@@ -25,10 +25,16 @@ DNS alone is not enough. After each primary-domain change:
 1. Open **Settings → Pages** on `Scubber/insider-intel`.
 2. Confirm **Primary** is `intel.thederpweb.com` (from `CNAME`).
 3. **Add domain** (additional) for `td3.dev` (and `www.td3.dev` if used).
+   GitHub’s REST `pages/domains` API may 404 for some accounts — use
+   **Settings → Pages → Custom domains → Add a domain** in the UI if needed.
 4. Wait until each shows DNS check ✓ and **TLS certificate has been issued** (can take minutes–hours). Until then browsers show “insecure” / cert errors; GitHub may also 404 the Host.
 5. Enable **Enforce HTTPS**.
 
 Do not leave only the TXT verification step complete — the domain must remain listed on that Pages settings screen.
+
+**Cutover note:** `intel.thederpweb.com` is the Pages primary (`web/CNAME`). A custom
+domain can only be attached to one repo — remove it from `Scubber/thederpweb`
+before adding it here.
 
 ```text
 Browser → Pages (web/) → https://api.intel.thederpweb.com  → processed JSONL
