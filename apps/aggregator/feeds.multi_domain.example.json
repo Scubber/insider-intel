@@ -1,0 +1,34 @@
+[
+  {
+    "id": "hrdive",
+    "name": "HR Dive",
+    "url": "https://www.hrdive.com/feeds/news/",
+    "enabled": true,
+    "category": "hr",
+    "channel": "news"
+  },
+  {
+    "id": "proskauer-workplace",
+    "name": "Proskauer Law and the Workplace",
+    "url": "https://www.lawandtheworkplace.com/feed/",
+    "enabled": true,
+    "category": "legal",
+    "channel": "news"
+  },
+  {
+    "id": "krebsonsecurity",
+    "name": "Krebs on Security",
+    "url": "https://krebsonsecurity.com/feed/",
+    "enabled": true,
+    "category": "insider-osint",
+    "channel": "news"
+  },
+  {
+    "id": "darkreading",
+    "name": "Dark Reading",
+    "url": "https://www.darkreading.com/rss.xml",
+    "enabled": true,
+    "category": "insider-osint",
+    "channel": "news"
+  }
+]

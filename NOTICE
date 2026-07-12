@@ -1,0 +1,24 @@
+Insider Threat Matrix™ Attribution
+==================================
+
+This project maps OSINT articles to techniques from the Insider Threat Matrix™
+(ITM), an open investigative framework published at:
+
+  https://insiderthreatmatrix.org/
+
+Canonical machine-readable taxonomy:
+
+  https://github.com/forscie/insider-threat-matrix
+
+The slim index shipped in shared/data/itm_index.json is derived from that
+upstream JSON (Apache License 2.0). Refresh with:
+
+  python -m apps.aggregator refresh_itm
+
+Insider Threat Matrix™ is owned by Forscie Limited. Insider Threat Matrix is a
+trademark of Forscie Limited.
+
+Use of the Insider Threat Matrix™ name and taxonomy does not imply sponsorship,
+endorsement, affiliation, certification, approval, or control by Forscie
+Limited. This product is described as aligned / mapped to the Insider Threat
+Matrix™, not as an official or certified ITM product.

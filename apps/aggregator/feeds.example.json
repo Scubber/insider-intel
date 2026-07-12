@@ -1,0 +1,37 @@
+[
+  {
+    "id": "krebsonsecurity",
+    "name": "Krebs on Security",
+    "url": "https://krebsonsecurity.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "darkreading",
+    "name": "Dark Reading",
+    "url": "https://www.darkreading.com/rss.xml",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "sans-isc",
+    "name": "SANS Internet Storm Center",
+    "url": "https://isc.sans.edu/rssfeed_full.xml",
+    "enabled": true,
+    "category": "hunt-signal"
+  },
+  {
+    "id": "bleepingcomputer",
+    "name": "BleepingComputer",
+    "url": "https://www.bleepingcomputer.com/feed/",
+    "enabled": true,
+    "category": "osint"
+  },
+  {
+    "id": "cisa-advisories",
+    "name": "CISA Cybersecurity Advisories",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+    "enabled": true,
+    "category": "advisory"
+  }
+]

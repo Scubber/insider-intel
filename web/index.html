@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>insider-intel</title>
+    <script>
+      /* Short-alias host: td3.dev → canonical intel UI. */
+      (function () {
+        var h = (location.hostname || "").toLowerCase();
+        var rest = location.pathname + location.search + location.hash;
+        if (h === "td3.dev" || h === "www.td3.dev") {
+          location.replace("https://intel.thederpweb.com" + (rest === "/" ? "" : rest));
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="./themes.css" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      (function () {
+        var t = localStorage.getItem("insider-intel-theme") || "cnn-lite";
+        document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <header class="top">
+      <div class="theme-picker" id="theme-picker">
+        <label for="theme-select">Theme</label>
+        <select id="theme-select" aria-label="Color theme">
+          <option value="cnn-lite">CNN Lite</option>
+          <option value="fox-news">Fox News</option>
+          <option value="feedly">Feedly</option>
+          <option value="yahoo-finance">Yahoo Finance</option>
+          <option value="voya">Voya</option>
+          <option value="dracula">Dracula</option>
+          <option value="matrix">Matrix</option>
+          <option value="midnight">Midnight</option>
+          <option value="phosphor">Phosphor</option>
+          <option value="signal">Signal</option>
+          <option value="old-reddit">Old Reddit</option>
+        </select>
+      </div>
+      <div class="brand-block">
+        <h1 class="product">insider-intel</h1>
+        <p class="tagline">
+          OSINT stream mapped to the Insider Threat Matrix™ — browse techniques,
+          mint hunt terms, hand off to SIEM.
+        </p>
+      </div>
+      <form class="search-bar" id="search-form" autocomplete="off">
+        <label class="sr-only" for="q">Search</label>
+        <input
+          id="q"
+          name="q"
+          type="search"
+          placeholder="Map a keyword (overemployment, moonlighting, …)"
+        />
+        <button type="submit" class="hunt-submit" aria-label="Hunt" title="Hunt">
+          <svg class="hunt-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle
+              cx="10.5"
+              cy="10.5"
+              r="6.25"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+            />
+            <path
+              d="M15.2 15.2L20 20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <button type="button" id="clear-search" class="ghost" hidden>Clear</button>
+      </form>
+      <div
+        class="hunt-usecases"
+        id="hunt-usecases"
+        role="group"
+        aria-label="Vetted hunt use cases"
+      ></div>
+      <details class="refine-panel" id="refine-panel" open>
+        <summary class="refine-summary" id="refine-summary">
+          <span class="refine-label">Refine</span>
+          <span class="refine-state" id="refine-state">Insider · All channels</span>
+        </summary>
+        <div class="refine-body">
+          <div class="stream-filters stream-filters-secondary" id="stream-filters">
+            <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
+              <button type="button" class="pill active" data-alignment="insider">
+                Insider Focus
+              </button>
+              <button type="button" class="pill" data-alignment="all">All indexed</button>
+            </div>
+            <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
+              <button type="button" class="pill active" data-channel="all">All channels</button>
+              <button type="button" class="pill" data-channel="news">News</button>
+              <button type="button" class="pill" data-channel="filings">Filings</button>
+              <button type="button" class="pill" data-channel="tips">Tips</button>
+            </div>
+            <div class="source-filter-row">
+              <label class="filter-label" for="source-select">Source</label>
+              <select id="source-select" aria-label="Filter by source">
+                <option value="">All feeds</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+      <p class="status" id="status" role="status">Connecting…</p>
+    </header>
+
+    <main class="app-shell" id="app-workbench" data-pane="articles">
+      <nav class="mobile-tabs" id="mobile-tabs" aria-label="Primary panes">
+        <button type="button" class="mobile-tab active" data-pane="articles">Articles</button>
+        <button type="button" class="mobile-tab" data-pane="matrix">Matrix</button>
+        <button type="button" class="mobile-tab" data-pane="workbench">
+          Workbench<span class="board-badge" id="board-badge" hidden></span>
+        </button>
+      </nav>
+
+      <div class="pane-grid">
+        <aside class="pane pane-matrix" data-pane-panel="matrix" aria-label="ITM taxonomy">
+          <div class="pane-head">
+            <h2>ITM matrix</h2>
+            <div class="pane-head-actions">
+              <button type="button" class="ghost matrix-latest-btn" id="matrix-latest">
+                Latest
+              </button>
+            </div>
+          </div>
+          <div class="pane-body">
+            <div class="matrix-mode-tabs" id="matrix-mode-tabs" role="tablist" aria-label="Matrix browse mode">
+              <button type="button" class="matrix-mode-tab active" data-matrix-mode="techniques">
+                Techniques
+              </button>
+              <button type="button" class="matrix-mode-tab" data-matrix-mode="detections">
+                Detections
+              </button>
+              <button type="button" class="matrix-mode-tab" data-matrix-mode="preventions">
+                Preventions
+              </button>
+            </div>
+            <label class="matrix-search-wrap">
+              <span class="sr-only">Search matrix</span>
+              <input
+                type="search"
+                id="matrix-q"
+                placeholder="Search id or title…"
+                autocomplete="off"
+              />
+            </label>
+            <div class="matrix-columns" id="matrix-columns"></div>
+            <ul class="matrix-control-list" id="matrix-control-list" hidden></ul>
+          </div>
+        </aside>
+
+        <section class="pane pane-articles" data-pane-panel="articles" aria-label="Articles">
+          <div class="pane-head">
+            <div class="pane-head-main">
+              <h2 id="stream-title">Latest</h2>
+              <span id="stream-count" class="meta"></span>
+            </div>
+            <button type="button" id="refresh-stream" class="ghost stream-refresh">
+              Refresh
+            </button>
+          </div>
+          <div class="pane-body" id="article-panel">
+            <div id="hunt-map" class="hunt-map" hidden>
+              <p class="hunt-map-label">Maps to</p>
+              <ul id="hunt-map-list" class="hunt-map-list"></ul>
+              <p class="hunt-map-empty" id="hunt-map-empty" hidden>
+                No direct ITM map — articles below may still help.
+              </p>
+            </div>
+            <p class="filter-context" id="filter-context" hidden></p>
+            <ul id="article-list" class="article-list"></ul>
+          </div>
+        </section>
+
+        <section
+          class="pane pane-workbench"
+          data-pane-panel="workbench"
+          id="workbench"
+          aria-label="Keyword workbench"
+        >
+          <div class="pane-head">
+            <h2>Workbench</h2>
+          </div>
+          <div class="pane-body panel">
+            <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
+              <div class="extraction-board-head">
+                <h3>
+                  Extraction board
+                  <span class="board-count" id="board-count">(0)</span>
+                </h3>
+                <p class="panel-actions extraction-board-actions">
+                  <button type="button" id="board-extract" class="copy-btn copy-btn-primary" disabled>
+                    Extract TTPs
+                  </button>
+                  <button type="button" id="board-copy-brief" class="copy-btn" disabled>
+                    Copy LLM
+                  </button>
+                  <button type="button" id="board-clear" class="copy-btn" disabled>Clear</button>
+                </p>
+              </div>
+              <p class="kw-hint board-coach">
+                Flag with <strong>+</strong> on Articles → Extract TTPs → hunt report (email / chat /
+                network / human)
+              </p>
+              <p class="kw-hint" id="board-empty">
+                No articles flagged yet. Use <strong>+</strong> on a stream card, or Add to board
+                below.
+              </p>
+              <ul id="board-list" class="board-list" hidden></ul>
+            </section>
+
+            <section class="ttp-report" id="ttp-report" hidden aria-label="TTP hunt report">
+              <div class="workbench-header">
+                <h3>Hunt report</h3>
+                <p class="kw-hint" id="ttp-report-meta"></p>
+                <p class="panel-actions">
+                  <button type="button" id="copy-ttp-report" class="copy-btn copy-btn-primary">
+                    Copy hunt report
+                  </button>
+                  <button type="button" id="copy-ttp-llm" class="copy-btn">
+                    Copy LLM query
+                  </button>
+                </p>
+              </div>
+              <div class="kw-group">
+                <h4>Behaviors</h4>
+                <ul id="ttp-behavior-list" class="ttp-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Email</h4>
+                <ul id="ttp-email-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Chat</h4>
+                <ul id="ttp-chat-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Network</h4>
+                <ul id="ttp-network-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Human / HR</h4>
+                <ul id="ttp-human-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Paste / search seeds</h4>
+                <ul id="ttp-seed-list" class="chip-list"></ul>
+              </div>
+            </section>
+
+            <p class="panel-empty" id="panel-empty">
+              Select an article for operator terms, or flag items with + on the Articles stream.
+            </p>
+            <div id="panel-body" hidden>
+              <div class="workbench-header">
+                <h3 id="panel-title"></h3>
+                <p class="panel-meta" id="panel-meta"></p>
+                <p class="panel-actions">
+                  <button type="button" id="board-toggle" class="copy-btn copy-btn-primary">
+                    Add to board
+                  </button>
+                  <a id="panel-link" class="panel-open" href="#" target="_blank" rel="noopener"
+                    >Open source</a
+                  >
+                  <button type="button" id="copy-plaintext" class="copy-btn">
+                    <svg class="copy-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <rect x="5.5" y="2.5" width="8" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+                      <rect x="2.5" y="4.5" width="8" height="10" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    </svg>
+                    <span>Copy terms</span>
+                  </button>
+                </p>
+              </div>
+              <div class="kw-group kw-group-primary">
+                <h4>Operator search terms</h4>
+                <p class="kw-hint">Click a term to copy one, or Copy terms for the full set.</p>
+                <ul id="operator-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>ITM techniques</h4>
+                <ul id="itm-list" class="chip-list"></ul>
+              </div>
+              <div class="kw-group">
+                <h4>Related detections</h4>
+                <p class="kw-hint">SIEM / IR handoff from matched techniques.</p>
+                <ul id="detection-list" class="chip-list"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Mapping aligned to the
+        <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener"
+          >Insider Threat Matrix™</a
+        >.
+        Insider Threat Matrix™ is owned by Forscie Limited. Insider Threat Matrix is a
+        trademark of Forscie Limited. Not affiliated with or endorsed by Forscie.
+      </p>
+      <p class="grok-meme" aria-hidden="true">BUILT BY ⚡ GROK! NOT HUMAN!</p>
+    </footer>
+
+    <script src="./config.js"></script>
+    <script src="./demo-store.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

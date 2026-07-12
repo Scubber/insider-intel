@@ -1,0 +1,462 @@
+/**
+ * Static demo API shim for GitHub Pages (no FastAPI).
+ * Expects web/demo/articles.json + web/demo/itm.json from export_demo_snapshot.py
+ */
+(() => {
+  const DEMO_BASE = new URL("./demo/", window.location.href).href;
+
+  let articles = [];
+  let itm = null;
+  let manifest = null;
+
+  function aliasMatches(phrase, haystack) {
+    if (!phrase || phrase.length < 3) return false;
+    if (!haystack.includes(phrase)) return false;
+    if (phrase.includes(" ")) return true;
+    const re = new RegExp(`(?:^|[^a-z0-9])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z0-9]|$)`, "i");
+    return re.test(haystack);
+  }
+
+  /** Keep in sync with high-signal gaps in shared/itm/aliases.py (demo snapshot lag). */
+  const DEMO_ALIAS_EXTRAS = {
+    IF038: [
+      "overemployment",
+      "over-employment",
+      "over employed",
+      "overemployed",
+      "moonlighting",
+      "moonlight",
+      "moonlighting policy",
+      "side job",
+      "side hustle",
+      "second job",
+      "dual employment",
+      "concurrent employment",
+      "undisclosed employment",
+      "undisclosed concurrent employment",
+      "secret second job",
+      "multiple jobs",
+      "working two jobs",
+      "two jobs",
+      "outside employment",
+      "outside employment policy",
+      "outside employment disclosure",
+      "conflict of interest disclosure",
+      "coi disclosure",
+      "secondary employment",
+      "additional employment",
+      "J2",
+      "job 2",
+    ],
+  };
+
+  function techById() {
+    const map = {};
+    (itm.techniques || []).forEach((t) => {
+      const id = String(t.id).toUpperCase();
+      const extras = DEMO_ALIAS_EXTRAS[id] || [];
+      if (!extras.length) {
+        map[id] = t;
+        return;
+      }
+      const aliases = [...(t.aliases || [])];
+      const seen = new Set(aliases.map((a) => String(a).toLowerCase()));
+      extras.forEach((a) => {
+        const key = String(a).toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          aliases.push(a);
+        }
+      });
+      map[id] = { ...t, aliases };
+    });
+    return map;
+  }
+
+  function enrichItmCatalog(params) {
+    const sourceId = params.source_id || "";
+    const channel = params.channel || "all";
+    const base = itm || { techniques: [], detections: [], preventions: [], articles: [] };
+    const byId = techById();
+    const techniques = (base.techniques || []).map((t) => {
+      const enriched = byId[String(t.id).toUpperCase()] || t;
+      const needle = String(t.id).toUpperCase();
+      const article_count = articles.filter((article) => {
+        if (sourceId && article.source_id !== sourceId) return false;
+        if (!articleMatchesChannel(article, channel)) return false;
+        const hits = article.itm_hits || [];
+        return hits.some(
+          (h) =>
+            String(h.id).toUpperCase() === needle ||
+            String(h.id).toUpperCase().startsWith(`${needle}.`),
+        );
+      }).length;
+      return { ...enriched, article_count };
+    });
+    return { ...base, techniques };
+  }
+
+  function articleMatchesAlignment(article, mode) {
+    const m = (mode || "insider").toLowerCase();
+    if (m === "all" || m === "*" || m === "") return true;
+    return (article.itm_alignment || "weak") === "insider";
+  }
+
+  function articleChannel(article) {
+    const ch = String(article.channel || "").toLowerCase();
+    if (ch === "news" || ch === "filings" || ch === "tips") return ch;
+    const sid = String(article.source_id || "").toLowerCase();
+    if (sid.startsWith("reddit-") || sid.startsWith("tip-")) return "tips";
+    if (sid.includes("courtlistener")) return "filings";
+    return "news";
+  }
+
+  function articleMatchesChannel(article, mode) {
+    const m = (mode || "all").toLowerCase();
+    if (m === "all" || m === "*" || m === "") return true;
+    return articleChannel(article) === m;
+  }
+
+  function articleMatchesTopic(article, tech) {
+    const blob = (article.topic_blob || `${article.title || ""} ${article.summary || ""}`).toLowerCase();
+    const phrases = [];
+    if (tech.title) phrases.push(String(tech.title).toLowerCase());
+    (tech.aliases || []).forEach((a) => {
+      const c = String(a || "").trim().toLowerCase();
+      if (c) phrases.push(c);
+    });
+    phrases.sort((a, b) => b.length - a.length);
+    return phrases.some((p) => aliasMatches(p, blob));
+  }
+
+  function articleMatchesItmId(article, itmId, topicMatch) {
+    const needle = String(itmId || "").trim().toUpperCase();
+    if (!needle) return true;
+    const hits = article.itm_hits || [];
+    if (
+      hits.some(
+        (h) =>
+          String(h.id).toUpperCase() === needle ||
+          String(h.id).toUpperCase().startsWith(`${needle}.`),
+      )
+    ) {
+      return true;
+    }
+    if (!topicMatch) return false;
+    const tech = techById()[needle];
+    if (!tech) return false;
+    return articleMatchesTopic(article, tech);
+  }
+
+  function techniquesForControl(kind, controlId) {
+    const needle = String(controlId || "").toUpperCase();
+    return (itm.techniques || [])
+      .filter((t) => {
+        const list = kind === "prevention" ? t.preventions || [] : t.detections || [];
+        return list.some((c) => String(c.id).toUpperCase() === needle);
+      })
+      .map((t) => t.id);
+  }
+
+  function articleMatchesControl(article, kind, controlId, topicMatch) {
+    const techIds = techniquesForControl(kind, controlId);
+    if (!techIds.length) return false;
+    return techIds.some((id) => articleMatchesItmId(article, id, topicMatch));
+  }
+
+  function normalizeTitle(title) {
+    let text = String(title || "")
+      .trim()
+      .toLowerCase();
+    for (let i = 0; i < 2; i += 1) {
+      const next = text.replace(/\s*[|\u2013\u2014\-]\s*[^|]+$/u, "").trim();
+      if (next === text) break;
+      text = next;
+    }
+    return text
+      .replace(/[^a-z0-9\s]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function storyDay(published) {
+    if (!published) return "unknown";
+    const d = new Date(published);
+    if (Number.isNaN(d.getTime())) return "unknown";
+    return d.toISOString().slice(0, 10);
+  }
+
+  function computeStoryKey(article) {
+    if (article.story_key) return String(article.story_key);
+    const payload = `${normalizeTitle(article.title)}|${storyDay(article.published)}`;
+    // FNV-1a 32-bit hex — stable enough for demo clustering
+    let h = 0x811c9dc5;
+    for (let i = 0; i < payload.length; i += 1) {
+      h ^= payload.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function isRedditish(sourceId) {
+    const sid = String(sourceId || "").toLowerCase();
+    return sid.startsWith("reddit-") || sid.startsWith("tip-");
+  }
+
+  function pickPrimary(members) {
+    return members.slice().sort((a, b) => {
+      const rs = (b.relevance_score || 0) - (a.relevance_score || 0);
+      if (rs) return rs;
+      const da = a.published || "";
+      const db = b.published || "";
+      if (da !== db) return da < db ? 1 : -1;
+      return (isRedditish(a.source_id) ? 1 : 0) - (isRedditish(b.source_id) ? 1 : 0);
+    })[0];
+  }
+
+  function clusterRows(rows) {
+    const buckets = new Map();
+    rows.forEach((a) => {
+      const key = computeStoryKey(a);
+      const channel = articleChannel(a);
+      const bucket = `${channel}:${key}`;
+      if (!a.story_key) a.story_key = key;
+      if (!buckets.has(bucket)) buckets.set(bucket, []);
+      buckets.get(bucket).push(a);
+    });
+    const clusters = [];
+    buckets.forEach((members) => {
+      const primary = pickPrimary(members);
+      const siblings = members
+        .filter((m) => m.link !== primary.link)
+        .sort((a, b) =>
+          String(a.source_name).localeCompare(String(b.source_name)) ||
+          String(a.link).localeCompare(String(b.link)),
+        );
+      clusters.push({
+        story_key: computeStoryKey(primary),
+        channel: articleChannel(primary),
+        primary,
+        siblings,
+        member_count: members.length,
+      });
+    });
+    clusters.sort((a, b) => {
+      const da = a.primary.published || "";
+      const db = b.primary.published || "";
+      if (da !== db) return da < db ? 1 : -1;
+      return (b.primary.relevance_score || 0) - (a.primary.relevance_score || 0);
+    });
+    return clusters;
+  }
+
+  function filterArticles(params) {
+    const minScore = Number(params.min_score ?? 0.15);
+    const sourceId = params.source_id || "";
+    const theme = (params.theme || "").toLowerCase();
+    const itmId = params.itm_id || "";
+    const detectionId = params.detection_id || "";
+    const preventionId = params.prevention_id || "";
+    const topicMatch =
+      params.topic_match === true ||
+      params.topic_match === "true" ||
+      params.topic_match === "1";
+    const alignment = params.itm_alignment || "insider";
+    const channel = params.channel || "all";
+    const limit = Math.min(Number(params.limit || 50), 200);
+    const group =
+      params.group === undefined ||
+      params.group === true ||
+      params.group === "true" ||
+      params.group === "1" ||
+      params.group === 1;
+
+    let rows = articles.filter((a) => {
+      if ((a.relevance_score ?? 0) < minScore) return false;
+      if (sourceId && a.source_id !== sourceId) return false;
+      if (!articleMatchesAlignment(a, alignment)) return false;
+      if (!articleMatchesChannel(a, channel)) return false;
+      if (theme) {
+        const hits = a.itm_hits || [];
+        if (!hits.some((h) => String(h.theme || "").toLowerCase() === theme)) return false;
+      }
+      if (itmId && !articleMatchesItmId(a, itmId, topicMatch)) return false;
+      if (detectionId && !articleMatchesControl(a, "detection", detectionId, topicMatch)) {
+        return false;
+      }
+      if (
+        preventionId &&
+        !articleMatchesControl(a, "prevention", preventionId, topicMatch)
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    if (group) {
+      const clusters = clusterRows(rows).slice(0, limit);
+      return {
+        total_indexed: articles.length,
+        count: clusters.length,
+        results: clusters.map((c) => c.primary),
+        clusters,
+      };
+    }
+
+    rows.sort((a, b) => {
+      const da = a.published || "";
+      const db = b.published || "";
+      return da < db ? 1 : da > db ? -1 : 0;
+    });
+    rows = rows.slice(0, limit);
+    return {
+      total_indexed: articles.length,
+      count: rows.length,
+      results: rows,
+      clusters: [],
+    };
+  }
+
+  function listSources(params) {
+    const filtered = filterArticles({
+      ...params,
+      limit: 500,
+      min_score: params.min_score ?? 0.15,
+      group: false,
+    }).results;
+    const map = new Map();
+    filtered.forEach((a) => {
+      const cur = map.get(a.source_id) || {
+        id: a.source_id,
+        name: a.source_name,
+        article_count: 0,
+      };
+      cur.article_count += 1;
+      map.set(a.source_id, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function search(params) {
+    const q = String(params.q || "").trim().toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const base = filterArticles({
+      ...params,
+      limit: 500,
+      itm_id: "",
+      detection_id: "",
+      prevention_id: "",
+      topic_match: false,
+    }).results;
+    if (!tokens.length) {
+      return {
+        query: q,
+        mode: params.mode || "hybrid",
+        total_indexed: articles.length,
+        count: 0,
+        results: [],
+      };
+    }
+    const scored = base
+      .map((a) => {
+        const hay = `${a.title || ""} ${a.summary || ""} ${(a.keywords_hit || []).join(" ")} ${(a.operator_terms || []).join(" ")}`.toLowerCase();
+        const hits = tokens.filter((t) => hay.includes(t)).length;
+        const score = hits / tokens.length;
+        return { article: a, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Number(params.limit || 40));
+    return {
+      query: q,
+      mode: params.mode || "hybrid",
+      total_indexed: articles.length,
+      count: scored.length,
+      results: scored.map((x) => ({ ...x.article, score: Number(x.score.toFixed(4)) })),
+    };
+  }
+
+  const ready = (async () => {
+    const [arts, catalog, man] = await Promise.all([
+      fetch(`${DEMO_BASE}articles.json`).then((r) => {
+        if (!r.ok) throw new Error(`demo articles ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${DEMO_BASE}itm.json`).then((r) => {
+        if (!r.ok) throw new Error(`demo itm ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${DEMO_BASE}manifest.json`).then((r) => (r.ok ? r.json() : null)),
+    ]);
+    articles = arts.articles || arts.results || [];
+    itm = catalog;
+    manifest = man;
+  })();
+
+  window.InsiderIntelDemo = {
+    ready,
+    async request(path, params = {}, options = {}) {
+      await ready;
+      const method = (options.method || "GET").toUpperCase();
+      if (path === "/health") {
+        return {
+          status: "ok",
+          demo: true,
+          indexed_articles: articles.length,
+          generated_at: manifest && manifest.generated_at,
+        };
+      }
+      if (path === "/itm") return enrichItmCatalog(params);
+      if (path === "/sources") return listSources(params);
+      if (path === "/articles") return filterArticles(params);
+      if (path === "/search") return search(params);
+      if (path === "/reload" && method === "POST") {
+        return { ok: true, demo: true, indexed_articles: articles.length };
+      }
+      if (path === "/extract/ttps" && method === "POST") {
+        let links = [];
+        try {
+          const raw = options.body ? JSON.parse(options.body) : {};
+          links = Array.isArray(raw.links) ? raw.links : [];
+        } catch {
+          links = [];
+        }
+        const picked = links
+          .map((link) => articles.find((a) => a.link === link))
+          .filter(Boolean);
+        const titles = picked.map((a) => a.title);
+        const seeds = [];
+        picked.forEach((a) => {
+          (a.operator_terms || []).forEach((t) => seeds.push(t));
+          (a.itm_hits || []).forEach((h) =>
+            (h.matched_aliases || []).forEach((t) => seeds.push(t)),
+          );
+        });
+        return {
+          mode: "seeds",
+          article_count: picked.length,
+          titles,
+          behaviors: [
+            {
+              id: "TTP-OE-01",
+              text: "Undisclosed second full-time remote job (dual employment / overemployment).",
+            },
+          ],
+          email: ["personal-domain mail during work hours", "Job B recruiter/HR threads"],
+          chat: ["second Slack/Teams identity", "J2 / OE / overemployed language"],
+          network: ["concurrent SaaS sessions for different orgs", "personal VPN + corp VPN patterns"],
+          human: [
+            "missing/false outside-employment or COI disclosure",
+            "LinkedIn current roles vs HRIS title mismatch",
+          ],
+          seeds: Array.from(new Set(seeds.concat(["overemployment", "moonlighting", "J2"]))),
+          matched_if038: picked.some((a) =>
+            (a.itm_hits || []).some((h) => String(h.id).toUpperCase() === "IF038"),
+          ),
+          detail: "Demo seed pack (static snapshot — set XAI_API_KEY on live API for LLM)",
+        };
+      }
+      throw new Error(`Demo mode does not support ${method} ${path}`);
+    },
+  };
+})();

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "reddit-netsec",
+    "name": "Reddit r/netsec",
+    "url": "https://www.reddit.com/r/netsec/.rss",
+    "enabled": true,
+    "category": "tips-reddit",
+    "channel": "tips"
+  },
+  {
+    "id": "reddit-malware",
+    "name": "Reddit r/Malware",
+    "url": "https://www.reddit.com/r/Malware/.rss",
+    "enabled": true,
+    "category": "tips-reddit",
+    "channel": "tips"
+  },
+  {
+    "id": "reddit-cybersecurity",
+    "name": "Reddit r/cybersecurity",
+    "url": "https://www.reddit.com/r/cybersecurity/.rss",
+    "enabled": true,
+    "category": "tips-reddit",
+    "channel": "tips"
+  },
+  {
+    "id": "reddit-blueteamsec",
+    "name": "Reddit r/blueteamsec",
+    "url": "https://www.reddit.com/r/blueteamsec/.rss",
+    "enabled": true,
+    "category": "tips-reddit",
+    "channel": "tips"
+  },
+  {
+    "id": "reddit-dfir",
+    "name": "Reddit r/DFIR",
+    "url": "https://www.reddit.com/r/DFIR/.rss",
+    "enabled": true,
+    "category": "tips-reddit",
+    "channel": "tips"
+  }
+]

@@ -1,0 +1,31 @@
+# Optional: deploy API from Actions once GCP Workload Identity is configured.
+# Prefer scripts/deploy_cloud_run.sh until secrets/OIDC are in place.
+#
+# Required repo secrets (when enabling):
+#   GCP_PROJECT_ID
+#   GCP_WORKLOAD_IDENTITY_PROVIDER
+#   GCP_SERVICE_ACCOUNT
+# And a self-hosted or Actions-compatible Docker build that can COPY
+# data/processed/articles.jsonl (upload artifact or GCS sync before build).
+
+name: cloud-run-api
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via local script for now
+        run: |
+          echo "Use scripts/deploy_cloud_run.sh from a machine with:"
+          echo "  - gcloud + Docker"
+          echo "  - data/processed/articles.jsonl"
+          echo "  - GCP_PROJECT set"
+          echo "See docs/hosting.md"
+          exit 0

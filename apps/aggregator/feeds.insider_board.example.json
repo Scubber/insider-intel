@@ -1,0 +1,184 @@
+[
+  {
+    "id": "krebsonsecurity",
+    "name": "Krebs on Security",
+    "url": "https://krebsonsecurity.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "darkreading",
+    "name": "Dark Reading",
+    "url": "https://www.darkreading.com/rss.xml",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "bleepingcomputer",
+    "name": "BleepingComputer",
+    "url": "https://www.bleepingcomputer.com/feed/",
+    "enabled": true,
+    "category": "osint"
+  },
+  {
+    "id": "thehackernews",
+    "name": "The Hacker News",
+    "url": "https://feeds.feedburner.com/TheHackersNews",
+    "enabled": true,
+    "category": "osint"
+  },
+  {
+    "id": "securityaffairs",
+    "name": "Security Affairs",
+    "url": "https://securityaffairs.com/feed",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "helpnetsecurity",
+    "name": "Help Net Security",
+    "url": "https://www.helpnetsecurity.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "securityboulevard",
+    "name": "Security Boulevard",
+    "url": "https://securityboulevard.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "cybersecuritydive",
+    "name": "Cybersecurity Dive",
+    "url": "https://www.cybersecuritydive.com/feeds/news/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "cyberscoop",
+    "name": "CyberScoop",
+    "url": "https://www.cyberscoop.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "infosecurity-magazine",
+    "name": "Infosecurity Magazine",
+    "url": "https://www.infosecurity-magazine.com/rss/news/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "theregister-security",
+    "name": "The Register \u2014 Security",
+    "url": "https://www.theregister.com/security/headlines.atom",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "therecord",
+    "name": "The Record",
+    "url": "https://therecord.media/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "technadu",
+    "name": "TechNadu",
+    "url": "https://www.technadu.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "cybersecuritynews",
+    "name": "Cyber Security News",
+    "url": "https://cybersecuritynews.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "hipaajournal",
+    "name": "The HIPAA Journal",
+    "url": "https://www.hipaajournal.com/feed/",
+    "enabled": true,
+    "category": "insider-healthcare"
+  },
+  {
+    "id": "hipaajournal-healthcare-cyber",
+    "name": "HIPAA Journal \u2014 Healthcare Cybersecurity",
+    "url": "https://www.hipaajournal.com/category/healthcare-cybersecurity/feed/",
+    "enabled": true,
+    "category": "insider-healthcare"
+  },
+  {
+    "id": "doj-press",
+    "name": "U.S. DOJ Press Releases",
+    "url": "https://www.justice.gov/news/rss?type=press_release&subtype=press_release",
+    "enabled": true,
+    "category": "insider-legal"
+  },
+  {
+    "id": "hstoday",
+    "name": "HSToday",
+    "url": "https://www.hstoday.us/feed/",
+    "enabled": true,
+    "category": "insider-national-security"
+  },
+  {
+    "id": "group-ib",
+    "name": "Group-IB Blog",
+    "url": "https://www.group-ib.com/blog/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "darktrace",
+    "name": "Darktrace Blog",
+    "url": "https://www.darktrace.com/blog/rss.xml",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "upguard",
+    "name": "UpGuard Blog",
+    "url": "https://www.upguard.com/blog/rss.xml",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "coincentral",
+    "name": "CoinCentral",
+    "url": "https://coincentral.com/feed/",
+    "enabled": true,
+    "category": "insider-crypto"
+  },
+  {
+    "id": "cointelegraph",
+    "name": "Cointelegraph",
+    "url": "https://cointelegraph.com/rss",
+    "enabled": true,
+    "category": "insider-crypto"
+  },
+  {
+    "id": "dailyhodl",
+    "name": "The Daily Hodl",
+    "url": "https://dailyhodl.com/feed/",
+    "enabled": true,
+    "category": "insider-crypto"
+  },
+  {
+    "id": "sans-isc",
+    "name": "SANS Internet Storm Center",
+    "url": "https://isc.sans.edu/rssfeed_full.xml",
+    "enabled": true,
+    "category": "hunt-signal"
+  },
+  {
+    "id": "cisa-advisories",
+    "name": "CISA Cybersecurity Advisories",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+    "enabled": false,
+    "category": "advisory"
+  }
+]
