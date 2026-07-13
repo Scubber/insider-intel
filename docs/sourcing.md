@@ -35,6 +35,7 @@ one-line reason in the coverage table below.
 |--------|-----|-----------------|--------|---------|------|
 | HR Dive | yes | yes (`hrdive`) | N/A (has RSS) | N/A | N/A |
 | Proskauer L&E | yes | yes (`proskauer-workplace`) | N/A | N/A | N/A |
+| DataTheftNews | no (SPA) | N/A | N/A | N/A | N/A — use `ingest_datatheftnews` (Supabase) |
 | Infosec pillar (Krebs, DR, …) | yes | not yet | optional | N/A | N/A |
 | CourtListener RECAP + opinions | N/A | N/A | N/A | yes | N/A |
 | Google Alerts | via alert RSS | N/A | yes | N/A | N/A |
@@ -46,6 +47,7 @@ one-line reason in the coverage table below.
 |--------|-----|--------|
 | HR Dive | `https://www.hrdive.com/feeds/news/` | HR / workplace (`DEFAULT_FEEDS`) |
 | Proskauer Law and the Workplace | `https://www.lawandtheworkplace.com/feed/` | Employment law (`DEFAULT_FEEDS`) |
+| DataTheftNews | Supabase `blog_posts` (no RSS) | `python -m apps.aggregator ingest_datatheftnews` |
 | Infosec pillar | Krebs, Dark Reading, … | Existing `DEFAULT_FEEDS` |
 
 ```bash

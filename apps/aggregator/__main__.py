@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m apps.aggregator",
         description=(
             "Insider-threat OSINT: RSS, sitemap archive, Feedly, CourtListener, "
-            "web-keyword ingest, process, and corporate export."
+            "DataTheftNews, web-keyword ingest, process, and corporate export."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=False)
@@ -155,6 +155,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(court_p)
 
+    dtn_p = sub.add_parser(
+        "ingest_datatheftnews",
+        help=(
+            "Pull DataTheftNews published posts via public Supabase API "
+            "(no RSS; trade-secret / insider-theft beat)."
+        ),
+    )
+    dtn_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    dtn_p.add_argument("--include-raw", action="store_true")
+    dtn_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max published posts to fetch (default: DATATHEFTNEWS_LIMIT).",
+    )
+    _add_verbose(dtn_p)
+
     web_p = sub.add_parser(
         "ingest_web_keywords",
         help="Pull Google Alerts-style RSS URLs (WEB_KEYWORD_FEED_URLS).",
@@ -210,7 +227,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     all_p = sub.add_parser(
         "all",
-        help="Run RSS (+ Feedly / CourtListener / web keywords when configured) then process.",
+        help=(
+            "Run RSS (+ Feedly / CourtListener / DataTheftNews / web keywords "
+            "when configured) then process."
+        ),
     )
     all_p.add_argument("--feeds-file", type=str, default=None)
     all_p.add_argument("--raw-path", type=str, default=DEFAULT_STORE_PATH)
@@ -226,6 +246,7 @@ def _build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--skip-feedly", action="store_true")
     all_p.add_argument("--skip-courtlistener", action="store_true")
     all_p.add_argument("--skip-web-keywords", action="store_true")
+    all_p.add_argument("--skip-datatheftnews", action="store_true")
     _add_verbose(all_p)
 
     itm_p = sub.add_parser(
@@ -362,6 +383,18 @@ def _cmd_ingest_courtlistener(args: argparse.Namespace) -> int:
     return 1 if result.failure_count and not result.success_count else 0
 
 
+def _cmd_ingest_datatheftnews(args: argparse.Namespace) -> int:
+    from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
+
+    result = run_datatheftnews_ingestion(
+        store_path=args.store_path,
+        include_raw=args.include_raw,
+        limit=args.limit,
+    )
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
 def _cmd_ingest_web_keywords(args: argparse.Namespace) -> int:
     result = run_web_keyword_ingestion(
         feed_urls=args.feed_urls,
@@ -436,6 +469,7 @@ def _cmd_all(args: argparse.Namespace) -> int:
         skip_feedly=args.skip_feedly,
         skip_courtlistener=args.skip_courtlistener,
         skip_web_keywords=args.skip_web_keywords,
+        skip_datatheftnews=args.skip_datatheftnews,
     )
     _print_ingest(result.ingestion)
     _print_process(result.processing)
@@ -473,6 +507,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_feedly(args)
     if args.command == "ingest_courtlistener":
         return _cmd_ingest_courtlistener(args)
+    if args.command == "ingest_datatheftnews":
+        return _cmd_ingest_datatheftnews(args)
     if args.command == "ingest_web_keywords":
         return _cmd_ingest_web_keywords(args)
     if args.command == "ingest_archive":

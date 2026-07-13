@@ -336,6 +336,15 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="legal",
         channel="news",
     ),
+    # Trade-secret / insider-theft beat — no public RSS; use ingest_datatheftnews
+    FeedSource(
+        id="datatheftnews",
+        name="DataTheftNews",
+        url="https://www.datatheftnews.com/blog",
+        category="insider-osint",
+        channel="news",
+        enabled=False,
+    ),
     # Tip / social-adjacent via Reddit RSS (no API key). Same RawArticle plane.
     FeedSource(
         id="reddit-netsec",

@@ -111,6 +111,29 @@ class Settings(BaseSettings):
         description="Comma-separated Google Alerts (or similar) RSS feed URLs",
     )
 
+    # DataTheftNews (no public RSS — Supabase blog_posts; anon key is public in their SPA)
+    datatheftnews_supabase_url: str = Field(
+        default="https://efjoefkaplfsgqwrbseg.supabase.co",
+        alias="DATATHEFTNEWS_SUPABASE_URL",
+    )
+    datatheftnews_anon_key: str | None = Field(
+        default=None,
+        alias="DATATHEFTNEWS_ANON_KEY",
+        description="Optional; when empty, discover from the public SPA bundle",
+    )
+    datatheftnews_limit: int = Field(
+        default=200,
+        alias="DATATHEFTNEWS_LIMIT",
+        ge=1,
+        le=1000,
+    )
+    datatheftnews_content_max_chars: int = Field(
+        default=50_000,
+        alias="DATATHEFTNEWS_CONTENT_MAX_CHARS",
+        ge=500,
+        le=200_000,
+    )
+
     # xAI / Grok — optional LLM fill for POST /extract/ttps
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_model: str = Field(default="grok-3-mini", alias="XAI_MODEL")

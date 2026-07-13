@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from apps.aggregator.config import get_enabled_feeds
+from apps.aggregator.config import DEFAULT_FEEDS
 from apps.search.index import ArticleSearchIndex
 from shared.itm.index import load_itm_index
 from shared.schemas import (
@@ -54,7 +54,7 @@ def list_sources(
     When filters are applied, only sources with matching articles are returned
     (counts reflect the filtered set). Unfiltered calls still merge configured feeds.
     """
-    configured = {f.id: f for f in get_enabled_feeds()}
+    configured = {f.id: f for f in DEFAULT_FEEDS}
     indexed = {
         sid: (name, count)
         for sid, name, count in get_index(path).list_sources(
