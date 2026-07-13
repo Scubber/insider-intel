@@ -49,7 +49,11 @@ def test_extract_cves_domains_and_itm_hits() -> None:
     assert all(i.startswith("DT") for i in dt_ids)
     assert all(i.startswith("PV") for i in pv_ids)
     # Removable / USB-oriented detections commonly linked from ME005 / IF002
-    assert any("USB" in c.title.upper() or "REMOVABLE" in c.title.upper() or "DLP" in c.title.upper() for c in entities.related_detections) or len(dt_ids) >= 1
+    usbish = any(
+        "USB" in c.title.upper() or "REMOVABLE" in c.title.upper() or "DLP" in c.title.upper()
+        for c in entities.related_detections
+    )
+    assert usbish or len(dt_ids) >= 1
 
 
 def test_classify_itm_alignment_insider_vs_weak() -> None:
