@@ -1685,3 +1685,63 @@ a.itm-chip:hover {
     flex-wrap: wrap;
   }
 }
+
+/* Technique dossier — single-column research view (mobile-first) */
+.dossier {
+  max-width: 46rem;
+}
+
+.dossier-head {
+  margin-bottom: 1.1rem;
+}
+
+.dossier-back {
+  margin-bottom: 0.6rem;
+}
+
+.dossier-head h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.08rem;
+  line-height: 1.3;
+}
+
+.dossier-meta {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.dossier-desc {
+  margin: 0 0 0.6rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.dossier-links {
+  margin: 0;
+}
+
+.dossier-cases .article-list {
+  margin-top: 0.35rem;
+}
+
+/* ITM chip pair — in-app dossier button + external matrix link */
+.itm-chip-pair {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+
+button.chip.itm-chip {
+  cursor: pointer;
+}
+
+.itm-chip-ext {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.4rem;
+  text-decoration: none;
+}

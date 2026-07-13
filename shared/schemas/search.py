@@ -121,6 +121,7 @@ class ItmTechniqueSummary(BaseModel):
     theme: str
     article_id: str
     parent_id: str | None = None
+    description: str = ""
     aliases: list[str] = Field(default_factory=list)
     article_count: int = 0
     detections: list[ControlRef] = Field(default_factory=list)

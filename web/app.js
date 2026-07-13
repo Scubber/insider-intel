@@ -269,6 +269,18 @@
     matrixModeTabs: document.getElementById("matrix-mode-tabs"),
     matrixColumns: document.getElementById("matrix-columns"),
     matrixControlList: document.getElementById("matrix-control-list"),
+    articlePanel: document.getElementById("article-panel"),
+    dossierPanel: document.getElementById("dossier-panel"),
+    dossierBack: document.getElementById("dossier-back"),
+    dossierTitle: document.getElementById("dossier-title"),
+    dossierMeta: document.getElementById("dossier-meta"),
+    dossierDesc: document.getElementById("dossier-desc"),
+    dossierItmLink: document.getElementById("dossier-itm-link"),
+    dossierTermList: document.getElementById("dossier-term-list"),
+    dossierDetectionList: document.getElementById("dossier-detection-list"),
+    dossierPreventionList: document.getElementById("dossier-prevention-list"),
+    dossierArticleList: document.getElementById("dossier-article-list"),
+    dossierCaseCount: document.getElementById("dossier-case-count"),
   };
 
   const state = {
@@ -295,6 +307,8 @@
     collapsedThemes: new Set(),
     extractionBoard: {},
     lastTtpReport: null,
+    view: "stream",
+    dossierTechniqueId: null,
   };
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
@@ -320,6 +334,54 @@
     if (!isMobileLayout()) return;
     const current = els.appWorkbench?.dataset.pane;
     if (!PANES.has(current)) setActivePane("articles");
+  }
+
+  /* Hash router — #/ (stream), #/technique/<ID> (dossier). GH Pages friendly. */
+  let suppressRoute = false;
+
+  function parseRoute() {
+    const raw = location.hash || "";
+    const path = raw.startsWith("#") ? raw.slice(1) : raw;
+    if (path.startsWith("/technique/")) {
+      const id = decodeURIComponent(path.slice("/technique/".length)).trim();
+      if (id) return { view: "technique", id: id.toUpperCase() };
+    }
+    return { view: "stream" };
+  }
+
+  function navigate(path) {
+    const target = `#${path}`;
+    if (location.hash === target) return;
+    suppressRoute = true;
+    location.hash = target;
+  }
+
+  async function applyRoute(route) {
+    if (route.view === "technique" && route.id) {
+      await showDossier(route.id);
+      return;
+    }
+    // Only reload the stream when leaving the dossier; hunt/matrix stream
+    // states never change the hash, so a same-route event is a no-op.
+    if (state.view === "dossier") {
+      await showLatest();
+    }
+  }
+
+  window.addEventListener("hashchange", () => {
+    if (suppressRoute) {
+      suppressRoute = false;
+      return;
+    }
+    applyRoute(parseRoute()).catch((err) => setStatus(`Load failed: ${err.message}`));
+  });
+
+  function setView(view) {
+    state.view = view;
+    const isDossier = view === "dossier";
+    if (els.articlePanel) els.articlePanel.hidden = isDossier;
+    if (els.dossierPanel) els.dossierPanel.hidden = !isDossier;
+    if (!isDossier) state.dossierTechniqueId = null;
   }
 
   const THEME_KEY = "insider-intel-theme";
@@ -1045,14 +1107,25 @@
     listEl.innerHTML = "";
     (hits || []).forEach((hit) => {
       const li = document.createElement("li");
-      const a = document.createElement("a");
-      a.className = "chip signal itm-chip";
-      a.href = itmUrl(hit);
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.title = hit.theme || "";
-      a.textContent = `${hit.id} · ${hit.title}`;
-      li.appendChild(a);
+      li.className = "itm-chip-pair";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip signal itm-chip";
+      btn.title = `${hit.id} · open dossier`;
+      btn.textContent = `${hit.id} · ${hit.title}`;
+      btn.addEventListener("click", () => {
+        selectTechnique(hit.id).catch((err) =>
+          setStatus(`Technique load failed: ${err.message}`),
+        );
+      });
+      const ext = document.createElement("a");
+      ext.className = "chip itm-chip-ext";
+      ext.href = itmUrl(hit);
+      ext.target = "_blank";
+      ext.rel = "noopener";
+      ext.title = "Open in Insider Threat Matrix™";
+      ext.textContent = "↗";
+      li.append(btn, ext);
       listEl.appendChild(li);
     });
     if (!(hits || []).length) {
@@ -1705,6 +1778,8 @@
   }
 
   async function showLatest() {
+    navigate("/");
+    setView("stream");
     state.selectedTechniqueId = null;
     state.selectedDetectionId = null;
     state.selectedPreventionId = null;
@@ -1730,6 +1805,54 @@
   }
 
   async function selectTechnique(techniqueId) {
+    navigate(`/technique/${encodeURIComponent(techniqueId)}`);
+    await showDossier(techniqueId);
+  }
+
+  function renderDossierShell(tech) {
+    if (els.dossierTitle) els.dossierTitle.textContent = `${tech.id} · ${tech.title}`;
+    if (els.dossierMeta) {
+      const themeLabel =
+        (MATRIX_THEMES.find((t) => t.id === tech.theme) || {}).label || tech.theme || "";
+      const count =
+        typeof tech.article_count === "number" ? ` · ${tech.article_count} indexed` : "";
+      els.dossierMeta.textContent = `${themeLabel}${count}`;
+    }
+    if (els.dossierDesc) {
+      const desc = String(tech.description || "").trim();
+      els.dossierDesc.textContent = desc;
+      els.dossierDesc.hidden = !desc;
+    }
+    if (els.dossierItmLink) els.dossierItmLink.href = itmUrl(tech);
+    fillCopyableChips(els.dossierTermList, techniqueAliases(tech), true);
+    fillControlChips(els.dossierDetectionList, tech.detections, "detection");
+    fillControlChips(els.dossierPreventionList, tech.preventions, "prevention");
+    if (els.dossierArticleList) els.dossierArticleList.innerHTML = "";
+    if (els.dossierCaseCount) els.dossierCaseCount.textContent = "";
+  }
+
+  function renderDossierArticles(dataOrResults) {
+    if (!els.dossierArticleList) return;
+    const clusters = clustersFromResponse(dataOrResults);
+    state.clusters = clusters;
+    state.articles = flattenClusterMembers(clusters);
+    els.dossierArticleList.innerHTML = "";
+    if (els.dossierCaseCount) {
+      els.dossierCaseCount.textContent = `(${clusters.length})`;
+    }
+    if (!clusters.length) {
+      const empty = document.createElement("li");
+      empty.className = "panel-empty stream-empty";
+      empty.textContent = "No indexed cases for this technique yet.";
+      els.dossierArticleList.appendChild(empty);
+      return;
+    }
+    clusters.forEach((cluster) => {
+      els.dossierArticleList.appendChild(buildArticleRow(cluster));
+    });
+  }
+
+  async function showDossier(techniqueId) {
     await ensureItmCatalog();
     state.matrixMode = "techniques";
     state.selectedTechniqueId = techniqueId;
@@ -1747,13 +1870,21 @@
 
     const tech = selectedTechnique();
     if (!tech) {
+      state.selectedTechniqueId = null;
       updateFilterContext("");
+      setView("stream");
+      setStatus(`Unknown technique “${techniqueId}”`);
       return;
     }
 
-    updateFilterContext(`${tech.id} · ${tech.title}`);
-    setStatus(`Loading articles for ${tech.id}…`);
+    state.dossierTechniqueId = tech.id;
+    updateFilterContext("");
+    setStatus(`Loading dossier for ${tech.id}…`);
     setActivePane("articles");
+    setView("dossier");
+    if (els.streamTitle) els.streamTitle.textContent = `${tech.id} dossier`;
+    if (els.streamCount) els.streamCount.textContent = "";
+    renderDossierShell(tech);
     const data = await api("/articles", {
       limit: 50,
       min_score: 0,
@@ -1765,11 +1896,13 @@
     });
     state.lastTotalIndexed = data.total_indexed || state.lastTotalIndexed;
     clearWorkbench();
-    renderArticles(data, `${tech.id} · ${tech.title}`);
+    renderDossierArticles(data);
     setStatus(`${tech.id} · ${(data.clusters || data.results || []).length} related stories`);
   }
 
   async function selectDetection(detectionId) {
+    navigate("/");
+    setView("stream");
     await ensureItmCatalog();
     state.matrixMode = "detections";
     state.selectedDetectionId = detectionId;
@@ -1812,6 +1945,8 @@
   }
 
   async function selectPrevention(preventionId) {
+    navigate("/");
+    setView("stream");
     await ensureItmCatalog();
     state.matrixMode = "preventions";
     state.selectedPreventionId = preventionId;
@@ -1878,6 +2013,96 @@
     if (isMobileLayout()) setActivePane("workbench");
   }
 
+  function buildArticleRow(cluster) {
+    const article = cluster.primary;
+    const siblings = cluster.siblings || [];
+    const members = [article, ...siblings];
+    const li = document.createElement("li");
+    li.className = "article-row";
+
+    const boardBtn = document.createElement("button");
+    boardBtn.type = "button";
+    boardBtn.className = "article-board-btn";
+    boardBtn.dataset.link = article.link;
+    const onBoard = articleOnBoard(article.link);
+    boardBtn.classList.toggle("on-board", onBoard);
+    boardBtn.textContent = onBoard ? "✓" : "+";
+    boardBtn.title = onBoard ? "Remove from board" : "Add to extraction board";
+    boardBtn.setAttribute("aria-label", boardBtn.title);
+    boardBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (articleOnBoard(article.link)) removeFromBoard(article.link);
+      else addToBoard(article, { focusWorkbench: true });
+    });
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "article-item";
+    btn.dataset.link = article.link;
+    btn.dataset.links = members.map((m) => m.link).join("|");
+    if (members.some((m) => m.link === state.selectedLink)) {
+      btn.classList.add("active");
+    }
+
+    const h3 = document.createElement("h3");
+    h3.textContent = article.title;
+    const meta = document.createElement("p");
+    meta.className = "row-meta";
+    const extra =
+      cluster.member_count > 1 ? ` · +${cluster.member_count - 1} sources` : "";
+    meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
+    const snip = document.createElement("p");
+    snip.className = "snip";
+    snip.textContent = article.summary || "";
+
+    const preview = document.createElement("div");
+    preview.className = "kw-preview";
+    const opPreview = composeOperatorTerms(article).slice(0, 4);
+    const itmPreview = (article.itm_hits || []).slice(0, 3);
+    if (opPreview.length) {
+      opPreview.forEach((term) => {
+        const chip = document.createElement("span");
+        chip.className = "chip signal";
+        chip.textContent = term;
+        preview.appendChild(chip);
+      });
+    } else if (itmPreview.length) {
+      itmPreview.forEach((hit) => {
+        const chip = document.createElement("span");
+        chip.className = "chip signal";
+        chip.textContent = hit.id;
+        preview.appendChild(chip);
+      });
+    }
+
+    btn.append(h3, meta, snip, preview);
+
+    if (siblings.length) {
+      const sources = document.createElement("div");
+      sources.className = "cluster-sources";
+      sources.setAttribute("role", "group");
+      sources.setAttribute("aria-label", "Other sources for this story");
+      members.forEach((member) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "cluster-source";
+        chip.dataset.link = member.link;
+        chip.textContent = member.source_name;
+        if (member.link === state.selectedLink) chip.classList.add("active");
+        chip.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectArticle(member);
+        });
+        sources.appendChild(chip);
+      });
+      btn.appendChild(sources);
+    }
+
+    btn.addEventListener("click", () => selectArticle(article));
+    li.append(boardBtn, btn);
+    return li;
+  }
+
   function renderArticles(dataOrResults, title, options = {}) {
     const clusters = clustersFromResponse(dataOrResults);
     state.clusters = clusters;
@@ -1895,93 +2120,7 @@
     }
 
     clusters.forEach((cluster) => {
-      const article = cluster.primary;
-      const siblings = cluster.siblings || [];
-      const members = [article, ...siblings];
-      const li = document.createElement("li");
-      li.className = "article-row";
-
-      const boardBtn = document.createElement("button");
-      boardBtn.type = "button";
-      boardBtn.className = "article-board-btn";
-      boardBtn.dataset.link = article.link;
-      const onBoard = articleOnBoard(article.link);
-      boardBtn.classList.toggle("on-board", onBoard);
-      boardBtn.textContent = onBoard ? "✓" : "+";
-      boardBtn.title = onBoard ? "Remove from board" : "Add to extraction board";
-      boardBtn.setAttribute("aria-label", boardBtn.title);
-      boardBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (articleOnBoard(article.link)) removeFromBoard(article.link);
-        else addToBoard(article, { focusWorkbench: true });
-      });
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "article-item";
-      btn.dataset.link = article.link;
-      btn.dataset.links = members.map((m) => m.link).join("|");
-      if (members.some((m) => m.link === state.selectedLink)) {
-        btn.classList.add("active");
-      }
-
-      const h3 = document.createElement("h3");
-      h3.textContent = article.title;
-      const meta = document.createElement("p");
-      meta.className = "row-meta";
-      const extra =
-        cluster.member_count > 1 ? ` · +${cluster.member_count - 1} sources` : "";
-      meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
-      const snip = document.createElement("p");
-      snip.className = "snip";
-      snip.textContent = article.summary || "";
-
-      const preview = document.createElement("div");
-      preview.className = "kw-preview";
-      const opPreview = composeOperatorTerms(article).slice(0, 4);
-      const itmPreview = (article.itm_hits || []).slice(0, 3);
-      if (opPreview.length) {
-        opPreview.forEach((term) => {
-          const chip = document.createElement("span");
-          chip.className = "chip signal";
-          chip.textContent = term;
-          preview.appendChild(chip);
-        });
-      } else if (itmPreview.length) {
-        itmPreview.forEach((hit) => {
-          const chip = document.createElement("span");
-          chip.className = "chip signal";
-          chip.textContent = hit.id;
-          preview.appendChild(chip);
-        });
-      }
-
-      btn.append(h3, meta, snip, preview);
-
-      if (siblings.length) {
-        const sources = document.createElement("div");
-        sources.className = "cluster-sources";
-        sources.setAttribute("role", "group");
-        sources.setAttribute("aria-label", "Other sources for this story");
-        members.forEach((member) => {
-          const chip = document.createElement("button");
-          chip.type = "button";
-          chip.className = "cluster-source";
-          chip.dataset.link = member.link;
-          chip.textContent = member.source_name;
-          if (member.link === state.selectedLink) chip.classList.add("active");
-          chip.addEventListener("click", (event) => {
-            event.stopPropagation();
-            selectArticle(member);
-          });
-          sources.appendChild(chip);
-        });
-        btn.appendChild(sources);
-      }
-
-      btn.addEventListener("click", () => selectArticle(article));
-      li.append(boardBtn, btn);
-      els.articleList.appendChild(li);
+      els.articleList.appendChild(buildArticleRow(cluster));
     });
   }
 
@@ -2136,6 +2275,8 @@
   }
 
   async function runSearch(query) {
+    navigate("/");
+    setView("stream");
     state.selectedTechniqueId = null;
     state.selectedDetectionId = null;
     state.selectedPreventionId = null;
@@ -2333,6 +2474,12 @@
     });
   }
 
+  if (els.dossierBack) {
+    els.dossierBack.addEventListener("click", () => {
+      showLatest().catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+  }
+
   if (els.mobileTabs) {
     els.mobileTabs.addEventListener("click", (event) => {
       const btn = event.target.closest(".mobile-tab[data-pane]");
@@ -2410,7 +2557,12 @@
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
-      await loadArticles();
+      const route = parseRoute();
+      if (route.view === "technique" && route.id) {
+        await showDossier(route.id);
+      } else {
+        await loadArticles();
+      }
     } catch (err) {
       setStatus(
         demoMode || window.INSIDER_INTEL_DEMO

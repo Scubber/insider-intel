@@ -182,6 +182,42 @@
             <p class="filter-context" id="filter-context" hidden></p>
             <ul id="article-list" class="article-list"></ul>
           </div>
+          <div class="pane-body dossier" id="dossier-panel" hidden>
+            <div class="dossier-head">
+              <button type="button" id="dossier-back" class="ghost dossier-back">
+                ← Stream
+              </button>
+              <h3 id="dossier-title"></h3>
+              <p class="dossier-meta" id="dossier-meta"></p>
+              <p class="dossier-desc" id="dossier-desc" hidden></p>
+              <p class="dossier-links">
+                <a id="dossier-itm-link" class="panel-open" href="#" target="_blank" rel="noopener"
+                  >Open in Insider Threat Matrix™</a
+                >
+              </p>
+            </div>
+            <div class="kw-group kw-group-primary" id="dossier-terms">
+              <h4>Hunt terms</h4>
+              <p class="kw-hint">Click a term to copy it.</p>
+              <ul id="dossier-term-list" class="chip-list"></ul>
+            </div>
+            <div class="kw-group">
+              <h4>Related detections</h4>
+              <ul id="dossier-detection-list" class="chip-list"></ul>
+            </div>
+            <div class="kw-group">
+              <h4>Related preventions</h4>
+              <ul id="dossier-prevention-list" class="chip-list"></ul>
+            </div>
+            <div class="kw-group dossier-cases">
+              <h4>Cases <span class="meta" id="dossier-case-count"></span></h4>
+              <p class="kw-hint">
+                Reported incidents and coverage matching this technique. Flag with
+                <strong>+</strong> to build a hunt.
+              </p>
+              <ul id="dossier-article-list" class="article-list"></ul>
+            </div>
+          </div>
         </section>
 
         <section

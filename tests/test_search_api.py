@@ -83,6 +83,8 @@ def test_health_search_articles_itm_and_sources(tmp_path, monkeypatch) -> None:
         assert any(t.get("preventions") for t in catalog["techniques"])
         assert all("article_count" in t for t in catalog["techniques"])
         assert any(t["article_count"] >= 1 for t in catalog["techniques"])
+        assert all("description" in t for t in catalog["techniques"])
+        assert any(t["description"] for t in catalog["techniques"])
 
         articles = client.get("/articles", params={"limit": 10})
         assert articles.status_code == 200

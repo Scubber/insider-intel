@@ -192,6 +192,7 @@ def itm_catalog(
                 theme=t.theme,
                 article_id=t.article_id,
                 parent_id=t.parent_id,
+                description=t.description_text or "",
                 aliases=list(t.aliases or []),
                 article_count=int(article_counts.get(t.id, 0)),
                 detections=[
