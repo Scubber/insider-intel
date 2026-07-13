@@ -202,6 +202,11 @@
               <ul id="dossier-term-list" class="chip-list"></ul>
             </div>
             <div class="kw-group">
+              <h4>Run it</h4>
+              <p class="kw-hint">Paste-and-run queries seeded with the hunt terms above.</p>
+              <div id="dossier-queries" class="query-stacks"></div>
+            </div>
+            <div class="kw-group">
               <h4>Related detections</h4>
               <ul id="dossier-detection-list" class="chip-list"></ul>
             </div>
@@ -294,6 +299,11 @@
                 <h4>Paste / search seeds</h4>
                 <ul id="ttp-seed-list" class="chip-list"></ul>
               </div>
+              <div class="kw-group">
+                <h4>Run it</h4>
+                <p class="kw-hint">Paste-and-run queries built from this report.</p>
+                <div id="ttp-queries" class="query-stacks"></div>
+              </div>
             </section>
 
             <p class="panel-empty" id="panel-empty">
@@ -353,6 +363,7 @@
 
     <script src="./config.js"></script>
     <script src="./demo-store.js"></script>
+    <script src="./hunt-templates.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

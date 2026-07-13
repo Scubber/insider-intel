@@ -1745,3 +1745,53 @@ button.chip.itm-chip {
   padding: 0.2rem 0.4rem;
   text-decoration: none;
 }
+
+/* Paste-and-run hunt query blocks */
+.query-stacks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.query-stack {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--side-bg) 70%, transparent);
+}
+
+.query-stack-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.query-stack-lang {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.query-block {
+  margin: 0;
+  padding: 0.6rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 65%, transparent);
+  border-top: 1px solid var(--line);
+  white-space: pre;
+}
+
+.query-stack-actions {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--line);
+}

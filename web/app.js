@@ -281,6 +281,8 @@
     dossierPreventionList: document.getElementById("dossier-prevention-list"),
     dossierArticleList: document.getElementById("dossier-article-list"),
     dossierCaseCount: document.getElementById("dossier-case-count"),
+    dossierQueries: document.getElementById("dossier-queries"),
+    ttpQueries: document.getElementById("ttp-queries"),
   };
 
   const state = {
@@ -858,6 +860,7 @@
     fillCopyableChips(els.ttpNetworkList, report.network, true);
     fillCopyableChips(els.ttpHumanList, report.human, true);
     fillCopyableChips(els.ttpSeedList, report.seeds, true);
+    renderQueryBlocks(els.ttpQueries, huntQueriesForReport(report));
     if (isMobileLayout()) setActivePane("workbench");
     try {
       els.ttpReport.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -866,8 +869,26 @@
     }
   }
 
+  function huntQueriesForReport(report) {
+    if (!report) return [];
+    return buildHuntQueries({
+      terms: report.seeds || [],
+      emailCues: report.email || [],
+      chatCues: report.chat || [],
+      networkCues: report.network || [],
+    });
+  }
+
   function ttpReportPlaintext(report) {
     if (!report) return "";
+    const queries = huntQueriesForReport(report);
+    const queryLines = queries.length
+      ? [
+          "",
+          "Run it:",
+          ...queries.flatMap((q) => [``, `## ${q.stack} (${q.lang})`, q.query]),
+        ]
+      : [];
     const lines = [
       "insider-intel hunt report (extraction board)",
       `Mode: ${report.mode || "seeds"}`,
@@ -893,6 +914,7 @@
       "",
       "Paste / search seeds:",
       ...report.seeds.map((t) => `- ${t}`),
+      ...queryLines,
     ];
     return lines.join("\n");
   }
@@ -1101,6 +1123,54 @@
       li.textContent = "—";
       listEl.appendChild(li);
     }
+  }
+
+  function buildHuntQueries(input) {
+    if (!window.InsiderIntelTemplates) return [];
+    try {
+      return window.InsiderIntelTemplates.buildQueries(input) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  function renderQueryBlocks(container, queries) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!(queries || []).length) {
+      const p = document.createElement("p");
+      p.className = "kw-hint";
+      p.textContent = "No hunt terms to build queries from yet.";
+      container.appendChild(p);
+      return;
+    }
+    queries.forEach((q) => {
+      const details = document.createElement("details");
+      details.className = "query-stack";
+      const summary = document.createElement("summary");
+      summary.className = "query-stack-summary";
+      const label = document.createElement("span");
+      label.textContent = q.label;
+      const lang = document.createElement("span");
+      lang.className = "query-stack-lang";
+      lang.textContent = q.lang;
+      summary.append(label, lang);
+      const pre = document.createElement("pre");
+      pre.className = "query-block";
+      pre.textContent = q.query;
+      const actions = document.createElement("p");
+      actions.className = "panel-actions query-stack-actions";
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "copy-btn";
+      copy.textContent = "Copy query";
+      copy.addEventListener("click", () => {
+        copyText(q.query, `Copied ${q.stack} query`);
+      });
+      actions.appendChild(copy);
+      details.append(summary, pre, actions);
+      container.appendChild(details);
+    });
   }
 
   function fillItmChips(listEl, hits) {
@@ -1825,6 +1895,10 @@
     }
     if (els.dossierItmLink) els.dossierItmLink.href = itmUrl(tech);
     fillCopyableChips(els.dossierTermList, techniqueAliases(tech), true);
+    renderQueryBlocks(
+      els.dossierQueries,
+      buildHuntQueries({ terms: techniqueAliases(tech) }),
+    );
     fillControlChips(els.dossierDetectionList, tech.detections, "detection");
     fillControlChips(els.dossierPreventionList, tech.preventions, "prevention");
     if (els.dossierArticleList) els.dossierArticleList.innerHTML = "";
