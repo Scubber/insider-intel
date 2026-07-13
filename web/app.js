@@ -217,6 +217,7 @@
 
   const els = {
     status: document.getElementById("status"),
+    dataState: document.getElementById("data-state"),
     streamFilters: document.getElementById("stream-filters"),
     searchForm: document.getElementById("search-form"),
     sourceSelect: document.getElementById("source-select"),
@@ -315,6 +316,7 @@
     lastTtpReport: null,
     view: "stream",
     dossierTechniqueId: null,
+    dataState: null,
   };
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
@@ -448,6 +450,28 @@
 
   function setStatus(text) {
     els.status.textContent = text;
+  }
+
+  function renderDataState() {
+    if (!els.dataState) return;
+    const ds = state.dataState;
+    if (!ds) {
+      els.dataState.hidden = true;
+      return;
+    }
+    const indexed = Number(ds.indexed || 0).toLocaleString();
+    if (ds.mode === "demo") {
+      const when = ds.generatedAt ? ` · ${formatDate(ds.generatedAt)}` : "";
+      els.dataState.textContent = `Snapshot${when} · ${indexed} indexed`;
+    } else {
+      els.dataState.textContent = `Live · ${indexed} indexed`;
+    }
+    els.dataState.classList.toggle("data-state-demo", ds.mode === "demo");
+    els.dataState.title =
+      ds.mode === "demo"
+        ? "Static demo snapshot — not live ingest"
+        : "Connected to the live API";
+    els.dataState.hidden = false;
   }
 
   function syncHuntUsecases() {
@@ -2540,6 +2564,10 @@
       await ensureItmCatalog(true);
       renderMatrixBrowse();
       await reapplyActiveFilters();
+      if (state.dataState) {
+        state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
+        renderDataState();
+      }
       setStatus(`Refreshed · ${reload.indexed_articles ?? state.lastTotalIndexed} indexed`);
     } catch (err) {
       setStatus(`Refresh failed: ${err.message}`);
@@ -2861,6 +2889,12 @@
       const demoNote = health.demo || demoMode ? " · static demo" : "";
       setStatus(`API ok · ${health.indexed_articles} indexed${demoNote}`);
       state.lastTotalIndexed = health.indexed_articles || 0;
+      state.dataState = {
+        mode: health.demo || demoMode ? "demo" : "live",
+        indexed: health.indexed_articles || 0,
+        generatedAt: health.generated_at || null,
+      };
+      renderDataState();
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
