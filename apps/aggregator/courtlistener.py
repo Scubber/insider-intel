@@ -17,10 +17,12 @@ from urllib.parse import urljoin
 import httpx
 
 from shared.schemas import RawArticle
+from shared.utils.text import normalize_whitespace, strip_html
 
 logger = logging.getLogger(__name__)
 
 COURTLISTENER_SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
+COURTLISTENER_OPINION_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/opinions/"
 COURTLISTENER_BASE = "https://www.courtlistener.com"
 
 DEFAULT_QUERIES: list[str] = [
@@ -45,6 +47,12 @@ OPINIONS_SOURCE_NAME = "CourtListener Opinions"
 # Opinion snippets can run long; cap what we pack into RawArticle.summary.
 SNIPPET_MAX_CHARS = 500
 
+# Full opinion bodies feed ITM scoring via RawArticle.content; cap the size.
+DEFAULT_OPINION_TEXT_MAX_CHARS = 20_000
+
+# Opinion detail text fields, in preference order (plain_text first).
+_OPINION_TEXT_FIELDS = "plain_text,html,html_lawbox,html_columbia,xml_harvard"
+
 
 class CourtListenerError(RuntimeError):
     """CourtListener API request or parse failure."""
@@ -59,6 +67,7 @@ class SearchTypeSpec:
     source_name: str
     order_by: str
     mapper: Callable[..., RawArticle | None]
+    enricher: Callable[..., RawArticle] | None = None
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -187,6 +196,92 @@ def opinion_hit_to_raw_article(
     )
 
 
+def _first_opinion_id(hit: dict[str, Any]) -> int | None:
+    # The top-level hit "id" is the opinion *cluster* id — only the nested
+    # opinions[].id is valid against /opinions/{id}/.
+    opinions = hit.get("opinions")
+    if isinstance(opinions, list):
+        for op in opinions:
+            if isinstance(op, dict) and isinstance(op.get("id"), int):
+                return op["id"]
+    return None
+
+
+def fetch_opinion_text(
+    opinion_id: int,
+    *,
+    token: str | None = None,
+    max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """Fetch one opinion's full text as plain text (None when empty)."""
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(
+                f"{COURTLISTENER_OPINION_DETAIL_URL}{opinion_id}/",
+                headers=headers,
+                params={"fields": _OPINION_TEXT_FIELDS},
+            )
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"opinion {opinion_id} fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"opinion {opinion_id} HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+    finally:
+        if own_client:
+            http.close()
+
+    plain = payload.get("plain_text")
+    if isinstance(plain, str) and plain.strip():
+        return plain.strip()[:max_chars]
+    for field in ("html", "html_lawbox", "html_columbia", "xml_harvard"):
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip():
+            text = normalize_whitespace(strip_html(value))
+            if text:
+                return text[:max_chars]
+    return None
+
+
+def enrich_opinion_article(
+    article: RawArticle,
+    hit: dict[str, Any],
+    *,
+    token: str | None = None,
+    max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
+    client: httpx.Client | None = None,
+) -> RawArticle:
+    """Attach the full opinion body to article.content (best-effort).
+
+    Never drops the article: on missing id or fetch failure the snippet-only
+    article is returned unchanged.
+    """
+    opinion_id = _first_opinion_id(hit)
+    if opinion_id is None:
+        return article
+    try:
+        text = fetch_opinion_text(
+            opinion_id,
+            token=token,
+            max_chars=max_chars,
+            client=client,
+        )
+    except CourtListenerError as exc:
+        logger.warning("Opinion text fetch failed for %s: %s", article.link, exc)
+        return article
+    if not text:
+        return article
+    return article.model_copy(update={"content": text})
+
+
 SEARCH_TYPES: dict[str, SearchTypeSpec] = {
     "dockets": SearchTypeSpec(
         api_type="r",
@@ -201,6 +296,7 @@ SEARCH_TYPES: dict[str, SearchTypeSpec] = {
         source_name=OPINIONS_SOURCE_NAME,
         order_by="dateFiled desc",
         mapper=opinion_hit_to_raw_article,
+        enricher=enrich_opinion_article,
     ),
 }
 
@@ -223,7 +319,10 @@ def _search(
     page_size: int = 20,
     max_pages: int = 1,
     order_by: str | None = None,
+    filed_after: str | None = None,
     include_raw: bool = False,
+    fetch_content: bool = False,
+    content_max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
     client: httpx.Client | None = None,
 ) -> list[RawArticle]:
     """Run one Search API query for a SEARCH_TYPES entry."""
@@ -246,6 +345,8 @@ def _search(
         "page_size": max(1, min(page_size, 100)),
         "order_by": order_by or spec.order_by,
     }
+    if filed_after:
+        params["filed_after"] = filed_after
 
     try:
         for _ in range(max(1, max_pages)):
@@ -277,6 +378,14 @@ def _search(
                 if article is None or article.link in seen_links:
                     continue
                 seen_links.add(article.link)
+                if fetch_content and spec.enricher is not None:
+                    article = spec.enricher(
+                        article,
+                        hit,
+                        token=token,
+                        max_chars=content_max_chars,
+                        client=http,
+                    )
                 articles.append(article)
 
             next_url = payload.get("next")
@@ -302,6 +411,7 @@ def search_recap(
     page_size: int = 20,
     max_pages: int = 1,
     order_by: str = "dateFiled desc",
+    filed_after: str | None = None,
     include_raw: bool = False,
     client: httpx.Client | None = None,
 ) -> list[RawArticle]:
@@ -313,6 +423,7 @@ def search_recap(
         page_size=page_size,
         max_pages=max_pages,
         order_by=order_by,
+        filed_after=filed_after,
         include_raw=include_raw,
         client=client,
     )
@@ -325,7 +436,10 @@ def search_opinions(
     page_size: int = 20,
     max_pages: int = 1,
     order_by: str = "dateFiled desc",
+    filed_after: str | None = None,
     include_raw: bool = False,
+    fetch_content: bool = False,
+    content_max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
     client: httpx.Client | None = None,
 ) -> list[RawArticle]:
     """Run one case law opinion (type=o) search and map results to RawArticle."""
@@ -336,7 +450,10 @@ def search_opinions(
         page_size=page_size,
         max_pages=max_pages,
         order_by=order_by,
+        filed_after=filed_after,
         include_raw=include_raw,
+        fetch_content=fetch_content,
+        content_max_chars=content_max_chars,
         client=client,
     )
 

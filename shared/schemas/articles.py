@@ -61,6 +61,10 @@ class RawArticle(BaseModel):
     link: str
     published: datetime | None = None
     summary: str | None = None
+    content: str | None = Field(
+        default=None,
+        description="Full plain-text body for scoring/search (not displayed)",
+    )
     source_id: str
     source_name: str
     channel: Channel = Field(

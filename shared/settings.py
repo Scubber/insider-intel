@@ -74,6 +74,24 @@ class Settings(BaseSettings):
             "(empty = COURTLISTENER_QUERIES / built-in defaults)"
         ),
     )
+    courtlistener_fetch_opinion_text: bool = Field(
+        default=True,
+        alias="COURTLISTENER_FETCH_OPINION_TEXT",
+        description="Fetch full opinion bodies for ITM scoring (1 extra GET per new opinion)",
+    )
+    courtlistener_opinion_text_max_chars: int = Field(
+        default=20_000,
+        alias="COURTLISTENER_OPINION_TEXT_MAX_CHARS",
+        ge=500,
+        le=200_000,
+    )
+    courtlistener_lookback_days: int = Field(
+        default=3,
+        alias="COURTLISTENER_LOOKBACK_DAYS",
+        description="Overlap window subtracted from the ingest watermark (filed_after)",
+        ge=0,
+        le=30,
+    )
 
     # Drop weak articles on process; UI should match this default
     process_min_score: float = Field(

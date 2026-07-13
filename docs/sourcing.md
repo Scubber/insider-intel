@@ -112,6 +112,23 @@ Oral-argument audio (`type=oa`) was considered and skipped: mostly appellate
 procedural talk with thin ITM signal; the same spec table in
 `apps/aggregator/courtlistener.py` makes it a small add later if needed.
 
+Behavior notes:
+
+- **Full opinion text** — for each new opinion the ingester fetches the
+  opinion body (`/opinions/{id}/`, one extra GET; `COURTLISTENER_FETCH_OPINION_TEXT=false`
+  to disable) into `RawArticle.content`, which feeds ITM technique matching and
+  search but is never displayed. An API token is recommended when this is on.
+- **Incremental runs** — a per-type `filed_after` watermark is persisted in
+  `data/state/ingest_state.json` (minus `COURTLISTENER_LOOKBACK_DAYS` overlap),
+  so re-runs skip already-covered dates. `--since YYYY-MM-DD` overrides it;
+  `--no-watermark` ignores it entirely.
+- **Docket refresh** — a docket whose search result changed (new cause,
+  parties, etc.) is rewritten in place in the raw store and re-processed on the
+  next `process` run, so cases update as they develop.
+- **Case clustering** — filings sharing a court + docket number share a
+  `story_key`, so a case's docket and opinions group as one cluster in the UI
+  stream (run `process --force` once to re-key historical rows).
+
 Defaults include employment / moonlighting-style queries in
 `apps/aggregator/courtlistener.py`. For deeper history, raise pages:
 

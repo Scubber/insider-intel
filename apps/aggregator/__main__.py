@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from apps.aggregator.archive_pipeline import run_archive_ingestion
 from apps.aggregator.config import load_feeds_from_file
@@ -133,6 +133,25 @@ def _build_parser() -> argparse.ArgumentParser:
             "Search type (repeatable): dockets | opinions | all. "
             "Defaults to COURTLISTENER_TYPES (dockets)."
         ),
+    )
+    court_p.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="Only results filed on/after this date (YYYY-MM-DD); overrides the watermark.",
+    )
+    court_p.add_argument(
+        "--no-watermark",
+        action="store_true",
+        help="Ignore and do not update the persisted filed_after watermark.",
+    )
+    court_p.add_argument(
+        "--no-opinion-text",
+        action="store_const",
+        const=False,
+        default=None,
+        dest="fetch_opinion_text",
+        help="Skip fetching full opinion bodies (COURTLISTENER_FETCH_OPINION_TEXT).",
     )
     _add_verbose(court_p)
 
@@ -318,12 +337,21 @@ def _cmd_ingest_feedly(args: argparse.Namespace) -> int:
 
 
 def _cmd_ingest_courtlistener(args: argparse.Namespace) -> int:
+    if args.since is not None:
+        try:
+            date.fromisoformat(args.since)
+        except ValueError:
+            print(f"error: --since must be YYYY-MM-DD, got {args.since!r}", file=sys.stderr)
+            return 2
     try:
         result = run_courtlistener_ingestion(
             queries=args.queries,
             types=args.types,
             page_size=args.page_size,
             max_pages=args.max_pages,
+            since=args.since,
+            use_watermark=not args.no_watermark,
+            fetch_opinion_text=args.fetch_opinion_text,
             store_path=args.store_path,
             include_raw=args.include_raw,
         )
