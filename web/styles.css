@@ -56,15 +56,11 @@ body {
 }
 
 .theme-picker {
-  position: absolute;
-  top: 1.75rem;
-  right: clamp(1rem, 3vw, 2.5rem);
-  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.45rem;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--top-muted, var(--muted));
 }
 
@@ -153,9 +149,6 @@ body {
     margin-top: 0;
   }
 
-  .brand-block .tagline {
-    padding-right: 8rem;
-  }
 }
 
 .brand,
@@ -177,7 +170,6 @@ body {
   color: var(--top-muted, var(--muted));
   font-family: var(--font-body, var(--font-display));
   font-size: 0.98rem;
-  padding-right: 8rem;
 }
 
 .search-bar {
@@ -1564,14 +1556,7 @@ a.itm-chip:hover {
     margin-top: 0.35rem;
   }
 
-  /* Theme picker relocates into the Refine body on mobile (see placeThemePicker). */
-  .refine-body .theme-picker {
-    position: static;
-    margin-top: 0.55rem;
-    font-size: 0.72rem;
-  }
-
-  .refine-body .theme-picker select {
+  .theme-picker select {
     min-height: 2.4rem;
   }
 

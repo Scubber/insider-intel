@@ -18,7 +18,9 @@
     <link rel="stylesheet" href="./styles.css" />
     <script>
       (function () {
+        var allowed = ["cnn-lite", "midnight", "phosphor"];
         var t = localStorage.getItem("insider-intel-theme") || "cnn-lite";
+        if (allowed.indexOf(t) === -1) t = "cnn-lite";
         document.documentElement.setAttribute("data-theme", t);
       })();
     </script>
@@ -27,22 +29,6 @@
     <div class="atmosphere" aria-hidden="true"></div>
 
     <header class="top">
-      <div class="theme-picker" id="theme-picker">
-        <label for="theme-select">Theme</label>
-        <select id="theme-select" aria-label="Color theme">
-          <option value="cnn-lite">CNN Lite</option>
-          <option value="fox-news">Fox News</option>
-          <option value="feedly">Feedly</option>
-          <option value="yahoo-finance">Yahoo Finance</option>
-          <option value="voya">Voya</option>
-          <option value="dracula">Dracula</option>
-          <option value="matrix">Matrix</option>
-          <option value="midnight">Midnight</option>
-          <option value="phosphor">Phosphor</option>
-          <option value="signal">Signal</option>
-          <option value="old-reddit">Old Reddit</option>
-        </select>
-      </div>
       <div class="brand-block">
         <h1 class="product">insider-intel</h1>
         <p class="tagline">
@@ -108,6 +94,14 @@
               <label class="filter-label" for="source-select">Source</label>
               <select id="source-select" aria-label="Filter by source">
                 <option value="">All feeds</option>
+              </select>
+            </div>
+            <div class="theme-picker" id="theme-picker">
+              <label class="filter-label" for="theme-select">Theme</label>
+              <select id="theme-select" aria-label="Color theme">
+                <option value="cnn-lite">Light</option>
+                <option value="midnight">Dark</option>
+                <option value="phosphor">Terminal</option>
               </select>
             </div>
           </div>
@@ -375,7 +369,6 @@
         Insider Threat Matrix™ is owned by Forscie Limited. Insider Threat Matrix is a
         trademark of Forscie Limited. Not affiliated with or endorsed by Forscie.
       </p>
-      <p class="grok-meme" aria-hidden="true">BUILT BY ⚡ GROK! NOT HUMAN!</p>
     </footer>
 
     <script src="./config.js"></script>

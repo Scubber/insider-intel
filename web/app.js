@@ -424,33 +424,19 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
+  const THEMES = new Set(["cnn-lite", "midnight", "phosphor"]);
   const themeSelect = document.getElementById("theme-select");
 
   function applyTheme(name) {
-    document.documentElement.setAttribute("data-theme", name);
-    localStorage.setItem(THEME_KEY, name);
-    if (themeSelect) themeSelect.value = name;
+    const theme = THEMES.has(name) ? name : "cnn-lite";
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+    if (themeSelect) themeSelect.value = theme;
   }
 
   if (themeSelect) {
-    const saved = localStorage.getItem(THEME_KEY) || "cnn-lite";
-    themeSelect.value = saved;
+    applyTheme(localStorage.getItem(THEME_KEY) || "cnn-lite");
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
-  }
-
-  /* On phones the absolute top-right picker fights the masthead for space;
-   * park it inside the Refine panel instead. */
-  const themePicker = document.getElementById("theme-picker");
-  const themePickerHome = themePicker && themePicker.parentElement;
-
-  function placeThemePicker() {
-    if (!themePicker || !themePickerHome) return;
-    const refineBody = document.querySelector("#refine-panel .refine-body");
-    if (isMobileLayout() && refineBody) {
-      refineBody.appendChild(themePicker);
-    } else if (themePicker.parentElement !== themePickerHome) {
-      themePickerHome.insertBefore(themePicker, themePickerHome.firstChild);
-    }
   }
 
   function setStatus(text) {
@@ -3015,16 +3001,10 @@
   }
 
   if (typeof MOBILE_MQ.addEventListener === "function") {
-    MOBILE_MQ.addEventListener("change", () => {
-      syncPaneForViewport();
-      placeThemePicker();
-    });
+    MOBILE_MQ.addEventListener("change", () => syncPaneForViewport());
     WIDE_MQ.addEventListener("change", () => syncPaneForViewport());
   } else if (typeof MOBILE_MQ.addListener === "function") {
-    MOBILE_MQ.addListener(() => {
-      syncPaneForViewport();
-      placeThemePicker();
-    });
+    MOBILE_MQ.addListener(() => syncPaneForViewport());
     WIDE_MQ.addListener(() => syncPaneForViewport());
   }
 
@@ -3062,7 +3042,6 @@
     try {
       initRefinePanel();
       syncPaneForViewport();
-      placeThemePicker();
       loadDismissed();
       loadExtractionBoard();
       renderExtractionBoard();
