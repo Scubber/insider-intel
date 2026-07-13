@@ -318,10 +318,15 @@
   };
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
+  const WIDE_MQ = window.matchMedia("(min-width: 1200px)");
   const PANES = new Set(["articles", "matrix", "workbench"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
+  }
+
+  function isWideLayout() {
+    return WIDE_MQ.matches;
   }
 
   function setActivePane(pane) {
@@ -337,8 +342,14 @@
   }
 
   function syncPaneForViewport() {
-    if (!isMobileLayout()) return;
     const current = els.appWorkbench?.dataset.pane;
+    // Wide layout shows every pane; park the tab state on "articles" so
+    // narrowing the window later never lands on a matrix-takeover view.
+    if (isWideLayout()) {
+      if (current !== "articles") setActivePane("articles");
+      return;
+    }
+    if (!isMobileLayout()) return;
     if (!PANES.has(current)) setActivePane("articles");
   }
 
@@ -2780,11 +2791,13 @@
       syncPaneForViewport();
       placeThemePicker();
     });
+    WIDE_MQ.addEventListener("change", () => syncPaneForViewport());
   } else if (typeof MOBILE_MQ.addListener === "function") {
     MOBILE_MQ.addListener(() => {
       syncPaneForViewport();
       placeThemePicker();
     });
+    WIDE_MQ.addListener(() => syncPaneForViewport());
   }
 
   if (els.sourceSelect) {

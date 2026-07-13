@@ -458,17 +458,35 @@ body {
   background: color-mix(in srgb, var(--side-bg) 88%, transparent);
 }
 
-.app-shell[data-pane="matrix"] .pane-grid {
-  grid-template-columns: 1fr;
+/* Below the wide breakpoint the Matrix is a tab that takes over the grid. */
+@media (max-width: 1199px) {
+  .app-shell[data-pane="matrix"] .pane-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell[data-pane="matrix"] .pane-matrix {
+    display: flex;
+  }
+
+  .app-shell[data-pane="matrix"] .pane-articles,
+  .app-shell[data-pane="matrix"] .pane-workbench {
+    display: none;
+  }
 }
 
-.app-shell[data-pane="matrix"] .pane-matrix {
-  display: flex;
-}
+/* Wide desktop: research cockpit — Matrix rail | content | Workbench. */
+@media (min-width: 1200px) {
+  .pane-grid {
+    grid-template-columns: minmax(14rem, 19rem) minmax(0, 1.2fr) minmax(18rem, 24rem);
+  }
 
-.app-shell[data-pane="matrix"] .pane-articles,
-.app-shell[data-pane="matrix"] .pane-workbench {
-  display: none;
+  .pane-matrix {
+    display: flex;
+  }
+
+  nav#mobile-tabs {
+    display: none;
+  }
 }
 
 .pane-head {
