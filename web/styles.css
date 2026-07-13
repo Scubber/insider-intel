@@ -1546,25 +1546,19 @@ a.itm-chip:hover {
     margin-top: 0.35rem;
   }
 
-  .theme-picker {
-    top: 0.85rem;
-    right: 1rem;
-    font-size: 0.68rem;
+  /* Theme picker relocates into the Refine body on mobile (see placeThemePicker). */
+  .refine-body .theme-picker {
+    position: static;
+    margin-top: 0.55rem;
+    font-size: 0.72rem;
   }
 
-  .theme-picker label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    border: 0;
+  .refine-body .theme-picker select {
+    min-height: 2.4rem;
   }
 
   .product {
-    padding-right: 6.5rem;
+    padding-right: 0;
   }
 
   .stream-only-filters.pill-bar {
@@ -1573,8 +1567,71 @@ a.itm-chip:hover {
   }
 
   .pill {
-    padding: 0.22rem 0.55rem;
-    font-size: 0.68rem;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.72rem;
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Vetted hunt chips: one scrollable row instead of a wrapping block. */
+  .hunt-usecases {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: none;
+    padding-bottom: 0.2rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hunt-usecase {
+    flex: 0 0 auto;
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  button.chip,
+  .itm-chip-pair .itm-chip-ext {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .matrix-tech-btn,
+  .matrix-control-btn,
+  .matrix-expand {
+    min-height: 2.75rem;
+  }
+
+  .mobile-tab {
+    min-height: 2.75rem;
+  }
+
+  .article-board-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    top: 0.4rem;
+  }
+
+  .article-item {
+    padding: 0.8rem 3.1rem 0.8rem 0.35rem;
+  }
+
+  .article-item .snip {
+    -webkit-line-clamp: 2;
+  }
+
+  /* Board actions stay reachable while the report scrolls underneath. */
+  .extraction-board-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--panel);
+    padding-bottom: 0.35rem;
   }
 
   .source-filter-row {

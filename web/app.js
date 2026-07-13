@@ -401,6 +401,21 @@
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
+  /* On phones the absolute top-right picker fights the masthead for space;
+   * park it inside the Refine panel instead. */
+  const themePicker = document.getElementById("theme-picker");
+  const themePickerHome = themePicker && themePicker.parentElement;
+
+  function placeThemePicker() {
+    if (!themePicker || !themePickerHome) return;
+    const refineBody = document.querySelector("#refine-panel .refine-body");
+    if (isMobileLayout() && refineBody) {
+      refineBody.appendChild(themePicker);
+    } else if (themePicker.parentElement !== themePickerHome) {
+      themePickerHome.insertBefore(themePicker, themePickerHome.firstChild);
+    }
+  }
+
   function setStatus(text) {
     els.status.textContent = text;
   }
@@ -2563,9 +2578,15 @@
   }
 
   if (typeof MOBILE_MQ.addEventListener === "function") {
-    MOBILE_MQ.addEventListener("change", () => syncPaneForViewport());
+    MOBILE_MQ.addEventListener("change", () => {
+      syncPaneForViewport();
+      placeThemePicker();
+    });
   } else if (typeof MOBILE_MQ.addListener === "function") {
-    MOBILE_MQ.addListener(() => syncPaneForViewport());
+    MOBILE_MQ.addListener(() => {
+      syncPaneForViewport();
+      placeThemePicker();
+    });
   }
 
   if (els.sourceSelect) {
@@ -2602,6 +2623,7 @@
     try {
       initRefinePanel();
       syncPaneForViewport();
+      placeThemePicker();
       loadExtractionBoard();
       renderExtractionBoard();
       syncBoardToggle();
