@@ -108,7 +108,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     court_p = sub.add_parser(
         "ingest_courtlistener",
-        help="Pull CourtListener RECAP dockets for curated insider-legal queries.",
+        help=(
+            "Pull CourtListener RECAP dockets and/or case law opinions "
+            "for curated insider-legal queries."
+        ),
     )
     court_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
     court_p.add_argument("--include-raw", action="store_true")
@@ -119,7 +122,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         dest="queries",
         default=None,
-        help="RECAP query (repeatable). Defaults to COURTLISTENER_QUERIES / built-ins.",
+        help="Search query (repeatable). Defaults to COURTLISTENER_QUERIES / built-ins.",
+    )
+    court_p.add_argument(
+        "--type",
+        action="append",
+        dest="types",
+        default=None,
+        help=(
+            "Search type (repeatable): dockets | opinions | all. "
+            "Defaults to COURTLISTENER_TYPES (dockets)."
+        ),
     )
     _add_verbose(court_p)
 
@@ -305,13 +318,18 @@ def _cmd_ingest_feedly(args: argparse.Namespace) -> int:
 
 
 def _cmd_ingest_courtlistener(args: argparse.Namespace) -> int:
-    result = run_courtlistener_ingestion(
-        queries=args.queries,
-        page_size=args.page_size,
-        max_pages=args.max_pages,
-        store_path=args.store_path,
-        include_raw=args.include_raw,
-    )
+    try:
+        result = run_courtlistener_ingestion(
+            queries=args.queries,
+            types=args.types,
+            page_size=args.page_size,
+            max_pages=args.max_pages,
+            store_path=args.store_path,
+            include_raw=args.include_raw,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     _print_ingest(result)
     return 1 if result.failure_count and not result.success_count else 0
 

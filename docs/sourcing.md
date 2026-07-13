@@ -24,7 +24,7 @@ one-line reason in the coverage table below.
 | 1 | **RSS** | Find a working feed; smoke-fetch; add to `DEFAULT_FEEDS` / feeds JSON | `python -m apps.aggregator ingest` |
 | 2 | **Archive** | Check `robots.txt` / sitemap / news-archive index; add to `archive_sources.py` | `python -m apps.aggregator ingest_archive` |
 | 3 | **Google Alerts** | If no/weak RSS or cross-site beat (BI, SHRM, NLR) | `WEB_KEYWORD_FEED_URLS` → `ingest_web_keywords` |
-| 4 | **CourtListener** | If legal/filings beat — add RECAP queries (not a site scrape) | `ingest_courtlistener` |
+| 4 | **CourtListener** | If legal/filings beat — add RECAP docket / opinion queries (not a site scrape) | `ingest_courtlistener` |
 | 5 | **Tips** | Tip/social only → `channel=tips` | Reddit / tips feeds |
 | 6 | **Hunt aliases** | New operator phrases → `shared/itm/aliases.py` | Maps-to ITM |
 | 7 | **Smoke** | Ingest wired lanes → `process` → `POST /reload` | Confirm Source in UI |
@@ -36,7 +36,7 @@ one-line reason in the coverage table below.
 | HR Dive | yes | yes (`hrdive`) | N/A (has RSS) | N/A | N/A |
 | Proskauer L&E | yes | yes (`proskauer-workplace`) | N/A | N/A | N/A |
 | Infosec pillar (Krebs, DR, …) | yes | not yet | optional | N/A | N/A |
-| CourtListener RECAP | N/A | N/A | N/A | yes | N/A |
+| CourtListener RECAP + opinions | N/A | N/A | N/A | yes | N/A |
 | Google Alerts | via alert RSS | N/A | yes | N/A | N/A |
 | Reddit tips | yes | N/A | N/A | N/A | yes |
 
@@ -100,19 +100,37 @@ curl -X POST http://127.0.0.1:8000/reload
 
 ## CourtListener (filings)
 
+Two search types share the v4 Search API, one `RawArticle` mapper each:
+
+- **`dockets`** (`type=r`, source `courtlistener-recap`) — federal RECAP docket
+  metadata (court, cause, parties). Default.
+- **`opinions`** (`type=o`, source `courtlistener-opinions`) — written case law
+  opinions; the search snippet (fact pattern text) lands in `summary`, so the
+  ITM processor maps techniques from actual opinion language.
+
+Oral-argument audio (`type=oa`) was considered and skipped: mostly appellate
+procedural talk with thin ITM signal; the same spec table in
+`apps/aggregator/courtlistener.py` makes it a small add later if needed.
+
 Defaults include employment / moonlighting-style queries in
 `apps/aggregator/courtlistener.py`. For deeper history, raise pages:
 
 ```bash
 python -m apps.aggregator ingest_courtlistener --max-pages 3 -v
+python -m apps.aggregator ingest_courtlistener --type opinions -v
+python -m apps.aggregator ingest_courtlistener --type all -v
 python -m apps.aggregator process --force
 curl -X POST http://127.0.0.1:8000/reload
 ```
 
-Override queries:
+Override queries and types:
 
 ```env
 COURTLISTENER_QUERIES="insider trading",moonlighting employee,"concurrent employment"
+# pull opinions alongside dockets in `all` runs (default: dockets only)
+COURTLISTENER_TYPES=all
+# opinion-specific queries (empty = fall back to COURTLISTENER_QUERIES)
+COURTLISTENER_OPINION_QUERIES="trade secret" former employee,"economic espionage"
 ```
 
 ### CourtListener MCP (agentic research)

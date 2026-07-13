@@ -61,6 +61,19 @@ class Settings(BaseSettings):
         ge=1,
         le=5,
     )
+    courtlistener_types: str = Field(
+        default="dockets",
+        alias="COURTLISTENER_TYPES",
+        description="Comma-separated search types: dockets,opinions (or 'all')",
+    )
+    courtlistener_opinion_queries: str = Field(
+        default="",
+        alias="COURTLISTENER_OPINION_QUERIES",
+        description=(
+            "Comma-separated opinion search queries "
+            "(empty = COURTLISTENER_QUERIES / built-in defaults)"
+        ),
+    )
 
     # Drop weak articles on process; UI should match this default
     process_min_score: float = Field(
