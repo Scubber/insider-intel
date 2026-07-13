@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from apps.aggregator.storage import JsonlArticleStore
 from shared.schemas import RawArticle
 
 
-def _article(title: str, link: str) -> RawArticle:
-    return RawArticle(
-        title=title,
-        link=link,
-        summary="test",
-        source_id="example",
-        source_name="Example",
-    )
+def _article(title: str, link: str, *, ingested_at: datetime | None = None) -> RawArticle:
+    kwargs: dict = {
+        "title": title,
+        "link": link,
+        "summary": "test",
+        "source_id": "example",
+        "source_name": "Example",
+    }
+    if ingested_at is not None:
+        kwargs["ingested_at"] = ingested_at
+    return RawArticle(**kwargs)
 
 
 def test_jsonl_store_saves_and_dedupes(tmp_path: Path) -> None:
@@ -61,7 +65,8 @@ def test_jsonl_store_reloads_known_links(tmp_path: Path) -> None:
 def test_refresh_saves_new_and_rewrites_changed(tmp_path: Path) -> None:
     path = tmp_path / "articles.jsonl"
     store = JsonlArticleStore(path)
-    store.save([_article("A", "https://example.com/a")])
+    older = datetime.now(UTC) - timedelta(seconds=5)
+    store.save([_article("A", "https://example.com/a", ingested_at=older)])
     original = store.load_all()[0]
 
     # Identical content → no-op.

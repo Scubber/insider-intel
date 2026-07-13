@@ -13,9 +13,16 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 ## For Cursor / AI agents
 
 **Start here:** [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md) — full handoff
-(status, commands, file map, next steps).
+(status, commands, file map, next steps). Process: [`docs/PROCESS.md`](docs/PROCESS.md).
 
-## MVP status
+## Release status
+
+**MVP prototype candidate** (`mvp-prototype-0.1`) — process: **Kanban + milestone gates**
+([M1](https://github.com/Scubber/insider-intel/milestone/1) closed at tag;
+[M2 Hosted MVP](https://github.com/Scubber/insider-intel/milestone/2) next).
+Public UI works; API hosting is still bake/redeploy until M2 (GCS + scheduled ingest).
+
+## MVP capability status
 
 | Layer | Status |
 |-------|--------|

@@ -3,9 +3,9 @@
 **Read this first** when continuing work on `insider-intel`.  
 Then follow: `.cursor/rules/project-rules.md` and `docs/architecture.md`.
 
-**Last updated:** 2026-07-12  
-**Repo location:** `thederpweb/insider-intel/` (package lives inside the monorepo)  
-**MVP status:** Backend + static Matrix/Articles/Workbench UI, **ITM-aligned tagging**. **Develop locally; host later** — see `docs/hosting.md`. Public demo UI: `https://intel.thederpweb.com`. Experiment UI: `exp/responsive-ui`.
+**Last updated:** 2026-07-13  
+**Repo location:** `insider-intel` standalone (`Scubber/insider-intel`)  
+**Release status:** **MVP prototype candidate** (`mvp-prototype-0.1`). Process: **Kanban + milestone gates** (M1 Prototype → M2 Hosted MVP). Backend + Matrix/Articles/Workbench UI, **ITM-aligned tagging**, CourtListener opinions on `main`. **Develop locally; harden host in M2** — see `docs/hosting.md` and `docs/PROCESS.md`. Public UI: `https://intel.thederpweb.com`.
 
 ---
 
