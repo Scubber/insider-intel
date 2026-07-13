@@ -12,10 +12,14 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from shared.schemas import ProcessedArticle, RawArticle
-from shared.schemas.articles import ControlRef, ExtractedEntities, resolve_channel
+from shared.schemas.articles import ExtractedEntities, resolve_channel
 from shared.utils.embeddings import get_default_embedder
 from shared.utils.entities import classify_itm_alignment, extract_entities, score_relevance
-from shared.utils.story_key import compute_story_key
+from shared.utils.story_key import (
+    compute_story_key,
+    filing_story_key,
+    parse_filing_reference,
+)
 from shared.utils.text import to_plain_text
 
 logger = logging.getLogger(__name__)
@@ -35,7 +39,7 @@ class ArticleProcessState(TypedDict, total=False):
 
 def _node_normalize(state: ArticleProcessState) -> ArticleProcessState:
     raw = RawArticle.model_validate(state["raw"])
-    parts = [raw.title, raw.summary or ""]
+    parts = [raw.title, raw.summary or "", raw.content or ""]
     clean = to_plain_text("\n".join(parts))
     return {"clean_text": clean, "error": None}
 
@@ -63,6 +67,17 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
     raw = RawArticle.model_validate(state["raw"])
     entities = ExtractedEntities.model_validate(state.get("entities") or {})
     channel = resolve_channel(raw.source_id, raw.channel)
+    story_key = compute_story_key(
+        raw.title,
+        raw.published,
+        fallback=raw.ingested_at,
+    )
+    if channel == "filings":
+        # Cluster court documents by case (court + docket number) so the
+        # docket and its opinions group together across days.
+        filing_ref = parse_filing_reference(raw.summary)
+        if filing_ref:
+            story_key = filing_story_key(*filing_ref)
     processed = ProcessedArticle(
         title=raw.title,
         link=raw.link,
@@ -75,11 +90,7 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         entities=entities,
         relevance_score=float(state.get("relevance_score") or 0.0),
         itm_alignment=classify_itm_alignment(entities),
-        story_key=compute_story_key(
-            raw.title,
-            raw.published,
-            fallback=raw.ingested_at,
-        ),
+        story_key=story_key,
         embedding=state.get("embedding"),
     )
     return {"processed": processed.model_dump(mode="json")}

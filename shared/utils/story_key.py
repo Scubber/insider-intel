@@ -50,7 +50,7 @@ def compute_story_key(
     """Hash of normalized title + publish day (stable across sources)."""
     norm = normalize_title(title)
     day = story_day(published, fallback=fallback)
-    payload = f"{norm}|{day}".encode("utf-8")
+    payload = f"{norm}|{day}".encode()
     return hashlib.sha1(payload).hexdigest()[:16]
 
 
@@ -58,3 +58,33 @@ def cluster_bucket_key(story_key: str, channel: str) -> str:
     """Stream clusters only within a channel."""
     ch = (channel or "news").strip().lower() or "news"
     return f"{ch}:{story_key}"
+
+
+# Filings carry court/docket as mapper-built summary lines ("Court: …",
+# "Docket: …"); parse the raw summary — display text collapses newlines.
+_DOCKET_LINE_RE = re.compile(r"^Docket:\s*(.+?)\s*$", re.MULTILINE)
+_COURT_LINE_RE = re.compile(r"^Court:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def parse_filing_reference(text: str | None) -> tuple[str, str] | None:
+    """Extract (court, docket_number) from a filing summary; None if no docket."""
+    if not text:
+        return None
+    docket_match = _DOCKET_LINE_RE.search(text)
+    if not docket_match or not docket_match.group(1).strip():
+        return None
+    court_match = _COURT_LINE_RE.search(text)
+    court = court_match.group(1).strip() if court_match else ""
+    return (court, docket_match.group(1).strip())
+
+
+def filing_story_key(court: str, docket_number: str) -> str:
+    """Case-level fingerprint: same court + docket clusters across days.
+
+    Punctuation is kept — docket numbers like "1:24-cr-00001" are
+    punctuation-significant.
+    """
+    court_norm = _WS_RE.sub(" ", (court or "").strip().lower())
+    docket_norm = _WS_RE.sub(" ", (docket_number or "").strip().lower())
+    payload = f"docket|{court_norm}|{docket_norm}".encode()
+    return hashlib.sha1(payload).hexdigest()[:16]
