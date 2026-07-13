@@ -1926,3 +1926,33 @@ button.chip.itm-chip {
 .crumb:hover .crumb-x {
   color: var(--accent);
 }
+
+/* Keyboard triage — cursor row, dismissed rows, desktop hint */
+.kbd-hint {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  .kbd-hint {
+    display: inline;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+}
+
+.article-row.cursor .article-item {
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.article-row.dismissed .article-item {
+  opacity: 0.45;
+}
+
+.article-row.dismissed .row-meta::after {
+  content: " · dismissed";
+  color: var(--muted);
+}

@@ -181,6 +181,8 @@
   ];
 
   const BOARD_STORAGE_KEY = "insider-intel.extractionBoard";
+  const DISMISSED_STORAGE_KEY = "insider-intel.dismissed";
+  const DISMISSED_CAP = 500;
 
   function techniqueAliases(tech) {
     const extra = CLIENT_ALIAS_EXTRAS[String(tech.id || "").toUpperCase()];
@@ -318,6 +320,8 @@
     view: "stream",
     dossierTechniqueId: null,
     dataState: null,
+    dismissed: new Set(),
+    cursorIndex: -1,
   };
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
@@ -667,6 +671,42 @@
 
   function selectedArticle() {
     return state.articles.find((a) => a.link === state.selectedLink) || null;
+  }
+
+  function loadDismissed() {
+    try {
+      const raw = localStorage.getItem(DISMISSED_STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      state.dismissed = new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch {
+      state.dismissed = new Set();
+    }
+  }
+
+  function saveDismissed() {
+    const arr = [...state.dismissed].slice(-DISMISSED_CAP);
+    state.dismissed = new Set(arr);
+    localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify(arr));
+  }
+
+  function clusterKey(cluster) {
+    return String(
+      (cluster && (cluster.story_key || (cluster.primary && cluster.primary.link))) || "",
+    );
+  }
+
+  function toggleDismissed(cluster, rowEl) {
+    const key = clusterKey(cluster);
+    if (!key) return;
+    const dismissed = !state.dismissed.has(key);
+    if (dismissed) state.dismissed.add(key);
+    else state.dismissed.delete(key);
+    saveDismissed();
+    const row =
+      rowEl ||
+      document.querySelector(`.article-row[data-story-key="${CSS.escape(key)}"]`);
+    if (row) row.classList.toggle("dismissed", dismissed);
+    setStatus(dismissed ? "Dismissed — d to restore" : "Restored");
   }
 
   function loadExtractionBoard() {
@@ -2137,6 +2177,7 @@
     state.clusters = clusters;
     state.articles = flattenClusterMembers(clusters);
     els.dossierArticleList.innerHTML = "";
+    state.cursorIndex = -1;
     if (els.dossierCaseCount) {
       els.dossierCaseCount.textContent = `(${clusters.length})`;
     }
@@ -2317,6 +2358,9 @@
     const members = [article, ...siblings];
     const li = document.createElement("li");
     li.className = "article-row";
+    const storyKey = clusterKey(cluster);
+    li.dataset.storyKey = storyKey;
+    if (state.dismissed.has(storyKey)) li.classList.add("dismissed");
 
     const boardBtn = document.createElement("button");
     boardBtn.type = "button";
@@ -2409,6 +2453,7 @@
     els.streamCount.textContent = `${clusters.length} shown`;
     els.articleList.innerHTML = "";
 
+    state.cursorIndex = -1;
     if (!clusters.length) {
       const empty = document.createElement("li");
       empty.className = "panel-empty stream-empty";
@@ -2421,6 +2466,69 @@
       els.articleList.appendChild(buildArticleRow(cluster));
     });
   }
+
+  function activeArticleListEl() {
+    return state.view === "dossier" ? els.dossierArticleList : els.articleList;
+  }
+
+  function cursorCluster() {
+    return state.clusters[state.cursorIndex] || null;
+  }
+
+  function moveCursor(delta) {
+    const listEl = activeArticleListEl();
+    if (!listEl) return;
+    const rows = [...listEl.querySelectorAll(".article-row")];
+    if (!rows.length) return;
+    const next = Math.min(rows.length - 1, Math.max(0, state.cursorIndex + delta));
+    if (state.cursorIndex >= 0 && rows[state.cursorIndex]) {
+      rows[state.cursorIndex].classList.remove("cursor");
+    }
+    state.cursorIndex = next;
+    rows[next].classList.add("cursor");
+    rows[next].scrollIntoView({ block: "nearest" });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target;
+    const tag = target && target.tagName;
+    if (
+      tag === "INPUT" ||
+      tag === "SELECT" ||
+      tag === "TEXTAREA" ||
+      (target && target.isContentEditable)
+    ) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (event.key === "/") {
+      event.preventDefault();
+      if (els.q) els.q.focus();
+      return;
+    }
+    if (key === "j" || key === "k") {
+      event.preventDefault();
+      moveCursor(key === "j" ? 1 : -1);
+      return;
+    }
+    const cluster = cursorCluster();
+    if (!cluster || !cluster.primary) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      selectArticle(cluster.primary);
+    } else if (key === "o") {
+      event.preventDefault();
+      window.open(cluster.primary.link, "_blank", "noopener");
+    } else if (key === "x") {
+      event.preventDefault();
+      if (articleOnBoard(cluster.primary.link)) removeFromBoard(cluster.primary.link);
+      else addToBoard(cluster.primary);
+    } else if (key === "d") {
+      event.preventDefault();
+      toggleDismissed(cluster);
+    }
+  });
 
   function setActiveScopePill(alignment) {
     document.querySelectorAll("#align-filters .pill").forEach((btn) => {
@@ -2955,6 +3063,7 @@
       initRefinePanel();
       syncPaneForViewport();
       placeThemePicker();
+      loadDismissed();
       loadExtractionBoard();
       renderExtractionBoard();
       syncBoardToggle();
