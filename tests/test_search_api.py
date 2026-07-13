@@ -149,3 +149,20 @@ def test_health_search_articles_itm_and_sources(tmp_path, monkeypatch) -> None:
         )
         assert post.status_code == 200
         assert post.json()["count"] >= 1
+
+        by_links = client.post(
+            "/articles/by-links",
+            json={
+                "links": [
+                    "https://example.com/insider",
+                    "https://example.com/not-indexed",
+                ]
+            },
+        )
+        assert by_links.status_code == 200
+        payload = by_links.json()
+        assert [r["link"] for r in payload["results"]] == ["https://example.com/insider"]
+        assert payload["results"][0]["operator_terms"]
+        assert payload["missing"] == ["https://example.com/not-indexed"]
+
+        assert client.post("/articles/by-links", json={"links": []}).status_code == 422

@@ -413,6 +413,23 @@
       if (path === "/reload" && method === "POST") {
         return { ok: true, demo: true, indexed_articles: articles.length };
       }
+      if (path === "/articles/by-links" && method === "POST") {
+        let links = [];
+        try {
+          const raw = options.body ? JSON.parse(options.body) : {};
+          links = Array.isArray(raw.links) ? raw.links : [];
+        } catch {
+          links = [];
+        }
+        const results = links
+          .map((link) => articles.find((a) => a.link === link))
+          .filter(Boolean);
+        const found = new Set(results.map((a) => a.link));
+        return {
+          results,
+          missing: links.filter((link) => !found.has(link)),
+        };
+      }
       if (path === "/extract/ttps" && method === "POST") {
         let links = [];
         try {

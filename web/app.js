@@ -250,6 +250,10 @@
     boardExtract: document.getElementById("board-extract"),
     boardClear: document.getElementById("board-clear"),
     boardCopyBrief: document.getElementById("board-copy-brief"),
+    boardShare: document.getElementById("board-share"),
+    boardExport: document.getElementById("board-export"),
+    boardImport: document.getElementById("board-import"),
+    boardImportFile: document.getElementById("board-import-file"),
     boardBadge: document.getElementById("board-badge"),
     ttpReport: document.getElementById("ttp-report"),
     ttpReportMeta: document.getElementById("ttp-report-meta"),
@@ -348,6 +352,17 @@
       const id = decodeURIComponent(path.slice("/technique/".length)).trim();
       if (id) return { view: "technique", id: id.toUpperCase() };
     }
+    if (path.startsWith("/board/")) {
+      const rest = path.slice("/board/".length);
+      const slash = rest.indexOf("/");
+      if (slash > 0) {
+        return {
+          view: "board",
+          variant: rest.slice(0, slash),
+          payload: rest.slice(slash + 1),
+        };
+      }
+    }
     return { view: "stream" };
   }
 
@@ -361,6 +376,10 @@
   async function applyRoute(route) {
     if (route.view === "technique" && route.id) {
       await showDossier(route.id);
+      return;
+    }
+    if (route.view === "board") {
+      await importBoardFromRoute(route);
       return;
     }
     // Only reload the stream when leaving the dossier; hunt/matrix stream
@@ -707,6 +726,159 @@
     });
   }
 
+  function placeholderBoardEntry(link) {
+    let host = "";
+    try {
+      host = new URL(link).hostname;
+    } catch {
+      host = String(link);
+    }
+    return {
+      link,
+      title: `${host} (imported)`,
+      source_id: "",
+      source_name: host,
+      channel: "news",
+      itm_ids: [],
+      operator_terms: [],
+      matched_aliases: [],
+    };
+  }
+
+  async function hydrateBoardLinks(links) {
+    const byLink = new Map();
+    let missing = [];
+    const CHUNK = 40; // /articles/by-links request bound
+    try {
+      for (let i = 0; i < links.length; i += CHUNK) {
+        const chunk = links.slice(i, i + CHUNK);
+        const data = await api(
+          "/articles/by-links",
+          {},
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ links: chunk }),
+            timeoutMs: 10000,
+          },
+        );
+        ((data && data.results) || []).forEach((hit) => byLink.set(hit.link, hit));
+        missing = missing.concat((data && data.missing) || []);
+      }
+    } catch {
+      // Older API or offline: placeholders keep the board usable — Extract
+      // still works because /extract/ttps resolves raw links itself.
+      missing = links.filter((link) => !byLink.has(link));
+    }
+    const entries = links.map((link) => {
+      const hit = byLink.get(link);
+      return hit ? boardItemFromArticle(hit) : placeholderBoardEntry(link);
+    });
+    return { entries, missing };
+  }
+
+  async function importBoardFromRoute(route) {
+    try {
+      if (!window.InsiderIntelBoardShare) throw new Error("share codec not loaded");
+      const links = await window.InsiderIntelBoardShare.decodeBoard(
+        route.payload,
+        route.variant,
+      );
+      if (!links.length) throw new Error("empty board payload");
+      setStatus(`Importing ${links.length} board item(s)…`);
+      const fresh = links.filter((link) => !state.extractionBoard[link]);
+      const { entries, missing } = await hydrateBoardLinks(fresh);
+      entries.forEach((entry) => {
+        state.extractionBoard[entry.link] = entry;
+      });
+      saveExtractionBoard();
+      renderExtractionBoard();
+      syncBoardToggle();
+      syncStreamBoardButtons();
+      setActivePane("workbench");
+      const skipped = links.length - fresh.length;
+      const parts = [`Imported ${fresh.length} board item(s)`];
+      if (skipped) parts.push(`${skipped} already on board`);
+      if (missing.length) parts.push(`${missing.length} not in this index`);
+      setStatus(parts.join(" · "));
+    } catch (err) {
+      setStatus(`Board import failed: ${err.message}`);
+    } finally {
+      // Strip the payload so refresh / back don't re-import.
+      history.replaceState(null, "", `${location.pathname}${location.search}#/`);
+    }
+  }
+
+  async function shareBoardLink() {
+    const entries = boardEntries();
+    if (!entries.length) {
+      setStatus("Add articles to the extraction board first");
+      return;
+    }
+    if (!window.InsiderIntelBoardShare) {
+      setStatus("Share codec not loaded");
+      return;
+    }
+    try {
+      const { variant, payload } = await window.InsiderIntelBoardShare.encodeBoard(
+        entries.map((e) => e.link),
+      );
+      const url = `${location.origin}${location.pathname}#/board/${variant}/${payload}`;
+      const warn =
+        url.length > 1800 ? " — long link; use Export for chat apps" : "";
+      await copyText(url, `Copied board link (${entries.length} item(s))${warn}`);
+    } catch (err) {
+      setStatus(`Share failed: ${err.message}`);
+    }
+  }
+
+  function exportBoardFile() {
+    const entries = boardEntries();
+    if (!entries.length) {
+      setStatus("Add articles to the extraction board first");
+      return;
+    }
+    const blob = new Blob(
+      [JSON.stringify({ v: 1, board: state.extractionBoard }, null, 2)],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "insider-intel-board.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`Exported ${entries.length} board item(s)`);
+  }
+
+  function importBoardData(data) {
+    const incoming =
+      data &&
+      data.v === 1 &&
+      data.board &&
+      typeof data.board === "object" &&
+      !Array.isArray(data.board)
+        ? Object.values(data.board)
+        : null;
+    if (!incoming) throw new Error("unrecognized board file");
+    let added = 0;
+    incoming.forEach((item) => {
+      if (!item || typeof item !== "object" || !item.link) return;
+      if (!state.extractionBoard[item.link]) added += 1;
+      state.extractionBoard[item.link] = {
+        ...placeholderBoardEntry(item.link),
+        ...item,
+      };
+    });
+    saveExtractionBoard();
+    renderExtractionBoard();
+    syncBoardToggle();
+    syncStreamBoardButtons();
+    setStatus(`Imported ${added} new board item(s) · ${boardEntries().length} total`);
+  }
+
   function renderExtractionBoard() {
     const entries = boardEntries();
     const n = entries.length;
@@ -714,6 +886,8 @@
     if (els.boardExtract) els.boardExtract.disabled = n === 0;
     if (els.boardClear) els.boardClear.disabled = n === 0;
     if (els.boardCopyBrief) els.boardCopyBrief.disabled = n === 0;
+    if (els.boardShare) els.boardShare.disabled = n === 0;
+    if (els.boardExport) els.boardExport.disabled = n === 0;
     if (els.boardBadge) {
       if (n > 0) {
         els.boardBadge.hidden = false;
@@ -2526,6 +2700,30 @@
     els.boardClear.addEventListener("click", () => clearBoard());
   }
 
+  if (els.boardShare) {
+    els.boardShare.addEventListener("click", () => {
+      shareBoardLink().catch((err) => setStatus(`Share failed: ${err.message}`));
+    });
+  }
+
+  if (els.boardExport) {
+    els.boardExport.addEventListener("click", () => exportBoardFile());
+  }
+
+  if (els.boardImport && els.boardImportFile) {
+    els.boardImport.addEventListener("click", () => els.boardImportFile.click());
+    els.boardImportFile.addEventListener("change", async () => {
+      const file = els.boardImportFile.files && els.boardImportFile.files[0];
+      els.boardImportFile.value = "";
+      if (!file) return;
+      try {
+        importBoardData(JSON.parse(await file.text()));
+      } catch (err) {
+        setStatus(`Board import failed: ${err.message}`);
+      }
+    });
+  }
+
   if (els.boardCopyBrief) {
     els.boardCopyBrief.addEventListener("click", () => {
       const text = agentBriefPlaintext(boardEntries());
@@ -2656,6 +2854,9 @@
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);
+      } else if (route.view === "board") {
+        await loadArticles();
+        await importBoardFromRoute(route);
       } else {
         await loadArticles();
       }

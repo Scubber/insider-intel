@@ -250,6 +250,16 @@
                   </button>
                   <button type="button" id="board-clear" class="copy-btn" disabled>Clear</button>
                 </p>
+                <p class="panel-actions extraction-board-actions">
+                  <button type="button" id="board-share" class="copy-btn" disabled>
+                    Share link
+                  </button>
+                  <button type="button" id="board-export" class="copy-btn" disabled>
+                    Export
+                  </button>
+                  <button type="button" id="board-import" class="copy-btn">Import</button>
+                  <input type="file" id="board-import-file" accept="application/json,.json" hidden />
+                </p>
               </div>
               <p class="kw-hint board-coach">
                 Flag with <strong>+</strong> on Articles → Extract TTPs → hunt report (email / chat /
@@ -364,6 +374,7 @@
     <script src="./config.js"></script>
     <script src="./demo-store.js"></script>
     <script src="./hunt-templates.js"></script>
+    <script src="./board-share.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

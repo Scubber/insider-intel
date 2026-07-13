@@ -239,6 +239,13 @@ class ArticleSearchIndex:
             return None
         return self._by_link.get(link)
 
+    def hit_by_link(self, link: str) -> SearchHit | None:
+        """Return the SearchHit for an exact link, if indexed."""
+        article = self.get_by_link(link)
+        if article is None:
+            return None
+        return self._to_hit(article, 0.0)
+
     def reload(self, path: str | Path) -> int:
         store = JsonlProcessedStore(path)
         self.build(store.load_all())

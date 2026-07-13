@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import BaseModel, Field
 
 from apps.aggregator.export import EXPORT_SCHEMA_VERSION, article_to_export_row, filter_articles
 from apps.aggregator.processed_storage import JsonlProcessedStore
@@ -18,6 +19,7 @@ from apps.search.ttp_extract import ExtractTtpsRequest, ExtractTtpsResponse, ext
 from shared.schemas import (
     ArticleListResponse,
     ItmCatalogResponse,
+    SearchHit,
     SearchMode,
     SearchRequest,
     SearchResponse,
@@ -275,6 +277,33 @@ def export_articles(
             "results": rows,
         }
     )
+
+
+class ArticlesByLinksRequest(BaseModel):
+    links: list[str] = Field(default_factory=list, min_length=1, max_length=40)
+
+
+class ArticlesByLinksResponse(BaseModel):
+    results: list[SearchHit] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+
+
+@app.post("/articles/by-links")
+def articles_by_links(body: ArticlesByLinksRequest) -> ArticlesByLinksResponse:
+    """Resolve exact article links to indexed hits (shared-board hydration)."""
+    links = [str(link).strip() for link in body.links if str(link).strip()]
+    if not links:
+        raise HTTPException(status_code=400, detail="links required")
+    index = service.get_index()
+    results = []
+    missing = []
+    for link in links:
+        hit = index.hit_by_link(link)
+        if hit is None:
+            missing.append(link)
+        else:
+            results.append(hit)
+    return ArticlesByLinksResponse(results=results, missing=missing)
 
 
 @app.post("/extract/ttps")
