@@ -1900,3 +1900,29 @@ button.chip.itm-chip {
   border-color: var(--accent);
   background: var(--signal-soft);
 }
+
+/* Filter breadcrumbs — one removable chip per active filter */
+.filter-crumbs {
+  list-style: none;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.crumb-x {
+  font-size: 0.95em;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.crumb:hover .crumb-x {
+  color: var(--accent);
+}

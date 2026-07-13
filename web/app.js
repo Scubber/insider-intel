@@ -222,6 +222,7 @@
     searchForm: document.getElementById("search-form"),
     sourceSelect: document.getElementById("source-select"),
     articleList: document.getElementById("article-list"),
+    filterCrumbs: document.getElementById("filter-crumbs"),
     streamTitle: document.getElementById("stream-title"),
     streamCount: document.getElementById("stream-count"),
     refreshStream: document.getElementById("refresh-stream"),
@@ -1645,13 +1646,13 @@
 
   function updateFilterContext(label) {
     if (!els.filterContext) return;
-    if (!hasMatrixFilter()) {
+    if (!hasMatrixFilter() || !label) {
       els.filterContext.hidden = true;
       els.filterContext.textContent = "";
       return;
     }
     els.filterContext.hidden = false;
-    els.filterContext.textContent = label || "Filtered by matrix selection";
+    els.filterContext.textContent = label;
   }
 
   function clearHuntMap() {
@@ -2092,6 +2093,7 @@
     await loadArticles();
     setStatus(`Latest · ${state.lastTotalIndexed} indexed`);
     syncHuntUsecases();
+    renderFilterCrumbs();
   }
 
   function channelParam() {
@@ -2222,9 +2224,8 @@
 
     const linked = linkedTechniqueIdsForControl("detection", detectionId);
     state.linkedTechniques = linked;
-    updateFilterContext(
-      `${control.id} · ${control.title} · ${linked.length} linked technique(s)`,
-    );
+    updateFilterContext("");
+    renderFilterCrumbs();
     setStatus(`Loading articles for ${control.id}…`);
     setActivePane("articles");
     const data = await api("/articles", {
@@ -2266,9 +2267,8 @@
 
     const linked = linkedTechniqueIdsForControl("prevention", preventionId);
     state.linkedTechniques = linked;
-    updateFilterContext(
-      `${control.id} · ${control.title} · ${linked.length} linked technique(s)`,
-    );
+    updateFilterContext("");
+    renderFilterCrumbs();
     setStatus(`Loading articles for ${control.id}…`);
     setActivePane("articles");
     const data = await api("/articles", {
@@ -2436,6 +2436,96 @@
 
   const REFINE_OPEN_KEY = "insider-intel-refine-open";
 
+  function buildCrumb(label, onRemove, title) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip crumb";
+    btn.title = title || `Remove filter: ${label}`;
+    const text = document.createElement("span");
+    text.textContent = label;
+    const x = document.createElement("span");
+    x.className = "crumb-x";
+    x.setAttribute("aria-hidden", "true");
+    x.textContent = "×";
+    btn.append(text, x);
+    btn.addEventListener("click", onRemove);
+    li.appendChild(btn);
+    return li;
+  }
+
+  function renderFilterCrumbs() {
+    if (!els.filterCrumbs) return;
+    els.filterCrumbs.innerHTML = "";
+    const fail = (err) => setStatus(`Load failed: ${err.message}`);
+    const items = [];
+
+    if (state.itmAlignment === "all") {
+      items.push(
+        buildCrumb(
+          "All indexed",
+          () => {
+            state.itmAlignment = "insider";
+            setActiveScopePill("insider");
+            updateRefineSummary();
+            reapplyActiveFilters().catch(fail);
+          },
+          "Back to Insider Focus",
+        ),
+      );
+    }
+
+    if (state.channel && state.channel !== "all") {
+      const labels = { news: "News", filings: "Filings", tips: "Tips" };
+      items.push(
+        buildCrumb(labels[state.channel] || state.channel, () => {
+          state.channel = "all";
+          setActiveChannelPill("all");
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.sourceId) {
+      let label = state.sourceId;
+      const opt = els.sourceSelect && els.sourceSelect.selectedOptions[0];
+      if (opt) label = opt.textContent.replace(/\s*\(\d+\)\s*$/, "").trim();
+      items.push(
+        buildCrumb(label, () => {
+          state.sourceId = "";
+          if (els.sourceSelect) els.sourceSelect.value = "";
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.selectedDetectionId || state.selectedPreventionId) {
+      const kind = state.selectedDetectionId ? "detections" : "preventions";
+      const id = state.selectedDetectionId || state.selectedPreventionId;
+      const control = ((state.itmCatalog && state.itmCatalog[kind]) || []).find(
+        (c) => c.id === id,
+      );
+      items.push(
+        buildCrumb(control ? `${control.id} · ${control.title}` : id, () => {
+          showLatest().catch(fail);
+        }),
+      );
+    }
+
+    if (state.searchMode && state.lastHuntQuery) {
+      items.push(
+        buildCrumb(`Hunt: ${state.lastHuntQuery}`, () => {
+          showLatest().catch(fail);
+        }),
+      );
+    }
+
+    items.forEach((li) => els.filterCrumbs.appendChild(li));
+    els.filterCrumbs.hidden = items.length === 0;
+  }
+
   function updateRefineSummary() {
     if (!els.refineState) return;
     const alignLabel =
@@ -2453,6 +2543,7 @@
     els.refineState.textContent = sourceLabel
       ? `${alignLabel} · ${channelLabel} · ${sourceLabel}`
       : `${alignLabel} · ${channelLabel}`;
+    renderFilterCrumbs();
   }
 
   function initRefinePanel() {
@@ -2638,6 +2729,7 @@
       `Hunt · ${mapCount} map(s) · ${results.length} article(s) of ${state.lastTotalIndexed} indexed`,
     );
     syncHuntUsecases();
+    renderFilterCrumbs();
   }
 
   async function reapplyActiveFilters() {
