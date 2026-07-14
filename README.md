@@ -12,15 +12,19 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 
 ## For Cursor / AI agents
 
-**Start here:** [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md) — full handoff
-(status, commands, file map, next steps). Process: [`docs/PROCESS.md`](docs/PROCESS.md).
+**Start here:** [`CLAUDE.md`](CLAUDE.md) — the agent operating manual
+(architecture map, commands, production invariants, hard-won gotchas).
+Dev environment: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · hosting:
+[`docs/hosting.md`](docs/hosting.md) · process: [`docs/PROCESS.md`](docs/PROCESS.md).
+Older handoff notes: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
 
 ## Release status
 
 **MVP prototype candidate** (`mvp-prototype-0.1`) — process: **Kanban + milestone gates**
 ([M1](https://github.com/Scubber/insider-intel/milestone/1) closed at tag;
 [M2 Hosted MVP](https://github.com/Scubber/insider-intel/milestone/2) next).
-Public UI works; API hosting is still bake/redeploy until M2 (GCS + scheduled ingest).
+Public UI and API are **hosted and self-refreshing** (GCS corpus + 6h
+scheduled ingest + keyless CD on merge to `main` — see [`docs/hosting.md`](docs/hosting.md)).
 
 ## MVP capability status
 
@@ -43,9 +47,17 @@ Public UI works; API hosting is still bake/redeploy until M2 (GCS + scheduled in
 | Web scrapers (non-RSS) | ✅ sitemap archive MVP (`ingest_archive`) |
 | Postgres + pgvector | 🔜 |
 | LLM summaries | 🔜 (`ai_summary` reserved) |
-| Cloudflare Pages + Cloud Run | 🟡 | Pages UI live; Cloud Run API via `scripts/deploy_cloud_run.sh` |
+| GitHub Pages + Cloud Run (GCS corpus, 6h refresh, OIDC CD) | ✅ |
 
 ## Quick start (local)
+
+Containerized (recommended — see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)):
+
+```bash
+make up     # API :8000 + UI :5500 + Postgres sidecar; make test / lint / shell
+```
+
+Or bare-metal:
 
 ```bash
 # Install (Python 3.12+)

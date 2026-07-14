@@ -1,3 +1,8 @@
+> **Note (2026-07-14):** parts of this handoff predate the containerized dev
+> environment and production hosting. Current source of truth:
+> [`../CLAUDE.md`](../CLAUDE.md), [`DEVELOPMENT.md`](DEVELOPMENT.md),
+> [`hosting.md`](hosting.md).
+
 # Cursor Handoff — insider-intel
 
 **Read this first** when continuing work on `insider-intel`.  
