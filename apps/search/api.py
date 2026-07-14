@@ -24,7 +24,10 @@ from shared.schemas import (
     SearchMode,
     SearchRequest,
     SearchResponse,
+    SocialCatalogResponse,
+    SocialSourceInfo,
     SourceInfo,
+    UseCaseInfo,
 )
 from shared.settings import get_settings
 
@@ -96,7 +99,15 @@ def list_sources(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
 ) -> list[SourceInfo]:
     """Sources with counts matching the same filters as the article stream."""
@@ -106,6 +117,8 @@ def list_sources(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
     )
 
 @app.get("/itm", response_model=ItmCatalogResponse)
@@ -150,7 +163,15 @@ def list_articles(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
     topic_match: bool = Query(
         default=False,
@@ -175,6 +196,8 @@ def list_articles(
         prevention_id=prevention_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
         topic_match=topic_match,
         group=group,
     )
@@ -192,6 +215,8 @@ def search_post(body: SearchRequest) -> SearchResponse:
         itm_id=body.itm_id,
         itm_alignment=body.itm_alignment,
         channel=body.channel,
+        use_case=body.use_case,
+        insider_type=body.insider_type,
     )
 
 
@@ -210,7 +235,15 @@ def search_get(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
 ) -> SearchResponse:
     return service.search(
@@ -223,6 +256,8 @@ def search_get(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
     )
 
 
@@ -348,6 +383,86 @@ def extract_ttps(body: ExtractTtpsRequest, request: Request) -> ExtractTtpsRespo
         raise HTTPException(status_code=400, detail="links required")
     index = service.get_index()
     return extract_ttps_for_links(index, links, settings=get_settings())
+
+
+@app.get("/usecases", response_model=list[UseCaseInfo])
+def list_usecases() -> list[UseCaseInfo]:
+    """Hunt use-case registry (ids + labels for UI filter chips)."""
+    return service.list_use_cases()
+
+
+@app.get("/social/catalog", response_model=SocialCatalogResponse)
+def social_catalog() -> SocialCatalogResponse:
+    """Curated social discovery suggestions plus current subscriptions."""
+    return service.social_catalog()
+
+
+class SocialSubscriptionRequest(BaseModel):
+    platform: str = Field(..., pattern="^(reddit|x)$")
+    id: str = Field(..., min_length=1, description="Subreddit name or X handle")
+    name: str | None = None
+
+
+@app.get("/social/subscriptions", response_model=list[SocialSourceInfo])
+def list_social_subscriptions() -> list[SocialSourceInfo]:
+    return service.social_catalog().subscriptions
+
+
+@app.post("/social/subscriptions", response_model=SocialSourceInfo)
+def add_social_subscription(body: SocialSubscriptionRequest) -> SocialSourceInfo:
+    """Subscribe a subreddit / X handle; pulled on the next social ingest run."""
+    try:
+        return service.add_social_subscription(body.platform, body.id, name=body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/social/subscriptions/{platform}/{handle}")
+def remove_social_subscription(platform: str, handle: str) -> dict[str, object]:
+    if platform not in ("reddit", "x"):
+        raise HTTPException(status_code=400, detail="platform must be reddit or x")
+    removed = service.remove_social_subscription(platform, handle)
+    if not removed:
+        raise HTTPException(status_code=404, detail="subscription not found")
+    return {"status": "removed", "platform": platform, "id": handle}
+
+
+class SocialIngestUrlRequest(BaseModel):
+    url: str = Field(..., min_length=10, description="Reddit post URL (or /s/ share link)")
+
+
+@app.post("/social/ingest_url")
+def social_ingest_url(body: SocialIngestUrlRequest) -> dict[str, object]:
+    """Flag one social post by URL: fetch, store, process, and index it now."""
+    from apps.aggregator.process_pipeline import run_processing
+    from apps.aggregator.reddit_pipeline import ingest_reddit_post_url
+
+    settings = get_settings()
+    try:
+        article = ingest_reddit_post_url(body.url, store_path=settings.raw_articles_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — remote fetch failure
+        raise HTTPException(status_code=502, detail=f"fetch failed: {exc}") from exc
+    if article is None:
+        raise HTTPException(status_code=404, detail="no post found at that URL")
+
+    processing = run_processing(
+        raw_path=settings.raw_articles_path,
+        processed_path=settings.processed_articles_path,
+        min_score=0.0,
+    )
+    index = service.get_index(settings.processed_articles_path, reload=True)
+    hit = index.hit_by_link(article.link)
+    return {
+        "status": "ingested",
+        "title": article.title,
+        "link": article.link,
+        "channel": article.channel,
+        "processed": processing.articles_processed,
+        "use_cases": hit.use_cases if hit else [],
+        "insider_type": hit.insider_type if hit else None,
+    }
 
 
 @app.post("/reload")

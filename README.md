@@ -32,6 +32,8 @@ Public UI works; API hosting is still bake/redeploy until M2 (GCS + scheduled in
 | Sitemap archive backfill (`ingest_archive`) | ✅ |
 | Google Alerts / web-keyword RSS (when configured) | ✅ |
 | Feedly boards (optional) | ✅ |
+| Social media (Reddit JSON + X, `channel=social`) with discovery catalog + subscriptions | ✅ |
+| Use-case + insider-type classification (heuristic; optional local/Anthropic LLM refiner) | ✅ |
 | LangGraph processing (ITM technique match + score) | ✅ |
 | Slim ITM taxonomy (`shared/data/itm_index.json`) | ✅ |
 | Local storage (JSONL) | ✅ |
@@ -68,6 +70,10 @@ python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.example.json
 python -m apps.aggregator ingest_feedly   # requires FEEDLY_* env
 python -m apps.aggregator ingest_courtlistener
 python -m apps.aggregator ingest_web_keywords  # requires WEB_KEYWORD_FEED_URLS
+python -m apps.aggregator social suggest       # curated subreddit / X catalog
+python -m apps.aggregator social add reddit overemployed
+python -m apps.aggregator ingest_social        # pull subscribed social sources
+python -m apps.aggregator ingest_social_url https://www.reddit.com/r/jobsearchhacks/s/...
 python -m apps.aggregator process --force
 python -m apps.aggregator export --out dist/export
 python -m apps.aggregator refresh_itm   # refresh slim ITM index from Forscie JSON

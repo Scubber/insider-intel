@@ -6,6 +6,7 @@ from shared.schemas.articles import (
     ExtractedEntities,
     FeedSource,
     IngestionRunResult,
+    InsiderType,
     ItmHit,
     ProcessedArticle,
     ProcessingRunResult,
@@ -20,8 +21,11 @@ from shared.schemas.search import (
     SearchMode,
     SearchRequest,
     SearchResponse,
+    SocialCatalogResponse,
+    SocialSourceInfo,
     SourceInfo,
     StoryCluster,
+    UseCaseInfo,
 )
 
 __all__ = [
@@ -31,6 +35,7 @@ __all__ = [
     "ExtractedEntities",
     "FeedSource",
     "IngestionRunResult",
+    "InsiderType",
     "ItmCatalogResponse",
     "ItmHit",
     "ProcessedArticle",
@@ -40,8 +45,11 @@ __all__ = [
     "SearchMode",
     "SearchRequest",
     "SearchResponse",
+    "SocialCatalogResponse",
+    "SocialSourceInfo",
     "SourceInfo",
     "SourceIngestionResult",
     "StoryCluster",
+    "UseCaseInfo",
     "resolve_channel",
 ]

@@ -32,6 +32,26 @@ def test_resolve_channel_heuristics() -> None:
     assert resolve_channel("unit42", "tips") == "tips"
 
 
+def test_resolve_channel_social() -> None:
+    assert resolve_channel("social-reddit-overemployed", "news") == "social"
+    assert resolve_channel("social-x-somehandle", None) == "social"
+    assert resolve_channel("anything", None, category="social-reddit") == "social"
+    assert resolve_channel("anything", "social") == "social"
+    # Legacy Reddit RSS feeds must stay in tips
+    assert resolve_channel("reddit-netsec", None) == "tips"
+
+
+def test_channel_filter_social_on_index() -> None:
+    index = ArticleSearchIndex(
+        [
+            _article(source_id="krebs", channel="news", title="news-a"),
+            _article(source_id="social-reddit-overemployed", channel="social", title="soc-a"),
+        ]
+    )
+    social = index.list_articles(limit=10, min_score=0, itm_alignment="all", channel="social")
+    assert social.count == 1 and social.results[0].channel == "social"
+
+
 def test_channel_filter_on_index() -> None:
     index = ArticleSearchIndex(
         [

@@ -104,8 +104,9 @@
 
   function articleChannel(article) {
     const ch = String(article.channel || "").toLowerCase();
-    if (ch === "news" || ch === "filings" || ch === "tips") return ch;
+    if (ch === "news" || ch === "filings" || ch === "tips" || ch === "social") return ch;
     const sid = String(article.source_id || "").toLowerCase();
+    if (sid.startsWith("social-")) return "social";
     if (sid.startsWith("reddit-") || sid.startsWith("tip-")) return "tips";
     if (sid.includes("courtlistener")) return "filings";
     return "news";
@@ -115,6 +116,20 @@
     const m = (mode || "all").toLowerCase();
     if (m === "all" || m === "*" || m === "") return true;
     return articleChannel(article) === m;
+  }
+
+  function articleMatchesUseCase(article, mode) {
+    const m = (mode || "all").toLowerCase();
+    if (m === "all" || m === "*" || m === "") return true;
+    return (article.use_cases || []).includes(m);
+  }
+
+  function articleMatchesInsiderType(article, mode) {
+    const m = (mode || "all").toLowerCase();
+    if (m === "all" || m === "*" || m === "") return true;
+    const value = article.insider_type || null;
+    if (m === "none" || m === "unclassified") return value === null;
+    return value === m;
   }
 
   function articleMatchesTopic(article, tech) {
@@ -276,6 +291,8 @@
       if (sourceId && a.source_id !== sourceId) return false;
       if (!articleMatchesAlignment(a, alignment)) return false;
       if (!articleMatchesChannel(a, channel)) return false;
+      if (!articleMatchesUseCase(a, params.use_case)) return false;
+      if (!articleMatchesInsiderType(a, params.insider_type)) return false;
       if (theme) {
         const hits = a.itm_hits || [];
         if (!hits.some((h) => String(h.theme || "").toLowerCase() === theme)) return false;

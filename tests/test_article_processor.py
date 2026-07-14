@@ -110,6 +110,65 @@ def test_naive_processed_at_does_not_crash(tmp_path: Path) -> None:
     assert not result.errors
 
 
+def test_processed_article_carries_classification() -> None:
+    raw = _raw(
+        title="Confession: overemployed and hiding it",
+        link="https://reddit.com/r/overemployed/post1",
+        summary=(
+            "I'm working two remote jobs (J1 and J2) without telling either "
+            "employer. Our outside employment policy forbids it but everyone does it."
+        ),
+        source_id="social-reddit-overemployed",
+        source_name="Reddit r/overemployed",
+        channel="social",
+    )
+    processed = process_article(raw)
+    assert processed.channel == "social"
+    assert "overemployment" in processed.use_cases
+    assert processed.insider_type == "negligent"
+    assert processed.classification_source == "heuristic"
+    assert processed.classification_confidence is None
+
+
+def test_unclassified_article_has_defaults() -> None:
+    raw = _raw(
+        title="Quarterly roadmap update",
+        link="https://example.com/roadmap",
+        summary="<p>The all-hands covered the roadmap and a new office.</p>",
+    )
+    processed = process_article(raw)
+    assert processed.use_cases == []
+    assert processed.insider_type is None
+    assert processed.classification_source is None
+
+
+def test_old_shape_processed_row_still_loads(tmp_path: Path) -> None:
+    """Rows written before the classification fields existed must parse."""
+    import json
+
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save([_raw()])
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+
+    row = json.loads(processed_path.read_text().splitlines()[0])
+    for key in (
+        "use_cases",
+        "insider_type",
+        "classification_source",
+        "classification_confidence",
+    ):
+        row.pop(key, None)
+    processed_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    from apps.aggregator.processed_storage import JsonlProcessedStore
+
+    rows = JsonlProcessedStore(processed_path).load_all()
+    assert len(rows) == 1
+    assert rows[0].use_cases == []
+    assert rows[0].insider_type is None
+
+
 def test_filing_articles_cluster_by_docket() -> None:
     docket = _raw(
         title="United States v. Example",

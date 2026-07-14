@@ -169,6 +169,32 @@ def _article_matches_alignment(
     return alignment == mode
 
 
+def _article_matches_use_case(
+    article: ProcessedArticle,
+    *,
+    use_case: str | None = None,
+) -> bool:
+    mode = (use_case or "all").strip().lower()
+    if mode in {"", "all", "*"}:
+        return True
+    return mode in (getattr(article, "use_cases", None) or [])
+
+
+def _article_matches_insider_type(
+    article: ProcessedArticle,
+    *,
+    insider_type: str = "all",
+) -> bool:
+    """'none' selects unclassified articles; 'all' passes everything."""
+    mode = (insider_type or "all").strip().lower()
+    if mode in {"", "all", "*"}:
+        return True
+    value = getattr(article, "insider_type", None)
+    if mode in {"none", "unclassified"}:
+        return value is None
+    return value == mode
+
+
 class ArticleSearchIndex:
     """Keyword + semantic + hybrid search over ProcessedArticle records."""
 
@@ -259,6 +285,8 @@ class ArticleSearchIndex:
         itm_id: str | None = None,
         itm_alignment: str = "all",
         channel: str = "all",
+        use_case: str | None = None,
+        insider_type: str = "all",
     ) -> list[tuple[str, str, int]]:
         """Return (source_id, source_name, article_count) matching optional filters."""
         counts: dict[str, tuple[str, int]] = {}
@@ -270,6 +298,10 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_use_case(article, use_case=use_case):
+                continue
+            if not _article_matches_insider_type(article, insider_type=insider_type):
                 continue
             sid = article.source_id
             name, n = counts.get(sid, (article.source_name, 0))
@@ -284,6 +316,8 @@ class ArticleSearchIndex:
         min_score: float = 0.0,
         source_id: str | None = None,
         channel: str = "all",
+        use_case: str | None = None,
+        insider_type: str = "all",
     ) -> dict[str, int]:
         """Count indexed articles per technique id.
 
@@ -303,6 +337,10 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_use_case(article, use_case=use_case):
+                continue
+            if not _article_matches_insider_type(article, insider_type=insider_type):
                 continue
 
             if not topic_match:
@@ -339,6 +377,8 @@ class ArticleSearchIndex:
         prevention_id: str | None = None,
         itm_alignment: str = "insider",
         channel: str = "all",
+        use_case: str | None = None,
+        insider_type: str = "all",
         topic_match: bool = False,
         group: bool = True,
     ) -> ArticleListResponse:
@@ -362,6 +402,8 @@ class ArticleSearchIndex:
             )
             and _article_matches_alignment(a, itm_alignment=itm_alignment)
             and _article_matches_channel(a, channel=channel)
+            and _article_matches_use_case(a, use_case=use_case)
+            and _article_matches_insider_type(a, insider_type=insider_type)
         ]
         hits = [self._to_hit(article, article.relevance_score) for article in filtered]
 
@@ -399,6 +441,8 @@ class ArticleSearchIndex:
         itm_id: str | None = None,
         itm_alignment: str = "insider",
         channel: str = "all",
+        use_case: str | None = None,
+        insider_type: str = "all",
     ) -> SearchResponse:
         query = (query or "").strip()
         if not query:
@@ -422,6 +466,10 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_use_case(article, use_case=use_case):
+                continue
+            if not _article_matches_insider_type(article, insider_type=insider_type):
                 continue
 
             kw_score = self._keyword_score(query_tokens, self._tokens[i], article)
@@ -512,4 +560,6 @@ class ArticleSearchIndex:
             ),
             itm_alignment=getattr(article, "itm_alignment", None) or "weak",
             story_key=story_key,
+            use_cases=list(getattr(article, "use_cases", None) or []),
+            insider_type=getattr(article, "insider_type", None),
         )
