@@ -118,13 +118,14 @@ def hit_to_raw_article(
         shown = [str(p) for p in parties[:8] if p]
         if shown:
             parts.append("Parties: " + "; ".join(shown))
-    parts.append(f"CourtListener query: {query}")
-
     return RawArticle(
         title=title,
         link=link,
         published=_parse_date(hit.get("dateFiled") or hit.get("date_filed")),
         summary="\n".join(parts) if parts else None,
+        # Scored (clean_text) but never displayed — keeps the match signal
+        # out of the user-visible summary.
+        content=f"CourtListener query: {query}",
         source_id=SOURCE_ID,
         source_name=SOURCE_NAME,
         channel="filings",
@@ -182,13 +183,12 @@ def opinion_hit_to_raw_article(
     snippet = _opinion_snippet(hit)
     if snippet:
         parts.append(snippet)
-    parts.append(f"CourtListener query: {query}")
-
     return RawArticle(
         title=title,
         link=link,
         published=_parse_date(hit.get("dateFiled") or hit.get("date_filed")),
         summary="\n".join(parts) if parts else None,
+        content=f"CourtListener query: {query}",
         source_id=OPINIONS_SOURCE_ID,
         source_name=OPINIONS_SOURCE_NAME,
         channel="filings",
@@ -279,7 +279,8 @@ def enrich_opinion_article(
         return article
     if not text:
         return article
-    return article.model_copy(update={"content": text})
+    combined = f"{article.content}\n{text}" if article.content else text
+    return article.model_copy(update={"content": combined})
 
 
 SEARCH_TYPES: dict[str, SearchTypeSpec] = {

@@ -247,8 +247,12 @@ def test_search_opinions_fetch_content_survives_detail_error() -> None:
             client=client,
         )
     assert len(articles) == 2
-    assert articles[0].content == "full opinion body"
-    assert articles[1].content is None  # detail 500 never drops the article
+    # query tag lives in content (scored, not displayed); opinion body appends
+    assert articles[0].content is not None
+    assert articles[0].content.startswith("CourtListener query:")
+    assert articles[0].content.endswith("full opinion body")
+    # detail 500 never drops the article; content keeps just the query tag
+    assert articles[1].content == "CourtListener query: insider"
 
 
 def test_search_dockets_never_fetches_detail() -> None:
