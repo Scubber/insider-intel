@@ -65,6 +65,8 @@ def run_reddit_ingestion(
                 sub,
                 limit=max_posts,
                 user_agent=settings.reddit_user_agent,
+                client_id=settings.reddit_client_id,
+                client_secret=settings.reddit_client_secret,
             )
             articles: list[RawArticle] = []
             for post in posts:

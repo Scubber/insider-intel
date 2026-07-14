@@ -150,7 +150,13 @@ class Settings(BaseSettings):
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_model: str = Field(default="grok-3-mini", alias="XAI_MODEL")
 
-    # Social — Reddit public JSON (no OAuth needed for read)
+    # Social — Reddit. Public JSON works from residential IPs; cloud IPs get
+    # 429'd, so set a free "script" app's credentials for OAuth app auth.
+    reddit_client_id: str | None = Field(default=None, alias="REDDIT_CLIENT_ID")
+    reddit_client_secret: str | None = Field(
+        default=None,
+        alias="REDDIT_CLIENT_SECRET",
+    )
     reddit_subreddits: str = Field(
         default="",
         alias="REDDIT_SUBREDDITS",

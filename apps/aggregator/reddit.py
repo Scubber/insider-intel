@@ -1,8 +1,11 @@
-"""Reddit client — public JSON listings, no OAuth needed for read.
+"""Reddit client — OAuth app auth when configured, public JSON otherwise.
 
-Reddit rejects default HTTP user agents; always send a descriptive UA.
-Supports subreddit /new listings plus single-post ingestion by URL (the
-manual "flag this post" path), including /s/ share links via redirect.
+Reddit rejects default HTTP user agents (and 429s unauthenticated requests
+from cloud provider IPs); always send a descriptive UA, and configure
+REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET (a free "script" app) so listing
+fetches go through oauth.reddit.com. Supports subreddit /new listings plus
+single-post ingestion by URL (the manual "flag this post" path), including
+/s/ share links via redirect — the single-post path stays on public JSON.
 """
 
 from __future__ import annotations
@@ -21,7 +24,49 @@ from shared.utils.text import to_plain_text
 logger = logging.getLogger(__name__)
 
 REDDIT_ORIGIN = "https://www.reddit.com"
+OAUTH_ORIGIN = "https://oauth.reddit.com"
+TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 DEFAULT_USER_AGENT = "insider-intel/0.1 (insider-threat research aggregator)"
+
+# App token cache: (access_token, monotonic_expiry). client_credentials
+# tokens last ~24h; refresh a minute early.
+_token_cache: tuple[str, float] | None = None
+
+
+def _get_app_token(
+    client_id: str,
+    client_secret: str,
+    *,
+    user_agent: str,
+    timeout: float = 20.0,
+    client: httpx.Client | None = None,
+) -> str:
+    global _token_cache
+    if _token_cache and time.monotonic() < _token_cache[1]:
+        return _token_cache[0]
+    owns_client = client is None
+    client = client or httpx.Client(timeout=timeout)
+    try:
+        response = client.post(
+            TOKEN_URL,
+            auth=(client_id, client_secret),
+            headers={"User-Agent": user_agent},
+            data={"grant_type": "client_credentials"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+    finally:
+        if owns_client:
+            client.close()
+    token = payload["access_token"]
+    expires_in = float(payload.get("expires_in") or 3600)
+    _token_cache = (token, time.monotonic() + max(expires_in - 60.0, 60.0))
+    return token
+
+
+def _clear_app_token() -> None:
+    global _token_cache
+    _token_cache = None
 
 
 def subreddit_source(sub: str) -> tuple[str, str]:
@@ -50,21 +95,78 @@ def _get_json(
         return response.json()
 
 
+def _oauth_get_json(
+    url: str,
+    *,
+    client_id: str,
+    client_secret: str,
+    user_agent: str,
+    params: dict[str, Any] | None = None,
+    timeout: float = 20.0,
+    client: httpx.Client | None = None,
+) -> Any:
+    """GET against oauth.reddit.com with a cached app token; one 401 retry."""
+    owns_client = client is None
+    client = client or httpx.Client(timeout=timeout, follow_redirects=True)
+    try:
+        for attempt in (1, 2):
+            token = _get_app_token(
+                client_id, client_secret, user_agent=user_agent, client=client
+            )
+            response = client.get(
+                url,
+                params=params,
+                headers={
+                    "User-Agent": user_agent,
+                    "Accept": "application/json",
+                    "Authorization": f"bearer {token}",
+                },
+            )
+            if response.status_code == 401 and attempt == 1:
+                _clear_app_token()  # expired/revoked token — mint a fresh one
+                continue
+            response.raise_for_status()
+            return response.json()
+    finally:
+        if owns_client:
+            client.close()
+
+
 def fetch_subreddit_new(
     sub: str,
     *,
     limit: int = 50,
     user_agent: str = DEFAULT_USER_AGENT,
     timeout: float = 20.0,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    client: httpx.Client | None = None,
 ) -> list[dict[str, Any]]:
-    """Newest posts for a subreddit as raw t3 data dicts."""
+    """Newest posts for a subreddit as raw t3 data dicts.
+
+    With client_id/client_secret set, uses OAuth app auth against
+    oauth.reddit.com (survives cloud-IP 429 blocking); otherwise falls back
+    to the public JSON endpoint.
+    """
     normalized = normalize_handle("reddit", sub)
-    payload = _get_json(
-        f"{REDDIT_ORIGIN}/r/{normalized}/new.json",
-        user_agent=user_agent,
-        params={"limit": min(max(limit, 1), 100), "raw_json": 1},
-        timeout=timeout,
-    )
+    params = {"limit": min(max(limit, 1), 100), "raw_json": 1}
+    if client_id and client_secret:
+        payload = _oauth_get_json(
+            f"{OAUTH_ORIGIN}/r/{normalized}/new",
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent=user_agent,
+            params=params,
+            timeout=timeout,
+            client=client,
+        )
+    else:
+        payload = _get_json(
+            f"{REDDIT_ORIGIN}/r/{normalized}/new.json",
+            user_agent=user_agent,
+            params=params,
+            timeout=timeout,
+        )
     children = (payload or {}).get("data", {}).get("children", [])
     return [
         child.get("data", {})
