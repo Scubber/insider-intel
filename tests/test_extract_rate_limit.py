@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 import apps.search.api as api_module
 from apps.search.ratelimit import SlidingWindowLimiter
 from apps.search.ttp_extract import ExtractTtpsResponse
+from shared.settings import Settings
 
 
 def test_per_ip_window_expires() -> None:
@@ -28,7 +29,13 @@ def test_global_cap() -> None:
     assert not limiter.allow("d", now=0.0)
 
 
-def test_extract_endpoint_returns_429(monkeypatch) -> None:
+def test_extract_endpoint_returns_429(tmp_path, monkeypatch) -> None:
+    settings = Settings(
+        PROCESSED_ARTICLES_PATH=str(tmp_path / "processed.jsonl"),
+        RAW_ARTICLES_PATH=str(tmp_path / "raw.jsonl"),
+    )
+    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.search.api.get_settings", lambda: settings)
     monkeypatch.setattr(
         api_module,
         "_extract_limiter",
