@@ -61,4 +61,11 @@ jobs:
         run: |
           URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')
           curl -sf "${URL}/health" >/dev/null && echo "health OK"
-          curl -sf "${URL}/articles?limit=1" | head -c 200
+          curl -sf "${URL}/articles?limit=1" >/dev/null && echo "articles OK"
+          curl -sf "${URL}/social/catalog" >/dev/null && echo "social catalog OK"
+          # subscription write path round-trip (catches read-only mount regressions)
+          curl -sf -X POST "${URL}/social/subscriptions" \
+            -H 'Content-Type: application/json' \
+            -d '{"platform":"reddit","id":"deploy-smoke-probe"}' >/dev/null
+          curl -sf -X DELETE "${URL}/social/subscriptions/reddit/deploy-smoke-probe" >/dev/null
+          echo "subscription round-trip OK"

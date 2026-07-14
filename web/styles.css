@@ -53,6 +53,9 @@ body {
   border-bottom: 1px solid var(--top-line, var(--line));
   animation: rise 0.7s ease-out both;
   position: relative;
+  /* Above .app-shell: expanded header content (social manager, tooltips)
+     otherwise spills under the pane grid, which silently eats clicks */
+  z-index: 10;
 }
 
 .theme-picker {
