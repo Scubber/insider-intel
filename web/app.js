@@ -528,7 +528,7 @@
       );
       hint.textContent = activeItem
         ? `${activeItem.label}: ${activeItem.description}`
-        : "Pick a hunt use case, then refine by insider type below.";
+        : "Explore the Core Four — pick a hunt topic, then refine by insider type below.";
     }
   }
 
