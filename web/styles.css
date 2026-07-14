@@ -1506,23 +1506,34 @@ body {
   transform: translateY(-2px);
 }
 
-/* Chips and filter pills sit at the left viewport edge — align their tips to
-   the element start so they can't overhang the viewport */
+/* Chips, filter pills, and group labels sit at the left viewport edge — align
+   their tips to the element start so they can't overhang the viewport */
 .hunt-usecase[data-tip]::after,
-.filter-group .pill[data-tip]::after {
+.filter-group .pill[data-tip]::after,
+.filter-label[data-tip]::after {
   left: 0;
   transform: translateY(2px);
 }
 
+/* Group labels that explain their controls on hover */
+.filter-label[data-tip] {
+  display: inline-block;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .hunt-usecase[data-tip]:hover::after,
-  .filter-group .pill[data-tip]:hover::after {
+  .filter-group .pill[data-tip]:hover::after,
+  .filter-label[data-tip]:hover::after {
     transform: translateY(0);
   }
 }
 
 .hunt-usecase[data-tip]:focus-visible::after,
-.filter-group .pill[data-tip]:focus-visible::after {
+.filter-group .pill[data-tip]:focus-visible::after,
+.filter-label[data-tip]:focus-visible::after {
   transform: translateY(0);
 }
 

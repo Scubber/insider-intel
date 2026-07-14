@@ -521,15 +521,6 @@
       const isHunt = Boolean(active) && q === active;
       btn.classList.toggle("active", isFacet || isHunt);
     });
-    const hint = document.getElementById("usecase-hint");
-    if (hint) {
-      const activeItem = HUNT_USE_CASES.find(
-        (item) => item.useCase && item.useCase === state.useCase,
-      );
-      hint.textContent = activeItem
-        ? `${activeItem.label}: ${activeItem.description}`
-        : "Explore the Core Four — pick a hunt topic, then refine by insider type below.";
-    }
   }
 
   function renderHuntUsecases() {

@@ -66,14 +66,17 @@
         <button type="button" id="clear-search" class="ghost" hidden>Clear</button>
       </form>
       <div class="hunt-usecases-block">
-        <span class="filter-label">Core Four Hunt Topics</span>
+        <span
+          class="filter-label"
+          data-tip="Explore the Core Four — pick a hunt topic, then refine by insider type below."
+          tabindex="0"
+        >Core Four Hunt Topics</span>
         <div
           class="hunt-usecases"
           id="hunt-usecases"
           role="group"
           aria-label="Core Four hunt topics"
         ></div>
-        <p class="kw-hint usecase-hint" id="usecase-hint"></p>
       </div>
       <details class="refine-panel" id="refine-panel" open>
         <summary class="refine-summary" id="refine-summary">
@@ -114,7 +117,11 @@
               </div>
             </div>
             <div class="filter-group">
-              <span class="filter-label">Insider type</span>
+              <span
+                class="filter-label"
+                data-tip="How culpable the insider appears — malicious, negligent, or an honest mistake. Hover a pill for each definition."
+                tabindex="0"
+              >Insider type</span>
               <div
                 class="pill-group"
                 id="insider-type-filters"
@@ -154,9 +161,6 @@
                   Unintentional
                 </button>
               </div>
-              <p class="kw-hint filter-group-hint">
-                How culpable the insider appears — hover a pill for the definition.
-              </p>
             </div>
             <div class="source-filter-row">
               <label class="filter-label" for="source-select">Source</label>
@@ -166,10 +170,6 @@
             </div>
             <details class="social-manager" id="social-manager">
               <summary class="filter-label">Social sources</summary>
-              <p class="kw-hint">
-                Pick subreddits / X accounts to ingest. Pulled on the next run:
-                <code>python -m apps.aggregator ingest_social</code>
-              </p>
               <div class="social-manager-group">
                 <h4 class="filter-label">Subscribed</h4>
                 <ul id="social-subscribed" class="social-source-list"></ul>
