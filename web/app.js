@@ -501,13 +501,16 @@
       const when = ds.generatedAt ? ` · ${formatDate(ds.generatedAt)}` : "";
       els.dataState.textContent = `Snapshot${when} · ${indexed} indexed`;
     } else {
-      els.dataState.textContent = `Live · ${indexed} indexed`;
+      const when = ds.updatedAt ? `Updated ${formatRelativeTime(ds.updatedAt)}` : "Live";
+      els.dataState.textContent = `${when} · ${indexed} articles`;
     }
     els.dataState.classList.toggle("data-state-demo", ds.mode === "demo");
     els.dataState.title =
       ds.mode === "demo"
         ? "Static demo snapshot — not live ingest"
-        : "Connected to the live API";
+        : ds.updatedAt
+          ? `Live API — corpus last indexed ${new Date(ds.updatedAt).toLocaleString()}`
+          : "Connected to the live API";
     els.dataState.hidden = false;
   }
 
@@ -592,6 +595,20 @@
     if (res.status === 204) return null;
     const text = await res.text();
     return text ? JSON.parse(text) : null;
+  }
+
+  function formatRelativeTime(value) {
+    try {
+      const mins = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+      if (!Number.isFinite(mins)) return formatDate(value);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins} min ago`;
+      const hours = Math.round(mins / 60);
+      if (hours < 48) return `${hours} h ago`;
+      return formatDate(value);
+    } catch {
+      return formatDate(value);
+    }
   }
 
   function formatDate(value) {
@@ -3311,6 +3328,7 @@
         mode: health.demo || demoMode ? "demo" : "live",
         indexed: health.indexed_articles || 0,
         generatedAt: health.generated_at || null,
+        updatedAt: health.last_indexed_at || health.generated_at || null,
       };
       renderDataState();
       await ensureItmCatalog();

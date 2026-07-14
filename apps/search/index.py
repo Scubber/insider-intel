@@ -259,6 +259,12 @@ class ArticleSearchIndex:
     def size(self) -> int:
         return len(self._articles)
 
+    @property
+    def last_processed_at(self) -> datetime | None:
+        """Newest processed_at in the corpus — 'freshness' for /health."""
+        stamps = [a.processed_at for a in self._articles if a.processed_at]
+        return max(stamps) if stamps else None
+
     def get_by_link(self, link: str) -> ProcessedArticle | None:
         """Return the indexed article for an exact link, if present."""
         if not link:

@@ -79,7 +79,12 @@ def _require_export_token(
 @app.get("/health")
 def health() -> dict[str, object]:
     index = service.get_index()
-    return {"status": "ok", "indexed_articles": index.size}
+    last = index.last_processed_at
+    return {
+        "status": "ok",
+        "indexed_articles": index.size,
+        "last_indexed_at": last.isoformat() if last else None,
+    }
 
 
 @app.get("/sources", response_model=list[SourceInfo])
