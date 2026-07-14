@@ -138,6 +138,66 @@ class Settings(BaseSettings):
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_model: str = Field(default="grok-3-mini", alias="XAI_MODEL")
 
+    # Social — Reddit public JSON (no OAuth needed for read)
+    reddit_subreddits: str = Field(
+        default="",
+        alias="REDDIT_SUBREDDITS",
+        description="Comma-separated fallback subreddits when no subscription file",
+    )
+    reddit_limit: int = Field(default=50, alias="REDDIT_LIMIT", ge=1, le=100)
+    reddit_user_agent: str = Field(
+        default="insider-intel/0.1 (insider-threat research aggregator)",
+        alias="REDDIT_USER_AGENT",
+    )
+    reddit_delay_seconds: float = Field(
+        default=2.0,
+        alias="REDDIT_DELAY_SECONDS",
+        ge=0.0,
+        le=30.0,
+    )
+    reddit_content_max_chars: int = Field(
+        default=20_000,
+        alias="REDDIT_CONTENT_MAX_CHARS",
+        ge=500,
+        le=200_000,
+    )
+
+    # Social — X/Twitter API v2 (optional; requires paid bearer token)
+    x_bearer_token: str | None = Field(default=None, alias="X_BEARER_TOKEN")
+    x_handles: str = Field(
+        default="",
+        alias="X_HANDLES",
+        description="Comma-separated fallback handles when no subscription file",
+    )
+    x_max_results: int = Field(default=25, alias="X_MAX_RESULTS", ge=5, le=100)
+
+    # Social subscriptions store (user-picked subreddits / X follows)
+    social_subscriptions_path: str = Field(
+        default="data/config/social_subscriptions.json",
+        alias="SOCIAL_SUBSCRIPTIONS_PATH",
+    )
+
+    # Use-case / insider-type classifier LLM refiner (heuristics always run)
+    classifier_llm_provider: str = Field(
+        default="none",
+        alias="CLASSIFIER_LLM_PROVIDER",
+        description="none | anthropic | openai (any OpenAI-compatible endpoint)",
+    )
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_MODEL")
+    openai_compat_base_url: str = Field(
+        default="http://localhost:11434/v1",
+        alias="OPENAI_COMPAT_BASE_URL",
+        description="OpenAI-compatible endpoint (default: local Ollama)",
+    )
+    openai_compat_api_key: str | None = Field(default=None, alias="OPENAI_COMPAT_API_KEY")
+    openai_compat_model: str = Field(default="llama3.1:8b", alias="OPENAI_COMPAT_MODEL")
+    classify_llm_channels: str = Field(
+        default="social",
+        alias="CLASSIFY_LLM_CHANNELS",
+        description="Channels eligible for the LLM refiner (comma list or 'all')",
+    )
+
     def cors_origin_list(self) -> list[str]:
         return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
 
@@ -148,6 +208,23 @@ class Settings(BaseSettings):
         return [
             part.strip()
             for part in self.web_keyword_feed_urls.split(",")
+            if part.strip()
+        ]
+
+    def reddit_subreddit_list(self) -> list[str]:
+        return [part.strip() for part in self.reddit_subreddits.split(",") if part.strip()]
+
+    def x_handle_list(self) -> list[str]:
+        return [
+            part.strip().lstrip("@")
+            for part in self.x_handles.split(",")
+            if part.strip().lstrip("@")
+        ]
+
+    def classify_llm_channel_list(self) -> list[str]:
+        return [
+            part.strip().lower()
+            for part in self.classify_llm_channels.split(",")
             if part.strip()
         ]
 

@@ -45,14 +45,29 @@
     },
   };
 
-  /** Vetted Hunt use cases — operator-facing chips under the search bar. */
+  /** Vetted Hunt use cases — operator-facing chips under the search bar.
+   * Chips with a useCase id filter the stream on the classified facet
+   * (keep ids aligned with shared/taxonomy/use_cases.py); query-only chips
+   * fall back to a text hunt. */
   const HUNT_USE_CASES = [
-    { label: "Overemployment", query: "overemployment" },
+    { label: "Overemployment", useCase: "overemployment", query: "overemployment" },
+    { label: "Data exfiltration", useCase: "data-exfiltration", query: "data exfiltration" },
+    { label: "Credential misuse", useCase: "credential-misuse", query: "shared credentials" },
+    { label: "Shadow IT", useCase: "shadow-it", query: "shadow it" },
     { label: "Moonlighting", query: "moonlighting" },
-    { label: "Outside employment", query: "outside employment" },
-    { label: "Dual employment", query: "dual employment" },
     { label: "Trade secret", query: "trade secret" },
   ];
+
+  const USE_CASE_LABELS = HUNT_USE_CASES.reduce((acc, item) => {
+    if (item.useCase) acc[item.useCase] = item.label;
+    return acc;
+  }, {});
+
+  const INSIDER_TYPE_LABELS = {
+    malicious: "Malicious",
+    negligent: "Negligent",
+    unintentional: "Unintentional",
+  };
 
   /** Curated IF038 TTP seeds — keep aligned with docs/ttps_overemployment.md */
   const IF038_TTP_SEEDS = [
@@ -271,6 +286,14 @@
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
     alignFilters: document.getElementById("align-filters"),
     channelFilters: document.getElementById("channel-filters"),
+    insiderTypeFilters: document.getElementById("insider-type-filters"),
+    socialManager: document.getElementById("social-manager"),
+    socialSubscribed: document.getElementById("social-subscribed"),
+    socialSubscribedEmpty: document.getElementById("social-subscribed-empty"),
+    socialSuggested: document.getElementById("social-suggested"),
+    socialAddForm: document.getElementById("social-add-form"),
+    socialAddPlatform: document.getElementById("social-add-platform"),
+    socialAddHandle: document.getElementById("social-add-handle"),
     refinePanel: document.getElementById("refine-panel"),
     refineState: document.getElementById("refine-state"),
     matrixQ: document.getElementById("matrix-q"),
@@ -298,6 +321,8 @@
     theme: "",
     itmAlignment: "insider",
     channel: "all",
+    useCase: "",
+    insiderType: "all",
     articles: [],
     clusters: [],
     selectedLink: null,
@@ -470,7 +495,10 @@
     const active = (state.lastHuntQuery || "").trim().toLowerCase();
     els.huntUsecases.querySelectorAll(".hunt-usecase").forEach((btn) => {
       const q = (btn.dataset.query || "").toLowerCase();
-      btn.classList.toggle("active", Boolean(active) && q === active);
+      const uc = btn.dataset.useCase || "";
+      const isFacet = Boolean(uc) && uc === state.useCase;
+      const isHunt = Boolean(active) && q === active;
+      btn.classList.toggle("active", isFacet || isHunt);
     });
   }
 
@@ -482,11 +510,22 @@
       btn.type = "button";
       btn.className = "hunt-usecase";
       btn.dataset.query = item.query;
+      if (item.useCase) btn.dataset.useCase = item.useCase;
       btn.textContent = item.label;
-      btn.title = `Hunt: ${item.query}`;
+      btn.title = item.useCase
+        ? `Filter stream: ${item.label}`
+        : `Hunt: ${item.query}`;
       btn.addEventListener("click", () => {
-        if (els.q) els.q.value = item.query;
-        runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
+        if (item.useCase) {
+          // Toggle the classified use-case facet on the stream.
+          state.useCase = state.useCase === item.useCase ? "" : item.useCase;
+          syncHuntUsecases();
+          updateRefineSummary();
+          reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+        } else {
+          if (els.q) els.q.value = item.query;
+          runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
+        }
         if (isMobileLayout()) setActivePane("articles");
       });
       els.huntUsecases.appendChild(btn);
@@ -1645,6 +1684,8 @@
           min_score: 0,
           itm_alignment: "all",
           channel: channelParam(),
+          use_case: useCaseParam(),
+          insider_type: insiderTypeParam(),
           source_id: state.sourceId || undefined,
           itm_id,
           topic_match: true,
@@ -2126,6 +2167,14 @@
     return state.channel && state.channel !== "all" ? state.channel : undefined;
   }
 
+  function useCaseParam() {
+    return state.useCase && state.useCase !== "all" ? state.useCase : undefined;
+  }
+
+  function insiderTypeParam() {
+    return state.insiderType && state.insiderType !== "all" ? state.insiderType : undefined;
+  }
+
   async function selectTechnique(techniqueId) {
     navigate(`/technique/${encodeURIComponent(techniqueId)}`);
     await showDossier(techniqueId);
@@ -2217,6 +2266,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       itm_id: tech.id,
       topic_match: true,
@@ -2260,6 +2311,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       detection_id: control.id,
       topic_match: true,
@@ -2303,6 +2356,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       prevention_id: control.id,
       topic_match: true,
@@ -2379,6 +2434,18 @@
     const extra =
       cluster.member_count > 1 ? ` · +${cluster.member_count - 1} sources` : "";
     meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
+    if (article.insider_type) {
+      const badge = document.createElement("span");
+      badge.className = `insider-type-badge insider-type-${article.insider_type}`;
+      badge.textContent = INSIDER_TYPE_LABELS[article.insider_type] || article.insider_type;
+      meta.append(" · ", badge);
+    }
+    (article.use_cases || []).forEach((useCaseId) => {
+      const tag = document.createElement("span");
+      tag.className = "use-case-tag";
+      tag.textContent = USE_CASE_LABELS[useCaseId] || useCaseId;
+      meta.append(" ", tag);
+    });
     const snip = document.createElement("p");
     snip.className = "snip";
     snip.textContent = article.summary || "";
@@ -2528,6 +2595,12 @@
     });
   }
 
+  function setActiveInsiderTypePill(insiderType) {
+    document.querySelectorAll("#insider-type-filters .pill").forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.insiderType || "") === insiderType);
+    });
+  }
+
   const REFINE_OPEN_KEY = "insider-intel-refine-open";
 
   function buildCrumb(label, onRemove, title) {
@@ -2570,11 +2643,33 @@
     }
 
     if (state.channel && state.channel !== "all") {
-      const labels = { news: "News", filings: "Filings", tips: "Tips" };
+      const labels = { news: "News", filings: "Filings", tips: "Tips", social: "Social" };
       items.push(
         buildCrumb(labels[state.channel] || state.channel, () => {
           state.channel = "all";
           setActiveChannelPill("all");
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.useCase) {
+      items.push(
+        buildCrumb(USE_CASE_LABELS[state.useCase] || state.useCase, () => {
+          state.useCase = "";
+          syncHuntUsecases();
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.insiderType && state.insiderType !== "all") {
+      items.push(
+        buildCrumb(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType, () => {
+          state.insiderType = "all";
+          setActiveInsiderTypePill("all");
           updateRefineSummary();
           reapplyActiveFilters().catch(fail);
         }),
@@ -2628,15 +2723,20 @@
     if (state.channel === "news") channelLabel = "News";
     else if (state.channel === "filings") channelLabel = "Filings";
     else if (state.channel === "tips") channelLabel = "Tips";
+    else if (state.channel === "social") channelLabel = "Social";
     let sourceLabel = "";
     if (state.sourceId && els.sourceSelect) {
       const opt = els.sourceSelect.selectedOptions[0];
       const raw = (opt && opt.textContent) || state.sourceId;
       sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim();
     }
-    els.refineState.textContent = sourceLabel
-      ? `${alignLabel} · ${channelLabel} · ${sourceLabel}`
-      : `${alignLabel} · ${channelLabel}`;
+    const parts = [alignLabel, channelLabel];
+    if (state.useCase) parts.push(USE_CASE_LABELS[state.useCase] || state.useCase);
+    if (state.insiderType && state.insiderType !== "all") {
+      parts.push(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType);
+    }
+    if (sourceLabel) parts.push(sourceLabel);
+    els.refineState.textContent = parts.join(" · ");
     renderFilterCrumbs();
   }
 
@@ -2671,6 +2771,8 @@
       min_score: UI_MIN_SCORE,
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       theme: state.theme || undefined,
     });
 
@@ -2710,6 +2812,8 @@
       min_score: UI_MIN_SCORE,
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       theme: state.theme || undefined,
     });
@@ -2787,6 +2891,8 @@
         min_score: 0,
         itm_alignment: "all",
         channel: channelParam(),
+        use_case: useCaseParam(),
+        insider_type: insiderTypeParam(),
         source_id: state.sourceId || undefined,
         theme: state.theme || undefined,
       }),
@@ -2865,6 +2971,17 @@
       if (!btn) return;
       state.channel = btn.dataset.channel || "all";
       setActiveChannelPill(state.channel);
+      updateRefineSummary();
+      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+  }
+
+  if (els.insiderTypeFilters) {
+    els.insiderTypeFilters.addEventListener("click", (event) => {
+      const btn = event.target.closest(".pill[data-insider-type]");
+      if (!btn) return;
+      state.insiderType = btn.dataset.insiderType || "all";
+      setActiveInsiderTypePill(state.insiderType);
       updateRefineSummary();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });
@@ -3038,6 +3155,106 @@
     showLatest().catch((err) => setStatus(`Load failed: ${err.message}`));
   });
 
+  function socialSourceRow(info, { subscribed }) {
+    const li = document.createElement("li");
+    li.className = "social-source-item";
+    const main = document.createElement("span");
+    main.className = "social-source-name";
+    main.textContent = info.name;
+    if (info.use_cases && info.use_cases.length) {
+      main.title = info.use_cases
+        .map((id) => USE_CASE_LABELS[id] || id)
+        .join(", ");
+    }
+    const count = document.createElement("span");
+    count.className = "meta";
+    count.textContent = info.article_count ? ` (${info.article_count})` : "";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost social-source-btn";
+    btn.textContent = subscribed ? "Remove" : "Add";
+    btn.addEventListener("click", () => {
+      const action = subscribed
+        ? api(
+            `/social/subscriptions/${encodeURIComponent(info.platform)}/${encodeURIComponent(info.id)}`,
+            {},
+            { method: "DELETE" },
+          )
+        : api(
+            "/social/subscriptions",
+            {},
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ platform: info.platform, id: info.id }),
+            },
+          );
+      action
+        .then(() => loadSocialCatalog())
+        .then(() => loadSources())
+        .catch((err) => setStatus(`Social update failed: ${err.message}`));
+    });
+    li.append(main, count, btn);
+    return li;
+  }
+
+  async function loadSocialCatalog() {
+    if (!els.socialManager) return;
+    let catalog;
+    try {
+      catalog = await api("/social/catalog");
+    } catch (err) {
+      // Demo mode / older API without social endpoints: hide the panel.
+      els.socialManager.hidden = true;
+      console.warn("Social catalog unavailable", err);
+      return;
+    }
+    els.socialManager.hidden = false;
+    const subscriptions = (catalog && catalog.subscriptions) || [];
+    const suggestions = ((catalog && catalog.suggestions) || []).filter(
+      (info) => !info.subscribed,
+    );
+    if (els.socialSubscribed) {
+      els.socialSubscribed.innerHTML = "";
+      subscriptions.forEach((info) => {
+        els.socialSubscribed.appendChild(socialSourceRow(info, { subscribed: true }));
+      });
+    }
+    if (els.socialSubscribedEmpty) {
+      els.socialSubscribedEmpty.hidden = subscriptions.length > 0;
+    }
+    if (els.socialSuggested) {
+      els.socialSuggested.innerHTML = "";
+      suggestions.forEach((info) => {
+        els.socialSuggested.appendChild(socialSourceRow(info, { subscribed: false }));
+      });
+    }
+  }
+
+  if (els.socialAddForm) {
+    els.socialAddForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const platform = (els.socialAddPlatform && els.socialAddPlatform.value) || "reddit";
+      const handle = ((els.socialAddHandle && els.socialAddHandle.value) || "").trim();
+      if (!handle) return;
+      api(
+        "/social/subscriptions",
+        {},
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform, id: handle }),
+        },
+      )
+        .then(() => {
+          if (els.socialAddHandle) els.socialAddHandle.value = "";
+          return loadSocialCatalog();
+        })
+        .then(() => loadSources())
+        .catch((err) => setStatus(`Social add failed: ${err.message}`));
+    });
+  }
+
   async function boot() {
     try {
       initRefinePanel();
@@ -3078,6 +3295,7 @@
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
+      loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);

@@ -1941,3 +1941,84 @@ button.chip.itm-chip {
   content: " · dismissed";
   color: var(--muted);
 }
+
+/* Insider-type badges + use-case tags on stream cards */
+.insider-type-badge,
+.use-case-tag {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.insider-type-badge.insider-type-malicious {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.insider-type-badge.insider-type-negligent {
+  border-color: #b9770e;
+  color: #b9770e;
+}
+
+.insider-type-badge.insider-type-unintentional {
+  border-color: #2471a3;
+  color: #2471a3;
+}
+
+/* Social sources manager (Refine panel) */
+.social-manager {
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.social-manager > summary {
+  cursor: pointer;
+}
+
+.social-manager-group {
+  margin: 0.4rem 0;
+}
+
+.social-source-list {
+  list-style: none;
+  margin: 0.2rem 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.social-source-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+.social-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.social-source-btn {
+  margin-left: auto;
+  font-size: 0.68rem;
+}
+
+.social-add-row {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.social-add-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}

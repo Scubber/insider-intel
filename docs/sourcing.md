@@ -25,9 +25,10 @@ one-line reason in the coverage table below.
 | 2 | **Archive** | Check `robots.txt` / sitemap / news-archive index; add to `archive_sources.py` | `python -m apps.aggregator ingest_archive` |
 | 3 | **Google Alerts** | If no/weak RSS or cross-site beat (BI, SHRM, NLR) | `WEB_KEYWORD_FEED_URLS` → `ingest_web_keywords` |
 | 4 | **CourtListener** | If legal/filings beat — add RECAP docket / opinion queries (not a site scrape) | `ingest_courtlistener` |
-| 5 | **Tips** | Tip/social only → `channel=tips` | Reddit / tips feeds |
-| 6 | **Hunt aliases** | New operator phrases → `shared/itm/aliases.py` | Maps-to ITM |
-| 7 | **Smoke** | Ingest wired lanes → `process` → `POST /reload` | Confirm Source in UI |
+| 5 | **Tips** | Tip/social RSS only → `channel=tips` | Reddit / tips feeds |
+| 6 | **Social** | First-person social intel (Reddit JSON / X API) → `channel=social` | `python -m apps.aggregator ingest_social` |
+| 7 | **Hunt aliases** | New operator phrases → `shared/itm/aliases.py` | Maps-to ITM |
+| 8 | **Smoke** | Ingest wired lanes → `process` → `POST /reload` | Confirm Source in UI |
 
 ### Source coverage
 
@@ -40,6 +41,8 @@ one-line reason in the coverage table below.
 | CourtListener RECAP + opinions | N/A | N/A | N/A | yes | N/A |
 | Google Alerts | via alert RSS | N/A | yes | N/A | N/A |
 | Reddit tips | yes | N/A | N/A | N/A | yes |
+| Reddit social (subscribed subs) | N/A — public JSON | N/A | N/A | N/A | N/A — `ingest_social`, `channel=social` |
+| X / Twitter (subscribed handles) | N/A — API v2, paid `X_BEARER_TOKEN` | N/A | N/A | N/A | N/A — `ingest_social`, token-gated |
 
 ## Wired free RSS (in repo)
 
@@ -171,6 +174,32 @@ from our batch `ingest_courtlistener` → `RawArticle` path:
 
 Elevated API/MCP usage may require Free Law Project membership; check
 [API usage](https://www.courtlistener.com/profile/api-usage/).
+
+## Social (Reddit + X, channel=social)
+
+First-person insider intel — confession/anecdote posts (e.g. r/jobsearchhacks
+overemployment threads). Sources are **user-picked subscriptions**, seeded from
+a curated per-use-case catalog (`apps/aggregator/social_catalog.py`, derived
+from `shared/taxonomy/use_cases.py`). Subscriptions live in
+`data/config/social_subscriptions.json` (single-tenant watchlist; also
+manageable from the UI Refine → Social sources panel or `GET/POST
+/social/subscriptions`).
+
+```bash
+python -m apps.aggregator social suggest              # curated catalog
+python -m apps.aggregator social add reddit overemployed
+python -m apps.aggregator ingest_social               # pull subscribed sources
+python -m apps.aggregator ingest_social_url <reddit-post-or-/s/-share-url>
+python -m apps.aggregator process                     # classify + index
+```
+
+Every processed article gets a **use case** (overemployment, data-exfiltration,
+credential-misuse, shadow-it) and an **insider type** (malicious / negligent /
+unintentional) via heuristics in `shared/utils/classify.py`; an optional LLM
+refiner (`CLASSIFIER_LLM_PROVIDER=anthropic|openai`, the latter covering local
+Ollama/vLLM endpoints) sharpens low-confidence social posts. Reddit uses the
+public JSON listings (descriptive User-Agent required, ~1 req/2s); X requires a
+paid API v2 bearer token and degrades gracefully when unset.
 
 ## Full pipeline
 

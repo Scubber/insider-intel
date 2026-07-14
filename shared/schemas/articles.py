@@ -8,7 +8,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, HttpUrl
 
 # Provenance lane for stream filters (orthogonal to Insider Focus).
-Channel = Literal["news", "filings", "tips"]
+Channel = Literal["news", "filings", "tips", "social"]
+
+# Insider disposition inferred per article (None = unclassified).
+InsiderType = Literal["negligent", "malicious", "unintentional"]
 
 
 def _utc_now() -> datetime:
@@ -24,6 +27,9 @@ def resolve_channel(
     """Resolve channel from explicit value, source id, or category."""
     sid = (source_id or "").strip().lower()
     cat = (category or "").strip().lower()
+    # social- must win over the legacy reddit- -> tips rule below
+    if sid.startswith("social-") or cat.startswith("social") or channel == "social":
+        return "social"
     if sid.startswith(("reddit-", "tip-")) or "tips-" in cat or cat == "tips":
         return "tips"
     if "courtlistener" in sid or cat in {"filings", "court", "recap"}:
@@ -185,6 +191,24 @@ class ProcessedArticle(BaseModel):
     story_key: str = Field(
         default="",
         description="Fingerprint for multi-source stream clustering (title+day)",
+    )
+    use_cases: list[str] = Field(
+        default_factory=list,
+        description="Matched hunt use-case ids (e.g. overemployment, data-exfiltration)",
+    )
+    insider_type: InsiderType | None = Field(
+        default=None,
+        description="Inferred insider disposition; None = unclassified",
+    )
+    classification_source: Literal["heuristic", "llm"] | None = Field(
+        default=None,
+        description="Which classifier produced use_cases/insider_type",
+    )
+    classification_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="LLM classifier self-reported confidence (heuristic leaves None)",
     )
     processed_at: datetime = Field(default_factory=_utc_now)
     # Filled by later LLM / embedding stages

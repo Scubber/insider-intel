@@ -44,6 +44,14 @@ class SearchHit(BaseModel):
         default="",
         description="Fingerprint for multi-source stream clustering",
     )
+    use_cases: list[str] = Field(
+        default_factory=list,
+        description="Matched hunt use-case ids (e.g. overemployment)",
+    )
+    insider_type: str | None = Field(
+        default=None,
+        description="negligent | malicious | unintentional | None (unclassified)",
+    )
 
 
 class SearchRequest(BaseModel):
@@ -66,7 +74,15 @@ class SearchRequest(BaseModel):
     )
     channel: str = Field(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    )
+    use_case: str | None = Field(
+        default=None,
+        description="Use-case filter id (e.g. overemployment) or None/all",
+    )
+    insider_type: str = Field(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     )
 
 
@@ -113,6 +129,36 @@ class SourceInfo(BaseModel):
     )
     enabled: bool = True
     article_count: int = 0
+
+
+class SocialSourceInfo(BaseModel):
+    """Curated or subscribed social source (subreddit / X account)."""
+
+    platform: str = Field(..., description="reddit | x")
+    id: str = Field(..., description="Subreddit name or X handle (no prefix)")
+    name: str
+    url: str | None = None
+    description: str | None = None
+    use_cases: list[str] = Field(default_factory=list)
+    source_id: str = Field(..., description="Computed ingest source id (social-*)")
+    subscribed: bool = False
+    origin: str = Field(default="catalog", description="catalog | manual")
+    article_count: int = 0
+
+
+class SocialCatalogResponse(BaseModel):
+    """Discovery catalog + subscription state for the social picker."""
+
+    suggestions: list[SocialSourceInfo] = Field(default_factory=list)
+    subscriptions: list[SocialSourceInfo] = Field(default_factory=list)
+
+
+class UseCaseInfo(BaseModel):
+    """Hunt use case exposed to the UI filter chips."""
+
+    id: str
+    label: str
+    description: str = ""
 
 
 class ItmTechniqueSummary(BaseModel):

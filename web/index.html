@@ -89,6 +89,20 @@
               <button type="button" class="pill" data-channel="news">News</button>
               <button type="button" class="pill" data-channel="filings">Filings</button>
               <button type="button" class="pill" data-channel="tips">Tips</button>
+              <button type="button" class="pill" data-channel="social">Social</button>
+            </div>
+            <div
+              class="pill-group"
+              id="insider-type-filters"
+              role="group"
+              aria-label="Insider type"
+            >
+              <button type="button" class="pill active" data-insider-type="all">Any type</button>
+              <button type="button" class="pill" data-insider-type="malicious">Malicious</button>
+              <button type="button" class="pill" data-insider-type="negligent">Negligent</button>
+              <button type="button" class="pill" data-insider-type="unintentional">
+                Unintentional
+              </button>
             </div>
             <div class="source-filter-row">
               <label class="filter-label" for="source-select">Source</label>
@@ -96,6 +110,35 @@
                 <option value="">All feeds</option>
               </select>
             </div>
+            <details class="social-manager" id="social-manager">
+              <summary class="filter-label">Social sources</summary>
+              <p class="kw-hint">
+                Pick subreddits / X accounts to ingest. Pulled on the next run:
+                <code>python -m apps.aggregator ingest_social</code>
+              </p>
+              <div class="social-manager-group">
+                <h4 class="filter-label">Subscribed</h4>
+                <ul id="social-subscribed" class="social-source-list"></ul>
+                <p class="kw-hint" id="social-subscribed-empty">Nothing subscribed yet.</p>
+              </div>
+              <div class="social-manager-group">
+                <h4 class="filter-label">Suggested</h4>
+                <ul id="social-suggested" class="social-source-list"></ul>
+              </div>
+              <form class="social-add-row" id="social-add-form" autocomplete="off">
+                <select id="social-add-platform" aria-label="Platform">
+                  <option value="reddit">reddit</option>
+                  <option value="x">x</option>
+                </select>
+                <input
+                  id="social-add-handle"
+                  type="text"
+                  placeholder="r/subreddit or @handle"
+                  aria-label="Subreddit or handle"
+                />
+                <button type="submit" class="ghost">Add</button>
+              </form>
+            </details>
             <div class="theme-picker" id="theme-picker">
               <label class="filter-label" for="theme-select">Theme</label>
               <select id="theme-select" aria-label="Color theme">
