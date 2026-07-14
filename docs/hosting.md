@@ -54,54 +54,55 @@ Browser → Pages (web/) → https://api.intel.thederpweb.com  → processed JSO
 Workbench Extract TTPs **requires** the live API (CourtListener enrich + optional xAI).
 The old Pages-only demo-store cannot match local Workbench.
 
-## Deploy the API (Cloud Run)
+## Production architecture (live since 2026-07-14)
 
-### Prerequisites
-
-1. GCP project with billing.
-2. [`gcloud` CLI](https://cloud.google.com/sdk/docs/install) + `gcloud auth login`.
-3. Docker Desktop (or equivalent) running.
-4. Local corpus: `data/processed/articles.jsonl` (after `aggregator process`).
-
-### One-shot deploy
-
-From repo root:
-
-```bash
-export GCP_PROJECT=your-gcp-project-id
-export GCP_REGION=us-east1          # optional
-chmod +x scripts/deploy_cloud_run.sh
-./scripts/deploy_cloud_run.sh
+```text
+GitHub Pages (web/)  →  Cloud Run service insider-intel-api (us-east1)
+                              │  reads /app/data (GCS FUSE mount, read-only)
+                     gs://insider-intel-502413-corpus  (processed/raw/state JSONL)
+                              ▲  read-write mount
+Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
+                              (aggregator all → bucket → POST /reload)
 ```
 
-Optional secrets (create in Secret Manager first):
+- **Project:** `insider-intel-502413` · **Region:** `us-east1` · budget alert at $10/mo.
+- **Corpus lives in GCS**, not the image. Images are corpus-free; the service
+  mounts the bucket read-only at `/app/data`, the refresh job mounts it
+  read-write. No more bake-and-redeploy.
+- **Scheduled ingest:** Cloud Scheduler → `corpus-refresh` job → full
+  `python -m apps.aggregator all` → POST `/reload` on the service.
+  Run it manually anytime: `gcloud run jobs execute corpus-refresh --region us-east1`.
+- **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
+  Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
+- **Endpoint guards:** `POST /extract/ttps` is rate-limited
+  (`EXTRACT_RATE_PER_IP_HOUR`, `EXTRACT_RATE_GLOBAL_DAY`); `GET /export/articles`
+  keeps its bearer token; secrets belong in Secret Manager, never in images.
+- **Service accounts (least privilege):** `api-runtime` (bucket objectViewer),
+  `ingest-job` (bucket objectAdmin), `scheduler-invoker` (job run.invoker),
+  `github-deployer` (run.developer + artifactregistry.writer via OIDC only).
 
-```bash
-export CLOUD_RUN_SECRETS='XAI_API_KEY=XAI_API_KEY:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest'
-./scripts/deploy_cloud_run.sh
-```
+## Deploy the API (CI — normal path)
 
-The script builds [`Dockerfile`](../Dockerfile) (bakes `articles.jsonl`), pushes to
-Artifact Registry, and deploys service `insider-intel-api` with
-`CORS_ORIGINS=https://intel.thederpweb.com,https://td3.dev,https://scubber.github.io`.
+Merges to `main` touching `apps/`, `shared/`, `pyproject.toml`, or the
+`Dockerfile` trigger [`deploy-api.yml`](../.github/workflows/deploy-api.yml):
+GitHub OIDC federates into the `github-deployer` service account (Workload
+Identity pool `github`, provider locked to `Scubber/insider-intel` — **no keys
+stored anywhere**), builds and pushes the image, rolls the service and the
+refresh job to it, then smoke-tests `/health` and `/articles`.
+Manual trigger: Actions → deploy-api → Run workflow.
 
-### Custom domain
+## Deploy the API (manual fallback)
 
-1. Cloud Run → service → **Manage custom domains** → `api.intel.thederpweb.com`.
-2. Route 53: create the record Cloud Run shows (usually CNAME / A/AAAA).
-3. Wait for managed certificate.
-4. `curl -sS https://api.intel.thederpweb.com/health`
+`scripts/deploy_cloud_run.sh` still works from a `gcloud`-authed machine, but
+note the corpus now comes from the bucket mount, not the image — the baked
+`data/processed/articles.jsonl` layer is ignored in production.
 
-### Refresh the public corpus
+## Refresh the public corpus
 
-Ingest/process locally, then **rebuild and redeploy** the image (corpus is baked in):
-
-```bash
-python -m apps.aggregator process --force   # if needed
-./scripts/deploy_cloud_run.sh
-```
-
-There is no live ingest inside the container in v1.
+Automatic: every 6 hours via Cloud Scheduler (`corpus-refresh-schedule`).
+Manual: `gcloud run jobs execute corpus-refresh --region us-east1 --wait`.
+The job logs each source and finishes by POSTing `/reload`; Reddit RSS sources
+429 from cloud IPs (known), everything else pulls normally.
 
 ## GitHub Pages (UI only)
 

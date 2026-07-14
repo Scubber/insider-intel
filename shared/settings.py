@@ -104,6 +104,18 @@ class Settings(BaseSettings):
     # One-way corporate pull — bearer token for GET /export/articles
     export_api_token: str | None = Field(default=None, alias="EXPORT_API_TOKEN")
 
+    # POST /extract/ttps can spend LLM credits — cap it. <=0 disables the limit.
+    extract_rate_per_ip_hour: int = Field(
+        default=20,
+        alias="EXTRACT_RATE_PER_IP_HOUR",
+        le=10_000,
+    )
+    extract_rate_global_day: int = Field(
+        default=200,
+        alias="EXTRACT_RATE_GLOBAL_DAY",
+        le=100_000,
+    )
+
     # Alert RSS URLs for web keyword discovery (comma-separated feed URLs)
     web_keyword_feed_urls: str = Field(
         default="",

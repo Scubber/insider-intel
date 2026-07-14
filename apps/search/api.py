@@ -7,7 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from apps.aggregator.export import EXPORT_SCHEMA_VERSION, article_to_export_row, filter_articles
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.search import service
+from apps.search.ratelimit import SlidingWindowLimiter
 from apps.search.ttp_extract import ExtractTtpsRequest, ExtractTtpsResponse, extract_ttps_for_links
 from shared.schemas import (
     ArticleListResponse,
@@ -306,13 +307,42 @@ def articles_by_links(body: ArticlesByLinksRequest) -> ArticlesByLinksResponse:
     return ArticlesByLinksResponse(results=results, missing=missing)
 
 
+_extract_limiter: SlidingWindowLimiter | None = None
+
+
+def _get_extract_limiter() -> SlidingWindowLimiter | None:
+    global _extract_limiter
+    settings = get_settings()
+    if settings.extract_rate_per_ip_hour <= 0:
+        return None
+    if _extract_limiter is None:
+        _extract_limiter = SlidingWindowLimiter(
+            settings.extract_rate_per_ip_hour,
+            settings.extract_rate_global_day,
+        )
+    return _extract_limiter
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/extract/ttps")
-def extract_ttps(body: ExtractTtpsRequest) -> ExtractTtpsResponse:
+def extract_ttps(body: ExtractTtpsRequest, request: Request) -> ExtractTtpsResponse:
     """Build a multi-channel hunt report from extraction-board article links.
 
     Uses indexed title/summary/text, optional CourtListener REST snippets for
     filings, and xAI when XAI_API_KEY is set. Falls back to curated IF038 seeds.
     """
+    limiter = _get_extract_limiter()
+    if limiter is not None and not limiter.allow(_client_ip(request)):
+        raise HTTPException(
+            status_code=429,
+            detail="extract rate limit exceeded; try again later",
+        )
     links = [str(link).strip() for link in body.links if str(link).strip()]
     if not links:
         raise HTTPException(status_code=400, detail="links required")
