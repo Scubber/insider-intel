@@ -35,11 +35,8 @@
   if (window.INSIDER_INTEL_DEMO) {
     window.INSIDER_INTEL_API_BASE = window.INSIDER_INTEL_API_BASE || "";
   } else if (isPublic) {
-    // Interim: direct Cloud Run URL until api.intel.thederpweb.com domain
-    // mapping is verified (Search Console) — then switch back.
     window.INSIDER_INTEL_API_BASE =
-      window.INSIDER_INTEL_API_BASE ||
-      "https://insider-intel-api-698664056335.us-east1.run.app";
+      window.INSIDER_INTEL_API_BASE || "https://api.intel.thederpweb.com";
   } else {
     window.INSIDER_INTEL_API_BASE =
       window.INSIDER_INTEL_API_BASE || "http://127.0.0.1:8000";
