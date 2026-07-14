@@ -1073,6 +1073,10 @@ body {
 }
 
 @media (max-width: 960px) {
+  .hunt-usecase::after {
+    display: none;
+  }
+
   .article-board-btn {
     opacity: 0.9;
   }
@@ -1450,6 +1454,110 @@ body {
   margin: 0 0 0.5rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+/* Styled hover tooltips: any element with data-tip. CSS-only; keep the DOM
+   copy in captions / sr-only twins for screen readers and touch. */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translate(-50%, 2px);
+  width: max-content;
+  max-width: min(16rem, 70vw);
+  white-space: normal;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font: 400 0.72rem / 1.45 var(--font-mono);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 30;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+[data-tip][data-tip-pos="bottom"]::after,
+[data-tip][data-tip-pos="bottom-end"]::after {
+  bottom: auto;
+  top: calc(100% + 0.4rem);
+  transform: translate(-50%, -2px);
+}
+
+[data-tip][data-tip-pos="bottom-end"]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+/* Chips sit at the left viewport edge — align their tips to the element start
+   so they can't overhang the viewport */
+.hunt-usecase[data-tip]::after {
+  left: 0;
+  transform: translateY(2px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hunt-usecase[data-tip]:hover::after {
+    transform: translateY(0);
+  }
+}
+
+.hunt-usecase[data-tip]:focus-visible::after {
+  transform: translateY(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-tip]:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 0.3s;
+  }
+  [data-tip][data-tip-pos="bottom-end"]:hover::after {
+    transform: translateY(0);
+  }
+}
+
+[data-tip]:focus-visible::after,
+.info-tip:focus::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+[data-tip][data-tip-pos="bottom-end"]:focus-visible::after,
+.info-tip[data-tip-pos="bottom-end"]:focus::after {
+  transform: translateY(0);
+}
+
+/* Small circled "?" info button (pane headers) */
+.info-tip {
+  font: 600 0.72rem / 1 var(--font-mono);
+  cursor: help;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  flex: 0 0 auto;
+  padding: 0;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.info-tip:hover,
+.info-tip:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .kw-group + .kw-group {

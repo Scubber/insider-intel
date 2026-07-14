@@ -89,7 +89,7 @@
                   type="button"
                   class="pill active"
                   data-alignment="insider"
-                  title="Only articles matched to Insider Threat Matrix™ techniques"
+                  data-tip="Only articles matched to Insider Threat Matrix™ techniques"
                 >
                   Insider Focus
                 </button>
@@ -97,7 +97,7 @@
                   type="button"
                   class="pill"
                   data-alignment="all"
-                  title="Everything indexed, including weak or unmatched articles"
+                  data-tip="Everything indexed, including weak or unmatched articles"
                 >
                   All indexed
                 </button>
@@ -125,7 +125,7 @@
                   type="button"
                   class="pill active"
                   data-insider-type="all"
-                  title="Any intent — include articles with no intent signal"
+                  data-tip="Any intent — include articles with no intent signal"
                 >
                   Any type
                 </button>
@@ -133,7 +133,7 @@
                   type="button"
                   class="pill"
                   data-insider-type="malicious"
-                  title="Deliberate harm — theft, sabotage, selling data"
+                  data-tip="Deliberate harm — theft, sabotage, selling data"
                 >
                   Malicious
                 </button>
@@ -141,7 +141,7 @@
                   type="button"
                   class="pill"
                   data-insider-type="negligent"
-                  title="Knew the rules, hid it or skipped them anyway"
+                  data-tip="Knew the rules, hid it or skipped them anyway"
                 >
                   Negligent
                 </button>
@@ -149,7 +149,7 @@
                   type="button"
                   class="pill"
                   data-insider-type="unintentional"
-                  title="Honest mistake — accident, phish, unaware of policy"
+                  data-tip="Honest mistake — accident, phish, unaware of policy"
                 >
                   Unintentional
                 </button>
@@ -331,6 +331,17 @@
         >
           <div class="pane-head">
             <h2>Workbench</h2>
+            <button
+              type="button"
+              class="info-tip"
+              aria-label="About the Workbench"
+              aria-describedby="workbench-tip-text"
+              data-tip="The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate."
+              data-tip-pos="bottom-end"
+            >
+              ?
+            </button>
+            <span id="workbench-tip-text" class="sr-only">The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate.</span>
           </div>
           <div class="pane-body panel">
             <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
@@ -340,22 +351,22 @@
                   <span class="board-count" id="board-count">(0)</span>
                 </h3>
                 <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-extract" class="copy-btn copy-btn-primary" disabled>
+                  <button type="button" id="board-extract" data-tip="Analyze the flagged articles into a TTP hunt report." data-tip-pos="bottom" class="copy-btn copy-btn-primary" disabled>
                     Extract TTPs
                   </button>
-                  <button type="button" id="board-copy-brief" class="copy-btn" disabled>
+                  <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard." data-tip-pos="bottom" class="copy-btn" disabled>
                     Copy LLM
                   </button>
-                  <button type="button" id="board-clear" class="copy-btn" disabled>Clear</button>
+                  <button type="button" id="board-clear" data-tip="Remove all articles from the board." data-tip-pos="bottom-end" class="copy-btn" disabled>Clear</button>
                 </p>
                 <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-share" class="copy-btn" disabled>
+                  <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL." data-tip-pos="bottom" class="copy-btn" disabled>
                     Share link
                   </button>
-                  <button type="button" id="board-export" class="copy-btn" disabled>
+                  <button type="button" id="board-export" data-tip="Download this board as a JSON file." data-tip-pos="bottom" class="copy-btn" disabled>
                     Export
                   </button>
-                  <button type="button" id="board-import" class="copy-btn">Import</button>
+                  <button type="button" id="board-import" data-tip="Load a board from an exported JSON file." data-tip-pos="bottom-end" class="copy-btn">Import</button>
                   <input type="file" id="board-import-file" accept="application/json,.json" hidden />
                 </p>
               </div>

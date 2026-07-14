@@ -542,7 +542,7 @@
       btn.dataset.query = item.query;
       if (item.useCase) btn.dataset.useCase = item.useCase;
       btn.textContent = item.label;
-      btn.title =
+      btn.dataset.tip =
         item.description ||
         (item.useCase ? `Filter stream: ${item.label}` : `Hunt: ${item.query}`);
       btn.addEventListener("click", () => {
