@@ -21,6 +21,8 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+    "pre-commit",
+    "detect-secrets",
 ]
 
 [project.scripts]

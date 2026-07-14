@@ -1,0 +1,74 @@
+# Local dev stack: FastAPI app (hot reload) + static UI + Postgres sidecar.
+#
+#   make up      → API http://localhost:8000  UI http://localhost:5500  Postgres :5432
+#   make db-reset nukes ONLY the Postgres volume; make clean tears everything down.
+#
+# The data plane is undecided — the app still runs on JSONL and only *receives*
+# DATABASE_URL through shared/settings.py, so Postgres can be swapped later
+# without touching application code.
+name: insider-intel
+
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    image: insider-intel-dev
+    command: uvicorn apps.search.api:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      # Single point of DB config — consumed via shared/settings.py (pydantic-settings)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-insider}:${POSTGRES_PASSWORD:-insider}@db:5432/${POSTGRES_DB:-insider_intel}
+      SEARCH_HOST: 0.0.0.0
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Live source: repo root (WSL ext4 — keep it off /mnt/c or file-watch dies)
+      - .:/app
+      # Anonymous volumes so host artifacts never shadow container ones
+      - /app/.venv
+      - /app/.pytest_cache
+      - /app/.ruff_cache
+      # pre-commit hook envs cache (survives `docker compose run --rm`)
+      - precommit-cache:/home/app/.cache
+    ports:
+      - "${SEARCH_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+
+  # Static UI (web/) — same dev image, live via the same bind mount
+  ui:
+    image: insider-intel-dev
+    command: python -m http.server 5500 --directory web
+    volumes:
+      - .:/app
+    ports:
+      - "${UI_PORT:-5500}:5500"
+    depends_on:
+      - app
+    init: true
+
+  db:
+    image: postgres:16.9
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insider}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insider}
+      POSTGRES_DB: ${POSTGRES_DB:-insider_intel}
+    volumes:
+      # Named volume; nuke for a fresh DB with:  docker volume rm insider-intel_pgdata
+      # (or just `make db-reset`)
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  pgdata:
+  precommit-cache:

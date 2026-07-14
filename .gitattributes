@@ -1,0 +1,5 @@
+# Normalize line endings to LF everywhere — prevents WSL/Windows CRLF drift
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
