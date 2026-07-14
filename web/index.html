@@ -65,12 +65,16 @@
         </button>
         <button type="button" id="clear-search" class="ghost" hidden>Clear</button>
       </form>
-      <div
-        class="hunt-usecases"
-        id="hunt-usecases"
-        role="group"
-        aria-label="Vetted hunt use cases"
-      ></div>
+      <div class="hunt-usecases-block">
+        <span class="filter-label">Hunt use cases</span>
+        <div
+          class="hunt-usecases"
+          id="hunt-usecases"
+          role="group"
+          aria-label="Vetted hunt use cases"
+        ></div>
+        <p class="kw-hint usecase-hint" id="usecase-hint"></p>
+      </div>
       <details class="refine-panel" id="refine-panel" open>
         <summary class="refine-summary" id="refine-summary">
           <span class="refine-label">Refine</span>
@@ -78,31 +82,81 @@
         </summary>
         <div class="refine-body">
           <div class="stream-filters stream-filters-secondary" id="stream-filters">
-            <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
-              <button type="button" class="pill active" data-alignment="insider">
-                Insider Focus
-              </button>
-              <button type="button" class="pill" data-alignment="all">All indexed</button>
+            <div class="filter-group">
+              <span class="filter-label">Scope</span>
+              <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
+                <button
+                  type="button"
+                  class="pill active"
+                  data-alignment="insider"
+                  title="Only articles matched to Insider Threat Matrix™ techniques"
+                >
+                  Insider Focus
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-alignment="all"
+                  title="Everything indexed, including weak or unmatched articles"
+                >
+                  All indexed
+                </button>
+              </div>
             </div>
-            <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
-              <button type="button" class="pill active" data-channel="all">All channels</button>
-              <button type="button" class="pill" data-channel="news">News</button>
-              <button type="button" class="pill" data-channel="filings">Filings</button>
-              <button type="button" class="pill" data-channel="tips">Tips</button>
-              <button type="button" class="pill" data-channel="social">Social</button>
+            <div class="filter-group">
+              <span class="filter-label">Channel</span>
+              <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
+                <button type="button" class="pill active" data-channel="all">All channels</button>
+                <button type="button" class="pill" data-channel="news">News</button>
+                <button type="button" class="pill" data-channel="filings">Filings</button>
+                <button type="button" class="pill" data-channel="tips">Tips</button>
+                <button type="button" class="pill" data-channel="social">Social</button>
+              </div>
             </div>
-            <div
-              class="pill-group"
-              id="insider-type-filters"
-              role="group"
-              aria-label="Insider type"
-            >
-              <button type="button" class="pill active" data-insider-type="all">Any type</button>
-              <button type="button" class="pill" data-insider-type="malicious">Malicious</button>
-              <button type="button" class="pill" data-insider-type="negligent">Negligent</button>
-              <button type="button" class="pill" data-insider-type="unintentional">
-                Unintentional
-              </button>
+            <div class="filter-group">
+              <span class="filter-label">Insider type</span>
+              <div
+                class="pill-group"
+                id="insider-type-filters"
+                role="group"
+                aria-label="Insider type"
+              >
+                <button
+                  type="button"
+                  class="pill active"
+                  data-insider-type="all"
+                  title="Any intent — include articles with no intent signal"
+                >
+                  Any type
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="malicious"
+                  title="Deliberate harm — theft, sabotage, selling data"
+                >
+                  Malicious
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="negligent"
+                  title="Knew the rules, hid it or skipped them anyway"
+                >
+                  Negligent
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="unintentional"
+                  title="Honest mistake — accident, phish, unaware of policy"
+                >
+                  Unintentional
+                </button>
+              </div>
+              <p class="kw-hint filter-group-hint">
+                How culpable the insider appears — hover a pill for the definition.
+              </p>
             </div>
             <div class="source-filter-row">
               <label class="filter-label" for="source-select">Source</label>

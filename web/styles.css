@@ -269,7 +269,7 @@ body {
 .stream-filters.stream-filters-secondary {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem 0.85rem;
   margin-top: 0.55rem;
   max-width: 40rem;
@@ -367,6 +367,41 @@ body {
   text-transform: uppercase;
   color: var(--muted);
   margin-right: 0.25rem;
+}
+
+/* Labeled filter groups: label above its pill row, optional hint below */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.filter-group .filter-label {
+  margin-right: 0;
+  color: var(--top-muted, var(--muted));
+}
+
+.filter-group-hint {
+  margin: 0;
+  max-width: 26rem;
+}
+
+.hunt-usecases-block {
+  margin-top: 0.55rem;
+}
+
+.hunt-usecases-block .filter-label {
+  color: var(--top-muted, var(--muted));
+}
+
+.hunt-usecases-block .hunt-usecases {
+  margin-top: 0.35rem;
+}
+
+.usecase-hint {
+  margin: 0.35rem 0 0;
+  max-width: 40rem;
 }
 
 .status {

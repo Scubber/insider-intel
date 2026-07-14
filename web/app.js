@@ -49,13 +49,34 @@
    * Chips with a useCase id filter the stream on the classified facet
    * (keep ids aligned with shared/taxonomy/use_cases.py); query-only chips
    * fall back to a text hunt. */
+  // Descriptions mirror shared/taxonomy/use_cases.py — keep in sync.
   const HUNT_USE_CASES = [
-    { label: "Overemployment", useCase: "overemployment", query: "overemployment" },
-    { label: "Data exfiltration", useCase: "data-exfiltration", query: "data exfiltration" },
-    { label: "Credential misuse", useCase: "credential-misuse", query: "shared credentials" },
-    { label: "Shadow IT", useCase: "shadow-it", query: "shadow it" },
-    { label: "Moonlighting", query: "moonlighting" },
-    { label: "Trade secret", query: "trade secret" },
+    {
+      label: "Overemployment",
+      useCase: "overemployment",
+      query: "overemployment moonlighting",
+      description:
+        "Undisclosed concurrent employment — secretly working multiple jobs (incl. moonlighting)",
+    },
+    {
+      label: "Data exfiltration",
+      useCase: "data-exfiltration",
+      query: "data exfiltration trade secret",
+      description: "Taking or leaking company data, files, or trade secrets",
+    },
+    {
+      label: "Credential misuse",
+      useCase: "credential-misuse",
+      query: "shared credentials",
+      description:
+        "Sharing, borrowing, or abusing logins, badges, and privileged access",
+    },
+    {
+      label: "Shadow IT",
+      useCase: "shadow-it",
+      query: "shadow it",
+      description: "Unsanctioned apps, devices, or AI tools used for work",
+    },
   ];
 
   const USE_CASE_LABELS = HUNT_USE_CASES.reduce((acc, item) => {
@@ -500,6 +521,15 @@
       const isHunt = Boolean(active) && q === active;
       btn.classList.toggle("active", isFacet || isHunt);
     });
+    const hint = document.getElementById("usecase-hint");
+    if (hint) {
+      const activeItem = HUNT_USE_CASES.find(
+        (item) => item.useCase && item.useCase === state.useCase,
+      );
+      hint.textContent = activeItem
+        ? `${activeItem.label}: ${activeItem.description}`
+        : "Pick a hunt use case, then refine by insider type below.";
+    }
   }
 
   function renderHuntUsecases() {
@@ -512,9 +542,9 @@
       btn.dataset.query = item.query;
       if (item.useCase) btn.dataset.useCase = item.useCase;
       btn.textContent = item.label;
-      btn.title = item.useCase
-        ? `Filter stream: ${item.label}`
-        : `Hunt: ${item.query}`;
+      btn.title =
+        item.description ||
+        (item.useCase ? `Filter stream: ${item.label}` : `Hunt: ${item.query}`);
       btn.addEventListener("click", () => {
         if (item.useCase) {
           // Toggle the classified use-case facet on the stream.
