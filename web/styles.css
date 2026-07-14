@@ -1488,10 +1488,16 @@ body {
 }
 
 [data-tip][data-tip-pos="bottom"]::after,
+[data-tip][data-tip-pos="bottom-start"]::after,
 [data-tip][data-tip-pos="bottom-end"]::after {
   bottom: auto;
   top: calc(100% + 0.4rem);
   transform: translate(-50%, -2px);
+}
+
+[data-tip][data-tip-pos="bottom-start"]::after {
+  left: 0;
+  transform: translateY(-2px);
 }
 
 [data-tip][data-tip-pos="bottom-end"]::after {
@@ -1518,14 +1524,24 @@ body {
 }
 
 @media (hover: hover) and (pointer: fine) {
+  /* Raise the hovered element itself: reduced-opacity (disabled) siblings
+     form their own stacking contexts, so the tip's z-index alone can't win */
+  [data-tip]:hover {
+    z-index: 60;
+  }
   [data-tip]:hover::after {
     opacity: 1;
     transform: translate(-50%, 0);
     transition-delay: 0.3s;
   }
+  [data-tip][data-tip-pos="bottom-start"]:hover::after,
   [data-tip][data-tip-pos="bottom-end"]:hover::after {
     transform: translateY(0);
   }
+}
+
+[data-tip]:focus-visible {
+  z-index: 60;
 }
 
 [data-tip]:focus-visible::after,
@@ -1534,6 +1550,7 @@ body {
   transform: translate(-50%, 0);
 }
 
+[data-tip][data-tip-pos="bottom-start"]:focus-visible::after,
 [data-tip][data-tip-pos="bottom-end"]:focus-visible::after,
 .info-tip[data-tip-pos="bottom-end"]:focus::after {
   transform: translateY(0);
