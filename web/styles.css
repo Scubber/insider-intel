@@ -1072,6 +1072,67 @@ body {
   color: var(--accent);
 }
 
+/* Open-source (↗) and expand (⌄) controls stacked under the + button */
+.article-open-btn,
+.article-expand-btn {
+  position: absolute;
+  right: 0.2rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 92%, var(--ink) 8%);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0.32;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.article-open-btn {
+  top: 2.65rem;
+}
+
+.article-expand-btn {
+  top: 4.75rem;
+}
+
+.article-row:hover .article-open-btn,
+.article-row:hover .article-expand-btn,
+.article-open-btn:focus-visible,
+.article-expand-btn:focus-visible {
+  opacity: 1;
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.article-open-btn:hover,
+.article-expand-btn:hover {
+  color: var(--accent);
+}
+
+.article-row.expanded .article-expand-btn {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Expanded card: lift the line clamp so the full summary reads inline */
+.article-row.expanded .article-item .snip {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: pre-line;
+}
+
 @media (max-width: 960px) {
   .hunt-usecase::after {
     display: none;
@@ -1079,6 +1140,23 @@ body {
 
   .article-board-btn {
     opacity: 0.9;
+  }
+
+  .article-open-btn,
+  .article-expand-btn {
+    opacity: 0.9;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .article-open-btn {
+    top: 3.45rem;
+  }
+
+  /* Beside ↗ instead of below it — three stacked buttons overflow short cards */
+  .article-expand-btn {
+    top: 3.45rem;
+    right: 3.2rem;
   }
 }
 
