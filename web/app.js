@@ -2456,6 +2456,34 @@
       else addToBoard(article, { focusWorkbench: true });
     });
 
+    const openBtn = document.createElement("a");
+    openBtn.className = "article-open-btn";
+    openBtn.href = article.link;
+    openBtn.target = "_blank";
+    openBtn.rel = "noopener";
+    openBtn.textContent = "↗";
+    openBtn.title = `Open source: ${article.source_name || article.link}`;
+    openBtn.setAttribute("aria-label", openBtn.title);
+    openBtn.addEventListener("click", (event) => event.stopPropagation());
+
+    // Inline expand — only when the clamped snip is actually hiding text.
+    let expandBtn = null;
+    if ((article.summary || "").length > 160) {
+      expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "article-expand-btn";
+      expandBtn.textContent = "⌄";
+      expandBtn.title = "Expand text";
+      expandBtn.setAttribute("aria-label", expandBtn.title);
+      expandBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = li.classList.toggle("expanded");
+        expandBtn.textContent = expanded ? "⌃" : "⌄";
+        expandBtn.title = expanded ? "Collapse text" : "Expand text";
+        expandBtn.setAttribute("aria-label", expandBtn.title);
+      });
+    }
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "article-item";
@@ -2532,7 +2560,9 @@
     }
 
     btn.addEventListener("click", () => selectArticle(article));
-    li.append(boardBtn, btn);
+    li.append(boardBtn, openBtn);
+    if (expandBtn) li.appendChild(expandBtn);
+    li.appendChild(btn);
     return li;
   }
 
