@@ -18,11 +18,42 @@ Cloud Scheduler (0 */6 ET) ──► Cloud Run Job corpus-refresh ──► POST
 
 GCP project `insider-intel-502413`, region `us-east1`, $10/mo budget alert.
 
+## Data & classification model
+
+Ingestion lanes (all emit `RawArticle` → `data/raw/articles.jsonl`): RSS
+(`config.py::DEFAULT_FEEDS`), Feedly, CourtListener, DataTheftNews, sitemap
+archive, web-keyword RSS, and **social** — Reddit (`reddit_pipeline.py`, OAuth
+app auth when `REDDIT_CLIENT_ID/SECRET` set, public JSON otherwise) and X
+(`x_pipeline.py`, needs `X_BEARER_TOKEN`). Social sources are user-picked
+subscriptions (`data/config/social_subscriptions.json` — the `config/` GCS
+prefix is exactly why the API may write there) seeded from a curated catalog
+derived from `shared/taxonomy/use_cases.py`.
+
+Processing (`shared/agents/article_processor.py`, LangGraph):
+normalize → extract_entities (ITM alias match) → score → **classify** → embed →
+assemble. The classify node stamps `use_cases` (overemployment,
+data-exfiltration, credential-misuse, shadow-it) and `insider_type`
+(malicious | negligent | unintentional) via heuristics in
+`shared/utils/classify.py`; an optional LLM refiner
+(`CLASSIFIER_LLM_PROVIDER=anthropic|openai`, `shared/llm/`) sharpens
+low-confidence social posts. A classified use case + insider type upgrades
+weak ITM alignment so first-person confessions surface under Insider Focus.
+
+Provenance channels: `news | filings | tips | social` — legacy `reddit-*` RSS
+feeds stay `tips`; API-based social sources use `social-*` ids. Facets thread
+end to end: `use_case` / `insider_type` / `channel` params on `/articles`,
+`/search`, `/sources`; registry at `GET /usecases`; subscriptions at
+`/social/catalog` + `/social/subscriptions`; one-off flagging via
+`POST /social/ingest_url` (accepts Reddit `/s/` share links).
+
 ## Everyday commands
 
 ```bash
 make up / down / shell / logs      # local stack: API :8000, UI :5500, Postgres :5432
 make test / lint / fmt / precommit # same commands CI runs — green local == green CI
+python -m apps.aggregator social suggest|add|remove   # manage social subscriptions
+python -m apps.aggregator ingest_social               # pull subscribed Reddit/X sources
+python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /s/ links)
 gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'

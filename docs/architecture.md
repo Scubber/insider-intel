@@ -10,13 +10,17 @@ Insider Threat Matrix™ is owned by Forscie Limited. This product is aligned /
 mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 
 ### Scope
-- **MVP (now):** Multi-domain RSS (infosec + HR/legal) + CourtListener RECAP +
-  optional Google Alerts (`WEB_KEYWORD_FEED_URLS`) / Feedly; LangGraph processing
-  (ITM match + score); JSONL storage; article stream + ITM filters + search API;
-  static UI + operator-term workbench; **one-way corporate export**. **Develop
-  locally; host later.** Sourcing runbook: [`docs/sourcing.md`](sourcing.md).
-  News seat budget: prefer **$0**; hard cap **&lt;$100/year** total (no Law360).
-- **Later:** expand archive sources, Postgres + pgvector, LLM summaries / ITM classification, scheduled ingest, Cloudflare Pages + Cloud Run deploy.
+- **Now (hosted):** Multi-domain RSS (infosec + HR/legal) + CourtListener RECAP +
+  DataTheftNews + optional Google Alerts (`WEB_KEYWORD_FEED_URLS`) / Feedly;
+  **social ingest** (Reddit OAuth/JSON + X API v2, user-picked subscriptions,
+  `channel=social`); LangGraph processing (ITM match + score + **use-case /
+  insider-type classification**, heuristic with optional LLM refiner); JSONL
+  storage; article stream + ITM / use-case / insider-type filters + search API;
+  static UI + operator-term workbench; **one-way corporate export**. Production
+  hosting per [`hosting.md`](hosting.md). Sourcing runbook:
+  [`docs/sourcing.md`](sourcing.md). News seat budget: prefer **$0**; hard cap
+  **&lt;$100/year** total (no Law360).
+- **Later:** expand archive sources, Postgres + pgvector, LLM summaries.
 - Product maturity (auth, read/unread, detection generation pipelines, etc.) stays out of MVP.
 - **Corporate boundary:** export OSINT *out* only; never read Graph/Teams/email/SIEM from this repo.
 
@@ -49,14 +53,28 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 - CourtListener RECAP search for federal dockets (no PACER purchase)
 - Optional Feedly boards and Google Alerts-style RSS (`WEB_KEYWORD_FEED_URLS`);
   prefer Alerts for cross-domain discovery (see [`sourcing.md`](sourcing.md))
-- Future: site scrapers emitting the same `RawArticle` schema
+- **Social lane (`channel=social`)**: Reddit subreddit listings (OAuth app auth
+  when `REDDIT_CLIENT_ID/SECRET` set; public JSON fallback) and X handles
+  (API v2, `X_BEARER_TOKEN`). Sources are user-picked subscriptions
+  (`data/config/social_subscriptions.json`) seeded from a curated per-use-case
+  catalog (`shared/taxonomy/use_cases.py` → `social_catalog.py`); single posts
+  flag in via `ingest_social_url` / `POST /social/ingest_url` (handles `/s/`
+  share links)
 - Sitemap archive backfill (`ingest_archive`) for keyword-filtered history
 - Stores raw articles + metadata
 - Corporate consumers pull via `aggregator export` or `GET /export/articles` (never inbound corp APIs)
 
 ### 2. Processing Layer
-- LangGraph: normalize → extract entities → score → embed → assemble
+- LangGraph: normalize → extract entities → score → **classify** → embed → assemble
 - Entity extraction matches article text to ITM technique titles + curated aliases
+- Classify stamps `use_cases` (overemployment / data-exfiltration /
+  credential-misuse / shadow-it) + `insider_type` (malicious / negligent /
+  unintentional): always-on heuristics (`shared/utils/classify.py`, reuses ITM
+  aliases) plus an optional LLM refiner (`CLASSIFIER_LLM_PROVIDER=anthropic`
+  → Claude Haiku, or `openai` → any OpenAI-compatible endpoint incl. local
+  Ollama), gated to low-confidence articles on `CLASSIFY_LLM_CHANNELS`
+  (default `social`). Classified use case + insider type upgrades weak ITM
+  alignment so first-person confession posts surface under Insider Focus
 - Each matched technique expands to linked **Detections (DT\*)** and **Preventions (PV\*)**
   from the upstream Forscie JSON (technique → control join). Articles are **not**
   keyword-matched against detection description text (Event IDs rarely appear in news).
@@ -75,8 +93,15 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 - ITM catalog (`GET /itm`) for taxonomy + technique `article_count`
   (optional `source_id` / `channel` so counts match Refine filters)
 - Keyword / semantic / hybrid search (`GET|POST /search`)
-- Secondary stream controls: Insider Focus / All indexed + Channel + Source
-- Corporate export NDJSON includes the same handoff fields
+- Secondary stream controls: Insider Focus / All indexed + Channel
+  (news | filings | tips | social) + **Insider type** + **use-case chips**
+  (`use_case` / `insider_type` params thread through `/articles`, `/search`,
+  `/sources`; registry at `GET /usecases`)
+- Social discovery/subscriptions: `GET /social/catalog`,
+  `GET/POST/DELETE /social/subscriptions`, `POST /social/ingest_url`
+  (UI: Refine → Social sources panel)
+- Corporate export NDJSON includes the same handoff fields (`use_cases`,
+  `insider_type`; schema `insider-intel.export.v2`)
 
 #### UI presentation contract (responsive web)
 
@@ -131,7 +156,8 @@ merges onto the curated IF038 seed floor. Without a key (or on API failure),
 Extract returns the seed pack and labels the report honestly.
 
 **Still later:** full multi-article CTI markdown template, server-side flags,
-persisted `ai_summary` on every article, social tip ingest beyond Reddit RSS.
+persisted `ai_summary` on every article. (Social ingest beyond Reddit RSS
+shipped — see Ingestion Layer above.)
 
 ### 6. Hosting (develop here → deploy later)
 
