@@ -74,11 +74,12 @@ Full write-up: `docs/architecture.md` § Hunt Package.
 | CORS (env-driven) | ✅ | `CORS_ORIGINS` |
 | Static UI (Hunt + Matrix + Articles + Workbench) | ✅ | `web/` — `exp/responsive-ui` POC shell |
 | Web scrapers (non-RSS) | ✅ | `ingest_archive` sitemap keyword backfill (HR/legal first) |
-| Native Twitter/X ingest | ❌ | Feedly / alert RSS only for now |
+| Native social ingest (Reddit + X, `channel=social`) | ✅ | `ingest_social` + subscriptions/catalog (`social suggest|add`); X needs `X_BEARER_TOKEN` |
+| Use-case + insider-type classification | ✅ | heuristics always; optional LLM via `CLASSIFIER_LLM_PROVIDER` |
 | Hunt Package (multi-article CTI brief) | 🟡 | Stream `+` → board → `POST /extract/ttps`; full package later |
 | Postgres + pgvector | ❌ | Settings stub (`DATABASE_URL`) |
 | LLM summarization / package AI | 🟡 | xAI optional on Extract (`XAI_API_KEY`); `ai_summary` persist later |
-| Live Cloudflare / Cloud Run deploy | ❌ | Documented target only |
+| Live Pages + Cloud Run deploy | ✅ | CD on merge to `main` — see `CLAUDE.md` / `docs/hosting.md` |
 | Corp Graph/Teams/SIEM inbound | ❌ | **Never** — export only |
 
 ### End-to-end flow
