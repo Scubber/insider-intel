@@ -158,6 +158,21 @@ pytest
 ruff check apps shared tests
 ```
 
+### UI verification
+
+After any change under `web/`, run the headless UX smoke test — it boots the UI
+in demo mode and drives the core journeys (stream, technique dossier, hunt,
+extraction board, themes) plus landscape and snippet regression guards:
+
+```bash
+pip install playwright   # once; Chromium is resolved automatically
+python scripts/ui_smoke.py            # serves web/ and runs the checks
+python scripts/ui_smoke.py --headed   # watch it run
+python scripts/ui_smoke.py --url http://127.0.0.1:5500  # test a running instance
+```
+
+Exit code is non-zero if any check fails.
+
 ## Design notes
 
 - **Product:** ITM-aligned insider OSINT → hunt/detection keywords (not generic cyber Feedly).

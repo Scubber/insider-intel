@@ -1481,28 +1481,6 @@ a.itm-chip:hover {
   max-width: 52rem;
 }
 
-.site-footer .grok-meme {
-  margin-top: 0.55rem;
-  max-width: none;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--signal);
-  animation: grok-stamp 1.6s ease-in-out infinite;
-}
-
-@keyframes grok-stamp {
-  0%,
-  100% {
-    opacity: 0.72;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -1940,4 +1918,54 @@ button.chip.itm-chip {
 .article-row.dismissed .row-meta::after {
   content: " · dismissed";
   color: var(--muted);
+}
+
+/* Short viewports (phone landscape): the fixed-header + internal-scroll model
+ * squashes the article pane to a sliver. Switch to natural page scroll so the
+ * header scrolls away and the active pane gets full height. Guarded to phone
+ * widths so short-but-wide desktop windows keep the 3-pane cockpit. */
+@media (max-height: 520px) and (max-width: 960px) {
+  body {
+    min-height: 0;
+  }
+
+  .top {
+    padding: 0.55rem 1rem 0.4rem;
+  }
+
+  .product {
+    font-size: 1.15rem;
+  }
+
+  .hunt-usecases,
+  .site-footer {
+    display: none;
+  }
+
+  .search-bar {
+    margin-top: 0.5rem;
+  }
+
+  .workbench,
+  .app-shell {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .pane-grid {
+    grid-template-rows: auto;
+  }
+
+  .app-shell[data-pane] .pane-articles,
+  .app-shell[data-pane] .pane-matrix,
+  .app-shell[data-pane] .pane-workbench {
+    height: auto;
+    overflow: visible;
+  }
+
+  .pane-body {
+    overflow: visible;
+    min-height: 0;
+  }
 }

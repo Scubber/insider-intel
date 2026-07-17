@@ -421,6 +421,22 @@
     }
   }
 
+  const _domParser = typeof DOMParser !== "undefined" ? new DOMParser() : null;
+
+  /** Feed summaries arrive with literal HTML entities and stray tags; render
+   * them as clean prose. Parsing as inert HTML strips real tags and decodes
+   * entities without mangling literal comparison text ("<5% but >2 …"); the
+   * parsed document never executes scripts or loads resources. */
+  function cleanSummary(raw) {
+    let text = String(raw || "");
+    if (!text) return "";
+    if (_domParser) {
+      const doc = _domParser.parseFromString(text, "text/html");
+      text = (doc.body && doc.body.textContent) || "";
+    }
+    return text.replace(/\s+/g, " ").trim();
+  }
+
   function itmUrl(hit) {
     const articleId = hit.article_id || THEME_ARTICLE[hit.theme] || "AR4";
     const sectionId = String(hit.id || "").split(".")[0];
@@ -1402,7 +1418,7 @@
       `Title: ${article.title}`,
       `Link: ${article.link}`,
       `Source: ${article.source_name}`,
-      `Summary: ${article.summary || "(none)"}`,
+      `Summary: ${cleanSummary(article.summary) || "(none)"}`,
       "",
       `ITM techniques: ${itmIds.length ? itmIds.join("; ") : "(none)"}`,
       `Related detections: ${detections.length ? detections.join("; ") : "(none)"}`,
@@ -2245,7 +2261,7 @@
     meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
     const snip = document.createElement("p");
     snip.className = "snip";
-    snip.textContent = article.summary || "";
+    snip.textContent = cleanSummary(article.summary);
 
     const preview = document.createElement("div");
     preview.className = "kw-preview";
@@ -2902,6 +2918,24 @@
     showLatest().catch((err) => setStatus(`Load failed: ${err.message}`));
   });
 
+  async function probeLiveApi() {
+    // Wait out a Cloud Run cold start rather than flashing the demo snapshot
+    // on first load. Retries with a short timeout each; throws if all fail.
+    const attempts = 3;
+    const perTryMs = 5000;
+    let lastErr = null;
+    for (let i = 1; i <= attempts; i += 1) {
+      try {
+        await api("/health", {}, { timeoutMs: perTryMs, cache: "no-store" });
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts) setStatus(`Waking live API… (${i}/${attempts})`);
+      }
+    }
+    throw lastErr || new Error("live API unreachable");
+  }
+
   async function boot() {
     try {
       initRefinePanel();
@@ -2912,11 +2946,12 @@
       syncBoardToggle();
       renderHuntUsecases();
 
-      // Public UI defaults to live API; if Cloud Run is not up yet, fall back to
-      // the static web/demo snapshot so Workbench / Extract / Copy still work.
+      // Public UI defaults to live API; Cloud Run cold starts can exceed a
+      // single probe's timeout, so retry a few times (showing progress) before
+      // falling back to the static web/demo snapshot.
       if (!demoMode) {
         try {
-          await api("/health", {}, { timeoutMs: 4000 });
+          await probeLiveApi();
         } catch (liveErr) {
           if (!window.InsiderIntelDemo) throw liveErr;
           console.warn("Live API unreachable — falling back to static demo", liveErr);
