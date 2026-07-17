@@ -147,6 +147,20 @@
     "category": "insider-osint"
   },
   {
+    "id": "404media",
+    "name": "404 Media",
+    "url": "https://www.404media.co/rss/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
+    "id": "cybernews",
+    "name": "Cybernews",
+    "url": "https://cybernews.com/feed/",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
     "id": "upguard",
     "name": "UpGuard Blog",
     "url": "https://www.upguard.com/blog/rss.xml",
@@ -192,6 +206,13 @@
     "id": "microsoft-security",
     "name": "Microsoft Security Blog",
     "url": "https://www.microsoft.com/en-us/security/blog/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "darkatlas",
+    "name": "DarkAtlas",
+    "url": "https://darkatlas.io/blog/rss.xml",
     "enabled": true,
     "category": "threat-research"
   },

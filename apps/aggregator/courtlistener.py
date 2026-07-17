@@ -31,6 +31,11 @@ DEFAULT_QUERIES: list[str] = [
     '"dual employment" (employee OR disclosure OR terminate OR policy)',
     '"outside employment" (policy OR disclosure OR terminate OR employee)',
     '"conflict of interest" ("outside employment" OR moonlighting OR "second job")',
+    # Scattered-Spider-class prosecutions — employee-targeting social engineering
+    # and the device/identity forensics (e.g. Windows GDID) their affidavits detail
+    '"scattered spider"',
+    '"sim swap" (fraud OR conspiracy OR indictment)',
+    '"help desk" ("social engineering" OR impersonation OR credentials)',
 ]
 
 SOURCE_ID = "courtlistener-recap"
