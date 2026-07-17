@@ -1,11 +1,11 @@
 """Headless UX smoke test for the insider-intel web UI.
 
-Boots web/ in demo mode with a throwaway http.server and drives the core
-investigator journeys in a real browser, asserting each works. Run this after
-any change to web/ — it is the standing "does the UI still work" check.
+Builds the standalone preview bundle (self-contained, no API) and drives the
+core investigator journeys in a real browser, asserting each works — plus a
+guard that no demo/offline code has re-entered web/. Run after any change to web/.
 
 Usage:
-  python scripts/ui_smoke.py            # serve web/ on an ephemeral port, run
+  python scripts/ui_smoke.py            # build the preview and run
   python scripts/ui_smoke.py --url URL  # test an already-running instance
   python scripts/ui_smoke.py --headed   # watch it run
 
@@ -77,7 +77,7 @@ class Checks:
             print(f"  FAIL  {name}{(' — ' + detail) if detail else ''}")
 
 
-def _drift_guard(checks: "Checks") -> None:
+def _drift_guard(checks: Checks) -> None:
     """The shipped site (web/) must carry no demo/offline code — the preview is
     the only place that lives. Guard against re-introducing the entanglement."""
     banned = ("demo-store", "INSIDER_INTEL_DEMO", "InsiderIntelDemo", "?demo")
@@ -197,7 +197,9 @@ def run(base_url: str, headed: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--url", help="Test an already-running instance instead of building the preview")
+    ap.add_argument(
+        "--url", help="Test a running instance instead of building the preview"
+    )
     ap.add_argument("--headed", action="store_true", help="Run with a visible browser")
     args = ap.parse_args()
 

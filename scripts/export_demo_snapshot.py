@@ -12,10 +12,9 @@ Run from insider-intel/:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from apps.search.index import ArticleSearchIndex
 from apps.search.service import get_index, itm_catalog
 from shared.settings import get_settings
 
@@ -73,7 +72,7 @@ def main() -> None:
     )
     itm_path.write_text(catalog.model_dump_json(), encoding="utf-8")
     manifest = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "article_count": len(articles),
         "technique_count": len(catalog.techniques),
         "detection_count": len(catalog.detections),
