@@ -77,9 +77,24 @@ class Checks:
             print(f"  FAIL  {name}{(' — ' + detail) if detail else ''}")
 
 
+def _drift_guard(checks: "Checks") -> None:
+    """The shipped site (web/) must carry no demo/offline code — the preview is
+    the only place that lives. Guard against re-introducing the entanglement."""
+    banned = ("demo-store", "INSIDER_INTEL_DEMO", "InsiderIntelDemo", "?demo")
+    hits = []
+    for name in ("index.html", "app.js", "config.js"):
+        text = (WEB / name).read_text(encoding="utf-8")
+        for tok in banned:
+            if tok in text:
+                hits.append(f"{name}:{tok}")
+    checks.check("web/ has no demo code", not hits, ", ".join(hits))
+    checks.check("web/demo/ is gone", not (WEB / "demo").exists())
+
+
 def run(base_url: str, headed: bool) -> int:
     checks = Checks()
-    demo = f"{base_url}/?demo=1"
+    demo = f"{base_url}/"
+    _drift_guard(checks)
     with sync_playwright() as p:
         launch = {"headless": not headed}
         exe = _chromium_path()
@@ -95,8 +110,8 @@ def run(base_url: str, headed: bool) -> int:
         page.wait_for_selector(".article-item", timeout=20000)
         checks.check("stream loads", page.locator(".article-item").count() > 0)
         checks.check(
-            "provenance chip shows snapshot",
-            "Snapshot" in (page.text_content("#data-state") or ""),
+            "data-state chip renders",
+            "indexed" in (page.text_content("#data-state") or ""),
         )
 
         # Snippet is clean prose (no literal HTML entities) — Fix 4 guard
@@ -182,14 +197,23 @@ def run(base_url: str, headed: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--url", help="Test an already-running instance instead of serving web/")
+    ap.add_argument("--url", help="Test an already-running instance instead of building the preview")
     ap.add_argument("--headed", action="store_true", help="Run with a visible browser")
     args = ap.parse_args()
 
     if args.url:
         return run(args.url.rstrip("/"), args.headed)
-    with _serve(WEB) as base:
-        return run(base, args.headed)
+
+    # Build the standalone preview bundle (self-contained, no API) and drive it.
+    import tempfile
+
+    from scripts.export_preview import build
+
+    html, _kept, _total = build(article_cap=300, blob_cap=800)
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "index.html").write_text(html, encoding="utf-8")
+        with _serve(Path(tmp)) as base:
+            return run(base, args.headed)
 
 
 if __name__ == "__main__":

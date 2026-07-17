@@ -142,7 +142,7 @@ See [`docs/hosting.md`](hosting.md) for the full checklist.
 - **Public API (later):** `https://api.intel.thederpweb.com` (Cloud Run) — DNS via Route 53 on `thederpweb.com`
 - **API (local):** FastAPI with JSONL/DB; set `CORS_ORIGINS` + `web/config.js` (`INSIDER_INTEL_API_BASE`)
 - **CI/CD:** GitHub Actions for `pytest` / Pages deploy. Branch tags are save points only.
-- Pure static with no API is unsupported for the live product (demo snapshot is the exception)
+- The live product requires the API; the standalone `preview/` bundle is the only offline build (share/demo only, not deployed)
 
 ## Repository Structure
 

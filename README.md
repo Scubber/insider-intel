@@ -148,8 +148,17 @@ Copy `.env.example` → `.env`. For hosted UI later, set `CORS_ORIGINS` and
 
 **Public UI:** `https://intel.thederpweb.com` (GitHub Pages).  
 **Public API:** `https://api.intel.thederpweb.com` (Cloud Run — see [docs/hosting.md](docs/hosting.md)).  
-Offline fallback snapshot: `?demo=1` (`web/demo/`; regenerate with
-`python scripts/export_demo_snapshot.py`).
+The shipped UI talks only to the live API; if it's unreachable it shows a
+retryable error state (no snapshot fallback).
+
+**Standalone preview:** a self-contained single-file build for sharing/demos
+that runs the UI offline against an embedded snapshot — entirely separate from
+the shipped site:
+
+```bash
+python scripts/export_demo_snapshot.py   # refresh preview/data snapshot
+python -m scripts.export_preview         # → dist/insider-intel-demo.html
+```
 
 ## Tests
 

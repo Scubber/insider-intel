@@ -1,13 +1,24 @@
 /**
- * Static demo API shim for GitHub Pages (no FastAPI).
- * Expects web/demo/articles.json + web/demo/itm.json from export_demo_snapshot.py
+ * Offline API responder for the STANDALONE PREVIEW bundle only (not shipped in
+ * web/). Answers the app's API calls from snapshot JSON embedded in the bundle
+ * so the preview runs with no server. The shipped website never loads this.
+ * Data is provided as <script type="application/json"> blocks with ids
+ * offline-articles / offline-itm / offline-manifest.
  */
 (() => {
-  const DEMO_BASE = new URL("./demo/", window.location.href).href;
-
   let articles = [];
   let itm = null;
   let manifest = null;
+
+  function embeddedJson(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent);
+    } catch {
+      return null;
+    }
+  }
 
   function aliasMatches(phrase, haystack) {
     if (!phrase || phrase.length < 3) return false;
@@ -377,23 +388,13 @@
   }
 
   const ready = (async () => {
-    const [arts, catalog, man] = await Promise.all([
-      fetch(`${DEMO_BASE}articles.json`).then((r) => {
-        if (!r.ok) throw new Error(`demo articles ${r.status}`);
-        return r.json();
-      }),
-      fetch(`${DEMO_BASE}itm.json`).then((r) => {
-        if (!r.ok) throw new Error(`demo itm ${r.status}`);
-        return r.json();
-      }),
-      fetch(`${DEMO_BASE}manifest.json`).then((r) => (r.ok ? r.json() : null)),
-    ]);
+    const arts = embeddedJson("offline-articles") || {};
     articles = arts.articles || arts.results || [];
-    itm = catalog;
-    manifest = man;
+    itm = embeddedJson("offline-itm");
+    manifest = embeddedJson("offline-manifest");
   })();
 
-  window.InsiderIntelDemo = {
+  window.InsiderIntelOffline = {
     ready,
     async request(path, params = {}, options = {}) {
       await ready;

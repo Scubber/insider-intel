@@ -1,6 +1,4 @@
 (() => {
-  const demoModeInitial = Boolean(window.INSIDER_INTEL_DEMO);
-  let demoMode = demoModeInitial;
   const apiBase = (window.INSIDER_INTEL_API_BASE || "http://127.0.0.1:8000").replace(
     /\/$/,
     "",
@@ -325,17 +323,8 @@
       return;
     }
     const indexed = Number(ds.indexed || 0).toLocaleString();
-    if (ds.mode === "demo") {
-      const when = ds.generatedAt ? ` · ${formatDate(ds.generatedAt)}` : "";
-      els.dataState.textContent = `Snapshot${when} · ${indexed} indexed`;
-    } else {
-      els.dataState.textContent = `Live · ${indexed} indexed`;
-    }
-    els.dataState.classList.toggle("data-state-demo", ds.mode === "demo");
-    els.dataState.title =
-      ds.mode === "demo"
-        ? "Static demo snapshot — not live ingest"
-        : "Connected to the live API";
+    els.dataState.textContent = `Live · ${indexed} indexed`;
+    els.dataState.title = "Connected to the live API";
     els.dataState.hidden = false;
   }
 
@@ -369,12 +358,6 @@
   }
 
   async function api(path, params = {}, options = {}) {
-    if (demoMode) {
-      if (!window.InsiderIntelDemo) {
-        throw new Error("Demo store not loaded");
-      }
-      return window.InsiderIntelDemo.request(path, params, options);
-    }
     const url = new URL(`${apiBase}${path}`);
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
@@ -2919,8 +2902,8 @@
   });
 
   async function probeLiveApi() {
-    // Wait out a Cloud Run cold start rather than flashing the demo snapshot
-    // on first load. Retries with a short timeout each; throws if all fail.
+    // Wait out a Cloud Run cold start on first load. Retries with a short
+    // timeout each; throws (surfacing the error state) if all fail.
     const attempts = 3;
     const perTryMs = 5000;
     let lastErr = null;
@@ -2946,33 +2929,14 @@
       syncBoardToggle();
       renderHuntUsecases();
 
-      // Public UI defaults to live API; Cloud Run cold starts can exceed a
-      // single probe's timeout, so retry a few times (showing progress) before
-      // falling back to the static web/demo snapshot.
-      if (!demoMode) {
-        try {
-          await probeLiveApi();
-        } catch (liveErr) {
-          if (!window.InsiderIntelDemo) throw liveErr;
-          console.warn("Live API unreachable — falling back to static demo", liveErr);
-          demoMode = true;
-          window.INSIDER_INTEL_DEMO = true;
-          setStatus("Live API offline — using static demo");
-        }
-      }
+      // Cloud Run can be cold on first hit; probeLiveApi retries a few times
+      // before surfacing an error (no silent snapshot fallback).
+      await probeLiveApi();
 
-      if (demoMode && window.InsiderIntelDemo) {
-        await window.InsiderIntelDemo.ready;
-      }
       const health = await api("/health");
-      const demoNote = health.demo || demoMode ? " · static demo" : "";
-      setStatus(`API ok · ${health.indexed_articles} indexed${demoNote}`);
+      setStatus(`API ok · ${health.indexed_articles} indexed`);
       state.lastTotalIndexed = health.indexed_articles || 0;
-      state.dataState = {
-        mode: health.demo || demoMode ? "demo" : "live",
-        indexed: health.indexed_articles || 0,
-        generatedAt: health.generated_at || null,
-      };
+      state.dataState = { indexed: health.indexed_articles || 0 };
       renderDataState();
       await ensureItmCatalog();
       renderMatrixBrowse();
@@ -2987,14 +2951,30 @@
         await loadArticles();
       }
     } catch (err) {
-      setStatus(
-        demoMode || window.INSIDER_INTEL_DEMO
-          ? `Demo failed to load (missing web/demo?). ${err.message}`
-          : `Cannot reach API at ${apiBase}. Try ?demo=1 for the static snapshot.`,
-      );
-      renderArticles([], "Latest");
       console.error(err);
+      renderApiError(err);
     }
+  }
+
+  function renderApiError(err) {
+    setStatus(`Cannot reach the intel API at ${apiBase}`);
+    if (els.dataState) els.dataState.hidden = true;
+    if (!els.articleList) return;
+    els.articleList.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "panel-empty stream-empty api-error";
+    const msg = document.createElement("p");
+    msg.textContent = `The intel API is unreachable (${err.message}). It may be waking up.`;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "copy-btn copy-btn-primary";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      setStatus("Retrying…");
+      boot().catch((e) => console.error(e));
+    });
+    li.append(msg, retry);
+    els.articleList.appendChild(li);
   }
 
   boot();

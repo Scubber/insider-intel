@@ -1,12 +1,13 @@
-"""Bundle the web UI into one self-contained HTML file (demo mode).
+"""Bundle the web UI into one self-contained PREVIEW HTML file.
 
-Produces a single .html that runs the full UI offline against an embedded,
-trimmed copy of the web/demo snapshot — handy for demos: open the file
-directly in a browser, or host it anywhere as one asset.
+Produces a single .html that runs the *unmodified* shipped web UI offline: the
+app talks to its normal API, but the bundle intercepts fetch and answers from
+an embedded snapshot (preview/data). The website itself has no demo/offline
+code — this preview is the only place that logic lives.
 
 Run from insider-intel/:
-  python -m scripts.export_demo_bundle [--out dist/insider-intel-demo.html]
-                                       [--articles 300] [--blob-cap 800]
+  python -m scripts.export_preview [--out dist/insider-intel-demo.html]
+                                   [--articles 300] [--blob-cap 800]
 """
 
 from __future__ import annotations
@@ -18,11 +19,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
+PREVIEW = ROOT / "preview"
 
-BOOTSTRAP = """
+# Runs before config.js. Pins the API base to a sentinel and routes every call
+# to it through the embedded offline responder, so app.js needs no demo code.
+BOOTSTRAP = r"""
 (function () {
-  // Hosts (e.g. artifact viewers) may stamp data-theme="dark"/"light" on the
-  // root element; map those onto the app's own theme names.
+  // Artifact viewers stamp data-theme="dark"/"light"; map onto app theme names.
   var MAP = { dark: "midnight", light: "cnn-lite" };
   new MutationObserver(function () {
     var v = document.documentElement.getAttribute("data-theme");
@@ -37,53 +40,50 @@ BOOTSTRAP = """
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 })();
 (function () {
-  window.INSIDER_INTEL_DEMO = true; // single-file bundle: demo snapshot only
+  var BASE = "https://offline.invalid";
+  window.INSIDER_INTEL_API_BASE = BASE; // config.js keeps a pre-set value
   var origFetch = window.fetch.bind(window);
-  function embedded(id) {
-    return document.getElementById(id).textContent;
-  }
   window.fetch = function (input, init) {
     var url = String(input && input.url ? input.url : input);
-    if (url.indexOf("/demo/") !== -1) {
-      var id = /articles\\.json(\\?|$)/.test(url)
-        ? "demo-articles"
-        : /itm\\.json(\\?|$)/.test(url)
-          ? "demo-itm"
-          : /manifest\\.json(\\?|$)/.test(url)
-            ? "demo-manifest"
-            : null;
-      if (id) {
-        return Promise.resolve(
-          new Response(embedded(id), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-    }
-    return origFetch(input, init);
+    if (url.indexOf(BASE) !== 0) return origFetch(input, init);
+    var u = new URL(url);
+    var params = {};
+    u.searchParams.forEach(function (v, k) { params[k] = v; });
+    var opts = { method: (init && init.method) || "GET", body: init && init.body };
+    return Promise.resolve(window.InsiderIntelOffline.request(u.pathname, params, opts))
+      .then(function (data) {
+        return new Response(data == null ? "" : JSON.stringify(data), {
+          status: data == null ? 204 : 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      })
+      .catch(function (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      });
   };
 })();
 """
 
 
-def _read(name: str) -> str:
+def _read_web(name: str) -> str:
     return (WEB / name).read_text(encoding="utf-8")
 
 
 def _json_script(el_id: str, text: str) -> str:
-    # Keep </script> (and comment openers) from terminating the block; both
-    # replacements stay valid inside JSON strings.
+    # Keep </script> (and comment openers) from terminating the block.
     safe = text.replace("</", "<\\/").replace("<!--", "<\\!--")
     return f'<script id="{el_id}" type="application/json">{safe}</script>'
 
 
-def _inline_js(name: str) -> str:
-    return f"<script>\n{_read(name)}\n</script>"
+def _inline(path: Path) -> str:
+    return f"<script>\n{path.read_text(encoding='utf-8')}\n</script>"
 
 
 def build(article_cap: int, blob_cap: int) -> tuple[str, int, int]:
-    articles_data = json.loads(_read("demo/articles.json"))
+    articles_data = json.loads((PREVIEW / "data/articles.json").read_text())
     rows = articles_data.get("articles", [])
     rows.sort(key=lambda r: r.get("published") or "", reverse=True)
     trimmed = rows[:article_cap]
@@ -95,16 +95,18 @@ def build(article_cap: int, blob_cap: int) -> tuple[str, int, int]:
         {"total_indexed": len(trimmed), "articles": trimmed}, separators=(",", ":")
     )
 
-    manifest = json.loads(_read("demo/manifest.json"))
+    manifest = json.loads((PREVIEW / "data/manifest.json").read_text())
     manifest["article_count"] = len(trimmed)
-    manifest["note"] = "Trimmed single-file demo bundle — not live ingest."
+    manifest["note"] = "Standalone preview bundle — embedded snapshot, not live ingest."
 
-    html = _read("index.html")
+    html = _read_web("index.html")
     head, rest = html.split("<body>", 1)
     body = rest.rsplit("</body>", 1)[0]
     body = re.sub(r'\s*<script src="\./[^"]+"></script>', "", body)
 
-    theme_snippet = re.search(r"<script>\s*(\(function \(\) \{.*?\}\)\(\);)\s*</script>", head, re.S)
+    theme_snippet = re.search(
+        r"<script>\s*(\(function \(\) \{.*?\}\)\(\);)\s*</script>", head, re.S
+    )
     theme_js = theme_snippet.group(1) if theme_snippet else ""
 
     parts = [
@@ -113,23 +115,23 @@ def build(article_cap: int, blob_cap: int) -> tuple[str, int, int]:
         "<head>",
         '<meta charset="utf-8" />',
         '<meta name="viewport" content="width=device-width, initial-scale=1" />',
-        "<title>insider-intel — demo</title>",
+        "<title>insider-intel — preview</title>",
         f"<script>{theme_js}</script>" if theme_js else "",
-        f"<style>\n{_read('themes.css')}\n</style>",
-        f"<style>\n{_read('styles.css')}\n</style>",
+        f"<style>\n{_read_web('themes.css')}\n</style>",
+        f"<style>\n{_read_web('styles.css')}\n</style>",
         "</head>",
         "<body>",
         body,
-        _json_script("demo-articles", articles_json),
-        _json_script("demo-itm", _read("demo/itm.json")),
-        _json_script("demo-manifest", json.dumps(manifest)),
+        _json_script("offline-articles", articles_json),
+        _json_script("offline-itm", (PREVIEW / "data/itm.json").read_text()),
+        _json_script("offline-manifest", json.dumps(manifest)),
         f"<script>{BOOTSTRAP}</script>",
-        _inline_js("config.js"),
-        _inline_js("ttp-packs.js"),
-        _inline_js("demo-store.js"),
-        _inline_js("hunt-templates.js"),
-        _inline_js("board-share.js"),
-        _inline_js("app.js"),
+        _inline(WEB / "config.js"),
+        _inline(WEB / "ttp-packs.js"),
+        _inline(PREVIEW / "offline-store.js"),
+        _inline(WEB / "hunt-templates.js"),
+        _inline(WEB / "board-share.js"),
+        _inline(WEB / "app.js"),
         "</body>",
         "</html>",
     ]

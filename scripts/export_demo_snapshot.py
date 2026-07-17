@@ -1,9 +1,9 @@
-"""Export a static demo snapshot for GitHub Pages (no live API).
+"""Export the snapshot that feeds the standalone preview bundle.
 
-Writes:
-  web/demo/articles.json
-  web/demo/itm.json
-  web/demo/manifest.json
+Writes (under preview/data/, NOT web/ — the shipped site has no snapshot):
+  preview/data/articles.json
+  preview/data/itm.json
+  preview/data/manifest.json
 
 Run from insider-intel/:
   python -m scripts.export_demo_snapshot
@@ -20,7 +20,8 @@ from apps.search.service import get_index, itm_catalog
 from shared.settings import get_settings
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO_DIR = ROOT / "web" / "demo"
+# Snapshot feeds the standalone preview bundle only — not shipped in web/.
+DEMO_DIR = ROOT / "preview" / "data"
 
 
 def _hit_dict(hit) -> dict:

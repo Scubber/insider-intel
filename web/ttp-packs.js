@@ -1,5 +1,6 @@
 /* Curated extraction-board TTP seed packs — single source of truth shared by
- * app.js (live + fallback) and demo-store.js (demo), so the two never drift.
+ * app.js (the shipped site) and the standalone preview's offline responder,
+ * so the two never drift.
  * A pack is selected when the board's ITM ids, hunt query, or article text
  * match its anchors/aliases; IF038 is the default when nothing matches. */
 (() => {

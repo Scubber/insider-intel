@@ -38,7 +38,6 @@ before adding it here.
 
 ```text
 Browser → Pages (web/) → https://api.intel.thederpweb.com  → processed JSONL
-                └─ ?demo=1 → web/demo/*.json (offline fallback only)
 ```
 
 ## Public site today (target)
@@ -46,13 +45,22 @@ Browser → Pages (web/) → https://api.intel.thederpweb.com  → processed JSO
 - **UI:** GitHub Pages (`web/`) — Hunt-first Articles | Workbench; Matrix tab.
 - **API:** Cloud Run FastAPI — same contract as local `:8000` (`/articles`, `/search`,
   `/itm`, `/extract/ttps`, `/reload`, …).
-- **`web/config.js`:** prefers `https://api.intel.thederpweb.com`. If that host is
-  unreachable, **boot auto-falls back** to the static `web/demo/` snapshot so
-  Hunt / board / Extract / Copy still work.
-- **Force snapshot:** `?demo=1`. **Force live (no fallback):** `?demo=0`.
+- **`web/config.js`:** points at `https://api.intel.thederpweb.com`. The site talks
+  only to the live API; if it is unreachable, boot retries (cold start) then shows a
+  retryable error state — there is no snapshot fallback baked into the site.
 
 Workbench Extract TTPs **requires** the live API (CourtListener enrich + optional xAI).
-The old Pages-only demo-store cannot match local Workbench.
+
+## Standalone preview (separate from the site)
+
+For sharing a working UI without a server, build a self-contained single file
+that runs offline against an embedded snapshot. This is **not** part of the
+deployed site — the offline responder and snapshot live under `preview/`, never `web/`:
+
+```bash
+python scripts/export_demo_snapshot.py   # refresh preview/data
+python -m scripts.export_preview         # → dist/insider-intel-demo.html
+```
 
 ## Deploy the API (Cloud Run)
 
@@ -106,28 +114,20 @@ There is no live ingest inside the container in v1.
 ## GitHub Pages (UI only)
 
 Workflow: `.github/workflows/pages.yml` publishes `web/` on pushes to `main` that touch `web/`.
-
-Static `web/demo/` snapshot is **optional fallback** (`?demo=1`), not the public default:
-
-```bash
-python scripts/export_demo_snapshot.py
-# commit web/demo/ when you want an offline snapshot updated
-```
+`web/` contains no demo/offline code — the shipped site depends on the live API.
 
 ## Local
 
 ```bash
 python scripts/launch_local.py   # API :8000 + UI :5500
-# offline UI against snapshot:
-# open http://127.0.0.1:5500/?demo=1
 ```
 
 ## What is static vs not
 
 | Piece | Static? | Notes |
 |-------|---------|-------|
-| `web/` UI | Yes | Pages |
-| `web/demo/` | Yes | `?demo=1` only |
+| `web/` UI | Yes | Pages (live API only) |
+| `preview/` bundle | Yes | Standalone share/demo, not deployed |
 | FastAPI | No | Cloud Run container |
 | Ingest / process | No | Local CLI (or future job) |
 
