@@ -36,6 +36,8 @@ DEFAULT_QUERIES: list[str] = [
     '"scattered spider"',
     '"sim swap" (fraud OR conspiracy OR indictment)',
     '"help desk" ("social engineering" OR impersonation OR credentials)',
+    # Device/telemetry attribution forensics (GDID-class affidavits)
+    '("device identifier" OR "digital fingerprint" OR telemetry) (VPN OR anonymized OR geolocation)',
 ]
 
 SOURCE_ID = "courtlistener-recap"

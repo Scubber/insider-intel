@@ -217,6 +217,20 @@
     "category": "threat-research"
   },
   {
+    "id": "dfir-report",
+    "name": "The DFIR Report",
+    "url": "https://thedfirreport.com/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "securityonline",
+    "name": "SecurityOnline",
+    "url": "https://securityonline.info/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
     "id": "coincentral",
     "name": "CoinCentral",
     "url": "https://coincentral.com/feed/",

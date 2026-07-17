@@ -218,7 +218,18 @@ CURATED_ALIASES: dict[str, tuple[str, ...]] = {
     "AF024": ("account misuse", "misused account", "shared admin account"),
     "AF027": ("clear email artifacts", "deleted emails", "purged mailbox"),
     "AF028": ("stalling", "delayed response", "investigation stall"),
-    "AF029": ("network obfuscation", "proxy chaining", "traffic obfuscation"),
+    "AF029": (
+        "network obfuscation",
+        "proxy chaining",
+        "traffic obfuscation",
+        "vpn evasion",
+        "anonymization",
+        "ip masking",
+        "residential proxy",
+        "ngrok",
+        "unmonitored network",
+        "switching networks",
+    ),
     "AF030": ("message deletion", "deleted messages", "chat wipe"),
     "AF031": ("code obfuscation", "commit obfuscation", "misrepresented contribution"),
     "AF032": ("system time modification", "clock skew", "timestomp clock"),
@@ -242,4 +253,12 @@ INSIDER_FRAMING_KEYWORDS: tuple[str, ...] = (
     "confidential information",
     "patient records",
     "snooping",
+    # Attribution-forensics: persistent device/telemetry artifacts that
+    # deanonymize an actor despite VPNs (e.g. the Windows GDID Scattered
+    # Spider case). Signals the reporting is investigation-grade.
+    "device fingerprint",
+    "device identifier",
+    "digital fingerprint",
+    "deanonymization",
+    "telemetry identifier",
 )
