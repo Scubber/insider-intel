@@ -1,6 +1,4 @@
 (() => {
-  const demoModeInitial = Boolean(window.INSIDER_INTEL_DEMO);
-  let demoMode = demoModeInitial;
   const apiBase = (window.INSIDER_INTEL_API_BASE || "http://127.0.0.1:8000").replace(
     /\/$/,
     "",
@@ -89,132 +87,6 @@
     negligent: "Negligent",
     unintentional: "Unintentional",
   };
-
-  /** Curated IF038 TTP seeds — keep aligned with docs/ttps_overemployment.md */
-  const IF038_TTP_SEEDS = [
-    {
-      id: "TTP-OE-01",
-      behavior: "Undisclosed second full-time remote job (dual employment / overemployment).",
-      email: [
-        "personal-domain mail during work hours",
-        "Job B recruiter/HR threads",
-        "personal calendar invites for Job B standups",
-      ],
-      chat: [
-        "second Slack/Teams identity",
-        "J2 / OE / overemployed language",
-        "status always Busy/BRB",
-      ],
-      network: [
-        "concurrent SaaS sessions for different orgs",
-        "personal VPN + corp VPN patterns",
-        "after-hours bursty productivity tools",
-      ],
-      human: [
-        "missing/false outside-employment or COI disclosure",
-        "dual W-2 / multiple employers on tax or benefits",
-        "LinkedIn current roles vs HRIS title mismatch",
-      ],
-      seeds: [
-        "outside employment",
-        "moonlighting",
-        "J2",
-        "overemployed",
-        "second job",
-        "dual employment",
-        "conflict of interest disclosure",
-      ],
-    },
-    {
-      id: "TTP-OE-02",
-      behavior: "Competitor / customer side work (trade-secret adjacent concurrent role).",
-      email: [
-        "competitor-domain threads",
-        "side project share of internal decks",
-        "personal Dropbox/Drive links in corp mail",
-      ],
-      chat: [
-        "screenshots of internal tools",
-        "my other company",
-        "recruiting coworkers",
-      ],
-      network: [
-        "large personal-cloud uploads",
-        "USB/email exfil near resignation",
-        "repos unused in day job",
-      ],
-      human: [
-        "undisclosed advisory/contractor role",
-        "COI form none",
-        "resignation timed with competitor start",
-      ],
-      seeds: [
-        "competitor",
-        "side project",
-        "advisory",
-        "consulting agreement",
-        "DTSA",
-        "trade secret",
-        "customer list",
-      ],
-    },
-    {
-      id: "TTP-OE-03",
-      behavior: "Using Employer A time/tools for Employer B.",
-      email: [
-        "drafts to Job B from corp mailbox",
-        "vague calendar blocks with no corp attendees",
-      ],
-      chat: [
-        "Job B tickets pasted into corp chat",
-        "second browser profile language",
-      ],
-      network: [
-        "Job B IdP on corp device",
-        "RDP/VDI to personal systems",
-        "clipboard/file activity to personal cloud",
-      ],
-      human: [
-        "timekeeping anomalies",
-        "always in meetings without corp artifacts",
-        "PIP for availability",
-      ],
-      seeds: ["personal laptop", "my other job", "client call"],
-    },
-    {
-      id: "TTP-OE-04",
-      behavior: "Identity split — personal stack for Job B, corp stack for Job A.",
-      email: ["auto-forward corp to personal", "Job B never on corp systems"],
-      chat: ["text me on my personal", "Signal/WhatsApp for work topics"],
-      network: ["MDM gaps", "personal hotspot only", "corp VPN idle while claiming hours"],
-      human: [
-        "unreachable on corp mobile",
-        "refuses MDM on personal devices used for work",
-      ],
-      seeds: ["personal phone", "text me", "Signal", "WhatsApp", "forward to Gmail"],
-    },
-    {
-      id: "TTP-OE-05",
-      behavior: "False or incomplete outside-employment / COI disclosure.",
-      email: [
-        "outside employment policy signature threads unanswered",
-        "policy reminders ignored",
-      ],
-      chat: ["don't tell HR", "policy screenshot shares"],
-      network: ["pair with HRIS — low network signal alone"],
-      human: [
-        "form answers vs LinkedIn/tax/benefits",
-        "AP payments to employee LLC",
-        "1099s",
-      ],
-      seeds: [
-        "outside employment policy",
-        "conflict of interest form",
-        "disclosure form",
-        "moonlighting policy",
-      ],
-    },
-  ];
 
   const BOARD_STORAGE_KEY = "insider-intel.extractionBoard";
   const DISMISSED_STORAGE_KEY = "insider-intel.dismissed";
@@ -497,20 +369,11 @@
       return;
     }
     const indexed = Number(ds.indexed || 0).toLocaleString();
-    if (ds.mode === "demo") {
-      const when = ds.generatedAt ? ` · ${formatDate(ds.generatedAt)}` : "";
-      els.dataState.textContent = `Snapshot${when} · ${indexed} indexed`;
-    } else {
-      const when = ds.updatedAt ? `Updated ${formatRelativeTime(ds.updatedAt)}` : "Live";
-      els.dataState.textContent = `${when} · ${indexed} articles`;
-    }
-    els.dataState.classList.toggle("data-state-demo", ds.mode === "demo");
-    els.dataState.title =
-      ds.mode === "demo"
-        ? "Static demo snapshot — not live ingest"
-        : ds.updatedAt
-          ? `Live API — corpus last indexed ${new Date(ds.updatedAt).toLocaleString()}`
-          : "Connected to the live API";
+    const when = ds.updatedAt ? `Updated ${formatRelativeTime(ds.updatedAt)}` : "Live";
+    els.dataState.textContent = `${when} · ${indexed} articles`;
+    els.dataState.title = ds.updatedAt
+      ? `Live API — corpus last indexed ${new Date(ds.updatedAt).toLocaleString()}`
+      : "Connected to the live API";
     els.dataState.hidden = false;
   }
 
@@ -558,12 +421,6 @@
   }
 
   async function api(path, params = {}, options = {}) {
-    if (demoMode) {
-      if (!window.InsiderIntelDemo) {
-        throw new Error("Demo store not loaded");
-      }
-      return window.InsiderIntelDemo.request(path, params, options);
-    }
     const url = new URL(`${apiBase}${path}`);
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
@@ -622,6 +479,22 @@
     } catch {
       return "unknown date";
     }
+  }
+
+  const _domParser = typeof DOMParser !== "undefined" ? new DOMParser() : null;
+
+  /** Feed summaries arrive with literal HTML entities and stray tags; render
+   * them as clean prose. Parsing as inert HTML strips real tags and decodes
+   * entities without mangling literal comparison text ("<5% but >2 …"); the
+   * parsed document never executes scripts or loads resources. */
+  function cleanSummary(raw) {
+    let text = String(raw || "");
+    if (!text) return "";
+    if (_domParser) {
+      const doc = _domParser.parseFromString(text, "text/html");
+      text = (doc.body && doc.body.textContent) || "";
+    }
+    return text.replace(/\s+/g, " ").trim();
   }
 
   function itmUrl(hit) {
@@ -1061,31 +934,19 @@
     });
   }
 
-  function if038AliasHints() {
-    return (CLIENT_ALIAS_EXTRAS.IF038.aliases || []).map((a) => String(a).toLowerCase());
-  }
-
-  function textHasIf038Alias(text) {
-    const hay = String(text || "").toLowerCase();
-    if (!hay) return false;
-    return if038AliasHints().some((alias) => alias && hay.includes(alias));
-  }
-
-  function boardMatchedIf038(entries) {
-    if ((state.huntMappedIds || []).some((id) => String(id).toUpperCase() === "IF038")) {
-      return true;
-    }
-    if (textHasIf038Alias(state.lastHuntQuery)) return true;
-
-    return (entries || []).some((item) => {
-      if ((item.itm_ids || []).some((id) => String(id).toUpperCase() === "IF038")) {
-        return true;
-      }
-      const blobs = [item.title, item.source_name, item.source_id]
+  function selectTtpPacks(entries) {
+    const packsApi = window.InsiderIntelPacks;
+    const itmIds = [...(state.huntMappedIds || [])];
+    const texts = [];
+    (entries || []).forEach((item) => {
+      (item.itm_ids || []).forEach((id) => itmIds.push(id));
+      [item.title, item.source_name, item.source_id]
         .concat(item.matched_aliases || [])
-        .concat(item.operator_terms || []);
-      return blobs.some((blob) => textHasIf038Alias(blob));
+        .concat(item.operator_terms || [])
+        .forEach((t) => texts.push(t));
     });
+    if (!packsApi) return { packs: [], matched: false };
+    return packsApi.selectPacks({ itmIds, huntQuery: state.lastHuntQuery, texts });
   }
 
   function uniqPush(list, seen, value) {
@@ -1117,16 +978,18 @@
       (item.matched_aliases || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
     });
 
-    // MVP: always attach curated IF038 TTP pack so Extract never yields an empty
-    // hunt report. Matching on board/hunt only changes the meta label.
-    const matchedIf038 = boardMatchedIf038(entries);
-    IF038_TTP_SEEDS.forEach((ttp) => {
-      behaviors.push({ id: ttp.id, text: ttp.behavior });
-      ttp.email.forEach((t) => uniqPush(email, seen.email, t));
-      ttp.chat.forEach((t) => uniqPush(chat, seen.chat, t));
-      ttp.network.forEach((t) => uniqPush(network, seen.network, t));
-      ttp.human.forEach((t) => uniqPush(human, seen.human, t));
-      ttp.seeds.forEach((t) => uniqPush(seeds, seen.seeds, t));
+    // Attach the matching curated pack(s) so Extract never yields an empty
+    // hunt report; falls back to IF038 when a board matches nothing.
+    const { packs, matched } = selectTtpPacks(entries);
+    packs.forEach((pack) => {
+      pack.seeds.forEach((ttp) => {
+        behaviors.push({ id: ttp.id, text: ttp.behavior });
+        ttp.email.forEach((t) => uniqPush(email, seen.email, t));
+        ttp.chat.forEach((t) => uniqPush(chat, seen.chat, t));
+        ttp.network.forEach((t) => uniqPush(network, seen.network, t));
+        ttp.human.forEach((t) => uniqPush(human, seen.human, t));
+        ttp.seeds.forEach((t) => uniqPush(seeds, seen.seeds, t));
+      });
     });
 
     return {
@@ -1139,10 +1002,10 @@
       human,
       seeds,
       usedIf038Seeds: true,
-      matchedIf038,
+      matchedIf038: packs.some((p) => p.id === "IF038") && matched,
       mode: "seeds",
-      detail: matchedIf038
-        ? "Seed pack · IF038 matched"
+      detail: matched
+        ? `Seed pack · ${packs.map((p) => p.label).join(" + ")}`
         : "Seed pack · IF038 overemployment TTP pack",
     };
   }
@@ -1615,7 +1478,7 @@
       `Title: ${article.title}`,
       `Link: ${article.link}`,
       `Source: ${article.source_name}`,
-      `Summary: ${article.summary || "(none)"}`,
+      `Summary: ${cleanSummary(article.summary) || "(none)"}`,
       "",
       `ITM techniques: ${itmIds.length ? itmIds.join("; ") : "(none)"}`,
       `Related detections: ${detections.length ? detections.join("; ") : "(none)"}`,
@@ -2514,7 +2377,7 @@
     });
     const snip = document.createElement("p");
     snip.className = "snip";
-    snip.textContent = article.summary || "";
+    snip.textContent = cleanSummary(article.summary);
 
     const preview = document.createElement("div");
     preview.className = "kw-preview";
@@ -3223,6 +3086,24 @@
     showLatest().catch((err) => setStatus(`Load failed: ${err.message}`));
   });
 
+  async function probeLiveApi() {
+    // Wait out a Cloud Run cold start on first load. Retries with a short
+    // timeout each; throws (surfacing the error state) if all fail.
+    const attempts = 3;
+    const perTryMs = 5000;
+    let lastErr = null;
+    for (let i = 1; i <= attempts; i += 1) {
+      try {
+        await api("/health", {}, { timeoutMs: perTryMs, cache: "no-store" });
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (i < attempts) setStatus(`Waking live API… (${i}/${attempts})`);
+      }
+    }
+    throw lastErr || new Error("live API unreachable");
+  }
+
   function socialSourceRow(info, { subscribed }) {
     const li = document.createElement("li");
     li.className = "social-source-item";
@@ -3272,7 +3153,7 @@
     try {
       catalog = await api("/social/catalog");
     } catch (err) {
-      // Demo mode / older API without social endpoints: hide the panel.
+      // Older API without social endpoints: hide the panel.
       els.socialManager.hidden = true;
       console.warn("Social catalog unavailable", err);
       return;
@@ -3333,31 +3214,15 @@
       syncBoardToggle();
       renderHuntUsecases();
 
-      // Public UI defaults to live API; if Cloud Run is not up yet, fall back to
-      // the static web/demo snapshot so Workbench / Extract / Copy still work.
-      if (!demoMode) {
-        try {
-          await api("/health", {}, { timeoutMs: 4000 });
-        } catch (liveErr) {
-          if (!window.InsiderIntelDemo) throw liveErr;
-          console.warn("Live API unreachable — falling back to static demo", liveErr);
-          demoMode = true;
-          window.INSIDER_INTEL_DEMO = true;
-          setStatus("Live API offline — using static demo");
-        }
-      }
+      // Cloud Run can be cold on first hit; probeLiveApi retries a few times
+      // before surfacing an error (no silent snapshot fallback).
+      await probeLiveApi();
 
-      if (demoMode && window.InsiderIntelDemo) {
-        await window.InsiderIntelDemo.ready;
-      }
       const health = await api("/health");
-      const demoNote = health.demo || demoMode ? " · static demo" : "";
-      setStatus(`API ok · ${health.indexed_articles} indexed${demoNote}`);
+      setStatus(`API ok · ${health.indexed_articles} indexed`);
       state.lastTotalIndexed = health.indexed_articles || 0;
       state.dataState = {
-        mode: health.demo || demoMode ? "demo" : "live",
         indexed: health.indexed_articles || 0,
-        generatedAt: health.generated_at || null,
         updatedAt: health.last_indexed_at || health.generated_at || null,
       };
       renderDataState();
@@ -3375,14 +3240,30 @@
         await loadArticles();
       }
     } catch (err) {
-      setStatus(
-        demoMode || window.INSIDER_INTEL_DEMO
-          ? `Demo failed to load (missing web/demo?). ${err.message}`
-          : `Cannot reach API at ${apiBase}. Try ?demo=1 for the static snapshot.`,
-      );
-      renderArticles([], "Latest");
       console.error(err);
+      renderApiError(err);
     }
+  }
+
+  function renderApiError(err) {
+    setStatus(`Cannot reach the intel API at ${apiBase}`);
+    if (els.dataState) els.dataState.hidden = true;
+    if (!els.articleList) return;
+    els.articleList.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "panel-empty stream-empty api-error";
+    const msg = document.createElement("p");
+    msg.textContent = `The intel API is unreachable (${err.message}). It may be waking up.`;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "copy-btn copy-btn-primary";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      setStatus("Retrying…");
+      boot().catch((e) => console.error(e));
+    });
+    li.append(msg, retry);
+    els.articleList.appendChild(li);
   }
 
   boot();

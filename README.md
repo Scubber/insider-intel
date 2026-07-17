@@ -173,8 +173,17 @@ Copy `.env.example` → `.env`. For hosted UI later, set `CORS_ORIGINS` and
 
 **Public UI:** `https://intel.thederpweb.com` (GitHub Pages).  
 **Public API:** `https://api.intel.thederpweb.com` (Cloud Run — see [docs/hosting.md](docs/hosting.md)).  
-Offline fallback snapshot: `?demo=1` (`web/demo/`; regenerate with
-`python scripts/export_demo_snapshot.py`).
+The shipped UI talks only to the live API; if it's unreachable it shows a
+retryable error state (no snapshot fallback).
+
+**Standalone preview:** a self-contained single-file build for sharing/demos
+that runs the UI offline against an embedded snapshot — entirely separate from
+the shipped site:
+
+```bash
+python scripts/export_demo_snapshot.py   # refresh preview/data snapshot
+python -m scripts.export_preview         # → dist/insider-intel-demo.html
+```
 
 ## Tests
 
@@ -182,6 +191,21 @@ Offline fallback snapshot: `?demo=1` (`web/demo/`; regenerate with
 pytest
 ruff check apps shared tests
 ```
+
+### UI verification
+
+After any change under `web/`, run the headless UX smoke test — it boots the UI
+in demo mode and drives the core journeys (stream, technique dossier, hunt,
+extraction board, themes) plus landscape and snippet regression guards:
+
+```bash
+pip install playwright   # once; Chromium is resolved automatically
+python scripts/ui_smoke.py            # serves web/ and runs the checks
+python scripts/ui_smoke.py --headed   # watch it run
+python scripts/ui_smoke.py --url http://127.0.0.1:5500  # test a running instance
+```
+
+Exit code is non-zero if any check fails.
 
 ## Design notes
 

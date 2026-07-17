@@ -1,9 +1,9 @@
-"""Export a static demo snapshot for GitHub Pages (no live API).
+"""Export the snapshot that feeds the standalone preview bundle.
 
-Writes:
-  web/demo/articles.json
-  web/demo/itm.json
-  web/demo/manifest.json
+Writes (under preview/data/, NOT web/ — the shipped site has no snapshot):
+  preview/data/articles.json
+  preview/data/itm.json
+  preview/data/manifest.json
 
 Run from insider-intel/:
   python -m scripts.export_demo_snapshot
@@ -12,15 +12,15 @@ Run from insider-intel/:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from apps.search.index import ArticleSearchIndex
 from apps.search.service import get_index, itm_catalog
 from shared.settings import get_settings
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO_DIR = ROOT / "web" / "demo"
+# Snapshot feeds the standalone preview bundle only — not shipped in web/.
+DEMO_DIR = ROOT / "preview" / "data"
 
 
 def _hit_dict(hit) -> dict:
@@ -72,7 +72,7 @@ def main() -> None:
     )
     itm_path.write_text(catalog.model_dump_json(), encoding="utf-8")
     manifest = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "article_count": len(articles),
         "technique_count": len(catalog.techniques),
         "detection_count": len(catalog.detections),
