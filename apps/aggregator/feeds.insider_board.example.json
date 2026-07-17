@@ -140,9 +140,58 @@
     "category": "threat-research"
   },
   {
+    "id": "sei-insider-threat",
+    "name": "CMU SEI Blog",
+    "url": "https://insights.sei.cmu.edu/blog/feeds/latest.rss",
+    "enabled": true,
+    "category": "insider-osint"
+  },
+  {
     "id": "upguard",
     "name": "UpGuard Blog",
     "url": "https://www.upguard.com/blog/rss.xml",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "dtex-i3",
+    "name": "DTEX i3 Blog",
+    "url": "https://www.dtexsystems.com/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "unit42",
+    "name": "Unit 42 (Palo Alto)",
+    "url": "https://unit42.paloaltonetworks.com/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "google-threat-intel",
+    "name": "Google Threat Intelligence",
+    "url": "https://cloudblog.withgoogle.com/topics/threat-intelligence/rss/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "crowdstrike",
+    "name": "CrowdStrike Blog",
+    "url": "https://www.crowdstrike.com/blog/feed/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "talos",
+    "name": "Cisco Talos",
+    "url": "https://blog.talosintelligence.com/rss/",
+    "enabled": true,
+    "category": "threat-research"
+  },
+  {
+    "id": "microsoft-security",
+    "name": "Microsoft Security Blog",
+    "url": "https://www.microsoft.com/en-us/security/blog/feed/",
     "enabled": true,
     "category": "threat-research"
   },
