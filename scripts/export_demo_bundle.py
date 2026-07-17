@@ -125,6 +125,7 @@ def build(article_cap: int, blob_cap: int) -> tuple[str, int, int]:
         _json_script("demo-manifest", json.dumps(manifest)),
         f"<script>{BOOTSTRAP}</script>",
         _inline_js("config.js"),
+        _inline_js("ttp-packs.js"),
         _inline_js("demo-store.js"),
         _inline_js("hunt-templates.js"),
         _inline_js("board-share.js"),

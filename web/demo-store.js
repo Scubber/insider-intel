@@ -442,35 +442,62 @@
           .map((link) => articles.find((a) => a.link === link))
           .filter(Boolean);
         const titles = picked.map((a) => a.title);
-        const seeds = [];
+
+        // Article-derived seeds, then the matched curated pack(s) from the
+        // shared registry (single source of truth with app.js).
+        const behaviors = [];
+        const email = [];
+        const chat = [];
+        const network = [];
+        const seedSet = new Set();
+        const human = [];
+        const push = (arr, values) =>
+          (values || []).forEach((v) => {
+            const c = String(v || "").trim();
+            if (c && !arr.some((x) => x.toLowerCase() === c.toLowerCase())) arr.push(c);
+          });
+
         picked.forEach((a) => {
-          (a.operator_terms || []).forEach((t) => seeds.push(t));
+          (a.operator_terms || []).forEach((t) => seedSet.add(t));
           (a.itm_hits || []).forEach((h) =>
-            (h.matched_aliases || []).forEach((t) => seeds.push(t)),
+            (h.matched_aliases || []).forEach((t) => seedSet.add(t)),
           );
         });
+
+        const itmIds = [];
+        const texts = [];
+        picked.forEach((a) => {
+          (a.itm_hits || []).forEach((h) => itmIds.push(h.id));
+          texts.push(a.title, a.source_name, a.source_id);
+          (a.operator_terms || []).forEach((t) => texts.push(t));
+        });
+        const packsApi = window.InsiderIntelPacks;
+        const selection = packsApi
+          ? packsApi.selectPacks({ itmIds, texts })
+          : { packs: [], matched: false };
+        selection.packs.forEach((pack) => {
+          pack.seeds.forEach((ttp) => {
+            behaviors.push({ id: ttp.id, text: ttp.behavior });
+            push(email, ttp.email);
+            push(chat, ttp.chat);
+            push(network, ttp.network);
+            push(human, ttp.human);
+            (ttp.seeds || []).forEach((t) => seedSet.add(t));
+          });
+        });
+        const label = selection.packs.map((p) => p.label).join(" + ");
         return {
           mode: "seeds",
           article_count: picked.length,
           titles,
-          behaviors: [
-            {
-              id: "TTP-OE-01",
-              text: "Undisclosed second full-time remote job (dual employment / overemployment).",
-            },
-          ],
-          email: ["personal-domain mail during work hours", "Job B recruiter/HR threads"],
-          chat: ["second Slack/Teams identity", "J2 / OE / overemployed language"],
-          network: ["concurrent SaaS sessions for different orgs", "personal VPN + corp VPN patterns"],
-          human: [
-            "missing/false outside-employment or COI disclosure",
-            "LinkedIn current roles vs HRIS title mismatch",
-          ],
-          seeds: Array.from(new Set(seeds.concat(["overemployment", "moonlighting", "J2"]))),
-          matched_if038: picked.some((a) =>
-            (a.itm_hits || []).some((h) => String(h.id).toUpperCase() === "IF038"),
-          ),
-          detail: "Demo seed pack (static snapshot — set XAI_API_KEY on live API for LLM)",
+          behaviors,
+          email,
+          chat,
+          network,
+          human,
+          seeds: Array.from(seedSet),
+          matched_if038: selection.matched && selection.packs.some((p) => p.id === "IF038"),
+          detail: `Demo seed pack · ${label || "IF038 overemployment"} (static snapshot — set XAI_API_KEY on live API for LLM)`,
         };
       }
       throw new Error(`Demo mode does not support ${method} ${path}`);
