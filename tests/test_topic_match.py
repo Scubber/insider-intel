@@ -9,14 +9,16 @@ from fastapi.testclient import TestClient
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.search import service
 from apps.search.api import app
-from apps.search.index import ArticleSearchIndex, _article_matches_itm
+from apps.search.index import _article_matches_itm
 from shared.itm.index import clear_itm_cache
 from shared.schemas import ExtractedEntities, ProcessedArticle
 from shared.settings import Settings
 from shared.utils.entities import extract_entities, match_itm_techniques
 
 
-def _article(*, title: str, summary: str = "", link: str = "https://example.com/x") -> ProcessedArticle:
+def _article(
+    *, title: str, summary: str = "", link: str = "https://example.com/x"
+) -> ProcessedArticle:
     return ProcessedArticle(
         title=title,
         link=link,

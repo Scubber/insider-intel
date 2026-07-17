@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from apps.aggregator.archive_pipeline import run_archive_ingestion
 from apps.aggregator.config import load_feeds_from_file
@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m apps.aggregator",
         description=(
             "Insider-threat OSINT: RSS, sitemap archive, Feedly, CourtListener, "
-            "web-keyword ingest, process, and corporate export."
+            "DataTheftNews, web-keyword ingest, process, and corporate export."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=False)
@@ -108,7 +108,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     court_p = sub.add_parser(
         "ingest_courtlistener",
-        help="Pull CourtListener RECAP dockets for curated insider-legal queries.",
+        help=(
+            "Pull CourtListener RECAP dockets and/or case law opinions "
+            "for curated insider-legal queries."
+        ),
     )
     court_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
     court_p.add_argument("--include-raw", action="store_true")
@@ -119,9 +122,116 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         dest="queries",
         default=None,
-        help="RECAP query (repeatable). Defaults to COURTLISTENER_QUERIES / built-ins.",
+        help="Search query (repeatable). Defaults to COURTLISTENER_QUERIES / built-ins.",
+    )
+    court_p.add_argument(
+        "--type",
+        action="append",
+        dest="types",
+        default=None,
+        help=(
+            "Search type (repeatable): dockets | opinions | all. "
+            "Defaults to COURTLISTENER_TYPES (dockets)."
+        ),
+    )
+    court_p.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="Only results filed on/after this date (YYYY-MM-DD); overrides the watermark.",
+    )
+    court_p.add_argument(
+        "--no-watermark",
+        action="store_true",
+        help="Ignore and do not update the persisted filed_after watermark.",
+    )
+    court_p.add_argument(
+        "--no-opinion-text",
+        action="store_const",
+        const=False,
+        default=None,
+        dest="fetch_opinion_text",
+        help="Skip fetching full opinion bodies (COURTLISTENER_FETCH_OPINION_TEXT).",
     )
     _add_verbose(court_p)
+
+    dtn_p = sub.add_parser(
+        "ingest_datatheftnews",
+        help=(
+            "Pull DataTheftNews published posts via public Supabase API "
+            "(no RSS; trade-secret / insider-theft beat)."
+        ),
+    )
+    dtn_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    dtn_p.add_argument("--include-raw", action="store_true")
+    dtn_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max published posts to fetch (default: DATATHEFTNEWS_LIMIT).",
+    )
+    _add_verbose(dtn_p)
+
+    social_p = sub.add_parser(
+        "ingest_social",
+        help=(
+            "Pull subscribed social sources (Reddit public JSON; X when "
+            "X_BEARER_TOKEN is set) into the raw store, channel=social."
+        ),
+    )
+    social_p.add_argument(
+        "--platform",
+        type=str,
+        choices=("reddit", "x", "all"),
+        default="all",
+        help="Which social platform(s) to pull (default all).",
+    )
+    social_p.add_argument(
+        "--subreddit",
+        action="append",
+        dest="subreddits",
+        default=None,
+        help="Subreddit override (repeatable). Defaults to subscriptions.",
+    )
+    social_p.add_argument(
+        "--handle",
+        action="append",
+        dest="handles",
+        default=None,
+        help="X handle override (repeatable). Defaults to subscriptions.",
+    )
+    social_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    social_p.add_argument("--include-raw", action="store_true")
+    social_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max posts per source (default: REDDIT_LIMIT / X_MAX_RESULTS).",
+    )
+    _add_verbose(social_p)
+
+    social_url_p = sub.add_parser(
+        "ingest_social_url",
+        help="Flag one social post by URL (Reddit post or /s/ share link) for ingest.",
+    )
+    social_url_p.add_argument("url", type=str, help="Reddit post URL")
+    social_url_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    _add_verbose(social_url_p)
+
+    social_mgmt_p = sub.add_parser(
+        "social",
+        help="Manage social subscriptions (list | suggest | add | remove).",
+    )
+    social_sub = social_mgmt_p.add_subparsers(dest="social_command", required=True)
+    social_sub.add_parser("list", help="List subscribed social sources.")
+    social_sub.add_parser("suggest", help="Show the curated discovery catalog.")
+    add_p = social_sub.add_parser("add", help="Subscribe to a subreddit / X handle.")
+    add_p.add_argument("platform", choices=("reddit", "x"))
+    add_p.add_argument("handle", type=str, help="Subreddit name or X handle")
+    remove_p = social_sub.add_parser("remove", help="Unsubscribe a social source.")
+    remove_p.add_argument("platform", choices=("reddit", "x"))
+    remove_p.add_argument("handle", type=str)
+    _add_verbose(social_mgmt_p)
 
     web_p = sub.add_parser(
         "ingest_web_keywords",
@@ -178,7 +288,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     all_p = sub.add_parser(
         "all",
-        help="Run RSS (+ Feedly / CourtListener / web keywords when configured) then process.",
+        help=(
+            "Run RSS (+ Feedly / CourtListener / DataTheftNews / web keywords "
+            "when configured) then process."
+        ),
     )
     all_p.add_argument("--feeds-file", type=str, default=None)
     all_p.add_argument("--raw-path", type=str, default=DEFAULT_STORE_PATH)
@@ -194,6 +307,8 @@ def _build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--skip-feedly", action="store_true")
     all_p.add_argument("--skip-courtlistener", action="store_true")
     all_p.add_argument("--skip-web-keywords", action="store_true")
+    all_p.add_argument("--skip-datatheftnews", action="store_true")
+    all_p.add_argument("--skip-social", action="store_true")
     _add_verbose(all_p)
 
     itm_p = sub.add_parser(
@@ -305,15 +420,122 @@ def _cmd_ingest_feedly(args: argparse.Namespace) -> int:
 
 
 def _cmd_ingest_courtlistener(args: argparse.Namespace) -> int:
-    result = run_courtlistener_ingestion(
-        queries=args.queries,
-        page_size=args.page_size,
-        max_pages=args.max_pages,
+    if args.since is not None:
+        try:
+            date.fromisoformat(args.since)
+        except ValueError:
+            print(f"error: --since must be YYYY-MM-DD, got {args.since!r}", file=sys.stderr)
+            return 2
+    try:
+        result = run_courtlistener_ingestion(
+            queries=args.queries,
+            types=args.types,
+            page_size=args.page_size,
+            max_pages=args.max_pages,
+            since=args.since,
+            use_watermark=not args.no_watermark,
+            fetch_opinion_text=args.fetch_opinion_text,
+            store_path=args.store_path,
+            include_raw=args.include_raw,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_ingest_datatheftnews(args: argparse.Namespace) -> int:
+    from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
+
+    result = run_datatheftnews_ingestion(
         store_path=args.store_path,
         include_raw=args.include_raw,
+        limit=args.limit,
     )
     _print_ingest(result)
     return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_ingest_social(args: argparse.Namespace) -> int:
+    from apps.aggregator.reddit_pipeline import run_reddit_ingestion
+    from apps.aggregator.run_all import _merge_ingestion
+    from apps.aggregator.x_pipeline import run_x_ingestion
+
+    results = []
+    if args.platform in ("reddit", "all"):
+        results.append(
+            run_reddit_ingestion(
+                subreddits=args.subreddits,
+                store_path=args.store_path,
+                include_raw=args.include_raw,
+                limit=args.limit,
+            )
+        )
+    if args.platform in ("x", "all"):
+        results.append(
+            run_x_ingestion(
+                handles=args.handles,
+                store_path=args.store_path,
+                include_raw=args.include_raw,
+                max_results=args.limit,
+            )
+        )
+    result = _merge_ingestion(*results)
+    _print_ingest(result)
+    if not result.sources:
+        print(
+            "Hint: subscribe sources first — python -m apps.aggregator social suggest, "
+            "then social add reddit overemployed (or set REDDIT_SUBREDDITS / X_HANDLES)."
+        )
+        return 0
+    return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_ingest_social_url(args: argparse.Namespace) -> int:
+    from apps.aggregator.reddit_pipeline import ingest_reddit_post_url
+
+    article = ingest_reddit_post_url(args.url, store_path=args.store_path)
+    if article is None:
+        print(f"error: no post found at {args.url}", file=sys.stderr)
+        return 1
+    print(f"Ingested: {article.title} ({article.link}) -> channel={article.channel}")
+    print("Run: python -m apps.aggregator process   # to classify + index it")
+    return 0
+
+
+def _cmd_social(args: argparse.Namespace) -> int:
+    from apps.aggregator.social_catalog import build_catalog
+    from apps.aggregator.social_subscriptions import SocialSubscriptionStore
+
+    store = SocialSubscriptionStore(get_settings().social_subscriptions_path)
+    if args.social_command == "list":
+        subscriptions = store.list()
+        if not subscriptions:
+            print("No social subscriptions. Try: python -m apps.aggregator social suggest")
+            return 0
+        for sub in subscriptions:
+            state = "on " if sub.enabled else "off"
+            tags = f" [{', '.join(sub.use_cases)}]" if sub.use_cases else ""
+            print(f"[{state}] {sub.platform}: {sub.display_name()}{tags}")
+        return 0
+    if args.social_command == "suggest":
+        subscribed = {(s.platform, s.id) for s in store.list() if s.enabled}
+        for info in build_catalog():
+            mark = "*" if (info.platform, info.id) in subscribed else " "
+            tags = f" [{', '.join(info.use_cases)}]" if info.use_cases else ""
+            print(f"[{mark}] {info.platform}: {info.name}{tags} — {info.description}")
+        print("\n(*) already subscribed. Add with: social add <platform> <handle>")
+        return 0
+    if args.social_command == "add":
+        entry = store.add(args.platform, args.handle)
+        print(f"Subscribed: {entry.platform} {entry.display_name()}")
+        return 0
+    if args.social_command == "remove":
+        removed = store.remove(args.platform, args.handle)
+        print("Removed." if removed else "Not found.")
+        return 0 if removed else 1
+    return 2
 
 
 def _cmd_ingest_web_keywords(args: argparse.Namespace) -> int:
@@ -390,6 +612,8 @@ def _cmd_all(args: argparse.Namespace) -> int:
         skip_feedly=args.skip_feedly,
         skip_courtlistener=args.skip_courtlistener,
         skip_web_keywords=args.skip_web_keywords,
+        skip_datatheftnews=args.skip_datatheftnews,
+        skip_social=args.skip_social,
     )
     _print_ingest(result.ingestion)
     _print_process(result.processing)
@@ -427,6 +651,14 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_feedly(args)
     if args.command == "ingest_courtlistener":
         return _cmd_ingest_courtlistener(args)
+    if args.command == "ingest_datatheftnews":
+        return _cmd_ingest_datatheftnews(args)
+    if args.command == "ingest_social":
+        return _cmd_ingest_social(args)
+    if args.command == "ingest_social_url":
+        return _cmd_ingest_social_url(args)
+    if args.command == "social":
+        return _cmd_social(args)
     if args.command == "ingest_web_keywords":
         return _cmd_ingest_web_keywords(args)
     if args.command == "ingest_archive":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from apps.aggregator.config import get_enabled_feeds
+from apps.aggregator.config import DEFAULT_FEEDS
 from apps.search.index import ArticleSearchIndex
 from shared.itm.index import load_itm_index
 from shared.schemas import (
@@ -14,7 +14,10 @@ from shared.schemas import (
     ItmCatalogResponse,
     SearchMode,
     SearchResponse,
+    SocialCatalogResponse,
+    SocialSourceInfo,
     SourceInfo,
+    UseCaseInfo,
 )
 from shared.schemas.articles import resolve_channel
 from shared.schemas.search import ItmArticleSummary, ItmTechniqueSummary
@@ -48,13 +51,15 @@ def list_sources(
     itm_id: str | None = None,
     itm_alignment: str = "all",
     channel: str = "all",
+    use_case: str | None = None,
+    insider_type: str = "all",
 ) -> list[SourceInfo]:
     """Sources with article counts for the active stream filters.
 
     When filters are applied, only sources with matching articles are returned
     (counts reflect the filtered set). Unfiltered calls still merge configured feeds.
     """
-    configured = {f.id: f for f in get_enabled_feeds()}
+    configured = {f.id: f for f in DEFAULT_FEEDS}
     indexed = {
         sid: (name, count)
         for sid, name, count in get_index(path).list_sources(
@@ -63,12 +68,18 @@ def list_sources(
             itm_id=itm_id,
             itm_alignment=itm_alignment,
             channel=channel,
+            use_case=use_case,
+            insider_type=insider_type,
         )
     }
 
-    filtered = (itm_alignment or "all").strip().lower() not in {"", "all", "*"} or bool(
-        theme or itm_id or min_score > 0
-    ) or (channel or "all").strip().lower() not in {"", "all", "*"}
+    filtered = (
+        (itm_alignment or "all").strip().lower() not in {"", "all", "*"}
+        or bool(theme or itm_id or min_score > 0)
+        or (channel or "all").strip().lower() not in {"", "all", "*"}
+        or (use_case or "all").strip().lower() not in {"", "all", "*"}
+        or (insider_type or "all").strip().lower() not in {"", "all", "*"}
+    )
 
     merged: dict[str, SourceInfo] = {}
     if not filtered:
@@ -115,6 +126,8 @@ def search(
     itm_id: str | None = None,
     itm_alignment: str = "insider",
     channel: str = "all",
+    use_case: str | None = None,
+    insider_type: str = "all",
     path: str | Path | None = None,
 ) -> SearchResponse:
     if isinstance(mode, str):
@@ -130,6 +143,8 @@ def search(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
     )
 
 
@@ -144,6 +159,8 @@ def list_articles(
     prevention_id: str | None = None,
     itm_alignment: str = "insider",
     channel: str = "all",
+    use_case: str | None = None,
+    insider_type: str = "all",
     topic_match: bool = False,
     group: bool = True,
     path: str | Path | None = None,
@@ -159,9 +176,78 @@ def list_articles(
         prevention_id=prevention_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
         topic_match=topic_match,
         group=group,
     )
+
+
+def _social_store():
+    from apps.aggregator.social_subscriptions import SocialSubscriptionStore
+
+    return SocialSubscriptionStore(get_settings().social_subscriptions_path)
+
+
+def social_catalog() -> SocialCatalogResponse:
+    """Curated suggestions + current subscriptions, with indexed article counts."""
+    from apps.aggregator.social_catalog import build_catalog, subscription_to_info
+
+    counts = {
+        sid: count
+        for sid, _name, count in get_index().list_sources(channel="social")
+    }
+    subscriptions = [subscription_to_info(s) for s in _social_store().list()]
+    subscribed_keys = {(s.platform, s.id) for s in subscriptions if s.subscribed}
+
+    suggestions = build_catalog()
+    for info in suggestions:
+        info.subscribed = (info.platform, info.id) in subscribed_keys
+        info.article_count = counts.get(info.source_id, 0)
+    for info in subscriptions:
+        info.article_count = counts.get(info.source_id, 0)
+    return SocialCatalogResponse(suggestions=suggestions, subscriptions=subscriptions)
+
+
+def add_social_subscription(
+    platform: str,
+    handle: str,
+    *,
+    name: str | None = None,
+    use_cases: list[str] | None = None,
+) -> SocialSourceInfo:
+    from apps.aggregator.social_catalog import build_catalog, subscription_to_info
+    from apps.aggregator.social_subscriptions import normalize_handle
+
+    origin = "manual"
+    catalog_use_cases: list[str] | None = None
+    normalized = normalize_handle(platform, handle)
+    for info in build_catalog():
+        if info.platform == platform and info.id == normalized:
+            origin = "catalog"
+            catalog_use_cases = list(info.use_cases)
+            break
+    entry = _social_store().add(
+        platform,
+        handle,
+        name=name,
+        origin=origin,
+        use_cases=use_cases or catalog_use_cases,
+    )
+    return subscription_to_info(entry)
+
+
+def remove_social_subscription(platform: str, handle: str) -> bool:
+    return _social_store().remove(platform, handle)
+
+
+def list_use_cases() -> list[UseCaseInfo]:
+    from shared.taxonomy.use_cases import USE_CASES
+
+    return [
+        UseCaseInfo(id=uc.id, label=uc.label, description=uc.description)
+        for uc in USE_CASES
+    ]
 
 
 def itm_catalog(

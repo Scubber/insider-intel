@@ -8,13 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.aggregator.process_pipeline import DEFAULT_PROCESSED_PATH
+from apps.aggregator.processed_storage import JsonlProcessedStore
 from shared.schemas import ProcessedArticle
 
 logger = logging.getLogger(__name__)
 
-EXPORT_SCHEMA_VERSION = "insider-intel.export.v1"
+EXPORT_SCHEMA_VERSION = "insider-intel.export.v2"
 DEFAULT_EXPORT_DIR = "dist/export"
 
 
@@ -31,6 +31,8 @@ def article_to_export_row(article: ProcessedArticle) -> dict[str, Any]:
         "summary": article.summary,
         "relevance_score": article.relevance_score,
         "itm_alignment": getattr(article, "itm_alignment", None) or "weak",
+        "use_cases": list(getattr(article, "use_cases", None) or []),
+        "insider_type": getattr(article, "insider_type", None),
         "processed_at": article.processed_at.isoformat() if article.processed_at else None,
         "itm_hits": [hit.model_dump(mode="json") for hit in article.entities.itm_hits],
         "operator_terms": list(article.entities.operator_terms),

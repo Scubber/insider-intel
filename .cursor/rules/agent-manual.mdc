@@ -1,0 +1,27 @@
+---
+description: Repo operating manual — production invariants and commands
+alwaysApply: true
+---
+
+Read CLAUDE.md at the repo root before making changes — it is the operating
+manual (architecture, commands, invariants, gotchas) for all agents, not just
+Claude.
+
+Critical constraints while working here:
+
+- This repo is IN PRODUCTION: merging to `main` triggers deploys
+  (Cloud Run API via OIDC + GitHub Pages UI). Work on branches.
+- Use the Makefile: `make up` (local stack :8000/:5500), `make test`,
+  `make lint` — CI runs these exact targets.
+- Corpus data lives in the GCS bucket, never baked into Docker images; the
+  Dockerfile's final stage must remain the Cloud Run runtime stage.
+- All env/config access goes through `shared/settings.py` (pydantic-settings).
+- Scoring-only text belongs in `RawArticle.content` (hidden), never in
+  `summary` (rendered in the UI).
+- Social subscriptions (`data/config/social_subscriptions.json`) are the only
+  state the API writes — that maps to the bucket's writable `config/` prefix.
+  Use-case / insider-type classification is heuristic-first
+  (`shared/utils/classify.py`); the LLM refiner is optional and gated.
+- Do not remove the rate limiter on `POST /extract/ttps` (it spends LLM
+  credits); keep GitHub Actions SHA-pinned; never commit secrets
+  (detect-secrets pre-commit hook enforces).

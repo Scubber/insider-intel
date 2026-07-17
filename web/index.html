@@ -42,7 +42,7 @@
           id="q"
           name="q"
           type="search"
-          placeholder="Map a keyword (overemployment, moonlighting, …)"
+          placeholder="Hunt an insider scenario — try moonlighting, stolen files, shared logins…"
         />
         <button type="submit" class="hunt-submit" aria-label="Hunt" title="Hunt">
           <svg class="hunt-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -65,12 +65,19 @@
         </button>
         <button type="button" id="clear-search" class="ghost" hidden>Clear</button>
       </form>
-      <div
-        class="hunt-usecases"
-        id="hunt-usecases"
-        role="group"
-        aria-label="Vetted hunt use cases"
-      ></div>
+      <div class="hunt-usecases-block">
+        <span
+          class="filter-label"
+          data-tip="Explore the Core Four — pick a hunt topic, then refine by insider type below."
+          tabindex="0"
+        >Core Four Hunt Topics</span>
+        <div
+          class="hunt-usecases"
+          id="hunt-usecases"
+          role="group"
+          aria-label="Core Four hunt topics"
+        ></div>
+      </div>
       <details class="refine-panel" id="refine-panel" open>
         <summary class="refine-summary" id="refine-summary">
           <span class="refine-label">Refine</span>
@@ -78,17 +85,82 @@
         </summary>
         <div class="refine-body">
           <div class="stream-filters stream-filters-secondary" id="stream-filters">
-            <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
-              <button type="button" class="pill active" data-alignment="insider">
-                Insider Focus
-              </button>
-              <button type="button" class="pill" data-alignment="all">All indexed</button>
+            <div class="filter-group">
+              <span class="filter-label">Scope</span>
+              <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
+                <button
+                  type="button"
+                  class="pill active"
+                  data-alignment="insider"
+                  data-tip="Only articles matched to Insider Threat Matrix™ techniques"
+                >
+                  Insider Focus
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-alignment="all"
+                  data-tip="Everything indexed, including weak or unmatched articles"
+                >
+                  All indexed
+                </button>
+              </div>
             </div>
-            <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
-              <button type="button" class="pill active" data-channel="all">All channels</button>
-              <button type="button" class="pill" data-channel="news">News</button>
-              <button type="button" class="pill" data-channel="filings">Filings</button>
-              <button type="button" class="pill" data-channel="tips">Tips</button>
+            <div class="filter-group">
+              <span class="filter-label">Channel</span>
+              <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
+                <button type="button" class="pill active" data-channel="all">All channels</button>
+                <button type="button" class="pill" data-channel="news">News</button>
+                <button type="button" class="pill" data-channel="filings">Filings</button>
+                <button type="button" class="pill" data-channel="tips">Tips</button>
+                <button type="button" class="pill" data-channel="social">Social</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <span
+                class="filter-label"
+                data-tip="How culpable the insider appears — malicious, negligent, or an honest mistake. Hover a pill for each definition."
+                tabindex="0"
+              >Insider type</span>
+              <div
+                class="pill-group"
+                id="insider-type-filters"
+                role="group"
+                aria-label="Insider type"
+              >
+                <button
+                  type="button"
+                  class="pill active"
+                  data-insider-type="all"
+                  data-tip="Any intent — include articles with no intent signal"
+                >
+                  Any type
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="malicious"
+                  data-tip="Deliberate harm — theft, sabotage, selling data"
+                >
+                  Malicious
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="negligent"
+                  data-tip="Knew the rules, hid it or skipped them anyway"
+                >
+                  Negligent
+                </button>
+                <button
+                  type="button"
+                  class="pill"
+                  data-insider-type="unintentional"
+                  data-tip="Honest mistake — accident, phish, unaware of policy"
+                >
+                  Unintentional
+                </button>
+              </div>
             </div>
             <div class="source-filter-row">
               <label class="filter-label" for="source-select">Source</label>
@@ -96,6 +168,31 @@
                 <option value="">All feeds</option>
               </select>
             </div>
+            <details class="social-manager" id="social-manager">
+              <summary class="filter-label">Social sources</summary>
+              <div class="social-manager-group">
+                <h4 class="filter-label">Subscribed</h4>
+                <ul id="social-subscribed" class="social-source-list"></ul>
+                <p class="kw-hint" id="social-subscribed-empty">Nothing subscribed yet.</p>
+              </div>
+              <div class="social-manager-group">
+                <h4 class="filter-label">Suggested</h4>
+                <ul id="social-suggested" class="social-source-list"></ul>
+              </div>
+              <form class="social-add-row" id="social-add-form" autocomplete="off">
+                <select id="social-add-platform" aria-label="Platform">
+                  <option value="reddit">reddit</option>
+                  <option value="x">x</option>
+                </select>
+                <input
+                  id="social-add-handle"
+                  type="text"
+                  placeholder="r/subreddit or @handle"
+                  aria-label="Subreddit or handle"
+                />
+                <button type="submit" class="ghost">Add</button>
+              </form>
+            </details>
             <div class="theme-picker" id="theme-picker">
               <label class="filter-label" for="theme-select">Theme</label>
               <select id="theme-select" aria-label="Color theme">
@@ -234,6 +331,17 @@
         >
           <div class="pane-head">
             <h2>Workbench</h2>
+            <button
+              type="button"
+              class="info-tip"
+              aria-label="About the Workbench"
+              aria-describedby="workbench-tip-text"
+              data-tip="The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate."
+              data-tip-pos="bottom-end"
+            >
+              ?
+            </button>
+            <span id="workbench-tip-text" class="sr-only">The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate.</span>
           </div>
           <div class="pane-body panel">
             <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
@@ -243,22 +351,22 @@
                   <span class="board-count" id="board-count">(0)</span>
                 </h3>
                 <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-extract" class="copy-btn copy-btn-primary" disabled>
+                  <button type="button" id="board-extract" data-tip="Analyze the flagged articles into a TTP hunt report." data-tip-pos="bottom-start" class="copy-btn copy-btn-primary" disabled>
                     Extract TTPs
                   </button>
-                  <button type="button" id="board-copy-brief" class="copy-btn" disabled>
+                  <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard." data-tip-pos="bottom-start" class="copy-btn" disabled>
                     Copy LLM
                   </button>
-                  <button type="button" id="board-clear" class="copy-btn" disabled>Clear</button>
+                  <button type="button" id="board-clear" data-tip="Remove all articles from the board." data-tip-pos="bottom-end" class="copy-btn" disabled>Clear</button>
                 </p>
                 <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-share" class="copy-btn" disabled>
+                  <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL." data-tip-pos="bottom-start" class="copy-btn" disabled>
                     Share link
                   </button>
-                  <button type="button" id="board-export" class="copy-btn" disabled>
+                  <button type="button" id="board-export" data-tip="Download this board as a JSON file." data-tip-pos="bottom-start" class="copy-btn" disabled>
                     Export
                   </button>
-                  <button type="button" id="board-import" class="copy-btn">Import</button>
+                  <button type="button" id="board-import" data-tip="Load a board from an exported JSON file." data-tip-pos="bottom-end" class="copy-btn">Import</button>
                   <input type="file" id="board-import-file" accept="application/json,.json" hidden />
                 </p>
               </div>

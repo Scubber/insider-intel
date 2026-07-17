@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROCESSED_PATH = "data/processed/articles.jsonl"
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def run_processing(
     *,
     raw_path: str | Path = DEFAULT_STORE_PATH,
@@ -24,7 +30,13 @@ def run_processing(
     force: bool = False,
     min_score: float = 0.0,
 ) -> ProcessingRunResult:
-    """Process all raw articles not already in the processed store.
+    """Process raw articles that are new or refreshed since last processing.
+
+    A raw article is re-processed (and its processed row replaced) when its
+    ``ingested_at`` is newer than the stored ``processed_at`` — this picks up
+    rows rewritten by the ingest store's refresh path. Known quirk: if a
+    refreshed article now scores below ``min_score``, its stale processed row
+    is left in place.
 
     Args:
         raw_path: Path to raw articles JSONL.
@@ -45,9 +57,24 @@ def run_processing(
         result.finished_at = datetime.now(UTC)
         return result
 
-    batch: list = []
+    # Collapse legacy duplicate lines (latest wins, order preserved).
+    by_link: dict[str, RawArticle] = {}
     for raw in raw_articles:
-        if not force and processed_store.has_link(raw.link):
+        by_link[raw.link] = raw
+
+    processed_at_by_link = {
+        a.link: a.processed_at for a in processed_store.load_all()
+    }
+
+    batch: list = []
+    reprocessed_existing = False
+    for raw in by_link.values():
+        existing = processed_at_by_link.get(raw.link)
+        if (
+            not force
+            and existing is not None
+            and _as_utc(existing) >= _as_utc(raw.ingested_at)
+        ):
             result.articles_skipped += 1
             continue
 
@@ -57,13 +84,15 @@ def run_processing(
             if processed.relevance_score < min_score:
                 result.articles_skipped += 1
                 continue
+            if raw.link in processed_at_by_link:
+                reprocessed_existing = True
             batch.append(processed)
         except Exception as exc:  # noqa: BLE001 — keep processing other articles
             msg = f"{raw.link}: {exc}"
             logger.error("Failed processing article: %s", msg)
             result.errors.append(msg)
 
-    if force and batch:
+    if (force or reprocessed_existing) and batch:
         result.articles_saved = processed_store.upsert(batch)
     else:
         result.articles_saved = processed_store.save(batch)

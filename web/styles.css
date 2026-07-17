@@ -53,6 +53,9 @@ body {
   border-bottom: 1px solid var(--top-line, var(--line));
   animation: rise 0.7s ease-out both;
   position: relative;
+  /* Above .app-shell: expanded header content (social manager, tooltips)
+     otherwise spills under the pane grid, which silently eats clicks */
+  z-index: 10;
 }
 
 .theme-picker {
@@ -269,7 +272,7 @@ body {
 .stream-filters.stream-filters-secondary {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem 0.85rem;
   margin-top: 0.55rem;
   max-width: 40rem;
@@ -367,6 +370,41 @@ body {
   text-transform: uppercase;
   color: var(--muted);
   margin-right: 0.25rem;
+}
+
+/* Labeled filter groups: label above its pill row, optional hint below */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.filter-group .filter-label {
+  margin-right: 0;
+  color: var(--top-muted, var(--muted));
+}
+
+.filter-group-hint {
+  margin: 0;
+  max-width: 26rem;
+}
+
+.hunt-usecases-block {
+  margin-top: 0.55rem;
+}
+
+.hunt-usecases-block .filter-label {
+  color: var(--top-muted, var(--muted));
+}
+
+.hunt-usecases-block .hunt-usecases {
+  margin-top: 0.35rem;
+}
+
+.usecase-hint {
+  margin: 0.35rem 0 0;
+  max-width: 40rem;
 }
 
 .status {
@@ -1037,9 +1075,91 @@ body {
   color: var(--accent);
 }
 
+/* Open-source (↗) and expand (⌄) controls stacked under the + button */
+.article-open-btn,
+.article-expand-btn {
+  position: absolute;
+  right: 0.2rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 92%, var(--ink) 8%);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0.32;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.article-open-btn {
+  top: 2.65rem;
+}
+
+.article-expand-btn {
+  top: 4.75rem;
+}
+
+.article-row:hover .article-open-btn,
+.article-row:hover .article-expand-btn,
+.article-open-btn:focus-visible,
+.article-expand-btn:focus-visible {
+  opacity: 1;
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.article-open-btn:hover,
+.article-expand-btn:hover {
+  color: var(--accent);
+}
+
+.article-row.expanded .article-expand-btn {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Expanded card: lift the line clamp so the full summary reads inline */
+.article-row.expanded .article-item .snip {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: pre-line;
+}
+
 @media (max-width: 960px) {
+  .hunt-usecase::after {
+    display: none;
+  }
+
   .article-board-btn {
     opacity: 0.9;
+  }
+
+  .article-open-btn,
+  .article-expand-btn {
+    opacity: 0.9;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .article-open-btn {
+    top: 3.45rem;
+  }
+
+  /* Beside ↗ instead of below it — three stacked buttons overflow short cards */
+  .article-expand-btn {
+    top: 3.45rem;
+    right: 3.2rem;
   }
 }
 
@@ -1415,6 +1535,141 @@ body {
   margin: 0 0 0.5rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+/* Styled hover tooltips: any element with data-tip. CSS-only; keep the DOM
+   copy in captions / sr-only twins for screen readers and touch. */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translate(-50%, 2px);
+  width: max-content;
+  max-width: min(16rem, 70vw);
+  white-space: normal;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font: 400 0.72rem / 1.45 var(--font-mono);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 30;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+[data-tip][data-tip-pos="bottom"]::after,
+[data-tip][data-tip-pos="bottom-start"]::after,
+[data-tip][data-tip-pos="bottom-end"]::after {
+  bottom: auto;
+  top: calc(100% + 0.4rem);
+  transform: translate(-50%, -2px);
+}
+
+[data-tip][data-tip-pos="bottom-start"]::after {
+  left: 0;
+  transform: translateY(-2px);
+}
+
+[data-tip][data-tip-pos="bottom-end"]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-2px);
+}
+
+/* Chips, filter pills, and group labels sit at the left viewport edge — align
+   their tips to the element start so they can't overhang the viewport */
+.hunt-usecase[data-tip]::after,
+.filter-group .pill[data-tip]::after,
+.filter-label[data-tip]::after {
+  left: 0;
+  transform: translateY(2px);
+}
+
+/* Group labels that explain their controls on hover */
+.filter-label[data-tip] {
+  display: inline-block;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hunt-usecase[data-tip]:hover::after,
+  .filter-group .pill[data-tip]:hover::after,
+  .filter-label[data-tip]:hover::after {
+    transform: translateY(0);
+  }
+}
+
+.hunt-usecase[data-tip]:focus-visible::after,
+.filter-group .pill[data-tip]:focus-visible::after,
+.filter-label[data-tip]:focus-visible::after {
+  transform: translateY(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Raise the hovered element itself: reduced-opacity (disabled) siblings
+     form their own stacking contexts, so the tip's z-index alone can't win */
+  [data-tip]:hover {
+    z-index: 60;
+  }
+  [data-tip]:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 0.3s;
+  }
+  [data-tip][data-tip-pos="bottom-start"]:hover::after,
+  [data-tip][data-tip-pos="bottom-end"]:hover::after {
+    transform: translateY(0);
+  }
+}
+
+[data-tip]:focus-visible {
+  z-index: 60;
+}
+
+[data-tip]:focus-visible::after,
+.info-tip:focus::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+[data-tip][data-tip-pos="bottom-start"]:focus-visible::after,
+[data-tip][data-tip-pos="bottom-end"]:focus-visible::after,
+.info-tip[data-tip-pos="bottom-end"]:focus::after {
+  transform: translateY(0);
+}
+
+/* Small circled "?" info button (pane headers) */
+.info-tip {
+  font: 600 0.72rem / 1 var(--font-mono);
+  cursor: help;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  flex: 0 0 auto;
+  padding: 0;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.info-tip:hover,
+.info-tip:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .kw-group + .kw-group {
@@ -1976,4 +2231,85 @@ button.chip.itm-chip {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.75rem;
+}
+
+/* Insider-type badges + use-case tags on stream cards */
+.insider-type-badge,
+.use-case-tag {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.insider-type-badge.insider-type-malicious {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.insider-type-badge.insider-type-negligent {
+  border-color: #b9770e;
+  color: #b9770e;
+}
+
+.insider-type-badge.insider-type-unintentional {
+  border-color: #2471a3;
+  color: #2471a3;
+}
+
+/* Social sources manager (Refine panel) */
+.social-manager {
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.social-manager > summary {
+  cursor: pointer;
+}
+
+.social-manager-group {
+  margin: 0.4rem 0;
+}
+
+.social-source-list {
+  list-style: none;
+  margin: 0.2rem 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.social-source-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+.social-source-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.social-source-btn {
+  margin-left: auto;
+  font-size: 0.68rem;
+}
+
+.social-add-row {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.social-add-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
 }

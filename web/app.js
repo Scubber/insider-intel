@@ -43,14 +43,50 @@
     },
   };
 
-  /** Vetted Hunt use cases — operator-facing chips under the search bar. */
+  /** Vetted Hunt use cases — operator-facing chips under the search bar.
+   * Chips with a useCase id filter the stream on the classified facet
+   * (keep ids aligned with shared/taxonomy/use_cases.py); query-only chips
+   * fall back to a text hunt. */
+  // Descriptions mirror shared/taxonomy/use_cases.py — keep in sync.
   const HUNT_USE_CASES = [
-    { label: "Overemployment", query: "overemployment" },
-    { label: "Moonlighting", query: "moonlighting" },
-    { label: "Outside employment", query: "outside employment" },
-    { label: "Dual employment", query: "dual employment" },
-    { label: "Trade secret", query: "trade secret" },
+    {
+      label: "Overemployment",
+      useCase: "overemployment",
+      query: "overemployment moonlighting",
+      description:
+        "Undisclosed concurrent employment — secretly working multiple jobs (incl. moonlighting)",
+    },
+    {
+      label: "Data exfiltration",
+      useCase: "data-exfiltration",
+      query: "data exfiltration trade secret",
+      description: "Taking or leaking company data, files, or trade secrets",
+    },
+    {
+      label: "Credential misuse",
+      useCase: "credential-misuse",
+      query: "shared credentials",
+      description:
+        "Sharing, borrowing, or abusing logins, badges, and privileged access",
+    },
+    {
+      label: "Shadow IT",
+      useCase: "shadow-it",
+      query: "shadow it",
+      description: "Unsanctioned apps, devices, or AI tools used for work",
+    },
   ];
+
+  const USE_CASE_LABELS = HUNT_USE_CASES.reduce((acc, item) => {
+    if (item.useCase) acc[item.useCase] = item.label;
+    return acc;
+  }, {});
+
+  const INSIDER_TYPE_LABELS = {
+    malicious: "Malicious",
+    negligent: "Negligent",
+    unintentional: "Unintentional",
+  };
 
   const BOARD_STORAGE_KEY = "insider-intel.extractionBoard";
   const DISMISSED_STORAGE_KEY = "insider-intel.dismissed";
@@ -143,6 +179,14 @@
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
     alignFilters: document.getElementById("align-filters"),
     channelFilters: document.getElementById("channel-filters"),
+    insiderTypeFilters: document.getElementById("insider-type-filters"),
+    socialManager: document.getElementById("social-manager"),
+    socialSubscribed: document.getElementById("social-subscribed"),
+    socialSubscribedEmpty: document.getElementById("social-subscribed-empty"),
+    socialSuggested: document.getElementById("social-suggested"),
+    socialAddForm: document.getElementById("social-add-form"),
+    socialAddPlatform: document.getElementById("social-add-platform"),
+    socialAddHandle: document.getElementById("social-add-handle"),
     refinePanel: document.getElementById("refine-panel"),
     refineState: document.getElementById("refine-state"),
     matrixQ: document.getElementById("matrix-q"),
@@ -170,6 +214,8 @@
     theme: "",
     itmAlignment: "insider",
     channel: "all",
+    useCase: "",
+    insiderType: "all",
     articles: [],
     clusters: [],
     selectedLink: null,
@@ -323,8 +369,11 @@
       return;
     }
     const indexed = Number(ds.indexed || 0).toLocaleString();
-    els.dataState.textContent = `Live · ${indexed} indexed`;
-    els.dataState.title = "Connected to the live API";
+    const when = ds.updatedAt ? `Updated ${formatRelativeTime(ds.updatedAt)}` : "Live";
+    els.dataState.textContent = `${when} · ${indexed} articles`;
+    els.dataState.title = ds.updatedAt
+      ? `Live API — corpus last indexed ${new Date(ds.updatedAt).toLocaleString()}`
+      : "Connected to the live API";
     els.dataState.hidden = false;
   }
 
@@ -333,7 +382,10 @@
     const active = (state.lastHuntQuery || "").trim().toLowerCase();
     els.huntUsecases.querySelectorAll(".hunt-usecase").forEach((btn) => {
       const q = (btn.dataset.query || "").toLowerCase();
-      btn.classList.toggle("active", Boolean(active) && q === active);
+      const uc = btn.dataset.useCase || "";
+      const isFacet = Boolean(uc) && uc === state.useCase;
+      const isHunt = Boolean(active) && q === active;
+      btn.classList.toggle("active", isFacet || isHunt);
     });
   }
 
@@ -345,11 +397,22 @@
       btn.type = "button";
       btn.className = "hunt-usecase";
       btn.dataset.query = item.query;
+      if (item.useCase) btn.dataset.useCase = item.useCase;
       btn.textContent = item.label;
-      btn.title = `Hunt: ${item.query}`;
+      btn.dataset.tip =
+        item.description ||
+        (item.useCase ? `Filter stream: ${item.label}` : `Hunt: ${item.query}`);
       btn.addEventListener("click", () => {
-        if (els.q) els.q.value = item.query;
-        runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
+        if (item.useCase) {
+          // Toggle the classified use-case facet on the stream.
+          state.useCase = state.useCase === item.useCase ? "" : item.useCase;
+          syncHuntUsecases();
+          updateRefineSummary();
+          reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+        } else {
+          if (els.q) els.q.value = item.query;
+          runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
+        }
         if (isMobileLayout()) setActivePane("articles");
       });
       els.huntUsecases.appendChild(btn);
@@ -389,6 +452,20 @@
     if (res.status === 204) return null;
     const text = await res.text();
     return text ? JSON.parse(text) : null;
+  }
+
+  function formatRelativeTime(value) {
+    try {
+      const mins = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+      if (!Number.isFinite(mins)) return formatDate(value);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins} min ago`;
+      const hours = Math.round(mins / 60);
+      if (hours < 48) return `${hours} h ago`;
+      return formatDate(value);
+    } catch {
+      return formatDate(value);
+    }
   }
 
   function formatDate(value) {
@@ -1508,6 +1585,8 @@
           min_score: 0,
           itm_alignment: "all",
           channel: channelParam(),
+          use_case: useCaseParam(),
+          insider_type: insiderTypeParam(),
           source_id: state.sourceId || undefined,
           itm_id,
           topic_match: true,
@@ -1989,6 +2068,14 @@
     return state.channel && state.channel !== "all" ? state.channel : undefined;
   }
 
+  function useCaseParam() {
+    return state.useCase && state.useCase !== "all" ? state.useCase : undefined;
+  }
+
+  function insiderTypeParam() {
+    return state.insiderType && state.insiderType !== "all" ? state.insiderType : undefined;
+  }
+
   async function selectTechnique(techniqueId) {
     navigate(`/technique/${encodeURIComponent(techniqueId)}`);
     await showDossier(techniqueId);
@@ -2080,6 +2167,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       itm_id: tech.id,
       topic_match: true,
@@ -2123,6 +2212,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       detection_id: control.id,
       topic_match: true,
@@ -2166,6 +2257,8 @@
       min_score: 0,
       itm_alignment: "all",
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       prevention_id: control.id,
       topic_match: true,
@@ -2226,6 +2319,34 @@
       else addToBoard(article, { focusWorkbench: true });
     });
 
+    const openBtn = document.createElement("a");
+    openBtn.className = "article-open-btn";
+    openBtn.href = article.link;
+    openBtn.target = "_blank";
+    openBtn.rel = "noopener";
+    openBtn.textContent = "↗";
+    openBtn.title = `Open source: ${article.source_name || article.link}`;
+    openBtn.setAttribute("aria-label", openBtn.title);
+    openBtn.addEventListener("click", (event) => event.stopPropagation());
+
+    // Inline expand — only when the clamped snip is actually hiding text.
+    let expandBtn = null;
+    if ((article.summary || "").length > 160) {
+      expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "article-expand-btn";
+      expandBtn.textContent = "⌄";
+      expandBtn.title = "Expand text";
+      expandBtn.setAttribute("aria-label", expandBtn.title);
+      expandBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = li.classList.toggle("expanded");
+        expandBtn.textContent = expanded ? "⌃" : "⌄";
+        expandBtn.title = expanded ? "Collapse text" : "Expand text";
+        expandBtn.setAttribute("aria-label", expandBtn.title);
+      });
+    }
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "article-item";
@@ -2242,6 +2363,18 @@
     const extra =
       cluster.member_count > 1 ? ` · +${cluster.member_count - 1} sources` : "";
     meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
+    if (article.insider_type) {
+      const badge = document.createElement("span");
+      badge.className = `insider-type-badge insider-type-${article.insider_type}`;
+      badge.textContent = INSIDER_TYPE_LABELS[article.insider_type] || article.insider_type;
+      meta.append(" · ", badge);
+    }
+    (article.use_cases || []).forEach((useCaseId) => {
+      const tag = document.createElement("span");
+      tag.className = "use-case-tag";
+      tag.textContent = USE_CASE_LABELS[useCaseId] || useCaseId;
+      meta.append(" ", tag);
+    });
     const snip = document.createElement("p");
     snip.className = "snip";
     snip.textContent = cleanSummary(article.summary);
@@ -2290,7 +2423,9 @@
     }
 
     btn.addEventListener("click", () => selectArticle(article));
-    li.append(boardBtn, btn);
+    li.append(boardBtn, openBtn);
+    if (expandBtn) li.appendChild(expandBtn);
+    li.appendChild(btn);
     return li;
   }
 
@@ -2391,6 +2526,12 @@
     });
   }
 
+  function setActiveInsiderTypePill(insiderType) {
+    document.querySelectorAll("#insider-type-filters .pill").forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.insiderType || "") === insiderType);
+    });
+  }
+
   const REFINE_OPEN_KEY = "insider-intel-refine-open";
 
   function buildCrumb(label, onRemove, title) {
@@ -2433,11 +2574,33 @@
     }
 
     if (state.channel && state.channel !== "all") {
-      const labels = { news: "News", filings: "Filings", tips: "Tips" };
+      const labels = { news: "News", filings: "Filings", tips: "Tips", social: "Social" };
       items.push(
         buildCrumb(labels[state.channel] || state.channel, () => {
           state.channel = "all";
           setActiveChannelPill("all");
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.useCase) {
+      items.push(
+        buildCrumb(USE_CASE_LABELS[state.useCase] || state.useCase, () => {
+          state.useCase = "";
+          syncHuntUsecases();
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.insiderType && state.insiderType !== "all") {
+      items.push(
+        buildCrumb(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType, () => {
+          state.insiderType = "all";
+          setActiveInsiderTypePill("all");
           updateRefineSummary();
           reapplyActiveFilters().catch(fail);
         }),
@@ -2491,15 +2654,20 @@
     if (state.channel === "news") channelLabel = "News";
     else if (state.channel === "filings") channelLabel = "Filings";
     else if (state.channel === "tips") channelLabel = "Tips";
+    else if (state.channel === "social") channelLabel = "Social";
     let sourceLabel = "";
     if (state.sourceId && els.sourceSelect) {
       const opt = els.sourceSelect.selectedOptions[0];
       const raw = (opt && opt.textContent) || state.sourceId;
       sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim();
     }
-    els.refineState.textContent = sourceLabel
-      ? `${alignLabel} · ${channelLabel} · ${sourceLabel}`
-      : `${alignLabel} · ${channelLabel}`;
+    const parts = [alignLabel, channelLabel];
+    if (state.useCase) parts.push(USE_CASE_LABELS[state.useCase] || state.useCase);
+    if (state.insiderType && state.insiderType !== "all") {
+      parts.push(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType);
+    }
+    if (sourceLabel) parts.push(sourceLabel);
+    els.refineState.textContent = parts.join(" · ");
     renderFilterCrumbs();
   }
 
@@ -2534,6 +2702,8 @@
       min_score: UI_MIN_SCORE,
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       theme: state.theme || undefined,
     });
 
@@ -2573,6 +2743,8 @@
       min_score: UI_MIN_SCORE,
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
+      use_case: useCaseParam(),
+      insider_type: insiderTypeParam(),
       source_id: state.sourceId || undefined,
       theme: state.theme || undefined,
     });
@@ -2650,6 +2822,8 @@
         min_score: 0,
         itm_alignment: "all",
         channel: channelParam(),
+        use_case: useCaseParam(),
+        insider_type: insiderTypeParam(),
         source_id: state.sourceId || undefined,
         theme: state.theme || undefined,
       }),
@@ -2728,6 +2902,17 @@
       if (!btn) return;
       state.channel = btn.dataset.channel || "all";
       setActiveChannelPill(state.channel);
+      updateRefineSummary();
+      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+  }
+
+  if (els.insiderTypeFilters) {
+    els.insiderTypeFilters.addEventListener("click", (event) => {
+      const btn = event.target.closest(".pill[data-insider-type]");
+      if (!btn) return;
+      state.insiderType = btn.dataset.insiderType || "all";
+      setActiveInsiderTypePill(state.insiderType);
       updateRefineSummary();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });
@@ -2919,6 +3104,106 @@
     throw lastErr || new Error("live API unreachable");
   }
 
+  function socialSourceRow(info, { subscribed }) {
+    const li = document.createElement("li");
+    li.className = "social-source-item";
+    const main = document.createElement("span");
+    main.className = "social-source-name";
+    main.textContent = info.name;
+    if (info.use_cases && info.use_cases.length) {
+      main.title = info.use_cases
+        .map((id) => USE_CASE_LABELS[id] || id)
+        .join(", ");
+    }
+    const count = document.createElement("span");
+    count.className = "meta";
+    count.textContent = info.article_count ? ` (${info.article_count})` : "";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost social-source-btn";
+    btn.textContent = subscribed ? "Remove" : "Add";
+    btn.addEventListener("click", () => {
+      const action = subscribed
+        ? api(
+            `/social/subscriptions/${encodeURIComponent(info.platform)}/${encodeURIComponent(info.id)}`,
+            {},
+            { method: "DELETE" },
+          )
+        : api(
+            "/social/subscriptions",
+            {},
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ platform: info.platform, id: info.id }),
+            },
+          );
+      action
+        .then(() => loadSocialCatalog())
+        .then(() => loadSources())
+        .catch((err) => setStatus(`Social update failed: ${err.message}`));
+    });
+    li.append(main, count, btn);
+    return li;
+  }
+
+  async function loadSocialCatalog() {
+    if (!els.socialManager) return;
+    let catalog;
+    try {
+      catalog = await api("/social/catalog");
+    } catch (err) {
+      // Older API without social endpoints: hide the panel.
+      els.socialManager.hidden = true;
+      console.warn("Social catalog unavailable", err);
+      return;
+    }
+    els.socialManager.hidden = false;
+    const subscriptions = (catalog && catalog.subscriptions) || [];
+    const suggestions = ((catalog && catalog.suggestions) || []).filter(
+      (info) => !info.subscribed,
+    );
+    if (els.socialSubscribed) {
+      els.socialSubscribed.innerHTML = "";
+      subscriptions.forEach((info) => {
+        els.socialSubscribed.appendChild(socialSourceRow(info, { subscribed: true }));
+      });
+    }
+    if (els.socialSubscribedEmpty) {
+      els.socialSubscribedEmpty.hidden = subscriptions.length > 0;
+    }
+    if (els.socialSuggested) {
+      els.socialSuggested.innerHTML = "";
+      suggestions.forEach((info) => {
+        els.socialSuggested.appendChild(socialSourceRow(info, { subscribed: false }));
+      });
+    }
+  }
+
+  if (els.socialAddForm) {
+    els.socialAddForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const platform = (els.socialAddPlatform && els.socialAddPlatform.value) || "reddit";
+      const handle = ((els.socialAddHandle && els.socialAddHandle.value) || "").trim();
+      if (!handle) return;
+      api(
+        "/social/subscriptions",
+        {},
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform, id: handle }),
+        },
+      )
+        .then(() => {
+          if (els.socialAddHandle) els.socialAddHandle.value = "";
+          return loadSocialCatalog();
+        })
+        .then(() => loadSources())
+        .catch((err) => setStatus(`Social add failed: ${err.message}`));
+    });
+  }
+
   async function boot() {
     try {
       initRefinePanel();
@@ -2936,11 +3221,15 @@
       const health = await api("/health");
       setStatus(`API ok · ${health.indexed_articles} indexed`);
       state.lastTotalIndexed = health.indexed_articles || 0;
-      state.dataState = { indexed: health.indexed_articles || 0 };
+      state.dataState = {
+        indexed: health.indexed_articles || 0,
+        updatedAt: health.last_indexed_at || health.generated_at || null,
+      };
       renderDataState();
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
+      loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);

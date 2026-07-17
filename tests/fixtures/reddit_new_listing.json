@@ -1,0 +1,60 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": null,
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "abc123",
+          "subreddit": "jobsearchhacks",
+          "title": "How I work two remote jobs without either knowing",
+          "selftext": "I've been overemployed for a year, J1 and J2, both remote. My company has an outside employment policy but everyone does it. Mouse jiggler keeps me green.",
+          "permalink": "/r/jobsearchhacks/comments/abc123/how_i_work_two_remote_jobs/",
+          "created_utc": 1752192000,
+          "score": 412,
+          "num_comments": 87,
+          "author": "throwaway_oe",
+          "link_flair_text": null,
+          "is_self": true,
+          "stickied": false,
+          "url": "https://www.reddit.com/r/jobsearchhacks/comments/abc123/how_i_work_two_remote_jobs/"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "mod001",
+          "subreddit": "jobsearchhacks",
+          "title": "Subreddit rules — read before posting",
+          "selftext": "Rules...",
+          "permalink": "/r/jobsearchhacks/comments/mod001/rules/",
+          "created_utc": 1700000000,
+          "score": 100,
+          "num_comments": 0,
+          "author": "AutoModerator",
+          "stickied": true,
+          "is_self": true,
+          "url": "https://www.reddit.com/r/jobsearchhacks/comments/mod001/rules/"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "link01",
+          "subreddit": "jobsearchhacks",
+          "title": "Article: remote workers juggling employers",
+          "selftext": "",
+          "permalink": "/r/jobsearchhacks/comments/link01/article_remote_workers/",
+          "created_utc": 1752105600,
+          "score": 55,
+          "num_comments": 12,
+          "author": "newsbot",
+          "stickied": false,
+          "is_self": false,
+          "url": "https://example.com/remote-workers"
+        }
+      }
+    ]
+  }
+}

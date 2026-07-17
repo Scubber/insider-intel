@@ -1,11 +1,16 @@
+> **Note (2026-07-14):** parts of this handoff predate the containerized dev
+> environment and production hosting. Current source of truth:
+> [`../CLAUDE.md`](../CLAUDE.md), [`DEVELOPMENT.md`](DEVELOPMENT.md),
+> [`hosting.md`](hosting.md).
+
 # Cursor Handoff — insider-intel
 
 **Read this first** when continuing work on `insider-intel`.  
 Then follow: `.cursor/rules/project-rules.md` and `docs/architecture.md`.
 
-**Last updated:** 2026-07-12  
-**Repo location:** `thederpweb/insider-intel/` (package lives inside the monorepo)  
-**MVP status:** Backend + static Matrix/Articles/Workbench UI, **ITM-aligned tagging**. **Develop locally; host later** — see `docs/hosting.md`. Public demo UI: `https://intel.thederpweb.com`. Experiment UI: `exp/responsive-ui`.
+**Last updated:** 2026-07-15  
+**Repo location:** `insider-intel` standalone (`Scubber/insider-intel`)  
+**Release status:** **MVP prototype candidate** (`mvp-prototype-0.1`). Process: **Kanban + milestone gates** (M1 Prototype → M2 Hosted MVP). Backend + Matrix/Articles/Workbench UI, **ITM-aligned tagging**, CourtListener opinions on `main`. **Develop locally; harden host in M2** — see `docs/hosting.md` and `docs/PROCESS.md`. Public UI: `https://intel.thederpweb.com`.
 
 ---
 
@@ -23,8 +28,11 @@ Brand / product title in UI: **insider-intel**. Goals: cheap, low-maintenance, s
 
 Not a general cyber news Feedly. Sitemap archive backfill (`ingest_archive`)
 covers keyword-filtered history where RSS cannot; follow the **New Source
-checklist** in [`docs/sourcing.md`](sourcing.md). **No native Twitter/X ingest
-yet** (Feedly/alert RSS only for social-adjacent content).
+checklist** in [`docs/sourcing.md`](sourcing.md). **Native social ingest is
+live** (`channel=social`): Reddit via OAuth/public JSON and X via API v2,
+driven by user-picked subscriptions with per-use-case discovery, plus use-case
+/ insider-type classification on every processed article — see
+`docs/architecture.md` and `docs/sourcing.md` §Social.
 
 Insider Threat Matrix™ is owned by Forscie Limited — see `NOTICE`. Descriptive “aligned / mapped to ITM” language only; no official/endorsed claims.
 
@@ -35,7 +43,7 @@ CTI-style analyst brief assembled from **multiple flagged articles** + workbench
 1. Flag articles “for hunt”
 2. Export multi-article JSON/markdown bundle (AI-consumable)
 3. Fill Hunt Package markdown template (news seen → hunts / optional SIEM dialect / novel TTPs); AI polish later
-4. Optional social/X or Feedly tip-account ingest → same `RawArticle` schema
+4. ~~Optional social/X or Feedly tip-account ingest~~ **done** — `ingest_social` emits the same `RawArticle` schema
 
 Full write-up: `docs/architecture.md` § Hunt Package.
 
@@ -66,11 +74,12 @@ Full write-up: `docs/architecture.md` § Hunt Package.
 | CORS (env-driven) | ✅ | `CORS_ORIGINS` |
 | Static UI (Hunt + Matrix + Articles + Workbench) | ✅ | `web/` — `exp/responsive-ui` POC shell |
 | Web scrapers (non-RSS) | ✅ | `ingest_archive` sitemap keyword backfill (HR/legal first) |
-| Native Twitter/X ingest | ❌ | Feedly / alert RSS only for now |
+| Native social ingest (Reddit + X, `channel=social`) | ✅ | `ingest_social` + subscriptions/catalog (`social suggest|add`); X needs `X_BEARER_TOKEN` |
+| Use-case + insider-type classification | ✅ | heuristics always; optional LLM via `CLASSIFIER_LLM_PROVIDER` |
 | Hunt Package (multi-article CTI brief) | 🟡 | Stream `+` → board → `POST /extract/ttps`; full package later |
 | Postgres + pgvector | ❌ | Settings stub (`DATABASE_URL`) |
 | LLM summarization / package AI | 🟡 | xAI optional on Extract (`XAI_API_KEY`); `ai_summary` persist later |
-| Live Cloudflare / Cloud Run deploy | ❌ | Documented target only |
+| Live Pages + Cloud Run deploy | ✅ | CD on merge to `main` — see `CLAUDE.md` / `docs/hosting.md` |
 | Corp Graph/Teams/SIEM inbound | ❌ | **Never** — export only |
 
 ### End-to-end flow
@@ -205,8 +214,8 @@ No secrets in `web/`.
 4. Expand `shared/itm/aliases.py` for noisy / missing OSINT phrases.
 5. Promote / merge POC UI when Hunt/Matrix sync settles (`working-intel-v1`
    is the public demo save point at `https://intel.thederpweb.com`).
-6. **Later — Hunt Package:** flag + multi-article export → markdown template → optional AI; then social/X or Feedly tip accounts.
-7. Expand `archive_sources.py` (Krebs / Dark Reading archive indexes); Postgres + pgvector; LLM `ai_summary` / ITM classification.
+6. **Later — Hunt Package:** flag + multi-article export → markdown template → optional AI. (Social/X ingest shipped: `ingest_social` + subscriptions + use-case/insider-type classification.)
+7. Expand `archive_sources.py` (Krebs / Dark Reading archive indexes); Postgres + pgvector; LLM `ai_summary`.
 8. **IF038 TTPs:** [`docs/ttps_overemployment.md`](ttps_overemployment.md) — deepen with CourtListener MCP + opinion text (LLM batch later).
 
 ---

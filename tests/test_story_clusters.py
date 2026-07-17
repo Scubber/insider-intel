@@ -135,3 +135,23 @@ def test_list_articles_groups_by_default() -> None:
     flat = index.list_articles(limit=10, min_score=0, itm_alignment="all", group=False)
     assert flat.count == 3
     assert flat.clusters == []
+
+
+def test_parse_filing_reference() -> None:
+    from shared.utils.story_key import parse_filing_reference
+
+    summary = "Court: S.D.N.Y.\nDocket: 1:24-cr-00001\nCourtListener query: q"
+    assert parse_filing_reference(summary) == ("S.D.N.Y.", "1:24-cr-00001")
+    assert parse_filing_reference("Docket: 23-1234") == ("", "23-1234")
+    assert parse_filing_reference("Court: S.D.N.Y.\nno docket here") is None
+    assert parse_filing_reference(None) is None
+    assert parse_filing_reference("Docket:   ") is None
+
+
+def test_filing_story_key_stable_and_court_scoped() -> None:
+    from shared.utils.story_key import filing_story_key
+
+    key = filing_story_key("S.D.N.Y.", "1:24-cr-00001")
+    assert key == filing_story_key("  s.d.n.y. ", "1:24-CR-00001")  # normalized
+    assert key != filing_story_key("N.D. Cal.", "1:24-cr-00001")  # court-scoped
+    assert key != filing_story_key("S.D.N.Y.", "1:24-cr-00002")

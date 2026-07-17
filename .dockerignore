@@ -17,7 +17,13 @@ data/cache
 .cursor
 web/demo
 docs
-tests
 scripts
 *.md
 !README.md
+# dev-env plumbing — never needed inside the image
+.devcontainer
+.github
+docker-compose.yml
+Makefile
+.pre-commit-config.yaml
+.secrets.baseline

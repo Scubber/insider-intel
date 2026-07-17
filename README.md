@@ -12,10 +12,21 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 
 ## For Cursor / AI agents
 
-**Start here:** [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md) — full handoff
-(status, commands, file map, next steps).
+**Start here:** [`CLAUDE.md`](CLAUDE.md) — the agent operating manual
+(architecture map, commands, production invariants, hard-won gotchas).
+Dev environment: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · hosting:
+[`docs/hosting.md`](docs/hosting.md) · process: [`docs/PROCESS.md`](docs/PROCESS.md).
+Older handoff notes: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
 
-## MVP status
+## Release status
+
+**MVP prototype candidate** (`mvp-prototype-0.1`) — process: **Kanban + milestone gates**
+([M1](https://github.com/Scubber/insider-intel/milestone/1) closed at tag;
+[M2 Hosted MVP](https://github.com/Scubber/insider-intel/milestone/2) next).
+Public UI and API are **hosted and self-refreshing** (GCS corpus + 6h
+scheduled ingest + keyless CD on merge to `main` — see [`docs/hosting.md`](docs/hosting.md)).
+
+## MVP capability status
 
 | Layer | Status |
 |-------|--------|
@@ -25,6 +36,8 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 | Sitemap archive backfill (`ingest_archive`) | ✅ |
 | Google Alerts / web-keyword RSS (when configured) | ✅ |
 | Feedly boards (optional) | ✅ |
+| Social media (Reddit JSON + X, `channel=social`) with discovery catalog + subscriptions | ✅ |
+| Use-case + insider-type classification (heuristic; optional local/Anthropic LLM refiner) | ✅ |
 | LangGraph processing (ITM technique match + score) | ✅ |
 | Slim ITM taxonomy (`shared/data/itm_index.json`) | ✅ |
 | Local storage (JSONL) | ✅ |
@@ -34,9 +47,17 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 | Web scrapers (non-RSS) | ✅ sitemap archive MVP (`ingest_archive`) |
 | Postgres + pgvector | 🔜 |
 | LLM summaries | 🔜 (`ai_summary` reserved) |
-| Cloudflare Pages + Cloud Run | 🟡 | Pages UI live; Cloud Run API via `scripts/deploy_cloud_run.sh` |
+| GitHub Pages + Cloud Run (GCS corpus, 6h refresh, OIDC CD) | ✅ |
 
 ## Quick start (local)
+
+Containerized (recommended — see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)):
+
+```bash
+make up     # API :8000 + UI :5500 + Postgres sidecar; make test / lint / shell
+```
+
+Or bare-metal:
 
 ```bash
 # Install (Python 3.12+)
@@ -61,6 +82,10 @@ python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.example.json
 python -m apps.aggregator ingest_feedly   # requires FEEDLY_* env
 python -m apps.aggregator ingest_courtlistener
 python -m apps.aggregator ingest_web_keywords  # requires WEB_KEYWORD_FEED_URLS
+python -m apps.aggregator social suggest       # curated subreddit / X catalog
+python -m apps.aggregator social add reddit overemployed
+python -m apps.aggregator ingest_social        # pull subscribed social sources
+python -m apps.aggregator ingest_social_url https://www.reddit.com/r/jobsearchhacks/s/...
 python -m apps.aggregator process --force
 python -m apps.aggregator export --out dist/export
 python -m apps.aggregator refresh_itm   # refresh slim ITM index from Forscie JSON

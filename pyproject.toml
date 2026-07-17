@@ -21,6 +21,12 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+    "pre-commit",
+    "detect-secrets",
+]
+# CLASSIFIER_LLM_PROVIDER=anthropic (openai-compatible endpoints need no extra)
+llm = [
+    "anthropic>=0.40",
 ]
 
 [project.scripts]

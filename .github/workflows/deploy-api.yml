@@ -1,0 +1,71 @@
+name: deploy-api
+
+# Keyless CD: GitHub OIDC → Workload Identity Federation → github-deployer SA.
+# Builds the runtime image (corpus-free; the service mounts the GCS bucket)
+# and rolls the Cloud Run service + refresh job to it.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/**"
+      - "shared/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+  IMAGE: us-east1-docker.pkg.dev/insider-intel-502413/insider-intel/insider-intel-api
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Build and push image
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
+          docker build -t "${IMAGE}:${GITHUB_SHA::7}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${GITHUB_SHA::7}"
+          docker push "${IMAGE}:latest"
+      - name: Deploy API service
+        run: |
+          gcloud run deploy insider-intel-api \
+            --image "${IMAGE}:${GITHUB_SHA::7}" \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}"
+      - name: Roll refresh job to same image
+        run: |
+          gcloud run jobs update corpus-refresh \
+            --image "${IMAGE}:${GITHUB_SHA::7}" \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}"
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')
+          curl -sf "${URL}/health" >/dev/null && echo "health OK"
+          curl -sf "${URL}/articles?limit=1" >/dev/null && echo "articles OK"
+          curl -sf "${URL}/social/catalog" >/dev/null && echo "social catalog OK"
+          # subscription write path round-trip (catches read-only mount regressions)
+          curl -sf -X POST "${URL}/social/subscriptions" \
+            -H 'Content-Type: application/json' \
+            -d '{"platform":"reddit","id":"deploy-smoke-probe"}' >/dev/null
+          curl -sf -X DELETE "${URL}/social/subscriptions/reddit/deploy-smoke-probe" >/dev/null
+          echo "subscription round-trip OK"

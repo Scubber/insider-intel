@@ -7,7 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from apps.aggregator.export import EXPORT_SCHEMA_VERSION, article_to_export_row, filter_articles
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.search import service
+from apps.search.ratelimit import SlidingWindowLimiter
 from apps.search.ttp_extract import ExtractTtpsRequest, ExtractTtpsResponse, extract_ttps_for_links
 from shared.schemas import (
     ArticleListResponse,
@@ -23,7 +24,10 @@ from shared.schemas import (
     SearchMode,
     SearchRequest,
     SearchResponse,
+    SocialCatalogResponse,
+    SocialSourceInfo,
     SourceInfo,
+    UseCaseInfo,
 )
 from shared.settings import get_settings
 
@@ -75,7 +79,12 @@ def _require_export_token(
 @app.get("/health")
 def health() -> dict[str, object]:
     index = service.get_index()
-    return {"status": "ok", "indexed_articles": index.size}
+    last = index.last_processed_at
+    return {
+        "status": "ok",
+        "indexed_articles": index.size,
+        "last_indexed_at": last.isoformat() if last else None,
+    }
 
 
 @app.get("/sources", response_model=list[SourceInfo])
@@ -95,7 +104,15 @@ def list_sources(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
 ) -> list[SourceInfo]:
     """Sources with counts matching the same filters as the article stream."""
@@ -105,6 +122,8 @@ def list_sources(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
     )
 
 @app.get("/itm", response_model=ItmCatalogResponse)
@@ -149,7 +168,15 @@ def list_articles(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
     topic_match: bool = Query(
         default=False,
@@ -174,6 +201,8 @@ def list_articles(
         prevention_id=prevention_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
         topic_match=topic_match,
         group=group,
     )
@@ -191,6 +220,8 @@ def search_post(body: SearchRequest) -> SearchResponse:
         itm_id=body.itm_id,
         itm_alignment=body.itm_alignment,
         channel=body.channel,
+        use_case=body.use_case,
+        insider_type=body.insider_type,
     )
 
 
@@ -209,7 +240,15 @@ def search_get(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | all (default)",
+        description="Provenance filter: news | filings | tips | social | all (default)",
+    ),
+    use_case: str | None = Query(
+        default=None,
+        description="Use-case filter (e.g. overemployment); see GET /usecases",
+    ),
+    insider_type: str = Query(
+        default="all",
+        description="negligent | malicious | unintentional | none | all (default)",
     ),
 ) -> SearchResponse:
     return service.search(
@@ -222,6 +261,8 @@ def search_get(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
     )
 
 
@@ -306,18 +347,127 @@ def articles_by_links(body: ArticlesByLinksRequest) -> ArticlesByLinksResponse:
     return ArticlesByLinksResponse(results=results, missing=missing)
 
 
+_extract_limiter: SlidingWindowLimiter | None = None
+
+
+def _get_extract_limiter() -> SlidingWindowLimiter | None:
+    global _extract_limiter
+    settings = get_settings()
+    if settings.extract_rate_per_ip_hour <= 0:
+        return None
+    if _extract_limiter is None:
+        _extract_limiter = SlidingWindowLimiter(
+            settings.extract_rate_per_ip_hour,
+            settings.extract_rate_global_day,
+        )
+    return _extract_limiter
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/extract/ttps")
-def extract_ttps(body: ExtractTtpsRequest) -> ExtractTtpsResponse:
+def extract_ttps(body: ExtractTtpsRequest, request: Request) -> ExtractTtpsResponse:
     """Build a multi-channel hunt report from extraction-board article links.
 
     Uses indexed title/summary/text, optional CourtListener REST snippets for
     filings, and xAI when XAI_API_KEY is set. Falls back to curated IF038 seeds.
     """
+    limiter = _get_extract_limiter()
+    if limiter is not None and not limiter.allow(_client_ip(request)):
+        raise HTTPException(
+            status_code=429,
+            detail="extract rate limit exceeded; try again later",
+        )
     links = [str(link).strip() for link in body.links if str(link).strip()]
     if not links:
         raise HTTPException(status_code=400, detail="links required")
     index = service.get_index()
     return extract_ttps_for_links(index, links, settings=get_settings())
+
+
+@app.get("/usecases", response_model=list[UseCaseInfo])
+def list_usecases() -> list[UseCaseInfo]:
+    """Hunt use-case registry (ids + labels for UI filter chips)."""
+    return service.list_use_cases()
+
+
+@app.get("/social/catalog", response_model=SocialCatalogResponse)
+def social_catalog() -> SocialCatalogResponse:
+    """Curated social discovery suggestions plus current subscriptions."""
+    return service.social_catalog()
+
+
+class SocialSubscriptionRequest(BaseModel):
+    platform: str = Field(..., pattern="^(reddit|x)$")
+    id: str = Field(..., min_length=1, description="Subreddit name or X handle")
+    name: str | None = None
+
+
+@app.get("/social/subscriptions", response_model=list[SocialSourceInfo])
+def list_social_subscriptions() -> list[SocialSourceInfo]:
+    return service.social_catalog().subscriptions
+
+
+@app.post("/social/subscriptions", response_model=SocialSourceInfo)
+def add_social_subscription(body: SocialSubscriptionRequest) -> SocialSourceInfo:
+    """Subscribe a subreddit / X handle; pulled on the next social ingest run."""
+    try:
+        return service.add_social_subscription(body.platform, body.id, name=body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/social/subscriptions/{platform}/{handle}")
+def remove_social_subscription(platform: str, handle: str) -> dict[str, object]:
+    if platform not in ("reddit", "x"):
+        raise HTTPException(status_code=400, detail="platform must be reddit or x")
+    removed = service.remove_social_subscription(platform, handle)
+    if not removed:
+        raise HTTPException(status_code=404, detail="subscription not found")
+    return {"status": "removed", "platform": platform, "id": handle}
+
+
+class SocialIngestUrlRequest(BaseModel):
+    url: str = Field(..., min_length=10, description="Reddit post URL (or /s/ share link)")
+
+
+@app.post("/social/ingest_url")
+def social_ingest_url(body: SocialIngestUrlRequest) -> dict[str, object]:
+    """Flag one social post by URL: fetch, store, process, and index it now."""
+    from apps.aggregator.process_pipeline import run_processing
+    from apps.aggregator.reddit_pipeline import ingest_reddit_post_url
+
+    settings = get_settings()
+    try:
+        article = ingest_reddit_post_url(body.url, store_path=settings.raw_articles_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — remote fetch failure
+        raise HTTPException(status_code=502, detail=f"fetch failed: {exc}") from exc
+    if article is None:
+        raise HTTPException(status_code=404, detail="no post found at that URL")
+
+    processing = run_processing(
+        raw_path=settings.raw_articles_path,
+        processed_path=settings.processed_articles_path,
+        min_score=0.0,
+    )
+    index = service.get_index(settings.processed_articles_path, reload=True)
+    hit = index.hit_by_link(article.link)
+    return {
+        "status": "ingested",
+        "title": article.title,
+        "link": article.link,
+        "channel": article.channel,
+        "processed": processing.articles_processed,
+        "use_cases": hit.use_cases if hit else [],
+        "insider_type": hit.insider_type if hit else None,
+    }
 
 
 @app.post("/reload")

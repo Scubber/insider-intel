@@ -111,7 +111,7 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("stream loads", page.locator(".article-item").count() > 0)
         checks.check(
             "data-state chip renders",
-            "indexed" in (page.text_content("#data-state") or ""),
+            "articles" in (page.text_content("#data-state") or ""),
         )
 
         # Snippet is clean prose (no literal HTML entities) — Fix 4 guard
