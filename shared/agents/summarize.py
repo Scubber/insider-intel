@@ -245,4 +245,11 @@ def summarize_fields(
         model=getattr(provider, "model_name", None),
     ).sanitized()
     llm_hits = _validate_itm_refs(result.itm_refs, lexical_hits)
+    logger.info(
+        "Case record extracted for %r (insider=%s, confidence=%.2f, llm_itm=%d)",
+        title[:70],
+        record.is_insider_case,
+        record.confidence,
+        len(llm_hits),
+    )
     return summary, record, llm_hits
