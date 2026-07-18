@@ -556,4 +556,5 @@ class ArticleSearchIndex:
             insider_type=getattr(article, "insider_type", None),
             ai_summary=getattr(article, "ai_summary", None),
             case_record=getattr(article, "case_record", None),
+            forensics=getattr(article, "forensics", None),
         )

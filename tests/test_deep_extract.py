@@ -1,23 +1,23 @@
-"""Tests for the two-stage deep extraction pipeline (stubbed LLM throughout)."""
+"""Tests for the pure-assembly hunt report (stored forensics → report, no LLM)."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from apps.aggregator.processed_storage import JsonlProcessedStore
-from apps.search import deep_extract, service, ttp_extract
+from apps.search import service, ttp_extract
 from shared.agents import process_article
+from shared.llm.base import pack_case_text
 from shared.schemas import RawArticle
+from shared.schemas.forensics import (
+    CaseMethod,
+    CaseObservable,
+    HuntQuerySeed,
+    PerCaseForensics,
+    case_record_from_forensics,
+    parse_forensics_json,
+)
 from shared.settings import Settings
-
-
-@pytest.fixture(autouse=True)
-def _fresh_cache():
-    deep_extract.clear_stage1_cache()
-    yield
-    deep_extract.clear_stage1_cache()
 
 
 def _cfg(**overrides) -> Settings:
@@ -39,281 +39,135 @@ def _article(title: str, link: str, *, content: str = "", channel: str = "news")
     )
 
 
-def _index_for(tmp_path, articles):
+def _forensics(link: str, title: str) -> PerCaseForensics:
+    return PerCaseForensics(
+        link=link,
+        title=title,
+        is_insider_case=True,
+        actor_profile="departing engineer — repo access",
+        methods=[
+            CaseMethod(
+                action="synced 9,700 design files to a personal Dropbox",
+                tools=["Dropbox"],
+                quantity="9,700 files",
+                observables=[
+                    CaseObservable(
+                        description="Bulk uploads to dropbox.com",
+                        artifact="proxy/egress logs",
+                        channel="cloud",
+                    )
+                ],
+            )
+        ],
+        detection="forensic review of the returned laptop",
+        candidate_technique_ids=["IF002"],
+        hunt_terms=["dropbox.com/home"],
+        hunt_queries=[
+            HuntQuerySeed(
+                stack="Splunk/SIEM",
+                logic="index=proxy dest_domain=dropbox.com bytes_out>100MB",
+                rationale="bulk sync pattern",
+            )
+        ],
+        extraction_status="llm",
+    )
+
+
+def _index_with_forensics(tmp_path, article, forensics):
+    enriched = article.model_copy(update={"forensics": forensics})
     path = tmp_path / "processed.jsonl"
-    JsonlProcessedStore(path).save(articles)
+    JsonlProcessedStore(path).save([enriched])
     return service.get_index(path, reload=True)
 
 
-def _stage1_reply(link: str) -> dict:
-    return {
-        "actor_profile": "departing engineer with repo access",
-        "timeline": ["2024-01: began syncing files", "2024-02: resigned"],
-        "methods": [
-            {
-                "action": "synced 9,700 design files to a personal Dropbox",
-                "tools": ["Dropbox"],
-                "quantity": "9,700 files",
-                "observables": [
-                    {
-                        "description": "Bulk uploads to dropbox.com",
-                        "artifact": "proxy/egress logs",
-                        "channel": "cloud",
-                    },
-                    {
-                        "description": "Personal-account browser sessions on the corp laptop",
-                        "artifact": "EDR browser telemetry",
-                        "channel": "endpoint",
-                    },
-                ],
-            }
-        ],
-        "detection": "forensic review of the returned laptop",
-        "outcome": "civil suit",
-        "candidate_technique_ids": ["IF002"],
-        "hunt_terms": ["dropbox.com/home", "design_files.zip"],
-    }
-
-
-def _synthesis_reply(link: str) -> dict:
-    return {
-        "summary": "Departing employees exfiltrated data via personal cloud storage.",
-        "techniques": [
-            {
-                "id": "IF002",
-                "tradecraft_summary": "Insiders bulk-sync corporate files to personal cloud "
-                "accounts shortly before resignation.",
-                "cases": [
-                    {
-                        "link": link,
-                        "tradecraft": "Synced 9,700 files to Dropbox before resigning.",
-                        "bullets": ["9,700 design files to personal Dropbox"],
-                    }
-                ],
-                "observables": [
-                    {
-                        "description": "Bulk uploads to consumer cloud domains",
-                        "artifact": "proxy/egress logs",
-                        "channel": "cloud",
-                    }
-                ],
-                "hunt_queries": [
-                    {
-                        "stack": "Splunk/SIEM",
-                        "logic": "index=proxy dest_domain IN (dropbox.com) bytes_out>100MB",
-                        "rationale": "catches the bulk sync pattern from the cases",
-                    }
-                ],
-            }
-        ],
-    }
-
-
-def test_two_stage_report_attaches_catalog_controls(tmp_path, monkeypatch) -> None:
+def test_report_assembles_from_stored_forensics(tmp_path) -> None:
     article = _article("US v. Example", "https://example.com/case-a")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
+    forensics = _forensics(article.link, article.title)
+    index = _index_with_forensics(tmp_path, article, forensics)
 
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            return _stage1_reply(article.link)
-        return _synthesis_reply(article.link)
+    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=_cfg())
+    assert report.mode == "llm"  # an enriched record contributed
+    assert report.report_version == 3
+    assert "Assembled from stored forensics · 1 enriched / 0 floor" in report.detail
 
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-
-    assert report.mode == "llm"
-    assert report.report_version == 2
     section = next(s for s in report.techniques if s.id == "IF002")
-    assert section.tradecraft_summary
-    assert section.cases[0].tradecraft
-    assert section.observables[0].channel == "cloud"
-    # DT*/PV* are attached from the catalog in code, never from the LLM.
+    # Bullets come from the stored method actions.
+    assert section.cases[0].bullets == ["synced 9,700 design files to a personal Dropbox"]
+    assert section.observables and section.observables[0].channel == "cloud"
+    # Hunt queries precomputed at ingest surface on the section.
+    assert section.detection.hunt_queries[0].logic.startswith("index=proxy")
+
+    # DT*/PV* controls attach from the catalog in code.
     from shared.itm.index import load_itm_index
 
     tech = next(t for t in load_itm_index().techniques if t.id == "IF002")
     assert [c.id for c in section.detection.detections] == sorted({r.id for r in tech.detections})
-    assert [c.id for c in section.detection.preventions] == sorted({r.id for r in tech.preventions})
-    assert section.detection.hunt_queries[0].logic.startswith("index=proxy")
     assert section.theme == tech.theme
-    # Legacy fields derive from the new structure (cloud → network bucket).
+
+    # Legacy cue fields derive from the new structure (cloud → network bucket).
     assert any("Bulk uploads" in cue for cue in report.network)
     assert "dropbox.com/home" in report.seeds
 
 
-def test_synthesis_drops_fake_ids_and_keeps_floor_sections(tmp_path, monkeypatch) -> None:
+def test_report_falls_back_to_floor_for_unenriched(tmp_path) -> None:
+    # No stored forensics → floor-derived record; still a report, mode "seeds".
     article = _article(
-        "Insider threat: engineer exfiltrated trade secrets", "https://example.com/case-b"
+        "Insider threat: engineer exfiltrated trade secrets", "https://example.com/case-floor"
     )
-    assert article.entities.itm_hits  # lexical floor has something to keep
-    floor_id = article.entities.itm_hits[0].id.upper()
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
+    assert article.entities.itm_hits and article.forensics is None
+    path = tmp_path / "processed.jsonl"
+    JsonlProcessedStore(path).save([article])
+    index = service.get_index(path, reload=True)
 
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            return _stage1_reply(article.link)
-        return {
-            "summary": "s",
-            "techniques": [{"id": "ZZ999", "cases": [{"link": article.link, "bullets": ["fake"]}]}],
-        }
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    ids = {s.id for s in report.techniques}
-    assert "ZZ999" not in ids
-    assert floor_id in ids  # lexically-hit technique survives the LLM dropping it
-
-
-def test_deep_cap_limits_stage1_calls_and_floor_fills_rest(tmp_path, monkeypatch) -> None:
-    articles = [
-        _article(f"Case {n}", f"https://example.com/cap-{n}", content="body " * (n + 1) * 100)
-        for n in range(5)
-    ]
-    index = _index_for(tmp_path, articles)
-    cfg = _cfg(ANTHROPIC_API_KEY="a", EXTRACT_DEEP_MAX_ARTICLES=2)
-
-    stage1_calls: list[str] = []
-
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            stage1_calls.append(user)
-            return _stage1_reply("")
-        return _synthesis_reply(articles[0].link)
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [a.link for a in articles], settings=cfg)
-    assert len(stage1_calls) == 2  # cap enforced
-    assert "2 deep / 3 floor" in report.detail
-
-
-def test_deep_max_zero_is_synthesis_only(tmp_path, monkeypatch) -> None:
-    article = _article("US v. Example", "https://example.com/case-zero")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a", EXTRACT_DEEP_MAX_ARTICLES=0)
-
-    systems: list[str] = []
-
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        systems.append(system)
-        return _synthesis_reply(article.link)
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    assert systems == [deep_extract.STAGE2_SYSTEM_PROMPT]  # exactly one call
-    assert report.mode == "llm"
-    assert "0 deep / 1 floor" in report.detail
-
-
-def test_stage1_failure_still_yields_llm_report(tmp_path, monkeypatch) -> None:
-    articles = [
-        _article("Case ok", "https://example.com/ok", content="x" * 5000),
-        _article("Case bad", "https://example.com/bad", content="y" * 4000),
-    ]
-    index = _index_for(tmp_path, [articles[0], articles[1]])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
-
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            if "example.com/bad" in user:
-                raise RuntimeError("boom")
-            return _stage1_reply("")
-        return _synthesis_reply(articles[0].link)
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [a.link for a in articles], settings=cfg)
-    assert report.mode == "llm"
-    assert "1 deep / 1 floor" in report.detail
-    assert "1 deep extraction(s) failed" in report.detail
-
-
-def test_stage2_failure_falls_back_to_mechanical_sections(tmp_path, monkeypatch) -> None:
-    article = _article("US v. Example", "https://example.com/mech")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
-
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            return _stage1_reply(article.link)
-        raise RuntimeError("synthesis provider down")
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    assert report.mode == "llm"
-    assert "Synthesis failed" in report.detail
-    section = next(s for s in report.techniques if s.id == "IF002")
-    # Mechanical assembly: bullets are the extracted method actions verbatim.
-    assert section.cases[0].bullets == ["synced 9,700 design files to a personal Dropbox"]
-    assert not section.tradecraft_summary
-    assert section.detection.detections  # controls still attach post-hoc
-    assert section.observables
-
-
-def test_total_llm_failure_returns_floor(tmp_path, monkeypatch) -> None:
-    article = _article("US v. Example", "https://example.com/floor-only")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
-
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        raise RuntimeError("everything down")
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
+    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=_cfg())
     assert report.mode == "seeds"
-    assert report.report_version == 1
-    assert "LLM failed" in report.detail
+    assert "0 enriched / 1 floor" in report.detail
+    # The lexically-matched technique still has a section (from the floor).
+    assert {s.id for s in report.techniques} & {h.id.upper() for h in article.entities.itm_hits}
 
 
-def test_malformed_stage_json_never_500s(tmp_path, monkeypatch) -> None:
-    article = _article("US v. Example", "https://example.com/malformed")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
+def test_mixed_board_counts_enriched_and_floor(tmp_path) -> None:
+    a = _article("US v. Alpha", "https://example.com/alpha")
+    b = _article("US v. Bravo", "https://example.com/bravo")
+    enriched = a.model_copy(update={"forensics": _forensics(a.link, a.title)})
+    path = tmp_path / "processed.jsonl"
+    JsonlProcessedStore(path).save([enriched, b])
+    index = service.get_index(path, reload=True)
 
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        # Wrong types everywhere — coercion must drop fields, not raise.
-        return {
-            "summary": 42,
-            "methods": [{"action": 1}, "not-a-dict", {"action": "ok", "observables": "nope"}],
-            "techniques": [{"id": 3}, {"id": "IF002", "cases": "nope"}],
-            "candidate_technique_ids": "IF002",
-            "hunt_terms": [None, "ok-term"],
-        }
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    assert report.mode in ("llm", "seeds")  # degraded, but a response
+    report = ttp_extract.extract_ttps_for_links(index, [a.link, b.link], settings=_cfg())
+    assert report.mode == "llm"
+    assert "1 enriched / 1 floor" in report.detail
 
 
-def test_stage1_cache_hits_on_same_processed_at(tmp_path, monkeypatch) -> None:
-    article = _article("US v. Example", "https://example.com/cached")
-    index = _index_for(tmp_path, [article])
-    cfg = _cfg(ANTHROPIC_API_KEY="a")
+def test_unindexed_links_short_circuit(tmp_path) -> None:
+    index = service.get_index(tmp_path / "empty.jsonl", reload=True)
+    report = ttp_extract.extract_ttps_for_links(
+        index, ["https://example.invalid/x"], settings=_cfg()
+    )
+    assert report.mode == "seeds"
+    assert report.article_count == 0
+    assert report.detail == "No indexed articles matched board links"
 
-    stage1_calls = 0
 
-    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
-        nonlocal stage1_calls
-        if system is deep_extract.STAGE1_SYSTEM_PROMPT:
-            stage1_calls += 1
-            return _stage1_reply(article.link)
-        return _synthesis_reply(article.link)
-
-    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
-    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
-    ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    ttp_extract.extract_ttps_for_links(index, [article.link], settings=cfg)
-    assert stage1_calls == 1  # second report reused the cached extraction
-
-    # A reprocessed article (new processed_at) misses cleanly.
-    reprocessed = article.model_copy(update={"processed_at": datetime.now(tz=UTC)})
-    assert deep_extract.cache_get(reprocessed) is None
+def test_parse_forensics_json_coerces_and_never_raises() -> None:
+    # Wrong types everywhere — coercion drops bad fields, never raises.
+    f = parse_forensics_json(
+        {
+            "actor_profile": 42,
+            "methods": [{"action": 1}, "nope", {"action": "ok", "observables": "bad"}],
+            "hunt_queries": [{"logic": "index=x"}, "junk"],
+            "is_insider_case": "yes",
+            "confidence": "high",
+            "exfil_channels": [None, "USB"],
+        },
+        link="l",
+        title="t",
+    )
+    assert [m.action for m in f.methods] == ["ok"]
+    assert f.methods[0].observables == []  # bad observables dropped
+    assert f.hunt_queries[0].logic == "index=x"
+    assert f.confidence == 0.0  # non-numeric coerced
+    assert f.exfil_channels == ["USB"]
 
 
 def test_forensics_from_floor_reshapes_case_record() -> None:
@@ -324,57 +178,45 @@ def test_forensics_from_floor_reshapes_case_record() -> None:
             "case_record": CaseRecord(
                 is_insider_case=True,
                 actor_role="contractor sysadmin",
-                access_vector="privileged VPN access",
                 methods=["dumped the customer database"],
                 exfil_channels=["personal Gmail"],
                 detection_trigger="DLP alert",
-                outcome="indicted",
             )
         }
     )
-    record = deep_extract.forensics_from_floor(article)
+    record = ttp_extract.forensics_from_floor(article)
     assert record.extraction_status == "floor"
     assert "contractor sysadmin" in record.actor_profile
     actions = [m.action for m in record.methods]
     assert "dumped the customer database" in actions
     assert any("personal Gmail" in a for a in actions)
     assert record.detection == "DLP alert"
-    assert record.candidate_technique_ids == [h.id.upper() for h in article.entities.itm_hits or []]
 
 
-def test_chat_completion_backcompat_without_max_tokens(monkeypatch) -> None:
-    from shared.llm import openai_provider
-
-    captured: dict = {}
-
-    class FakeResponse:
-        status_code = 200
-        text = ""
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {"choices": [{"message": {"content": "{}"}}]}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        captured.update(json)
-        return FakeResponse()
-
-    monkeypatch.setattr(openai_provider.httpx, "post", fake_post)
-    out = openai_provider._chat_completion(
-        base_url="http://x/v1", model="m", api_key=None, timeout=5, system="s", user="u"
+def test_case_record_from_forensics_derives_and_sanitizes() -> None:
+    f = PerCaseForensics(
+        link="l",
+        title="t",
+        is_insider_case=True,
+        actor_profile="departing engineer — repo access",
+        methods=[CaseMethod(action="x" * 500)],
+        exfil_channels=["personal Dropbox"],
+        detection="laptop review",
     )
-    assert out == "{}"
-    assert "max_tokens" not in captured  # classifier/summarizer callers unchanged
+    record = case_record_from_forensics(f)
+    assert record.is_insider_case
+    assert record.actor_role == "departing engineer"  # from actor_profile head
+    assert record.detection_trigger == "laptop review"
+    assert record.exfil_channels == ["personal Dropbox"]
+    assert len(record.methods[0]) == 120  # sanitize() clamps list items to 120
 
-    openai_provider._chat_completion(
-        base_url="http://x/v1",
-        model="m",
-        api_key=None,
-        timeout=5,
-        system="s",
-        user="u",
-        max_tokens=1234,
-    )
-    assert captured["max_tokens"] == 1234
+
+def test_pack_case_text_filing_head_and_tail() -> None:
+    body = "The defendant exfiltrated schematics. " * 1200  # ~46k chars
+    packed = pack_case_text(body, max_chars=36_000, is_filing=True)
+    assert len(packed) <= 36_000 + 50
+    assert "…[middle truncated]…" in packed
+    assert packed.rstrip().endswith("The defendant exfiltrated schematics.")
+    news = pack_case_text(body, max_chars=8_000, is_filing=False)
+    assert len(news) == 8_000
+    assert "…[middle truncated]…" not in news

@@ -270,9 +270,9 @@ def _throttle_wait_seconds(exc: CourtListenerError) -> float:
 def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
     """Drop paid-for LLM fields for links whose source text just changed.
 
-    Without this, the summarize node's carry-forward would keep the thin
-    pre-full-text case_record forever. Stripping ai_summary, case_record, and
-    the ``source=="llm"`` ITM hits makes the next processing run re-extract
+    Without this, the enrich node's carry-forward would keep the thin
+    pre-full-text record forever. Stripping ai_summary, case_record, forensics,
+    and the ``source=="llm"`` ITM hits makes the next processing run re-extract
     over the full document (budget-bounded as usual).
     """
     from apps.aggregator.processed_storage import JsonlProcessedStore
@@ -282,7 +282,11 @@ def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
     for row in store.load_all():
         if row.link not in links:
             continue
-        if row.ai_summary is None and row.case_record is None:
+        if (
+            row.ai_summary is None
+            and row.case_record is None
+            and getattr(row, "forensics", None) is None
+        ):
             continue
         hits = [h for h in row.entities.itm_hits if getattr(h, "source", "lexical") != "llm"]
         updated.append(
@@ -290,6 +294,7 @@ def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
                 update={
                     "ai_summary": None,
                     "case_record": None,
+                    "forensics": None,
                     "entities": row.entities.model_copy(update={"itm_hits": hits}),
                 }
             )
@@ -340,9 +345,9 @@ def run_courtlistener_text_backfill(
 
     candidates = [a for a in article_store.load_all() if needs_full_text(a)]
     candidates.sort(
-        key=lambda a: (a.published or a.ingested_at).timestamp()
-        if (a.published or a.ingested_at)
-        else 0.0,
+        key=lambda a: (
+            (a.published or a.ingested_at).timestamp() if (a.published or a.ingested_at) else 0.0
+        ),
         reverse=True,
     )
 

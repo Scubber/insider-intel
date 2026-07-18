@@ -1679,7 +1679,7 @@
       extractBtn.disabled = true;
       extractBtn.textContent = "Extracting…";
     }
-    setStatus(`Deep-extracting ${entries.length} case(s)…`);
+    setStatus(`Building hunt report · ${entries.length} case(s)…`);
     try {
       let report;
       try {
@@ -1690,9 +1690,9 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ links: entries.map((e) => e.link) }),
-            // Two-stage extraction (per-article deep reads + synthesis)
-            // legitimately takes 60-150s on a full board.
-            timeoutMs: 180000,
+            // Pure code assembly of stored forensics — fast; the margin covers
+            // a cold-start reload of the corpus index.
+            timeoutMs: 30000,
           },
         );
         report = normalizeExtractResponse(data, entries);
@@ -1705,10 +1705,10 @@
       }
       renderTtpReport(report);
       if (report.mode === "llm") {
-        setStatus(`Extracted hunt report · LLM · ${entries.length} article(s)`);
+        setStatus(`Hunt report · stored case forensics · ${entries.length} article(s)`);
       } else if (!String(els.status?.textContent || "").startsWith("Extract offline")) {
         setStatus(
-          `Extracted hunt report · seed pack · ${entries.length} article(s)` +
+          `Hunt report · seed pack · ${entries.length} article(s)` +
             (report.detail ? ` · ${report.detail}` : ""),
         );
       }

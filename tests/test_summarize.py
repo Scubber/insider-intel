@@ -1,4 +1,4 @@
-"""Tests for the ingest summarizer (ai_summary + case_record + LLM ITM hits)."""
+"""Tests for the unified ingest enricher (ai_summary + forensics + ITM hits)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from apps.aggregator.process_pipeline import run_processing
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.aggregator.storage import JsonlArticleStore
 from shared.agents import process_article
-from shared.llm.base import CaseExtractionResult, ItmRef
 from shared.schemas import CaseRecord, RawArticle
 
 
@@ -28,35 +27,54 @@ def _raw(**overrides: object) -> RawArticle:
     return RawArticle.model_validate(data)
 
 
-def _result(**overrides: object) -> CaseExtractionResult:
-    data = {
+def _reply(**overrides: object) -> dict:
+    """The unified enricher's raw JSON reply (analyst note + forensic record)."""
+    data: dict = {
         "ai_summary": "A departing engineer copied schematics to USB before resigning.",
         "is_insider_case": True,
+        "confidence": 0.9,
+        "actor_profile": "departing engineer — engineering file share",
         "actor_role": "departing engineer",
         "access_vector": "engineering file share",
-        "methods": ["USB copy of design files"],
+        "methods": [
+            {
+                "action": "USB copy of design files",
+                "tools": ["USB drive"],
+                "observables": [
+                    {
+                        "description": "mass file copy to removable media",
+                        "artifact": "EDR removable-media events",
+                        "channel": "endpoint",
+                    }
+                ],
+            }
+        ],
         "exfil_channels": ["USB drive"],
         "outcome": "charged under DTSA",
-        "confidence": 0.9,
+        "hunt_terms": ["design_files.zip"],
+        "hunt_queries": [
+            {"stack": "EDR", "logic": "device_type=USB action=file_write", "rationale": "USB copy"}
+        ],
+        "itm_refs": [],
     }
     data.update(overrides)
-    return CaseExtractionResult.model_validate(data)
+    return data
 
 
-class FakeSummarizer:
+class FakeEnricher:
     model_name = "fake-model"
 
-    def __init__(self, result: CaseExtractionResult | None = None) -> None:
+    def __init__(self, reply: dict | None = None) -> None:
         self.calls = 0
-        self.result = result if result is not None else _result()
+        self.reply = reply if reply is not None else _reply()
 
     def extract_case(self, *, title, source, text, itm_candidates):
         self.calls += 1
         self.last_candidates = itm_candidates
-        return self.result
+        return self.reply
 
 
-class ExplodingSummarizer(FakeSummarizer):
+class ExplodingEnricher(FakeEnricher):
     def extract_case(self, **kwargs):
         self.calls += 1
         raise RuntimeError("provider down")
@@ -76,11 +94,12 @@ def test_provider_unset_is_a_noop() -> None:
     processed = process_article(_raw())
     assert processed.ai_summary is None
     assert processed.case_record is None
+    assert processed.forensics is None
     assert all(h.source == "lexical" for h in processed.entities.itm_hits)
 
 
 def test_non_qualifying_article_never_calls_provider(monkeypatch) -> None:
-    fake = FakeSummarizer()
+    fake = FakeEnricher()
     _install(monkeypatch, fake)
     processed = process_article(
         _raw(
@@ -90,44 +109,53 @@ def test_non_qualifying_article_never_calls_provider(monkeypatch) -> None:
         )
     )
     assert fake.calls == 0
-    assert processed.case_record is None
+    assert processed.forensics is None
 
 
-def test_qualifying_article_gets_summary_record_and_llm_hits(monkeypatch) -> None:
-    fake = FakeSummarizer(
-        _result(
+def test_qualifying_article_gets_note_forensics_and_llm_hits(monkeypatch) -> None:
+    fake = FakeEnricher(
+        _reply(
             itm_refs=[
-                ItmRef(id="IF038", confidence=0.9, evidence="second job"),
-                ItmRef(id="ZZ999", confidence=0.99),  # not in catalog → dropped
-                ItmRef(id="AF001", confidence=0.2),  # below floor → dropped
+                {"id": "IF038", "confidence": 0.9, "evidence": "second job"},
+                {"id": "ZZ999", "confidence": 0.99},  # not in catalog → dropped
+                {"id": "AF001", "confidence": 0.2},  # below floor → dropped
             ]
         )
     )
     _install(monkeypatch, fake)
     processed = process_article(_raw())
     assert fake.calls == 1
-    assert "candidate" not in (fake.last_candidates or "").lower() or fake.last_candidates
     assert processed.ai_summary and "departing engineer" in processed.ai_summary
+
+    forensics = processed.forensics
+    assert forensics is not None and forensics.is_insider_case
+    assert forensics.extraction_status == "llm"
+    assert forensics.methods and forensics.methods[0].action == "USB copy of design files"
+    assert forensics.hunt_queries and forensics.hunt_queries[0].stack == "EDR"
+    assert forensics.link == processed.link and forensics.model == "fake-model"
+    # candidate_technique_ids are stamped from the final merged ITM hits.
+    assert "IF038" in forensics.candidate_technique_ids
+
+    # Legacy CaseRecord is derived from the forensic record for UI back-compat.
     record = processed.case_record
     assert record is not None and record.is_insider_case
     assert record.methods == ["USB copy of design files"]
-    assert record.model == "fake-model"
-    assert record.extracted_at is not None
+    assert record.model == "fake-model" and record.extracted_at is not None
 
     by_id = {h.id: h for h in processed.entities.itm_hits}
     assert "IF038" in by_id and by_id["IF038"].source == "llm"
     assert "ZZ999" not in by_id and "AF001" not in by_id
-    # LLM hits join the filter/search signals and control resolution
     assert "IF038" in processed.entities.keywords_hit
 
 
 def test_provider_failure_still_processes_article(monkeypatch) -> None:
-    fake = ExplodingSummarizer()
+    fake = ExplodingEnricher()
     _install(monkeypatch, fake)
     processed = process_article(_raw())
     assert fake.calls == 1
     assert processed.ai_summary is None
     assert processed.case_record is None
+    assert processed.forensics is None
     assert processed.entities.itm_hits  # lexical pipeline unaffected
 
 
@@ -137,13 +165,13 @@ def test_carry_forward_never_rebills(monkeypatch, tmp_path: Path) -> None:
     store = JsonlArticleStore(raw_path)
     store.save([_raw()])
 
-    fake = FakeSummarizer(_result(itm_refs=[ItmRef(id="IF038", confidence=0.9)]))
+    fake = FakeEnricher(_reply(itm_refs=[{"id": "IF038", "confidence": 0.9}]))
     _install(monkeypatch, fake)
     run_processing(raw_path=raw_path, processed_path=processed_path)
     assert fake.calls == 1
 
     # Refresh the raw article → it is re-processed, but the paid-for fields
-    # (summary, record, LLM ITM hit) must carry forward with zero new calls.
+    # (note, forensics, LLM ITM hit) must carry forward with zero new calls.
     updated = _raw(summary="<p>Employee also sabotaged backups before departure.</p>")
     assert store.refresh([updated]) == (0, 1)
     run_processing(raw_path=raw_path, processed_path=processed_path)
@@ -153,7 +181,7 @@ def test_carry_forward_never_rebills(monkeypatch, tmp_path: Path) -> None:
     assert len(rows) == 1
     row = rows[0]
     assert "sabotaged backups" in row.clean_text  # reprocess really happened
-    assert row.ai_summary and row.case_record is not None
+    assert row.ai_summary and row.forensics is not None and row.case_record is not None
     assert any(h.id == "IF038" and h.source == "llm" for h in row.entities.itm_hits)
 
 
@@ -165,22 +193,54 @@ def test_backfill_converts_existing_corpus_bounded_by_cap(monkeypatch, tmp_path:
 
     # First run without any provider: rows exist, no records (pre-feature corpus).
     run_processing(raw_path=raw_path, processed_path=processed_path)
-    assert all(r.case_record is None for r in JsonlProcessedStore(processed_path).load_all())
+    assert all(r.forensics is None for r in JsonlProcessedStore(processed_path).load_all())
 
     # Provider appears with a 2-call budget: backfill sweeps newest-first.
     monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "2")
-    fake = FakeSummarizer()
+    fake = FakeEnricher()
     _install(monkeypatch, fake)
     run_processing(raw_path=raw_path, processed_path=processed_path)
     assert fake.calls == 2
     rows = JsonlProcessedStore(processed_path).load_all()
-    assert sum(1 for r in rows if r.case_record is not None) == 2
+    assert sum(1 for r in rows if r.forensics is not None) == 2
 
     # Next run finishes the remainder without re-billing the converted rows.
     run_processing(raw_path=raw_path, processed_path=processed_path)
     assert fake.calls == 3
     rows = JsonlProcessedStore(processed_path).load_all()
-    assert all(r.case_record is not None for r in rows)
+    assert all(r.forensics is not None for r in rows)
+
+
+def test_backfill_upgrades_legacy_rows_when_enabled(monkeypatch, tmp_path: Path) -> None:
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save([_raw()])
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+
+    # Simulate a legacy row: case_record present, forensics absent (old summarizer).
+    store = JsonlProcessedStore(processed_path)
+    row = store.load_all()[0]
+    legacy = row.model_copy(
+        update={"case_record": CaseRecord(is_insider_case=True, methods=["old method"])}
+    )
+    store.upsert([legacy])
+    assert store.load_all()[0].forensics is None
+
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+
+    # Upgrade OFF → legacy row is left untouched (never re-billed).
+    monkeypatch.setenv("SUMMARIZER_UPGRADE_LEGACY", "0")
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 0
+    assert store.load_all()[0].forensics is None
+
+    # Upgrade ON → the legacy row is re-billed once to add the forensic record.
+    monkeypatch.setenv("SUMMARIZER_UPGRADE_LEGACY", "1")
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 1
+    upgraded = store.load_all()[0]
+    assert upgraded.forensics is not None and upgraded.forensics.extraction_status == "llm"
 
 
 def test_case_record_sanitization_clamps() -> None:
@@ -204,35 +264,39 @@ def test_pre_feature_jsonl_row_still_loads(tmp_path: Path) -> None:
 
     row = json.loads(processed_path.read_text().splitlines()[0])
     row.pop("case_record", None)
+    row.pop("forensics", None)
     for hit in row.get("entities", {}).get("itm_hits", []):
         hit.pop("source", None)
     processed_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
 
     rows = JsonlProcessedStore(processed_path).load_all()
     assert len(rows) == 1
-    assert rows[0].case_record is None
+    assert rows[0].case_record is None and rows[0].forensics is None
     assert all(h.source == "lexical" for h in rows[0].entities.itm_hits)
 
 
-def test_search_hit_carries_summary_and_record() -> None:
+def test_search_hit_carries_summary_record_and_forensics() -> None:
     from apps.search.index import ArticleSearchIndex
+    from shared.schemas.forensics import PerCaseForensics
 
     processed = process_article(_raw())
     enriched = processed.model_copy(
         update={
             "ai_summary": "Analyst summary.",
             "case_record": CaseRecord(is_insider_case=True, methods=["USB copy"]),
+            "forensics": PerCaseForensics(link=processed.link, title=processed.title),
         }
     )
     hit = ArticleSearchIndex._to_hit(enriched, 1.0)
     assert hit.ai_summary == "Analyst summary."
     assert hit.case_record is not None and hit.case_record.methods == ["USB copy"]
+    assert hit.forensics is not None and hit.forensics.link == processed.link
 
 
 def test_filings_get_the_bigger_prompt_budget(monkeypatch) -> None:
     received: dict[str, int] = {}
 
-    class CapProbe(FakeSummarizer):
+    class CapProbe(FakeEnricher):
         def extract_case(self, *, title, source, text, itm_candidates):
             received[source] = len(text)
             return super().extract_case(
@@ -254,5 +318,5 @@ def test_filings_get_the_bigger_prompt_budget(monkeypatch) -> None:
     )
     process_article(_raw(content=body, link="https://example.com/news-cap"))
 
-    assert received["courtlistener-recap"] > 6000  # filings budget (24k default)
-    assert received["example"] <= 6000  # news budget unchanged
+    assert received["courtlistener-recap"] > 8000  # filings budget (36k default)
+    assert received["example"] <= 8000  # news budget (8k default)

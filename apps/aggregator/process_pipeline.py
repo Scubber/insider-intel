@@ -13,8 +13,8 @@ from shared.agents import process_article
 from shared.agents.summarize import (
     SummaryBudget,
     article_qualifies,
+    enrich_fields,
     merge_llm_hits,
-    summarize_fields,
 )
 from shared.llm import get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
@@ -131,30 +131,40 @@ def _backfill_summaries(
     settings,
     exclude_links: set[str],
 ) -> int:
-    """Summarize stored qualifying articles that predate the summarizer.
+    """Enrich stored qualifying articles that lack a forensic record.
 
     Already-processed rows are skipped forever by the main loop, so without
-    this sweep the existing corpus would never gain case records. Newest
-    published first; bounded by the shared per-run budget, so the corpus
-    converts over successive 6h refreshes at a fixed cost ceiling.
+    this sweep the existing corpus would never gain forensic records. Two
+    tiers, each newest-published first: never-enriched rows before legacy
+    upgrades (a fixed per-run budget always spends on new coverage first).
+    Bounded by the shared budget, so the corpus converts over successive 6h
+    refreshes at a fixed cost ceiling.
     """
     if get_summarizer_provider(settings) is None or budget.remaining <= 0:
         return 0
 
-    candidates = [
-        row
-        for row in processed_store.load_all()
-        if row.link not in exclude_links and row.case_record is None and article_qualifies(row)
-    ]
-    if not candidates:
+    upgrade_legacy = settings.summarizer_upgrade_legacy
+    fresh: list[ProcessedArticle] = []
+    legacy: list[ProcessedArticle] = []
+    for row in processed_store.load_all():
+        if row.link in exclude_links or row.forensics is not None or not article_qualifies(row):
+            continue
+        if row.case_record is None:
+            fresh.append(row)
+        elif upgrade_legacy:
+            legacy.append(row)
+    if not fresh and not legacy:
         return 0
-    candidates.sort(key=lambda a: _as_utc(a.published or a.processed_at), reverse=True)
+    order = lambda a: _as_utc(a.published or a.processed_at)  # noqa: E731
+    fresh.sort(key=order, reverse=True)
+    legacy.sort(key=order, reverse=True)
+    candidates = fresh + legacy
 
     updated: list[ProcessedArticle] = []
     for row in candidates:
         if budget.remaining <= 0:
             break
-        summary, record, llm_hits = summarize_fields(
+        summary, forensics, record, llm_hits = enrich_fields(
             title=row.title,
             source=row.source_id,
             text=row.clean_text or row.summary or "",
@@ -163,22 +173,40 @@ def _backfill_summaries(
             settings=settings,
             budget=budget,
         )
-        if summary is None and record is None:
-            logger.warning("Backfill summary failed for %s", row.link)
+        if forensics is None:
+            logger.warning("Backfill enrichment failed for %s", row.link)
             continue
+        # Drop any stale LLM-adjudicated hits from the old run before re-merging,
+        # then stamp the final catalog-validated ids onto the record.
+        lexical_entities = row.entities.model_copy(
+            update={
+                "itm_hits": [
+                    h for h in row.entities.itm_hits if getattr(h, "source", "lexical") != "llm"
+                ]
+            }
+        )
+        merged = merge_llm_hits(lexical_entities, llm_hits)
+        forensics = forensics.model_copy(
+            update={
+                "link": row.link,
+                "title": row.title,
+                "candidate_technique_ids": [h.id.upper() for h in merged.itm_hits],
+            }
+        )
         updated.append(
             row.model_copy(
                 update={
                     "ai_summary": summary,
                     "case_record": record,
-                    "entities": merge_llm_hits(row.entities, llm_hits),
+                    "forensics": forensics,
+                    "entities": merged,
                 }
             )
         )
 
     if updated:
         processed_store.upsert(updated)
-        logger.info("Backfilled case records for %d article(s)", len(updated))
+        logger.info("Backfilled forensic records for %d article(s)", len(updated))
     return len(updated)
 
 

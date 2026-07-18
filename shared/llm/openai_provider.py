@@ -10,12 +10,15 @@ import httpx
 
 from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
-    SUMMARIZE_SYSTEM_PROMPT,
-    CaseExtractionResult,
+    ENRICH_SYSTEM_PROMPT,
     ClassificationResult,
-    build_summarize_prompt,
+    build_enrich_prompt,
     build_user_prompt,
 )
+
+# Unified enrichment produces a large JSON (analyst note + full forensic
+# record + hunt queries); the summary path needs the headroom.
+ENRICH_MAX_TOKENS = 4000
 
 logger = logging.getLogger(__name__)
 
@@ -108,24 +111,25 @@ class OpenAICompatSummarizer:
 
     def extract_case(
         self, *, title: str, source: str, text: str, itm_candidates: str
-    ) -> CaseExtractionResult | None:
+    ) -> dict | None:
         content = _chat_completion(
             base_url=self._base_url,
             model=self._model,
             api_key=self._api_key,
             timeout=self._timeout,
-            system=SUMMARIZE_SYSTEM_PROMPT,
-            user=build_summarize_prompt(
+            system=ENRICH_SYSTEM_PROMPT,
+            user=build_enrich_prompt(
                 title=title,
                 source=source,
                 text=text,
                 itm_candidates=itm_candidates,
                 max_chars=self._max_input_chars,
             ),
+            max_tokens=ENRICH_MAX_TOKENS,
         )
         if content is None:
             return None
-        return _parse_case_result(content)
+        return _parse_json_object(content, label="Enricher")
 
 
 def _parse_json_object(content: str, *, label: str) -> dict | None:
@@ -156,15 +160,4 @@ def _parse_result(content: str) -> ClassificationResult | None:
         return ClassificationResult.model_validate(data).sanitized()
     except ValueError as exc:
         logger.warning("Classifier reply failed validation: %s", exc)
-        return None
-
-
-def _parse_case_result(content: str) -> CaseExtractionResult | None:
-    data = _parse_json_object(content, label="Summarizer")
-    if data is None:
-        return None
-    try:
-        return CaseExtractionResult.model_validate(data)
-    except ValueError as exc:
-        logger.warning("Summarizer reply failed validation: %s", exc)
         return None

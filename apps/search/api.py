@@ -421,9 +421,9 @@ def _client_ip(request: Request) -> str:
 def extract_ttps(body: ExtractTtpsRequest, request: Request) -> ExtractTtpsResponse:
     """Build a multi-channel hunt report from extraction-board article links.
 
-    Uses indexed title/summary/text, optional CourtListener REST snippets for
-    filings, and an LLM (EXTRACT_LLM_PROVIDER: xAI/Anthropic/OpenAI-compatible)
-    for per-technique case bullets + summary. Evidence-only report without one.
+    Assembles each article's stored ingest-time forensic record (or a
+    floor-derived one if not yet enriched) into technique sections in code —
+    no LLM at read time. The rate limiter is only a CPU/abuse guard.
     """
     limiter = _get_extract_limiter()
     if limiter is not None and not limiter.allow(_client_ip(request)):

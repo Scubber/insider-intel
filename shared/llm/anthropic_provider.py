@@ -6,13 +6,12 @@ import logging
 
 from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
-    SUMMARIZE_SYSTEM_PROMPT,
-    CaseExtractionResult,
+    ENRICH_SYSTEM_PROMPT,
     ClassificationResult,
-    build_summarize_prompt,
+    build_enrich_prompt,
     build_user_prompt,
 )
-from shared.llm.openai_provider import _parse_case_result, _parse_result
+from shared.llm.openai_provider import ENRICH_MAX_TOKENS, _parse_json_object, _parse_result
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +57,8 @@ class AnthropicSummarizer:
 
     def extract_case(
         self, *, title: str, source: str, text: str, itm_candidates: str
-    ) -> CaseExtractionResult | None:
-        prompt = build_summarize_prompt(
+    ) -> dict | None:
+        prompt = build_enrich_prompt(
             title=title,
             source=source,
             text=text,
@@ -69,12 +68,12 @@ class AnthropicSummarizer:
         try:
             message = self._client.messages.create(
                 model=self._model,
-                max_tokens=800,
-                system=SUMMARIZE_SYSTEM_PROMPT,
+                max_tokens=ENRICH_MAX_TOKENS,
+                system=ENRICH_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
         except Exception as exc:
-            logger.warning("Anthropic summarize call failed: %s", exc)
+            logger.warning("Anthropic enrich call failed: %s", exc)
             return None
         parts = [block.text for block in message.content if getattr(block, "text", None)]
-        return _parse_case_result("".join(parts))
+        return _parse_json_object("".join(parts), label="Enricher")

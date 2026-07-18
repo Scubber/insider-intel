@@ -166,73 +166,19 @@ class Settings(BaseSettings):
     # One-way corporate pull — bearer token for GET /export/articles
     export_api_token: str | None = Field(default=None, alias="EXPORT_API_TOKEN")
 
-    # POST /extract/ttps can spend LLM credits — cap it. <=0 disables the limit.
-    # Deep extraction makes up to EXTRACT_DEEP_MAX_ARTICLES+1 LLM calls per
-    # request, so the request-rate defaults are tighter than they used to be.
+    # POST /extract/ttps assembles stored forensics in code — no LLM at read
+    # time — so the limiter is now only a CPU/abuse guard, not a spend cap.
+    # <=0 disables the limit.
     extract_rate_per_ip_hour: int = Field(
-        default=6,
+        default=30,
         alias="EXTRACT_RATE_PER_IP_HOUR",
         le=10_000,
     )
     extract_rate_global_day: int = Field(
-        default=60,
+        default=2000,
         alias="EXTRACT_RATE_GLOBAL_DAY",
         le=100_000,
     )
-    # Two-stage hunt-report extraction: stage 1 deep-reads each board article
-    # (one LLM call per article, capped below), stage 2 synthesizes the
-    # cross-case technique report (one call). 0 deep articles = synthesis-only
-    # over floor-derived forensics — the cheap single-call rollback mode.
-    extract_deep_max_articles: int = Field(
-        default=10,
-        alias="EXTRACT_DEEP_MAX_ARTICLES",
-        ge=0,
-        le=40,
-    )
-    extract_stage1_filings_max_chars: int = Field(
-        default=36_000,
-        alias="EXTRACT_STAGE1_FILINGS_MAX_CHARS",
-        description="Stage-1 text budget for court filings (stored bodies are ≤40k)",
-        ge=500,
-        le=200_000,
-    )
-    extract_stage1_max_chars: int = Field(
-        default=8_000,
-        alias="EXTRACT_STAGE1_MAX_CHARS",
-        description="Stage-1 text budget for non-filing articles",
-        ge=500,
-        le=200_000,
-    )
-    extract_stage1_concurrency: int = Field(
-        default=4,
-        alias="EXTRACT_STAGE1_CONCURRENCY",
-        ge=1,
-        le=8,
-    )
-    extract_stage1_cache_size: int = Field(
-        default=256,
-        alias="EXTRACT_STAGE1_CACHE_SIZE",
-        description="In-process LRU of per-article forensics (valid: max-instances=1)",
-        ge=0,
-        le=10_000,
-    )
-    # Per-stage provider/model overrides. Unset = inherit EXTRACT_LLM_PROVIDER
-    # and the provider's default model. Recommended production split: a cheap
-    # fast model for stage 1 (claude-haiku-4-5 / gemini-2.5-flash) and the
-    # strongest configured model for stage 2 (anthropic / claude-sonnet-5) —
-    # synthesis is one call per report and is where quality is won.
-    extract_stage1_llm_provider: str | None = Field(
-        default=None,
-        alias="EXTRACT_STAGE1_LLM_PROVIDER",
-        description="auto | xai | anthropic | gemini | openai | none (None inherits)",
-    )
-    extract_stage1_model: str | None = Field(default=None, alias="EXTRACT_STAGE1_MODEL")
-    extract_stage2_llm_provider: str | None = Field(
-        default=None,
-        alias="EXTRACT_STAGE2_LLM_PROVIDER",
-        description="auto | xai | anthropic | gemini | openai | none (None inherits)",
-    )
-    extract_stage2_model: str | None = Field(default=None, alias="EXTRACT_STAGE2_MODEL")
 
     # Alert RSS URLs for web keyword discovery (comma-separated feed URLs)
     web_keyword_feed_urls: str = Field(
@@ -262,17 +208,6 @@ class Settings(BaseSettings):
         alias="DATATHEFTNEWS_CONTENT_MAX_CHARS",
         ge=500,
         le=200_000,
-    )
-
-    # xAI / Grok — optional LLM fill for POST /extract/ttps
-    xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
-    xai_model: str = Field(default="grok-3-mini", alias="XAI_MODEL")
-    # Which LLM enriches the extract report. "auto" picks the first configured
-    # key (xAI, then Anthropic); "openai" means any OpenAI-compatible endpoint.
-    extract_llm_provider: str = Field(
-        default="auto",
-        alias="EXTRACT_LLM_PROVIDER",
-        description="auto | xai | anthropic | openai | none",
     )
 
     # Social — Reddit. Public JSON works from residential IPs; cloud IPs get
@@ -381,17 +316,26 @@ class Settings(BaseSettings):
         description="LLM-call budget per processing run (0 disables)",
     )
     summarizer_max_input_chars: int = Field(
-        default=6000,
+        default=8000,
         alias="SUMMARIZER_MAX_INPUT_CHARS",
         ge=500,
-        le=50_000,
+        le=200_000,
     )
     summarizer_filings_max_input_chars: int = Field(
-        default=24_000,
+        default=36_000,
         alias="SUMMARIZER_FILINGS_MAX_INPUT_CHARS",
         description="Bigger prompt budget for court filings (full-document extraction)",
         ge=500,
-        le=50_000,
+        le=200_000,
+    )
+    summarizer_upgrade_legacy: bool = Field(
+        default=True,
+        alias="SUMMARIZER_UPGRADE_LEGACY",
+        description=(
+            "Re-bill legacy rows that have a case_record but no forensics, once, "
+            "to add the forensic record (budget-bounded). Disable to leave them "
+            "until their source text changes."
+        ),
     )
 
     def cors_origin_list(self) -> list[str]:

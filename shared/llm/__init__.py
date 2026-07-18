@@ -11,7 +11,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from shared.llm.base import (
-    CaseExtractionResult,
     ClassificationResult,
     ClassifierProvider,
     ItmRef,
@@ -24,7 +23,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "CaseExtractionResult",
     "ClassificationResult",
     "ClassifierProvider",
     "ItmRef",

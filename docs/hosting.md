@@ -105,26 +105,23 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `PACER_PURCHASE_MAX_PER_RUN` (default 5). Estimated spend is tracked in
   `state/ingest_state.json` (`pacer_spend:YYYY-Qn`). Purchased documents
   join the public RECAP archive.
-- **Extract-report LLM (opt-in):** `POST /extract/ttps` enriches the hunt
-  report with per-technique case bullets + an analyst summary via
-  `EXTRACT_LLM_PROVIDER` (default `auto`: tries every configured key in
-  order xAI → Anthropic → Gemini → OpenAI, skipping providers that error —
-  e.g. an account out of credits; with no keys it returns the evidence-only
-  report). Keys go on the **service** (the endpoint runs there):
-  `gcloud run services update insider-intel-api --region us-east1
-  --update-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest`.
-  Gemini uses an AI Studio key (default model `gemini-2.5-flash`); a bare
-  `OPENAI_API_KEY` targets real OpenAI (`gpt-4o-mini`) — `OPENAI_COMPAT_*`
-  overrides still win for self-hosted endpoints.
-- **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
-  the provider env + key on the **job only** (the extract endpoint above is
-  the API's only LLM use). Providers: `anthropic | openai | gemini`:
+- **Hunt report — no read-time LLM:** `POST /extract/ttps` assembles each
+  boarded article's stored `forensics` record into technique sections in code;
+  there is no LLM call at read time, so **no LLM keys belong on the service**.
+  Reports get richer as the corpus is enriched (floor fallback until then).
+- **Ingest enricher (opt-in — the only LLM use):** one unified call per
+  qualifying article writes the analyst note + forensic record that the hunt
+  report reads. Set the provider env + key on the **job only**. Providers:
+  `anthropic | openai | gemini`:
   `gcloud run jobs update corpus-refresh --region us-east1
-  --update-env-vars SUMMARIZER_LLM_PROVIDER=gemini
-  --update-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest`.
-  Spend is capped by `SUMMARIZER_MAX_ARTICLES_PER_RUN` (default 15/run ≈
-  $3-4/mo on Haiku); results persist in the corpus so each article is billed
-  once, and the backfill sweep converts the existing corpus gradually.
+  --update-env-vars SUMMARIZER_LLM_PROVIDER=anthropic
+  --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
+  `SUMMARIZER_MODEL` overrides the model (a stronger model is worth it now that
+  the call produces the full forensic record). Spend is capped by
+  `SUMMARIZER_MAX_ARTICLES_PER_RUN` (default 15/run); each article is billed
+  once (results persist), the backfill sweep converts the existing corpus
+  gradually, and `SUMMARIZER_UPGRADE_LEGACY` (default on) re-bills legacy
+  `case_record`-only rows once to add the forensic record.
 - **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
   Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
 - **Endpoint guards:** `POST /extract/ttps` is rate-limited
