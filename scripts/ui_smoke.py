@@ -121,8 +121,33 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("snippets decode HTML entities", not entity_leak,
                      "found literal entity in a snippet")
 
-        # Matrix technique -> dossier. On wide layouts the Matrix rail is always
-        # visible; on narrow layouts it lives behind a tab.
+        # Observed-only ITM rail: grouped theme headers present, and the rail
+        # never renders zero-coverage taxonomy rows.
+        theme_headers = page.locator(".pane-matrix .itm-rail-theme").count()
+        checks.check("rail shows observed theme groups", 1 <= theme_headers <= 5,
+                     f"{theme_headers} theme headers")
+        checks.check("rail has no zero-coverage rows",
+                     page.locator(".pane-matrix .matrix-tech-zero").count() == 0)
+
+        # Case click highlights its techniques in the rail.
+        row_with_hit = page.locator(".article-row:has(.itm-id-chip)").first
+        row_with_hit.locator(".article-item").click()
+        checks.check("selected case highlights rail techniques",
+                     page.locator(".itm-rail-btn.case-hit").count() >= 1)
+
+        # Masthead MATRIX opens the center full-matrix browser and comes back.
+        page.click(".masthead-nav-item[data-pane='matrix']")
+        page.wait_for_selector("#matrix-panel:not([hidden])", timeout=10000)
+        checks.check(
+            "MATRIX nav opens full matrix",
+            page.locator("#matrix-columns .matrix-col").count() == 5
+            and page.locator("#matrix-q").is_visible(),
+        )
+        page.click("#matrix-back")
+        page.wait_for_selector("#article-panel:not([hidden])", timeout=10000)
+
+        # Matrix technique -> dossier. On wide layouts the observed-only rail is
+        # always visible; on narrow layouts it lives behind a tab.
         tab = page.locator(".mobile-tab[data-pane='matrix']")
         if tab.is_visible():
             tab.click()
@@ -164,6 +189,28 @@ def run(base_url: str, headed: bool) -> int:
             if page.evaluate("document.documentElement.getAttribute('data-theme')") != theme:
                 theme_ok = False
         checks.check("all three themes apply", theme_ok)
+
+        # Mobile journeys: full-matrix CTA from the rail tab, and tap-to-read.
+        mp = browser.new_page(viewport={"width": 390, "height": 844})
+        mp.goto(demo)
+        mp.wait_for_selector(".article-item", timeout=20000)
+        mp.click(".mobile-tab[data-pane='matrix']")
+        mp.wait_for_selector("#matrix-browse-all", state="visible", timeout=10000)
+        mp.click("#matrix-browse-all")
+        mp.wait_for_selector("#matrix-panel:not([hidden])", timeout=10000)
+        cta_ok = mp.evaluate(
+            "() => document.querySelector('.app-shell').dataset.pane === 'articles'"
+        )
+        checks.check("mobile: rail CTA opens full matrix on articles pane", cta_ok)
+        mp.click("#matrix-back")
+        mp.wait_for_selector("#article-panel:not([hidden])", timeout=10000)
+        expandable = mp.locator(".article-row:has(.article-expand-btn)").first
+        expandable.locator(".article-item").click()
+        checks.check(
+            "mobile: tapping a case expands the analyst note",
+            "expanded" in (expandable.get_attribute("class") or ""),
+        )
+        mp.close()
 
         # Landscape (short viewport) — Fix 2 guard: article visible, not a sliver
         for w, h, tag in ((844, 390, "iphone"), (932, 430, "promax")):

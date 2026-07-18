@@ -239,38 +239,15 @@
       </nav>
 
       <div class="pane-grid">
-        <aside class="pane pane-matrix" data-pane-panel="matrix" aria-label="ITM taxonomy">
+        <aside class="pane pane-matrix" data-pane-panel="matrix" aria-label="Observed ITM techniques">
           <div class="pane-head">
             <h2>ITM INDEX</h2>
-            <div class="pane-head-actions">
-              <button type="button" class="ghost matrix-latest-btn" id="matrix-latest">
-                Latest
-              </button>
-            </div>
           </div>
           <div class="pane-body">
-            <div class="matrix-mode-tabs" id="matrix-mode-tabs" role="tablist" aria-label="Matrix browse mode">
-              <button type="button" class="matrix-mode-tab active" data-matrix-mode="techniques">
-                Techniques
-              </button>
-              <button type="button" class="matrix-mode-tab" data-matrix-mode="detections">
-                Detections
-              </button>
-              <button type="button" class="matrix-mode-tab" data-matrix-mode="preventions">
-                Preventions
-              </button>
-            </div>
-            <label class="matrix-search-wrap">
-              <span class="sr-only">Search matrix</span>
-              <input
-                type="search"
-                id="matrix-q"
-                placeholder="Search id or title…"
-                autocomplete="off"
-              />
-            </label>
-            <div class="matrix-columns" id="matrix-columns"></div>
-            <ul class="matrix-control-list" id="matrix-control-list" hidden></ul>
+            <div class="itm-rail" id="itm-rail" aria-live="polite"></div>
+            <button type="button" class="itm-rail-browse" id="matrix-browse-all">
+              Browse full matrix →
+            </button>
             <p class="itm-index-attribution">
               ITM™ owned by Forscie Limited. Not affiliated with or endorsed by
               Forscie.
@@ -391,6 +368,43 @@
                 <div id="ttp-queries" class="query-stacks"></div>
               </div>
             </section>
+          </div>
+          <div class="pane-body matrix-view" id="matrix-panel" hidden>
+            <div class="matrix-view-head">
+              <button type="button" id="matrix-back" class="ghost dossier-back">← Stream</button>
+              <h3>Insider Threat Matrix™</h3>
+              <button type="button" class="ghost matrix-latest-btn" id="matrix-latest">
+                Latest
+              </button>
+            </div>
+            <div class="matrix-toolbar">
+              <div class="matrix-mode-tabs" id="matrix-mode-tabs" role="tablist" aria-label="Matrix browse mode">
+                <button type="button" class="matrix-mode-tab active" data-matrix-mode="techniques">
+                  Techniques
+                </button>
+                <button type="button" class="matrix-mode-tab" data-matrix-mode="detections">
+                  Detections
+                </button>
+                <button type="button" class="matrix-mode-tab" data-matrix-mode="preventions">
+                  Preventions
+                </button>
+              </div>
+              <label class="matrix-search-wrap">
+                <span class="sr-only">Search matrix</span>
+                <input
+                  type="search"
+                  id="matrix-q"
+                  placeholder="Search id or title…"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+            <div class="matrix-columns" id="matrix-columns"></div>
+            <ul class="matrix-control-list" id="matrix-control-list" hidden></ul>
+            <p class="itm-index-attribution">
+              ITM™ owned by Forscie Limited. Not affiliated with or endorsed by
+              Forscie.
+            </p>
           </div>
         </section>
 
