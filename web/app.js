@@ -342,18 +342,19 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const THEMES = new Set(["cnn-lite", "midnight", "phosphor"]);
+  const DEFAULT_THEME = "dossier";
+  const THEMES = new Set(["dossier", "cnn-lite", "midnight", "phosphor"]);
   const themeSelect = document.getElementById("theme-select");
 
   function applyTheme(name) {
-    const theme = THEMES.has(name) ? name : "cnn-lite";
+    const theme = THEMES.has(name) ? name : DEFAULT_THEME;
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
     if (themeSelect) themeSelect.value = theme;
   }
 
   if (themeSelect) {
-    applyTheme(localStorage.getItem(THEME_KEY) || "cnn-lite");
+    applyTheme(localStorage.getItem(THEME_KEY) || DEFAULT_THEME);
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
@@ -732,8 +733,8 @@
       const link = btn.dataset.link || "";
       const on = articleOnBoard(link);
       btn.classList.toggle("on-board", on);
-      btn.textContent = on ? "✓" : "+";
-      btn.title = on ? "Remove from board" : "Add to extraction board";
+      btn.textContent = on ? "✓ FLAGGED" : "+ FLAG";
+      btn.title = on ? "Remove from board" : "Add to evidence board";
       btn.setAttribute("aria-label", btn.title);
     });
   }
@@ -2294,6 +2295,66 @@
     if (isMobileLayout()) setActivePane("workbench");
   }
 
+  // Case-file card helpers (Dossier redesign) ---------------------------------
+  const LEGAL_SOURCE_RE =
+    /courtlistener|recap|pacer|law360|sec[-_.]|\bdoj\b|justice|lawsuit|complaint|filing|docket/i;
+
+  /** Channel → case-file KIND stamped on the file tab. */
+  function caseKindLabel(article) {
+    const channel = String(article.channel || "").toLowerCase();
+    const src = String(article.source_id || article.source_name || "").toLowerCase();
+    if (channel === "filings" || LEGAL_SOURCE_RE.test(src)) return "CASE";
+    if (channel === "social" || src.startsWith("social-")) return "SOCIAL";
+    return "NEWS"; // news + legacy reddit-* tips
+  }
+
+  /** Deterministic case number: filing date + a short link-derived suffix so
+   * same-day cases stay distinct (no wall-clock/random — resume-safe & stable). */
+  function caseNumber(article) {
+    let stamp = "0000-0000";
+    const d = new Date(article.published);
+    if (Number.isFinite(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      stamp = `${y}-${m}${day}`;
+    }
+    const key = String(article.link || article.title || "");
+    let h = 0;
+    for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    const suffix = h.toString(36).toUpperCase().slice(-3).padStart(3, "0");
+    return `${stamp}-${suffix}`;
+  }
+
+  /** Compact "filed" age for the meta row. */
+  function caseFiledAge(value) {
+    try {
+      const then = new Date(value).getTime();
+      if (!Number.isFinite(then)) return "unknown";
+      const ms = Date.now() - then;
+      const days = Math.floor(ms / 86400000);
+      if (days <= 0) {
+        const hrs = Math.floor(ms / 3600000);
+        return hrs <= 0 ? "today" : `${hrs}h ago`;
+      }
+      if (days < 7) return `${days}d ago`;
+      if (days < 60) return `${Math.floor(days / 7)}w ago`;
+      if (days < 730) return `${Math.floor(days / 30)}mo ago`;
+      return `${Math.floor(days / 365)}y ago`;
+    } catch {
+      return "unknown";
+    }
+  }
+
+  /** Relevance as an integer 0–100 for the "SIG" meta segment (null if absent). */
+  function sigScore(article) {
+    const raw = article.relevance_score != null ? article.relevance_score : article.score;
+    if (raw == null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n <= 1 ? n * 100 : n);
+  }
+
   function buildArticleRow(cluster) {
     const article = cluster.primary;
     const siblings = cluster.siblings || [];
@@ -2304,49 +2365,12 @@
     li.dataset.storyKey = storyKey;
     if (state.dismissed.has(storyKey)) li.classList.add("dismissed");
 
-    const boardBtn = document.createElement("button");
-    boardBtn.type = "button";
-    boardBtn.className = "article-board-btn";
-    boardBtn.dataset.link = article.link;
-    const onBoard = articleOnBoard(article.link);
-    boardBtn.classList.toggle("on-board", onBoard);
-    boardBtn.textContent = onBoard ? "✓" : "+";
-    boardBtn.title = onBoard ? "Remove from board" : "Add to extraction board";
-    boardBtn.setAttribute("aria-label", boardBtn.title);
-    boardBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (articleOnBoard(article.link)) removeFromBoard(article.link);
-      else addToBoard(article, { focusWorkbench: true });
-    });
+    // 1. File tab — "<KIND> <case-no>"
+    const tab = document.createElement("div");
+    tab.className = "case-tab";
+    tab.textContent = `${caseKindLabel(article)} ${caseNumber(article)}`;
 
-    const openBtn = document.createElement("a");
-    openBtn.className = "article-open-btn";
-    openBtn.href = article.link;
-    openBtn.target = "_blank";
-    openBtn.rel = "noopener";
-    openBtn.textContent = "↗";
-    openBtn.title = `Open source: ${article.source_name || article.link}`;
-    openBtn.setAttribute("aria-label", openBtn.title);
-    openBtn.addEventListener("click", (event) => event.stopPropagation());
-
-    // Inline expand — only when the clamped snip is actually hiding text.
-    let expandBtn = null;
-    if ((article.summary || "").length > 160) {
-      expandBtn = document.createElement("button");
-      expandBtn.type = "button";
-      expandBtn.className = "article-expand-btn";
-      expandBtn.textContent = "⌄";
-      expandBtn.title = "Expand text";
-      expandBtn.setAttribute("aria-label", expandBtn.title);
-      expandBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const expanded = li.classList.toggle("expanded");
-        expandBtn.textContent = expanded ? "⌃" : "⌄";
-        expandBtn.title = expanded ? "Collapse text" : "Expand text";
-        expandBtn.setAttribute("aria-label", expandBtn.title);
-      });
-    }
-
+    // 2. Card body (clickable to select). Interactive footer lives OUTSIDE it.
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "article-item";
@@ -2356,51 +2380,69 @@
       btn.classList.add("active");
     }
 
-    const h3 = document.createElement("h3");
-    h3.textContent = article.title;
+    // 3. Meta row — SOURCE / FILED / SIG (truncates) + in-flow classification stamp.
     const meta = document.createElement("p");
     meta.className = "row-meta";
-    const extra =
-      cluster.member_count > 1 ? ` · +${cluster.member_count - 1} sources` : "";
-    meta.textContent = `${article.source_name}${extra} · ${formatDate(article.published)}`;
+    const metaText = document.createElement("span");
+    metaText.className = "case-meta";
+    const srcExtra = cluster.member_count > 1 ? ` +${cluster.member_count - 1}` : "";
+    const metaParts = [
+      `SOURCE: ${article.source_name || "UNATTRIBUTED"}${srcExtra}`,
+      `FILED: ${caseFiledAge(article.published)}`,
+    ];
+    const sig = sigScore(article);
+    if (sig != null) metaParts.push(`SIG ${sig}`);
+    metaText.textContent = metaParts.join(" · ");
+    meta.appendChild(metaText);
     if (article.insider_type) {
-      const badge = document.createElement("span");
-      badge.className = `insider-type-badge insider-type-${article.insider_type}`;
-      badge.textContent = INSIDER_TYPE_LABELS[article.insider_type] || article.insider_type;
-      meta.append(" · ", badge);
-    }
-    (article.use_cases || []).forEach((useCaseId) => {
-      const tag = document.createElement("span");
-      tag.className = "use-case-tag";
-      tag.textContent = USE_CASE_LABELS[useCaseId] || useCaseId;
-      meta.append(" ", tag);
-    });
-    const snip = document.createElement("p");
-    snip.className = "snip";
-    snip.textContent = cleanSummary(article.summary);
-
-    const preview = document.createElement("div");
-    preview.className = "kw-preview";
-    const opPreview = composeOperatorTerms(article).slice(0, 4);
-    const itmPreview = (article.itm_hits || []).slice(0, 3);
-    if (opPreview.length) {
-      opPreview.forEach((term) => {
-        const chip = document.createElement("span");
-        chip.className = "chip signal";
-        chip.textContent = term;
-        preview.appendChild(chip);
-      });
-    } else if (itmPreview.length) {
-      itmPreview.forEach((hit) => {
-        const chip = document.createElement("span");
-        chip.className = "chip signal";
-        chip.textContent = hit.id;
-        preview.appendChild(chip);
-      });
+      const stamp = document.createElement("span");
+      stamp.className = `case-stamp insider-type-${article.insider_type}`;
+      stamp.textContent =
+        INSIDER_TYPE_LABELS[article.insider_type] || article.insider_type;
+      meta.appendChild(stamp);
     }
 
-    btn.append(h3, meta, snip, preview);
+    // 4. Headline
+    const h3 = document.createElement("h3");
+    h3.textContent = article.title;
 
+    // 5. ANALYST NOTE — LLM summary when present, else trimmed feed summary.
+    const analystText =
+      String(article.ai_summary || "").trim() || cleanSummary(article.summary);
+    btn.append(meta, h3);
+    if (analystText) {
+      const note = document.createElement("div");
+      note.className = "analyst-note";
+      const label = document.createElement("span");
+      label.className = "analyst-note-label";
+      label.textContent = "ANALYST NOTE";
+      const snip = document.createElement("p");
+      snip.className = "snip";
+      snip.textContent = analystText;
+      note.append(label, snip);
+      btn.appendChild(note);
+    }
+
+    // 6. Expanded read state — un-clamps the note + points to the source.
+    // Gate on the text actually shown (analystText = ai_summary || summary), not
+    // the raw feed summary, so READ matches the clamped note in production. The
+    // tail is built here but attached as a sibling of the card <button> below —
+    // it holds an anchor, which must not be nested inside the button.
+    const expandable = analystText.length > 160;
+    let readTail = null;
+    if (expandable) {
+      readTail = document.createElement("p");
+      readTail.className = "case-read-tail";
+      readTail.append("— FULL TEXT VIA SOURCE · ");
+      const orig = document.createElement("a");
+      orig.href = article.link;
+      orig.target = "_blank";
+      orig.rel = "noopener";
+      orig.textContent = "OPEN ORIGINAL ↗";
+      readTail.appendChild(orig);
+    }
+
+    // Cluster siblings (other sources for the same story)
     if (siblings.length) {
       const sources = document.createElement("div");
       sources.className = "cluster-sources";
@@ -2421,11 +2463,99 @@
       });
       btn.appendChild(sources);
     }
-
     btn.addEventListener("click", () => selectArticle(article));
-    li.append(boardBtn, openBtn);
-    if (expandBtn) li.appendChild(expandBtn);
-    li.appendChild(btn);
+
+    // 7. Footer — hunt-term chips + inverted ITM chip (left) · actions (right).
+    const footer = document.createElement("div");
+    footer.className = "case-footer";
+
+    const terms = document.createElement("div");
+    terms.className = "case-terms";
+    composeOperatorTerms(article)
+      .slice(0, 4)
+      .forEach((term) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "term-chip";
+        chip.textContent = term;
+        chip.title = `Copy “${term}”`;
+        chip.addEventListener("click", (event) => {
+          event.stopPropagation();
+          copyText(term, `Copied “${term}”`);
+        });
+        terms.appendChild(chip);
+      });
+    const firstHit = (article.itm_hits || [])[0];
+    if (firstHit && firstHit.id) {
+      const itmChip = document.createElement("button");
+      itmChip.type = "button";
+      itmChip.className = "itm-id-chip";
+      itmChip.textContent = firstHit.id;
+      itmChip.title = `${firstHit.id}${firstHit.title ? ` · ${firstHit.title}` : ""} · open dossier`;
+      itmChip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectTechnique(firstHit.id).catch((err) =>
+          setStatus(`Technique load failed: ${err.message}`),
+        );
+      });
+      terms.appendChild(itmChip);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "case-actions";
+
+    const boardBtn = document.createElement("button");
+    boardBtn.type = "button";
+    boardBtn.className = "article-board-btn";
+    boardBtn.dataset.link = article.link;
+    const onBoard = articleOnBoard(article.link);
+    boardBtn.classList.toggle("on-board", onBoard);
+    boardBtn.textContent = onBoard ? "✓ FLAGGED" : "+ FLAG";
+    boardBtn.title = onBoard ? "Remove from board" : "Add to evidence board";
+    boardBtn.setAttribute("aria-label", boardBtn.title);
+    boardBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (articleOnBoard(article.link)) removeFromBoard(article.link);
+      else addToBoard(article, { focusWorkbench: true });
+    });
+
+    const openBtn = document.createElement("a");
+    openBtn.className = "article-open-btn";
+    openBtn.href = article.link;
+    openBtn.target = "_blank";
+    openBtn.rel = "noopener";
+    openBtn.textContent = "OPEN ↗";
+    openBtn.title = `Open source: ${article.source_name || article.link}`;
+    openBtn.setAttribute("aria-label", openBtn.title);
+    openBtn.addEventListener("click", (event) => event.stopPropagation());
+
+    actions.append(boardBtn, openBtn);
+
+    if (expandable) {
+      const expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "article-expand-btn";
+      expandBtn.textContent = "READ ⌄";
+      expandBtn.title = "Read in place";
+      expandBtn.setAttribute("aria-label", expandBtn.title);
+      expandBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const expanded = li.classList.toggle("expanded");
+        expandBtn.textContent = expanded ? "CLOSE ⌃" : "READ ⌄";
+        expandBtn.title = expanded ? "Collapse" : "Read in place";
+        expandBtn.setAttribute("aria-label", expandBtn.title);
+      });
+      actions.appendChild(expandBtn);
+    }
+
+    footer.append(terms, actions);
+
+    // readTail sits between the card body and footer (a sibling of the button so
+    // its OPEN ORIGINAL anchor is never nested inside the .article-item button);
+    // it continues the card box and only shows when the row is .expanded.
+    li.append(tab, btn);
+    if (readTail) li.appendChild(readTail);
+    li.appendChild(footer);
     return li;
   }
 

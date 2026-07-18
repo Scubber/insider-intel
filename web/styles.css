@@ -1032,103 +1032,148 @@ body {
   padding: 0;
 }
 
+/* ── Case-file card (Dossier) ────────────────────────────────────────────────
+   A card = file tab (above) + body (.article-item, top of the box) + footer
+   (.case-footer, bottom of the box). Body and footer share the side borders and
+   background so they read as one card; the tab sits attached to the top-left. */
 .article-row {
   position: relative;
+  margin-bottom: 1.1rem;
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
+  box-shadow: 0 1px 3px rgba(33, 29, 22, 0.12);
 }
 
-.article-board-btn {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.2rem;
-  z-index: 2;
-  width: 1.85rem;
-  height: 1.85rem;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--panel) 92%, var(--ink) 8%);
-  color: var(--muted);
-  font: inherit;
-  font-size: 1.15rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.32;
-  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+.article-row:last-child {
+  margin-bottom: 0.25rem;
 }
 
-.article-row:hover .article-board-btn,
-.article-board-btn:focus-visible {
-  opacity: 1;
+/* 1. File tab — "<KIND> <case-no>", attached above the card body */
+.case-tab {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.22rem 0.75rem 0.16rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--ink);
+  color: var(--btn-fg);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Hunt-term chips (dashed) + inverted ITM id chip */
+.case-terms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.term-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px dashed var(--muted);
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
-  border-color: var(--accent);
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.term-chip:hover,
+.term-chip:focus-visible {
+  color: var(--accent);
+  border-color: var(--ink);
+  background: var(--hover);
+}
+
+.itm-id-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--btn-fg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s ease;
+}
+
+.itm-id-chip:hover,
+.itm-id-chip:focus-visible {
+  filter: brightness(1.3);
+}
+
+/* Footer action row — text buttons, right-aligned */
+.case-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  padding: 0.5rem 1.1rem 0.65rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.case-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.article-board-btn,
+.article-open-btn,
+.article-expand-btn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.article-board-btn:hover,
+.article-open-btn:hover,
+.article-expand-btn:hover,
+.article-board-btn:focus-visible,
+.article-open-btn:focus-visible,
+.article-expand-btn:focus-visible {
+  color: var(--accent);
 }
 
 .article-board-btn.on-board {
-  opacity: 1;
   color: var(--accent);
-  border-color: var(--accent);
-  background: var(--signal-soft);
-}
-
-.article-board-btn:hover {
-  color: var(--accent);
-}
-
-/* Open-source (↗) and expand (⌄) controls stacked under the + button */
-.article-open-btn,
-.article-expand-btn {
-  position: absolute;
-  right: 0.2rem;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--panel) 92%, var(--ink) 8%);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.95rem;
-  line-height: 1;
-  text-decoration: none;
-  cursor: pointer;
-  opacity: 0.32;
-  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.article-open-btn {
-  top: 2.65rem;
-}
-
-.article-expand-btn {
-  top: 4.75rem;
-}
-
-.article-row:hover .article-open-btn,
-.article-row:hover .article-expand-btn,
-.article-open-btn:focus-visible,
-.article-expand-btn:focus-visible {
-  opacity: 1;
-  color: var(--ink);
-  border-color: var(--accent);
-}
-
-.article-open-btn:hover,
-.article-expand-btn:hover {
-  color: var(--accent);
+  font-weight: 600;
 }
 
 .article-row.expanded .article-expand-btn {
-  opacity: 1;
   color: var(--accent);
-  border-color: var(--accent);
 }
 
-/* Expanded card: lift the line clamp so the full summary reads inline */
+/* Expanded read state: lift the note's line clamp + reveal the source pointer */
 .article-row.expanded .article-item .snip {
   display: block;
   -webkit-line-clamp: unset;
@@ -1136,30 +1181,43 @@ body {
   white-space: pre-line;
 }
 
+/* Sibling of .article-item (not a child — it holds a link). Continues the card
+   box (panel bg + side borders, no margin) so body → read-tail → footer read as
+   one card; a dashed rule separates it from the note above. */
+.case-read-tail {
+  display: none;
+  margin: 0;
+  padding: 0.5rem 1.1rem 0.55rem;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-top: 1px dashed var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.case-read-tail a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.article-row.expanded .case-read-tail {
+  display: block;
+}
+
 @media (max-width: 960px) {
   .hunt-usecase::after {
     display: none;
   }
 
-  .article-board-btn {
-    opacity: 0.9;
-  }
-
+  /* Larger tap targets for the footer actions on touch */
+  .article-board-btn,
   .article-open-btn,
   .article-expand-btn {
-    opacity: 0.9;
-    width: 2.75rem;
-    height: 2.75rem;
-  }
-
-  .article-open-btn {
-    top: 3.45rem;
-  }
-
-  /* Beside ↗ instead of below it — three stacked buttons overflow short cards */
-  .article-expand-btn {
-    top: 3.45rem;
-    right: 3.2rem;
+    padding: 0.3rem 0.2rem;
+    font-size: 0.72rem;
   }
 }
 
@@ -1169,10 +1227,11 @@ body {
   box-sizing: border-box;
   text-align: left;
   display: block;
-  padding: 0.95rem 2.2rem 0.95rem 0.35rem;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
+  padding: 0.7rem 1.1rem 0.8rem;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 0 var(--radius) 0 0;
+  background: var(--panel);
   color: inherit;
   font: inherit;
   white-space: normal;
@@ -1183,7 +1242,7 @@ body {
 }
 
 .article-item:hover {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--panel) 94%, var(--ink));
 }
 
 .article-item.active {
@@ -1191,9 +1250,10 @@ body {
 }
 
 .article-item h3 {
-  margin: 0;
+  margin: 0.5rem 0 0;
   font-family: var(--font-display);
-  font-size: 1.02rem;
+  font-size: 1.08rem;
+  line-height: 1.28;
   font-weight: var(--headline-weight, 600);
   letter-spacing: var(--headline-tracking, -0.01em);
   text-transform: var(--headline-transform, none);
@@ -1201,17 +1261,99 @@ body {
   word-break: break-word;
 }
 
+/* Meta row: SOURCE / FILED / SIG (truncates) + in-flow classification stamp */
 .article-item .row-meta {
-  margin: 0.35rem 0 0;
-  font-size: 0.8rem;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  font-size: 0.72rem;
   color: var(--muted);
   font-family: var(--font-mono);
-  overflow-wrap: anywhere;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.case-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-stamp {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.45rem;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.85;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.case-stamp.insider-type-malicious {
+  color: #a8352a;
+}
+
+.case-stamp.insider-type-negligent {
+  color: #8a6a1f;
+}
+
+.case-stamp.insider-type-unintentional {
+  color: #3f5e7a;
+}
+
+/* The stamp only renders when insider_type is set (production). Its fixed
+   classification hues read on the light dossier/cnn-lite paper but go muddy on
+   the dark backup themes — lift to legible tints and drop the opacity there. */
+[data-theme="midnight"] .case-stamp,
+[data-theme="phosphor"] .case-stamp {
+  opacity: 1;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-malicious,
+[data-theme="phosphor"] .case-stamp.insider-type-malicious {
+  color: #e07a70;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-negligent,
+[data-theme="phosphor"] .case-stamp.insider-type-negligent {
+  color: #d9ad4e;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-unintentional,
+[data-theme="phosphor"] .case-stamp.insider-type-unintentional {
+  color: #8fb3d9;
+}
+
+/* ANALYST NOTE block */
+.analyst-note {
+  margin-top: 0.55rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--hover);
+  border-left: 3px solid var(--ink);
+}
+
+.analyst-note-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .article-item .snip {
-  margin: 0.4rem 0 0;
+  margin: 0;
   font-size: 0.9rem;
+  line-height: 1.5;
   color: var(--muted);
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1847,16 +1989,6 @@ a.itm-chip:hover {
     min-height: 2.75rem;
   }
 
-  .article-board-btn {
-    width: 2.75rem;
-    height: 2.75rem;
-    top: 0.4rem;
-  }
-
-  .article-item {
-    padding: 0.8rem 3.1rem 0.8rem 0.35rem;
-  }
-
   .article-item .snip {
     -webkit-line-clamp: 2;
   }
@@ -2166,12 +2298,17 @@ button.chip.itm-chip {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.article-row.dismissed .article-item {
+.article-row.dismissed .article-item,
+.article-row.dismissed .case-tab,
+.article-row.dismissed .case-footer {
   opacity: 0.45;
 }
 
+/* On .row-meta (the flex container), not .case-meta — .case-meta truncates with
+   ellipsis and would clip this cue. As a flex item it is never clipped. */
 .article-row.dismissed .row-meta::after {
-  content: " · dismissed";
+  content: "· dismissed";
+  flex: 0 0 auto;
   color: var(--muted);
 }
 
@@ -2312,4 +2449,77 @@ button.chip.itm-chip {
 .social-add-row input[type="text"] {
   flex: 1;
   min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DOSSIER THEME — high-fidelity overrides (default theme).
+   The card structure above is theme-agnostic; these tune the exact classified-
+   file look from the design handoff. Scoped to [data-theme="dossier"] so the
+   cnn-lite / midnight / phosphor backup themes are untouched.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Masthead: 2px ink underline; tagline + search in typewriter type */
+[data-theme="dossier"] .top {
+  border-bottom-width: 2px;
+}
+
+[data-theme="dossier"] .tagline {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+[data-theme="dossier"] .search-bar input {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="dossier"] .search-bar input::placeholder {
+  color: var(--muted);
+}
+
+/* Panes sit on the page (kraft) so the cream case cards lift off it */
+[data-theme="dossier"] .pane,
+[data-theme="dossier"] .pane-matrix {
+  background: var(--paper);
+}
+
+/* Rail headings in the reused "index label" style */
+[data-theme="dossier"] .pane-head h2 {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+}
+
+/* Case cards: cream body on kraft, Newsreader headline up to the design size */
+[data-theme="dossier"] .article-item h3 {
+  font-size: 1.3rem;
+  line-height: 1.25;
+  max-width: 56ch;
+}
+
+[data-theme="dossier"] .analyst-note {
+  background: #efe9d9;
+  border-left-color: #211d16;
+}
+
+[data-theme="dossier"] .analyst-note .snip {
+  color: #4a4438;
+  font-size: 0.94rem;
+}
+
+/* Dashed hunt-term chips in the faint kraft tone from the tokens */
+[data-theme="dossier"] .term-chip {
+  border-color: #a89e87;
+  color: #4a4438;
+}
+
+[data-theme="dossier"] .term-chip:hover,
+[data-theme="dossier"] .term-chip:focus-visible {
+  border-color: #211d16;
+  background: #efe9d9;
+  color: #a8352a;
 }

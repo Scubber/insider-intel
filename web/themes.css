@@ -1,10 +1,16 @@
 /**
  * Easy themes for insider-intel UI.
- * Add a theme: copy a [data-theme="…"] block, set --* vars, add option in index.html.
+ * Add a theme: copy a [data-theme="…"] block, set --* vars, add an <option> in
+ * index.html and the name to the THEMES set in app.js.
  * Switcher stores choice in localStorage (key: insider-intel-theme).
  *
- * Lookalike themes use system font stacks only (no webfonts) — aimed at the
- * sites named in the option list, not pixel-perfect clones.
+ * DEFAULT THEME = "dossier" (classified-file / kraft-paper look). The inline
+ * <head> script and app.js both default data-theme to "dossier", so the
+ * [data-theme="dossier"] block below is what a first-time visitor sees. Its
+ * Newsreader + Courier Prime webfonts are loaded (only) in index.html.
+ * cnn-lite / midnight / phosphor are backup themes (untouched, system fonts).
+ * :root holds the shared/neutral defaults every theme — including the masthead
+ * --top-* vars — builds on; keep it adaptive so backup themes inherit sanely.
  */
 
 :root {
@@ -48,6 +54,49 @@
   --masthead: transparent;
   --masthead-height: 0;
   --radius: 2px;
+}
+
+/* Dossier — DEFAULT theme: classified-file / GoldenEye dossier on kraft paper.
+   Self-contained (defines the masthead --top-* vars too) so it never leaks into,
+   nor inherits from, the backup themes. */
+[data-theme="dossier"] {
+  --ink: #211d16;
+  --muted: #7a7263;
+  --paper: #e9e2d0;
+  --panel: #faf7ee;
+  --line: #c9c0aa;
+  --signal: #a8352a;
+  --signal-soft: rgba(168, 53, 42, 0.1);
+  --accent: #a8352a;
+  --accent-soft: rgba(168, 53, 42, 0.1);
+  --focus: #a8352a;
+  --btn-fg: #efe9d9;
+  --input-bg: #faf7ee;
+  --side-bg: #efe9d9;
+  --hover: rgba(168, 53, 42, 0.06);
+  --brand-glow: transparent;
+  --atmosphere: linear-gradient(180deg, #ece5d4 0%, #e6dfcc 100%);
+  --scanlines: none;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-mono: "Courier Prime", "Courier New", Courier, monospace;
+  --brand-weight: 700;
+  --brand-tracking: -0.02em;
+  --brand-transform: none;
+  --headline-weight: 600;
+  --headline-tracking: -0.015em;
+  --headline-transform: none;
+  --top-bg: #efe9d9;
+  --top-ink: #211d16;
+  --top-muted: #7a7263;
+  --top-line: #211d16;
+  --top-input-bg: #faf7ee;
+  --top-field-bg: #faf7ee;
+  --top-field-ink: #211d16;
+  --top-btn-bg: #211d16;
+  --masthead: #211d16;
+  --masthead-height: 0;
+  --radius: 3px;
 }
 
 [data-theme="midnight"] {
