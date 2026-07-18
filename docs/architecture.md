@@ -59,6 +59,15 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   archived text yet are retried weekly. Enriched rows get a force-refresh
   (fresh `ingested_at`) and their prior LLM fields cleared, so the next
   processing pass re-scores and re-extracts them over the full filing.
+- **Rolling historical sweep**: each refresh also ingests one time window
+  (`COURTLISTENER_HISTORY_WINDOW_DAYS`, default 90) of past insider-crime
+  cases — insider trading, trade secrets, economic espionage, computer
+  fraud — walking a persisted cursor backward from today to
+  `COURTLISTENER_HISTORY_FLOOR` (default 2015-01-01; empty disables).
+  Metadata only; the text backfill and purchaser pick the documents up over
+  subsequent runs. A throttled window never advances the cursor. At 4
+  refreshes/day the decade seeds in ~10 days;
+  `sweep_courtlistener_history --windows N` fast-forwards manually.
 - **PACER purchasing (opt-in)**: when `PACER_USERNAME`/`PACER_PASSWORD` are
   set, insider-qualifying cases whose documents aren't in the free archive
   get their lead document (docket report first, then complaint/indictment)

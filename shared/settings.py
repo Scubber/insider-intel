@@ -128,6 +128,25 @@ class Settings(BaseSettings):
         ge=0,
         le=100_000,
     )
+    # Rolling historical sweep: each refresh also ingests one time window of
+    # past insider-crime cases, walking backward until the floor is reached.
+    courtlistener_history_floor: str = Field(
+        default="2015-01-01",
+        alias="COURTLISTENER_HISTORY_FLOOR",
+        description="Sweep backward until this filing date (empty disables)",
+    )
+    courtlistener_history_window_days: int = Field(
+        default=90,
+        alias="COURTLISTENER_HISTORY_WINDOW_DAYS",
+        ge=7,
+        le=365,
+    )
+    courtlistener_history_max_pages: int = Field(
+        default=1,
+        alias="COURTLISTENER_HISTORY_MAX_PAGES",
+        ge=1,
+        le=5,
+    )
     courtlistener_lookback_days: int = Field(
         default=3,
         alias="COURTLISTENER_LOOKBACK_DAYS",

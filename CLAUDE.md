@@ -58,6 +58,7 @@ python -m apps.aggregator ingest_social               # pull subscribed Reddit/X
 python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /s/ links)
 python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
 python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECAP Fetch, budget-capped)
+python -m apps.aggregator sweep_courtlistener_history --windows 4  # pull historical case windows manually
 gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'

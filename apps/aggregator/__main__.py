@@ -177,6 +177,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(court_text_p)
 
+    history_p = sub.add_parser(
+        "sweep_courtlistener_history",
+        help=(
+            "Ingest historical insider-crime case windows (walks backward to "
+            "COURTLISTENER_HISTORY_FLOOR; one window per call by default)."
+        ),
+    )
+    history_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    history_p.add_argument(
+        "--windows",
+        type=int,
+        default=1,
+        help="Number of consecutive windows to sweep in this invocation.",
+    )
+    _add_verbose(history_p)
+
     pacer_p = sub.add_parser(
         "purchase_pacer",
         help=(
@@ -501,6 +517,22 @@ def _cmd_backfill_courtlistener_text(args: argparse.Namespace) -> int:
     return 1 if result.failure_count and not result.success_count else 0
 
 
+def _cmd_sweep_courtlistener_history(args: argparse.Namespace) -> int:
+    from apps.aggregator.courtlistener_pipeline import run_courtlistener_history_sweep
+
+    exit_code = 0
+    for _ in range(max(1, args.windows)):
+        result = run_courtlistener_history_sweep(store_path=args.store_path)
+        if not result.sources:
+            print("History sweep disabled or already at the floor.")
+            break
+        _print_ingest(result)
+        if result.failure_count and not result.success_count:
+            exit_code = 1
+            break
+    return exit_code
+
+
 def _cmd_purchase_pacer(args: argparse.Namespace) -> int:
     from apps.aggregator.pacer_purchase import run_pacer_purchases
 
@@ -729,6 +761,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_backfill_courtlistener_text(args)
     if args.command == "purchase_pacer":
         return _cmd_purchase_pacer(args)
+    if args.command == "sweep_courtlistener_history":
+        return _cmd_sweep_courtlistener_history(args)
     if args.command == "ingest_datatheftnews":
         return _cmd_ingest_datatheftnews(args)
     if args.command == "ingest_social":

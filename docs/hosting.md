@@ -82,7 +82,10 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   Run it manually anytime: `gcloud run jobs execute corpus-refresh --region us-east1`.
   Each run also backfills full court-document text from the free RECAP
   archive (≤ `COURTLISTENER_BACKFILL_MAX_DOCKETS`, default 25 attempts/run)
-  before processing.
+  and ingests one historical case window (back to
+  `COURTLISTENER_HISTORY_FLOOR`) before processing. Runtime is ~8-10 min at
+  the 7s CourtListener pacing; if you raise the per-run caps, also raise the
+  job timeout (`gcloud run jobs update corpus-refresh --task-timeout=20m`).
 - **PACER purchasing (opt-in):** to let the refresh job buy missing lead
   documents for qualifying cases via RECAP Fetch, store the PACER account
   credentials + a CourtListener token in Secret Manager and attach them to

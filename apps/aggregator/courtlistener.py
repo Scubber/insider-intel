@@ -576,6 +576,7 @@ def _search(
     max_pages: int = 1,
     order_by: str | None = None,
     filed_after: str | None = None,
+    filed_before: str | None = None,
     include_raw: bool = False,
     fetch_content: bool = False,
     content_max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
@@ -603,6 +604,8 @@ def _search(
     }
     if filed_after:
         params["filed_after"] = filed_after
+    if filed_before:
+        params["filed_before"] = filed_before
 
     try:
         for _ in range(max(1, max_pages)):
