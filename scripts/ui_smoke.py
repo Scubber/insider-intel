@@ -129,11 +129,18 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("rail has no zero-coverage rows",
                      page.locator(".pane-matrix .matrix-tech-zero").count() == 0)
 
-        # Case click highlights its techniques in the rail.
+        # Case click collapses the rail to that article's tagged techniques.
+        full_rows = page.locator(".itm-rail-btn").count()
         row_with_hit = page.locator(".article-row:has(.itm-id-chip)").first
         row_with_hit.locator(".article-item").click()
-        checks.check("selected case highlights rail techniques",
-                     page.locator(".itm-rail-btn.case-hit").count() >= 1)
+        case_rows = page.locator(".itm-rail-btn").count()
+        case_hits = page.locator(".itm-rail-btn.case-hit").count()
+        checks.check("selected case filters rail to its techniques",
+                     1 <= case_rows < full_rows and case_hits == case_rows,
+                     f"full={full_rows} case={case_rows} hits={case_hits}")
+        page.click("#itm-rail-show-all")
+        checks.check("SHOW ALL restores the full observed rail",
+                     page.locator(".itm-rail-btn").count() == full_rows)
 
         # Masthead MATRIX opens the center full-matrix browser and comes back.
         page.click(".masthead-nav-item[data-pane='matrix']")

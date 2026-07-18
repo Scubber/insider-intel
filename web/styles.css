@@ -1003,6 +1003,36 @@ body {
   color: var(--muted);
 }
 
+/* Case-filter head: shown while the rail is collapsed to the selected case. */
+.itm-rail-filter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.itm-rail-filter button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--accent);
+  border-bottom: 1px solid transparent;
+}
+
+.itm-rail-filter button:hover,
+.itm-rail-filter button:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
 .itm-rail-browse {
   margin-top: 0.9rem;
   align-self: flex-start;
