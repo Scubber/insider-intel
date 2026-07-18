@@ -201,22 +201,104 @@ def test_extract_ttps_endpoint_reports_llm_off(tmp_path, monkeypatch) -> None:
     assert "LLM off" in body["detail"]
 
 
-def test_resolve_extract_provider_auto_and_explicit() -> None:
-    from apps.search.ttp_extract import resolve_extract_provider
+def test_resolve_extract_providers_auto_and_explicit() -> None:
+    from apps.search.ttp_extract import resolve_extract_providers
 
     base = dict(CORS_ORIGINS="http://127.0.0.1:5500")
-    assert resolve_extract_provider(Settings(**base)) is None
-    assert resolve_extract_provider(Settings(**base, XAI_API_KEY="x"))[0] == "xai"
-    assert resolve_extract_provider(Settings(**base, ANTHROPIC_API_KEY="a"))[0] == "anthropic"
-    # xAI wins auto when both keys exist; explicit choice overrides.
-    both = Settings(**base, XAI_API_KEY="x", ANTHROPIC_API_KEY="a")
-    assert resolve_extract_provider(both)[0] == "xai"
+    assert resolve_extract_providers(Settings(**base)) == []
+    assert resolve_extract_providers(Settings(**base, XAI_API_KEY="x"))[0][0] == "xai"
+    assert resolve_extract_providers(Settings(**base, ANTHROPIC_API_KEY="a"))[0][0] == "anthropic"
+    # auto lists every configured key in preference order.
+    many = Settings(
+        **base, XAI_API_KEY="x", ANTHROPIC_API_KEY="a", GEMINI_API_KEY="g", OPENAI_API_KEY="o"
+    )
+    assert [p for p, _ in resolve_extract_providers(many)] == [
+        "xai",
+        "anthropic",
+        "gemini",
+        "openai",
+    ]
     forced = Settings(
         **base, XAI_API_KEY="x", ANTHROPIC_API_KEY="a", EXTRACT_LLM_PROVIDER="anthropic"
     )
-    assert resolve_extract_provider(forced)[0] == "anthropic"
+    assert [p for p, _ in resolve_extract_providers(forced)] == ["anthropic"]
     off = Settings(**base, XAI_API_KEY="x", EXTRACT_LLM_PROVIDER="none")
-    assert resolve_extract_provider(off) is None
+    assert resolve_extract_providers(off) == []
+    # A bare OPENAI_API_KEY retargets the openai provider to real OpenAI.
+    openai_only = Settings(**base, OPENAI_API_KEY="o")
+    assert resolve_extract_providers(openai_only) == [("openai", "gpt-4o-mini")]
+    gemini_only = Settings(**base, GEMINI_API_KEY="g")
+    assert resolve_extract_providers(gemini_only) == [("gemini", "gemini-2.5-flash")]
+
+
+def test_extract_falls_through_failing_providers(tmp_path, monkeypatch) -> None:
+    from apps.search import ttp_extract
+
+    article = process_article(
+        RawArticle(
+            title="Insider threat: engineer exfiltrated trade secrets",
+            link="https://example.com/fallback-case",
+            summary="Disgruntled employee used removable media for data exfiltration.",
+            published=datetime(2024, 6, 1, tzinfo=UTC),
+            source_id="example",
+            source_name="Example",
+        )
+    )
+    path = tmp_path / "processed.jsonl"
+    JsonlProcessedStore(path).save([article])
+    index = service.get_index(path, reload=True)
+
+    settings = Settings(
+        CORS_ORIGINS="http://127.0.0.1:5500",
+        ANTHROPIC_API_KEY="broke-account",  # pragma: allowlist secret
+        GEMINI_API_KEY="works",  # pragma: allowlist secret
+    )
+
+    calls: list[str] = []
+
+    def fake_call(*, provider, model, system, user, cfg):
+        calls.append(provider)
+        if provider == "anthropic":
+            raise RuntimeError("credit balance is too low")
+        return {"summary": "Gemini wrote this.", "behaviors": [], "techniques": []}
+
+    monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
+    monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
+    report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=settings)
+    assert calls == ["anthropic", "gemini"]
+    assert report.mode == "llm"
+    assert report.summary == "Gemini wrote this."
+    assert "gemini" in report.detail
+
+
+def test_resolve_openai_and_gemini_compat_defaults() -> None:
+    from shared.llm import resolve_gemini_compat, resolve_openai_compat
+
+    base = dict(CORS_ORIGINS="http://127.0.0.1:5500")
+    # Bare OPENAI_API_KEY swaps the local-Ollama defaults for real OpenAI.
+    url, model, key = resolve_openai_compat(Settings(**base, OPENAI_API_KEY="sk-x"))
+    assert url == "https://api.openai.com/v1"
+    assert model == "gpt-4o-mini"
+    assert key == "sk-x"
+    # Explicit OPENAI_COMPAT_* values always win.
+    url2, model2, key2 = resolve_openai_compat(
+        Settings(
+            **base,
+            OPENAI_API_KEY="sk-x",  # pragma: allowlist secret
+            OPENAI_COMPAT_BASE_URL="http://myhost:8080/v1",
+            OPENAI_COMPAT_MODEL="mistral",
+        )
+    )
+    assert url2 == "http://myhost:8080/v1"
+    assert model2 == "mistral"
+    # No key at all keeps the local defaults (Ollama).
+    url3, _, key3 = resolve_openai_compat(Settings(**base))
+    assert url3 == "http://localhost:11434/v1"
+    assert key3 is None
+    gurl, gmodel, gkey = resolve_gemini_compat(Settings(**base, GEMINI_API_KEY="g"))
+    assert gurl.startswith("https://generativelanguage.googleapis.com")
+    assert gmodel == "gemini-2.5-flash"
+    assert gkey == "g"
 
 
 def test_merge_llm_sections_validates_ids_and_resolves_links() -> None:

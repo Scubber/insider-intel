@@ -88,9 +88,11 @@ legacy fallback.
 - **`POST /extract/ttps` spends LLM credits** — it is rate-limited
   (`apps/search/ratelimit.py`, env-tunable). Don't remove the limiter; the
   service also runs `max-instances=1` as a cost/abuse ceiling. Provider is
-  `EXTRACT_LLM_PROVIDER` (auto: xAI key, else Anthropic key, else
-  evidence-only report); the key must be attached to the **API service**,
-  not just the refresh job.
+  `EXTRACT_LLM_PROVIDER` (auto tries each configured key in order —
+  xAI → Anthropic → Gemini → OpenAI — falling through runtime failures;
+  no keys = evidence-only report); keys must be attached to the
+  **API service**, not just the refresh job. Gemini/OpenAI ride the
+  OpenAI-compatible client (`shared/llm/resolve_*_compat`).
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).
