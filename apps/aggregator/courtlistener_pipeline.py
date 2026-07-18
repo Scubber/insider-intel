@@ -458,3 +458,144 @@ def run_courtlistener_text_backfill(
         len(errors),
     )
     return result
+
+
+# Rolling historical sweep — one window per refresh, newest to oldest.
+# The core insider-crime queries (not the noisier policy/social-engineering
+# ones) keep each window to ~8 paced requests.
+HISTORY_QUERIES: list[str] = [
+    '"insider trading"',
+    '"trade secret" (employee OR contractor OR "former employee")',
+    '"economic espionage"',
+    '"computer fraud" (employee OR contractor OR insider)',
+]
+_HISTORY_CURSOR_KEY = "courtlistener_history:cursor"
+
+
+def run_courtlistener_history_sweep(
+    *,
+    token: str | None = None,
+    state: JsonIngestState | None = None,
+    state_path: str = DEFAULT_STATE_PATH,
+    store: ArticleStore | None = None,
+    store_path: str = DEFAULT_STORE_PATH,
+    request_delay: float | None = None,
+    client: httpx.Client | None = None,
+) -> IngestionRunResult:
+    """Ingest one historical window of insider-crime cases (metadata only).
+
+    Walks a cursor backward from today in COURTLISTENER_HISTORY_WINDOW_DAYS
+    steps until COURTLISTENER_HISTORY_FLOOR, persisting progress in the ingest
+    state — so the 6h refresh gradually seeds a decade of prosecutions with no
+    manual steps. Document bodies are NOT fetched here; the existing text
+    backfill (and, where the archive is empty, the PACER purchaser) harvests
+    them over subsequent runs at the usual pace. A throttled window does not
+    advance the cursor, so nothing is skipped.
+    """
+    settings = get_settings()
+    started_at = datetime.now(UTC)
+    result = IngestionRunResult(started_at=started_at)
+    floor_raw = (settings.courtlistener_history_floor or "").strip()
+    if not floor_raw:
+        result.finished_at = datetime.now(UTC)
+        return result  # disabled
+    try:
+        floor = date.fromisoformat(floor_raw)
+    except ValueError:
+        logger.warning("Ignoring bad COURTLISTENER_HISTORY_FLOOR %r", floor_raw)
+        result.finished_at = datetime.now(UTC)
+        return result
+
+    ingest_state = state or JsonIngestState(state_path)
+    cursor_raw = ingest_state.get(_HISTORY_CURSOR_KEY) or started_at.date().isoformat()
+    try:
+        cursor = date.fromisoformat(cursor_raw)
+    except ValueError:
+        cursor = started_at.date()
+    if cursor <= floor:
+        logger.info("CourtListener history sweep complete (cursor at floor %s)", floor)
+        result.finished_at = datetime.now(UTC)
+        return result
+
+    window = timedelta(days=settings.courtlistener_history_window_days)
+    since = max(floor, cursor - window)
+    api_token = token if token is not None else settings.courtlistener_api_token
+    delay = (
+        request_delay if request_delay is not None else settings.courtlistener_request_delay_seconds
+    )
+    article_store: ArticleStore = store or JsonlArticleStore(store_path)
+
+    collected: dict[str, RawArticle] = {}
+    errors: list[str] = []
+    throttled = False
+    request_no = 0
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        for search_type in ("dockets", "opinions"):
+            if throttled:
+                break
+            for query in HISTORY_QUERIES:
+                if request_no > 0 and delay > 0:
+                    time.sleep(delay)
+                request_no += 1
+                try:
+                    articles = _search(
+                        search_type=search_type,
+                        query=query,
+                        token=api_token,
+                        page_size=100,
+                        max_pages=settings.courtlistener_history_max_pages,
+                        filed_after=since.isoformat(),
+                        filed_before=cursor.isoformat(),
+                        fetch_content=False,  # bodies come via the text backfill
+                        client=http,
+                    )
+                    for article in articles:
+                        collected.setdefault(article.link, article)
+                except CourtListenerError as exc:
+                    errors.append(f"{query}: {exc}")
+                    if _is_throttled(exc):
+                        logger.warning(
+                            "History sweep throttled — window %s..%s retries next run",
+                            since,
+                            cursor,
+                        )
+                        throttled = True
+                        break
+    finally:
+        if own_client:
+            http.close()
+
+    batch = list(collected.values())
+    refresh = getattr(article_store, "refresh", None)
+    if callable(refresh):
+        new, updated = refresh(batch)
+        saved = new + updated
+    else:
+        saved = article_store.save(batch)
+
+    if not throttled:
+        ingest_state.set(_HISTORY_CURSOR_KEY, since.isoformat())
+        logger.info(
+            "CourtListener history window %s..%s: fetched=%d saved=%d (next: back to %s)",
+            since,
+            cursor,
+            len(batch),
+            saved,
+            max(floor, since - window),
+        )
+
+    result.sources.append(
+        SourceIngestionResult(
+            source_id="courtlistener-history",
+            source_name=f"CourtListener history {since}..{cursor}",
+            success=not (errors and len(batch) == 0),
+            articles_fetched=len(batch),
+            articles_saved=saved,
+            error="; ".join(errors[:3]) if errors and len(batch) == 0 else None,
+        )
+    )
+    result.total_articles_saved = saved
+    result.finished_at = datetime.now(UTC)
+    return result

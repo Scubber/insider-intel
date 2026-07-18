@@ -8,6 +8,7 @@ from pathlib import Path
 
 from apps.aggregator.config import get_enabled_feeds, load_feeds_from_file
 from apps.aggregator.courtlistener_pipeline import (
+    run_courtlistener_history_sweep,
     run_courtlistener_ingestion,
     run_courtlistener_text_backfill,
 )
@@ -96,6 +97,11 @@ def run_full_pipeline(
             store_path=raw_path,
             include_raw=include_raw,
         )
+        # One historical window per run — walks back to the configured floor,
+        # seeding past insider prosecutions (metadata; text arrives via the
+        # backfill below over subsequent runs).
+        history_result = run_courtlistener_history_sweep(store_path=raw_path)
+        court_result = _merge_ingestion(court_result, history_result)
         # Pull full RECAP/opinion document text for stored cases before
         # processing, so re-scoring + LLM extraction see whole filings.
         text_result = run_courtlistener_text_backfill(

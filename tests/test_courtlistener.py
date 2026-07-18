@@ -792,3 +792,84 @@ def test_throttle_wait_and_retry_honors_hint(tmp_path, monkeypatch) -> None:
     assert calls["n"] == 2
     assert result.total_articles_saved == 1
     assert any(50 < s < 60 for s in sleeps)  # honored "51 seconds" + margin
+
+
+# --- Rolling historical sweep -------------------------------------------------
+
+
+def _history_search_stub(calls):
+    from shared.schemas import RawArticle
+
+    def fake_search(*, search_type, query, filed_after=None, filed_before=None, **kw):
+        calls.append((search_type, query, filed_after, filed_before))
+        return [
+            RawArticle(
+                title=f"US v. {search_type} {len(calls)}",
+                link=f"https://www.courtlistener.com/docket/{9000 + len(calls)}/x/",
+                summary="Court: SDNY",
+                content="CourtListener query: h",
+                source_id="courtlistener-recap",
+                source_name="CourtListener RECAP",
+                channel="filings",
+            )
+        ]
+
+    return fake_search
+
+
+def test_history_sweep_walks_windows_back_to_floor(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
+    monkeypatch.setenv("COURTLISTENER_HISTORY_WINDOW_DAYS", "90")
+    state = clp.JsonIngestState(tmp_path / "state.json")
+
+    r1 = clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert r1.total_articles_saved == 8  # 4 queries x 2 types, unique links
+    # 8 spaced queries, each with a bounded window
+    assert len(calls) == 8
+    _, _, since1, before1 = calls[0]
+    assert since1 < before1
+    cursor_after_1 = state.get("courtlistener_history:cursor")
+    assert cursor_after_1 == since1
+
+    # Second run continues from the stored cursor — windows never overlap.
+    clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    _, _, since2, before2 = calls[8]
+    assert before2 == since1
+    assert since2 < before2
+
+
+def test_history_sweep_stops_at_floor_and_respects_disable(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    state.set("courtlistener_history:cursor", "2015-01-01")  # at the default floor
+
+    result = clp.run_courtlistener_history_sweep(
+        store_path=str(tmp_path / "raw.jsonl"), state=state
+    )
+    assert calls == [] and result.sources == []
+
+    monkeypatch.setenv("COURTLISTENER_HISTORY_FLOOR", "")
+    state2 = clp.JsonIngestState(tmp_path / "state2.json")
+    result2 = clp.run_courtlistener_history_sweep(
+        store_path=str(tmp_path / "raw2.jsonl"), state=state2
+    )
+    assert calls == [] and result2.sources == []
+
+
+def test_history_sweep_throttle_does_not_advance_cursor(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.courtlistener import CourtListenerError
+
+    def throttled(**kw):
+        raise CourtListenerError("HTTP 429: throttled")
+
+    monkeypatch.setattr(clp, "_search", throttled)
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert state.get("courtlistener_history:cursor") is None  # window retries next run
