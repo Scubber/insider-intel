@@ -1825,6 +1825,29 @@ body {
   color: var(--muted);
 }
 
+/* Structured case record (ingest LLM extraction) — dossier-style fact rows */
+.case-record-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.case-record-list dt {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  align-self: baseline;
+  white-space: nowrap;
+}
+
+.case-record-list dd {
+  margin: 0;
+  color: var(--ink);
+}
+
 /* Styled hover tooltips: any element with data-tip. CSS-only; keep the DOM
    copy in captions / sr-only twins for screen readers and touch. */
 [data-tip] {

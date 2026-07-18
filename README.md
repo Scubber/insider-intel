@@ -46,7 +46,7 @@ scheduled ingest + keyless CD on merge to `main` — see [`docs/hosting.md`](doc
 | One-way corporate export (CLI NDJSON + `GET /export/articles`) | ✅ |
 | Web scrapers (non-RSS) | ✅ sitemap archive MVP (`ingest_archive`) |
 | Postgres + pgvector | 🔜 |
-| LLM summaries | 🔜 (`ai_summary` reserved) |
+| LLM case records + summaries at ingest (`SUMMARIZER_LLM_PROVIDER`; `ai_summary`, `case_record`, LLM-adjudicated ITM hits) | ✅ opt-in |
 | GitHub Pages + Cloud Run (GCS corpus, 6h refresh, OIDC CD) | ✅ |
 
 ## Quick start (local)

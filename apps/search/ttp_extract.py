@@ -186,11 +186,32 @@ def _uniq(items: list[str]) -> list[str]:
     return out
 
 
+def _technique_behavior_text(tech_id: str, fallback_title: str) -> str:
+    """First sentence of the catalog description — a behavior, not a label."""
+    from shared.itm.index import load_itm_index
+
+    for tech in load_itm_index().techniques:
+        if tech.id.upper() == tech_id.upper():
+            desc = (tech.description_text or "").strip()
+            if desc:
+                first = desc.split(". ", 1)[0].strip()
+                return (first if first.endswith(".") else first + ".")[:220]
+            return tech.title
+    return fallback_title
+
+
 def seed_floor_report(
     articles: list[ProcessedArticle],
     *,
     detail: str = "",
 ) -> ExtractTtpsResponse:
+    """Evidence-first seed report.
+
+    Behaviors come from what the selection actually shows — its ITM hits and
+    case-record methods. The hardcoded IF038 overemployment pack is only
+    emitted when IF038 itself matched, or as an explicitly-labeled generic
+    fallback when the selection carries no evidence at all.
+    """
     behaviors: list[TtpBehavior] = []
     email: list[str] = []
     chat: list[str] = []
@@ -198,23 +219,46 @@ def seed_floor_report(
     human: list[str] = []
     seeds: list[str] = []
 
+    seen_tech: set[str] = set()
+    case_methods: list[str] = []
     for article in articles:
         seeds.extend(article.entities.operator_terms or [])
         for hit in article.entities.itm_hits or []:
             seeds.extend(hit.matched_aliases or [])
+            tid = str(hit.id).upper()
+            if tid not in seen_tech:
+                seen_tech.add(tid)
+                behaviors.append(
+                    TtpBehavior(id=hit.id, text=_technique_behavior_text(hit.id, hit.title))
+                )
+        record = getattr(article, "case_record", None)
+        if record is not None:
+            case_methods.extend(record.methods)
+            seeds.extend(record.methods)
+            seeds.extend(record.exfil_channels)
+            network.extend(record.exfil_channels)
+            if record.detection_trigger:
+                human.append(record.detection_trigger)
 
-    for ttp in IF038_TTP_SEEDS:
-        behaviors.append(TtpBehavior(id=ttp["id"], text=ttp["behavior"]))
-        email.extend(ttp["email"])
-        chat.extend(ttp["chat"])
-        network.extend(ttp["network"])
-        human.extend(ttp["human"])
-        seeds.extend(ttp["seeds"])
+    for n, method in enumerate(_uniq(case_methods), start=1):
+        behaviors.append(TtpBehavior(id=f"CASE-{n:02d}", text=f"Case-observed method: {method}"))
 
     matched = any(
-        any(str(h.id).upper() == "IF038" for h in (a.entities.itm_hits or []))
-        for a in articles
+        any(str(h.id).upper() == "IF038" for h in (a.entities.itm_hits or [])) for a in articles
     )
+    if matched or not behaviors:
+        # IF038 matched → its pack belongs in the report. No evidence at all →
+        # the pack is a last-resort floor, labeled honestly below.
+        for ttp in IF038_TTP_SEEDS:
+            behaviors.append(TtpBehavior(id=ttp["id"], text=ttp["behavior"]))
+            email.extend(ttp["email"])
+            chat.extend(ttp["chat"])
+            network.extend(ttp["network"])
+            human.extend(ttp["human"])
+            seeds.extend(ttp["seeds"])
+        if not matched and not detail:
+            detail = "Generic overemployment pack — no matched evidence in selection"
+
     return ExtractTtpsResponse(
         mode="seeds",
         article_count=len(articles),
@@ -239,10 +283,31 @@ def _article_text_pack(article: ProcessedArticle, extra: str = "") -> str:
     ]
     if article.summary:
         parts.append(f"Summary:\n{article.summary}")
-    if article.clean_text:
-        parts.append(f"Text:\n{article.clean_text}")
     if article.ai_summary:
         parts.append(f"AI summary:\n{article.ai_summary}")
+    record = getattr(article, "case_record", None)
+    if record is not None and (record.is_insider_case or record.methods or record.exfil_channels):
+        lines = ["Case record:"]
+        for label, value in (
+            ("actor_role", record.actor_role),
+            ("access_vector", record.access_vector),
+            ("timeframe", record.timeframe),
+            ("detection_trigger", record.detection_trigger),
+            ("outcome", record.outcome),
+        ):
+            if value:
+                lines.append(f"- {label}: {value}")
+        for label, values in (
+            ("motive_signals", record.motive_signals),
+            ("methods", record.methods),
+            ("exfil_channels", record.exfil_channels),
+        ):
+            if values:
+                lines.append(f"- {label}: {'; '.join(values)}")
+        parts.append("\n".join(lines))
+    # Raw text last so MAX_TEXT_CHARS truncation eats prose, not structure.
+    if article.clean_text:
+        parts.append(f"Text:\n{article.clean_text}")
     if extra:
         parts.append(f"CourtListener enrich:\n{extra}")
     blob = "\n\n".join(parts)
@@ -354,7 +419,7 @@ def _call_xai(
         "text packs, extract multi-channel hunt cues for email, chat, network, and "
         "human/HR investigation — not SIEM-only. Prefer IF038 / overemployment / "
         "undisclosed concurrent employment cues when relevant. Respond with JSON only:\n"
-        '{'
+        "{"
         '"behaviors":[{"id":"TTP-…","text":"…"}],'
         '"email":["…"],"chat":["…"],"network":["…"],"human":["…"],"seeds":["…"]'
         "}\n"
@@ -380,9 +445,7 @@ def _call_xai(
             logger.warning("xAI extract HTTP %s: %s", resp.status_code, resp.text[:300])
             return None
         data = resp.json()
-        content = (
-            ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-        )
+        content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
         if not content.strip():
             return None
         # Strip optional markdown fences

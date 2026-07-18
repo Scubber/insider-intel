@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -121,6 +122,10 @@ class ItmHit(BaseModel):
         default_factory=list,
         description="Which aliases / title phrases matched in the article text",
     )
+    source: Literal["lexical", "llm"] = Field(
+        default="lexical",
+        description="How the technique was mapped: alias match or LLM adjudication",
+    )
 
 
 class ControlRef(BaseModel):
@@ -157,6 +162,85 @@ class ExtractedEntities(BaseModel):
     )
 
 
+_CTRL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+_CASE_FIELD_MAX_CHARS = 200
+_CASE_LIST_MAX_ITEMS = 8
+_CASE_LIST_ITEM_MAX_CHARS = 120
+
+
+def _clean_case_str(value: str | None, limit: int = _CASE_FIELD_MAX_CHARS) -> str | None:
+    if value is None:
+        return None
+    cleaned = _CTRL_CHARS_RE.sub(" ", str(value)).replace("\n", " ").replace("\r", " ")
+    cleaned = " ".join(cleaned.split()).strip()
+    return cleaned[:limit] or None
+
+
+def _clean_case_list(values: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = _clean_case_str(value, _CASE_LIST_ITEM_MAX_CHARS)
+        if not cleaned or cleaned.lower() in seen:
+            continue
+        seen.add(cleaned.lower())
+        out.append(cleaned)
+        if len(out) >= _CASE_LIST_MAX_ITEMS:
+            break
+    return out
+
+
+class CaseRecord(BaseModel):
+    """Structured insider-case facts extracted by the ingest summarizer LLM.
+
+    Fields render in the UI as plain text and feed hunt-term generation, so
+    they must pass through ``sanitized()`` before storage.
+    """
+
+    is_insider_case: bool = False
+    actor_role: str | None = Field(
+        default=None, description="e.g. 'departing engineer', 'contractor sysadmin'"
+    )
+    access_vector: str | None = Field(
+        default=None, description="e.g. 'privileged VPN access', 'source repo access'"
+    )
+    motive_signals: list[str] = Field(default_factory=list)
+    methods: list[str] = Field(
+        default_factory=list,
+        description="Tools/techniques close to the article's own wording",
+    )
+    exfil_channels: list[str] = Field(
+        default_factory=list, description="e.g. 'personal Gmail', 'USB drive'"
+    )
+    timeframe: str | None = None
+    detection_trigger: str | None = Field(
+        default=None, description="What surfaced the activity, if stated"
+    )
+    outcome: str | None = Field(
+        default=None, description="Charges, termination, settlement, ongoing…"
+    )
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    extracted_at: datetime | None = None
+    model: str | None = Field(default=None, description="LLM that produced the record")
+
+    def sanitized(self) -> CaseRecord:
+        """Clamp lengths and strip control chars — output is UI-rendered text."""
+        return self.model_copy(
+            update={
+                "actor_role": _clean_case_str(self.actor_role),
+                "access_vector": _clean_case_str(self.access_vector),
+                "motive_signals": _clean_case_list(self.motive_signals),
+                "methods": _clean_case_list(self.methods),
+                "exfil_channels": _clean_case_list(self.exfil_channels),
+                "timeframe": _clean_case_str(self.timeframe),
+                "detection_trigger": _clean_case_str(self.detection_trigger),
+                "outcome": _clean_case_str(self.outcome),
+                "model": _clean_case_str(self.model, 80),
+            }
+        )
+
+
 class ProcessedArticle(BaseModel):
     """Article after processing; input for search/embeddings later.
 
@@ -184,9 +268,7 @@ class ProcessedArticle(BaseModel):
     )
     itm_alignment: Literal["insider", "weak"] = Field(
         default="weak",
-        description=(
-            "ITM-aligned insider scenario (insider) vs weak/unaligned mapping (weak)"
-        ),
+        description=("ITM-aligned insider scenario (insider) vs weak/unaligned mapping (weak)"),
     )
     story_key: str = Field(
         default="",
@@ -211,8 +293,12 @@ class ProcessedArticle(BaseModel):
         description="LLM classifier self-reported confidence (heuristic leaves None)",
     )
     processed_at: datetime = Field(default_factory=_utc_now)
-    # Filled by later LLM / embedding stages
+    # Filled by the optional ingest summarizer LLM (SUMMARIZER_LLM_PROVIDER)
     ai_summary: str | None = None
+    case_record: CaseRecord | None = Field(
+        default=None,
+        description="Structured case facts from the ingest summarizer LLM",
+    )
     embedding: list[float] | None = None
 
 

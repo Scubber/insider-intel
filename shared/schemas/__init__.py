@@ -1,6 +1,7 @@
 """Shared Pydantic schemas for insider-intel."""
 
 from shared.schemas.articles import (
+    CaseRecord,
     Channel,
     ControlRef,
     ExtractedEntities,
@@ -30,6 +31,7 @@ from shared.schemas.search import (
 
 __all__ = [
     "ArticleListResponse",
+    "CaseRecord",
     "Channel",
     "ControlRef",
     "ExtractedEntities",

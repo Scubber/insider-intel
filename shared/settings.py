@@ -216,6 +216,33 @@ class Settings(BaseSettings):
         description="Channels eligible for the LLM refiner (comma list or 'all')",
     )
 
+    # Ingest summarizer LLM: writes ai_summary + case_record on qualifying
+    # articles and adjudicates ITM technique candidates. Each article is
+    # billed once, ever (results persist in the processed corpus).
+    summarizer_llm_provider: str = Field(
+        default="none",
+        alias="SUMMARIZER_LLM_PROVIDER",
+        description="none | anthropic | openai (any OpenAI-compatible endpoint)",
+    )
+    summarizer_model: str | None = Field(
+        default=None,
+        alias="SUMMARIZER_MODEL",
+        description="Override model; None uses the provider's classifier default",
+    )
+    summarizer_max_articles_per_run: int = Field(
+        default=15,
+        alias="SUMMARIZER_MAX_ARTICLES_PER_RUN",
+        ge=0,
+        le=500,
+        description="LLM-call budget per processing run (0 disables)",
+    )
+    summarizer_max_input_chars: int = Field(
+        default=6000,
+        alias="SUMMARIZER_MAX_INPUT_CHARS",
+        ge=500,
+        le=50_000,
+    )
+
     def cors_origin_list(self) -> list[str]:
         return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
 
@@ -223,11 +250,7 @@ class Settings(BaseSettings):
         return [part.strip() for part in self.feedly_stream_ids.split(",") if part.strip()]
 
     def web_keyword_feed_url_list(self) -> list[str]:
-        return [
-            part.strip()
-            for part in self.web_keyword_feed_urls.split(",")
-            if part.strip()
-        ]
+        return [part.strip() for part in self.web_keyword_feed_urls.split(",") if part.strip()]
 
     def reddit_subreddit_list(self) -> list[str]:
         return [part.strip() for part in self.reddit_subreddits.split(",") if part.strip()]
@@ -241,9 +264,7 @@ class Settings(BaseSettings):
 
     def classify_llm_channel_list(self) -> list[str]:
         return [
-            part.strip().lower()
-            for part in self.classify_llm_channels.split(",")
-            if part.strip()
+            part.strip().lower() for part in self.classify_llm_channels.split(",") if part.strip()
         ]
 
 

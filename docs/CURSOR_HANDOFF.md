@@ -78,7 +78,7 @@ Full write-up: `docs/architecture.md` § Hunt Package.
 | Use-case + insider-type classification | ✅ | heuristics always; optional LLM via `CLASSIFIER_LLM_PROVIDER` |
 | Hunt Package (multi-article CTI brief) | 🟡 | Stream `+` → board → `POST /extract/ttps`; full package later |
 | Postgres + pgvector | ❌ | Settings stub (`DATABASE_URL`) |
-| LLM summarization / package AI | 🟡 | xAI optional on Extract (`XAI_API_KEY`); `ai_summary` persist later |
+| LLM summarization / package AI | ✅ opt-in | Ingest summarizer (`SUMMARIZER_LLM_PROVIDER`) persists `ai_summary` + `case_record`; xAI optional on Extract (`XAI_API_KEY`) |
 | Live Pages + Cloud Run deploy | ✅ | CD on merge to `main` — see `CLAUDE.md` / `docs/hosting.md` |
 | Corp Graph/Teams/SIEM inbound | ❌ | **Never** — export only |
 
