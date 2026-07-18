@@ -1839,6 +1839,65 @@ body {
   margin: 0.15rem 0;
 }
 
+/* Deep report: tradecraft prose, typed observables, and detect & hunt. */
+.ttp-tradecraft-summary,
+.ttp-case-tradecraft {
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.ttp-case-tradecraft {
+  color: var(--muted);
+}
+
+.ttp-subhead {
+  margin: 0.7rem 0 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.ttp-observable-artifact {
+  margin: 0.35rem 0 0.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.ttp-channel-chip {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.ttp-control-chips {
+  margin: 0.2rem 0 0.35rem;
+  line-height: 1.9;
+}
+
+.ttp-control-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ttp-control-chip:hover {
+  border-color: var(--accent);
+}
+
 .board-badge {
   display: inline-flex;
   align-items: center;

@@ -87,7 +87,8 @@ def test_seed_floor_without_if038_reports_actual_techniques() -> None:
 
 
 def test_seed_floor_case_record_feeds_behaviors_and_seeds() -> None:
-    from apps.search.ttp_extract import _article_text_pack, seed_floor_report
+    from apps.search.deep_extract import _deep_text_pack
+    from apps.search.ttp_extract import seed_floor_report
     from shared.schemas import CaseRecord
 
     article = _processed(
@@ -112,7 +113,7 @@ def test_seed_floor_case_record_feeds_behaviors_and_seeds() -> None:
     assert "personal Gmail" in report.network
     assert "DLP alert on outbound mail" in report.human
 
-    pack = _article_text_pack(article)
+    pack = _deep_text_pack(article, Settings(CORS_ORIGINS="http://127.0.0.1:5500"))
     assert "Case record:" in pack
     assert "- actor_role: departing engineer" in pack
     assert pack.index("Case record:") < pack.index("Text:")
@@ -231,9 +232,37 @@ def test_resolve_extract_providers_auto_and_explicit() -> None:
     assert resolve_extract_providers(gemini_only) == [("gemini", "gemini-2.5-flash")]
 
 
-def test_extract_falls_through_failing_providers(tmp_path, monkeypatch) -> None:
-    from apps.search import ttp_extract
+def test_resolve_extract_providers_per_stage_overrides() -> None:
+    from apps.search.ttp_extract import resolve_extract_providers
 
+    base = dict(CORS_ORIGINS="http://127.0.0.1:5500")
+    cfg = Settings(
+        **base,
+        ANTHROPIC_API_KEY="a",
+        GEMINI_API_KEY="g",
+        EXTRACT_STAGE1_LLM_PROVIDER="gemini",
+        EXTRACT_STAGE2_LLM_PROVIDER="anthropic",
+        EXTRACT_STAGE2_MODEL="claude-sonnet-5",
+    )
+    # Base resolution (no stage) keeps the auto chain untouched.
+    assert [p for p, _ in resolve_extract_providers(cfg)] == ["anthropic", "gemini"]
+    # Stage overrides narrow to one provider; the stage-2 model override applies.
+    assert resolve_extract_providers(cfg, stage="stage1") == [("gemini", "gemini-2.5-flash")]
+    assert resolve_extract_providers(cfg, stage="stage2") == [("anthropic", "claude-sonnet-5")]
+    # Unset overrides inherit the base behavior.
+    plain = Settings(**base, ANTHROPIC_API_KEY="a", GEMINI_API_KEY="g")
+    assert resolve_extract_providers(plain, stage="stage1") == resolve_extract_providers(plain)
+    # A model override under "auto" is ignored (which provider would be a guess).
+    auto_model = Settings(**base, ANTHROPIC_API_KEY="a", EXTRACT_STAGE1_MODEL="whatever")
+    assert resolve_extract_providers(auto_model, stage="stage1") == [
+        ("anthropic", "claude-haiku-4-5")
+    ]
+
+
+def test_extract_falls_through_failing_providers(tmp_path, monkeypatch) -> None:
+    from apps.search import deep_extract, ttp_extract
+
+    deep_extract.clear_stage1_cache()
     article = process_article(
         RawArticle(
             title="Insider threat: engineer exfiltrated trade secrets",
@@ -256,16 +285,18 @@ def test_extract_falls_through_failing_providers(tmp_path, monkeypatch) -> None:
 
     calls: list[str] = []
 
-    def fake_call(*, provider, model, system, user, cfg):
+    def fake_call(*, provider, model, system, user, cfg, max_tokens=2000):
         calls.append(provider)
         if provider == "anthropic":
             raise RuntimeError("credit balance is too low")
-        return {"summary": "Gemini wrote this.", "behaviors": [], "techniques": []}
+        return {"summary": "Gemini wrote this.", "methods": [], "techniques": []}
 
     monkeypatch.setattr(ttp_extract, "_call_extract_llm", fake_call)
     monkeypatch.setattr(ttp_extract, "enrich_courtlistener_snippet", lambda *a, **k: "")
     report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=settings)
-    assert calls == ["anthropic", "gemini"]
+    # Anthropic fails and falls through to Gemini on both stages (1 deep
+    # article → stage-1 call, then the synthesis call).
+    assert calls == ["anthropic", "gemini", "anthropic", "gemini"]
     assert report.mode == "llm"
     assert report.summary == "Gemini wrote this."
     assert "gemini" in report.detail
@@ -301,8 +332,8 @@ def test_resolve_openai_and_gemini_compat_defaults() -> None:
     assert gkey == "g"
 
 
-def test_merge_llm_sections_validates_ids_and_resolves_links() -> None:
-    from apps.search.ttp_extract import _merge_llm_into_floor, seed_floor_report
+def test_merge_synthesis_validates_ids_and_resolves_links() -> None:
+    from apps.search.ttp_extract import _merge_synthesis, seed_floor_report
 
     article = _processed(
         "DictateMD, Inc. v. Ahmadi",
@@ -311,25 +342,39 @@ def test_merge_llm_sections_validates_ids_and_resolves_links() -> None:
     )
     floor = seed_floor_report([article])
     real_id = floor.techniques[0].id
-    llm = {
+    synthesis = {
         "summary": "One departing employee stole trade secrets.",
         "techniques": [
             {
                 "id": real_id,
+                "tradecraft_summary": "Departing employees sync data out before resigning.",
                 "cases": [
                     {
+                        # Abbreviated title, no link — the token fallback resolves it.
                         "title": "DictateMD v. Ahmadi",
+                        "tradecraft": "Synced the customer list days before resigning.",
                         "bullets": ["Synced the customer list to a personal drive"],
+                    }
+                ],
+                "observables": [
+                    {
+                        "description": "Bulk uploads to a personal cloud account",
+                        "artifact": "proxy/egress logs",
+                        "channel": "cloud",
+                    }
+                ],
+                "hunt_queries": [
+                    {
+                        "stack": "Splunk/SIEM",
+                        "logic": "index=proxy dest_domain=dropbox.com bytes_out>100MB",
+                        "rationale": "catches the bulk sync seen in DictateMD",
                     }
                 ],
             },
             {"id": "ZZ999", "cases": [{"title": "Fake", "bullets": ["invented"]}]},
         ],
     }
-    merged = _merge_llm_into_floor(
-        floor, llm, links_by_title={article.title: article.link}, provider="anthropic"
-    )
-    assert merged.mode == "llm"
+    merged = _merge_synthesis(floor, synthesis, articles=[article])
     assert merged.summary == "One departing employee stole trade secrets."
     ids = {s.id for s in merged.techniques}
     assert real_id in ids and "ZZ999" not in ids
@@ -338,7 +383,40 @@ def test_merge_llm_sections_validates_ids_and_resolves_links() -> None:
     assert enriched.cases[0].link == article.link
     assert enriched.cases[0].title == article.title
     assert enriched.cases[0].bullets == ["Synced the customer list to a personal drive"]
-    assert "anthropic" in merged.detail
+    assert enriched.cases[0].tradecraft.startswith("Synced the customer list")
+    assert enriched.tradecraft_summary
+    assert enriched.observables[0].channel == "cloud"
+    assert enriched.detection.hunt_queries[0].stack == "Splunk/SIEM"
+
+
+def test_merge_synthesis_resolves_exact_links_first() -> None:
+    from apps.search.ttp_extract import _merge_synthesis, seed_floor_report
+
+    article = _processed(
+        "DictateMD, Inc. v. Ahmadi",
+        "https://example.com/dictatemd-exact",
+        "Departing employee accused of trade secret theft and data exfiltration.",
+    )
+    floor = seed_floor_report([article])
+    real_id = floor.techniques[0].id
+    synthesis = {
+        "techniques": [
+            {
+                "id": real_id,
+                "cases": [
+                    {
+                        "link": article.link,  # exact link, garbled title
+                        "title": "some hallucinated case name",
+                        "bullets": ["bulk download before resignation"],
+                    }
+                ],
+            }
+        ],
+    }
+    merged = _merge_synthesis(floor, synthesis, articles=[article])
+    enriched = next(s for s in merged.techniques if s.id == real_id)
+    assert enriched.cases[0].link == article.link
+    assert enriched.cases[0].title == article.title
 
 
 def test_articles_text_endpoint_returns_filing_body(tmp_path, monkeypatch) -> None:
@@ -382,9 +460,10 @@ def test_articles_text_endpoint_returns_filing_body(tmp_path, monkeypatch) -> No
 
 
 def test_filings_pack_carries_full_document_text() -> None:
-    from apps.search.ttp_extract import FILINGS_TEXT_MAX_CHARS, MAX_TEXT_CHARS, _article_text_pack
+    from apps.search.deep_extract import _deep_text_pack
 
-    body = "The defendant exfiltrated schematics. " * 500  # ~19k chars
+    cfg = Settings(CORS_ORIGINS="http://127.0.0.1:5500")
+    body = "The defendant exfiltrated schematics. " * 1200  # ~46k chars
     filing = process_article(
         RawArticle(
             title="United States v. Example",
@@ -396,9 +475,12 @@ def test_filings_pack_carries_full_document_text() -> None:
             channel="filings",
         )
     )
-    pack = _article_text_pack(filing)
-    assert len(pack) > MAX_TEXT_CHARS  # filings are not clipped to the news cap
-    assert len(pack) <= FILINGS_TEXT_MAX_CHARS
+    pack = _deep_text_pack(filing, cfg)
+    assert len(pack) > cfg.extract_stage1_max_chars  # not clipped to the news cap
+    assert len(pack) <= cfg.extract_stage1_filings_max_chars + 100
+    # Head+tail truncation: charging language AND sentencing sections survive.
+    assert "…[middle truncated]…" in pack
+    assert pack.rstrip().endswith("The defendant exfiltrated schematics.")
 
     news = process_article(
         RawArticle(
@@ -410,4 +492,4 @@ def test_filings_pack_carries_full_document_text() -> None:
             source_name="Example",
         )
     )
-    assert len(_article_text_pack(news)) <= MAX_TEXT_CHARS
+    assert len(_deep_text_pack(news, cfg)) <= cfg.extract_stage1_max_chars + 100

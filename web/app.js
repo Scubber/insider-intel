@@ -1252,8 +1252,11 @@
     }
   }
 
-  // Per-technique sections: ID + what the technique is, then how each boarded
-  // case actually did it (LLM-enriched bullets, or case-record facts offline).
+  // Per-technique sections: ID + what the technique is, cross-case tradecraft,
+  // how each boarded case actually did it, the forensic observables that
+  // behavior leaves behind, and detect & hunt guidance (ITM DT*/PV* controls
+  // plus case-grounded queries). Every deep field is guarded — floor/offline
+  // reports simply render without them.
   function renderTtpTechniques(container, techniques) {
     if (!container) return;
     container.innerHTML = "";
@@ -1270,6 +1273,13 @@
       head.appendChild(document.createTextNode(` ${section.description || section.title || ""}`));
       wrap.appendChild(head);
 
+      if (section.tradecraft_summary) {
+        const trade = document.createElement("p");
+        trade.className = "ttp-tradecraft-summary";
+        trade.textContent = section.tradecraft_summary;
+        wrap.appendChild(trade);
+      }
+
       (section.cases || []).forEach((caseItem) => {
         const caseHead = document.createElement("p");
         caseHead.className = "ttp-case-title";
@@ -1284,6 +1294,12 @@
           caseHead.textContent = caseItem.title;
         }
         wrap.appendChild(caseHead);
+        if (caseItem.tradecraft) {
+          const tc = document.createElement("p");
+          tc.className = "ttp-case-tradecraft";
+          tc.textContent = caseItem.tradecraft;
+          wrap.appendChild(tc);
+        }
         const ul = document.createElement("ul");
         ul.className = "ttp-case-bullets";
         (caseItem.bullets || []).forEach((bullet) => {
@@ -1294,7 +1310,116 @@
         if (ul.children.length) wrap.appendChild(ul);
       });
 
+      renderTtpObservables(wrap, section.observables);
+      renderTtpDetection(wrap, section.detection);
+
       container.appendChild(wrap);
+    });
+  }
+
+  // Forensic observables grouped by artifact (log source), each with a
+  // channel chip so the analyst knows which stack to look in.
+  function renderTtpObservables(wrap, observables) {
+    const items = (observables || []).filter((o) => o && o.description);
+    if (!items.length) return;
+    const head = document.createElement("p");
+    head.className = "ttp-subhead";
+    head.textContent = "Forensic observables";
+    wrap.appendChild(head);
+    const byArtifact = new Map();
+    items.forEach((o) => {
+      const artifact = o.artifact || "other";
+      if (!byArtifact.has(artifact)) byArtifact.set(artifact, []);
+      byArtifact.get(artifact).push(o);
+    });
+    byArtifact.forEach((group, artifact) => {
+      const p = document.createElement("p");
+      p.className = "ttp-observable-artifact";
+      p.textContent = artifact;
+      wrap.appendChild(p);
+      const ul = document.createElement("ul");
+      ul.className = "ttp-case-bullets";
+      group.forEach((o) => {
+        const li = document.createElement("li");
+        li.textContent = o.description;
+        if (o.channel) {
+          const chip = document.createElement("span");
+          chip.className = "ttp-channel-chip";
+          chip.textContent = o.channel;
+          li.appendChild(document.createTextNode(" "));
+          li.appendChild(chip);
+        }
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+    });
+  }
+
+  // Detect & hunt: ITM DT*/PV* control chips (linked to the public matrix)
+  // plus the case-grounded hunt queries as copyable blocks.
+  function renderTtpDetection(wrap, detection) {
+    if (!detection) return;
+    const detections = detection.detections || [];
+    const preventions = detection.preventions || [];
+    const queries = detection.hunt_queries || [];
+    if (!detections.length && !preventions.length && !queries.length) return;
+
+    const head = document.createElement("p");
+    head.className = "ttp-subhead";
+    head.textContent = "Detect & hunt";
+    wrap.appendChild(head);
+
+    if (detections.length || preventions.length) {
+      const chips = document.createElement("p");
+      chips.className = "ttp-control-chips";
+      const addChip = (ref, base) => {
+        const a = document.createElement("a");
+        a.className = "ttp-control-chip";
+        a.href = `${base}/${encodeURIComponent(ref.id)}`;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.title = ref.title || ref.id;
+        a.textContent = ref.id;
+        chips.appendChild(a);
+        chips.appendChild(document.createTextNode(" "));
+      };
+      detections.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/detections"));
+      preventions.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/preventions"));
+      wrap.appendChild(chips);
+    }
+
+    queries.forEach((q) => {
+      if (!q || !q.logic) return;
+      const details = document.createElement("details");
+      details.className = "query-stack";
+      details.open = true;
+      const summary = document.createElement("summary");
+      summary.className = "query-stack-summary";
+      const label = document.createElement("span");
+      label.textContent = q.stack || "SIEM";
+      summary.appendChild(label);
+      const pre = document.createElement("pre");
+      pre.className = "query-block";
+      pre.textContent = q.logic;
+      details.append(summary, pre);
+      if (q.rationale) {
+        const why = document.createElement("p");
+        why.className = "kw-hint";
+        why.textContent = q.rationale;
+        details.appendChild(why);
+      }
+      const actions = document.createElement("p");
+      actions.className = "panel-actions query-stack-actions";
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "copy-btn";
+      copy.textContent = "Copy query";
+      copy.addEventListener("click", () => {
+        copyText(q.logic, `Copied ${q.stack || "hunt"} query`);
+      });
+      actions.appendChild(copy);
+      details.appendChild(actions);
+      wrap.appendChild(details);
     });
   }
 
@@ -1306,9 +1431,11 @@
     setView("report");
     if (els.ttpReportMeta) {
       const mode = report.mode || (report.usedIf038Seeds ? "seeds" : "seeds");
+      // Deep reports carry a precise detail line ("LLM deep (anthropic) ·
+      // 8 deep / 2 floor source(s)") — prefer it over the generic label.
       const modeLabel =
         mode === "llm"
-          ? `LLM · ${report.articleCount} source(s)`
+          ? report.detail || `LLM · ${report.articleCount} source(s)`
           : report.detail || `Seed pack · ${report.articleCount} article(s)`;
       els.ttpReportMeta.textContent = modeLabel;
     }
@@ -1354,14 +1481,35 @@
           ...queries.flatMap((q) => [``, `## ${q.stack} (${q.lang})`, q.query]),
         ]
       : [];
-    const techniqueLines = (report.techniques || []).flatMap((section) => [
-      "",
-      `${section.id} — ${section.description || section.title || ""}`,
-      ...(section.cases || []).flatMap((c) => [
-        `  ${c.title}`,
-        ...(c.bullets || []).map((b) => `  - ${b}`),
-      ]),
-    ]);
+    const techniqueLines = (report.techniques || []).flatMap((section) => {
+      const detection = section.detection || {};
+      const controls = [...(detection.detections || []), ...(detection.preventions || [])];
+      return [
+        "",
+        `${section.id} — ${section.description || section.title || ""}`,
+        ...(section.tradecraft_summary ? [`  Tradecraft: ${section.tradecraft_summary}`] : []),
+        ...(section.cases || []).flatMap((c) => [
+          `  ${c.title}`,
+          ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
+          ...(c.bullets || []).map((b) => `  - ${b}`),
+        ]),
+        ...((section.observables || []).length
+          ? [
+              "  Observables:",
+              ...(section.observables || []).map(
+                (o) => `  - [${o.channel || "network"}] ${o.description}${o.artifact ? ` (${o.artifact})` : ""}`,
+              ),
+            ]
+          : []),
+        ...(controls.length
+          ? [`  ITM controls: ${controls.map((c) => c.id).join(", ")}`]
+          : []),
+        ...((detection.hunt_queries || []).flatMap((q) => [
+          `  Hunt (${q.stack || "SIEM"}): ${q.logic}`,
+          ...(q.rationale ? [`    why: ${q.rationale}`] : []),
+        ])),
+      ];
+    });
     const lines = [
       "insider-intel hunt report (extraction board)",
       `Mode: ${report.mode || "seeds"}`,
@@ -1426,10 +1574,18 @@
       ...(report.techniques || []).flatMap((s) => [
         "",
         `${s.id} — ${s.description || s.title || ""}`,
+        ...(s.tradecraft_summary ? [`Tradecraft: ${s.tradecraft_summary}`] : []),
         ...(s.cases || []).flatMap((c) => [
           `  Case: ${c.title}`,
+          ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
           ...(c.bullets || []).map((b) => `  - ${b}`),
         ]),
+        ...((s.observables || []).map(
+          (o) => `  Observable [${o.channel || "network"}]: ${o.description}${o.artifact ? ` (${o.artifact})` : ""}`,
+        )),
+        ...(((s.detection || {}).hunt_queries || []).map(
+          (q) => `  Existing hunt query (${q.stack || "SIEM"}): ${q.logic}`,
+        )),
       ]),
       "",
       "Behaviors:",
@@ -1478,6 +1634,7 @@
       seeds: data.seeds || [],
       matchedIf038: Boolean(data.matched_if038),
       detail: data.detail || "",
+      reportVersion: data.report_version || 1,
       usedIf038Seeds: true,
     };
   }
@@ -1522,7 +1679,7 @@
       extractBtn.disabled = true;
       extractBtn.textContent = "Extracting…";
     }
-    setStatus("Extracting TTPs…");
+    setStatus(`Deep-extracting ${entries.length} case(s)…`);
     try {
       let report;
       try {
@@ -1533,8 +1690,9 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ links: entries.map((e) => e.link) }),
-            // LLM enrichment (xAI/Anthropic) legitimately takes 20-60s.
-            timeoutMs: 75000,
+            // Two-stage extraction (per-article deep reads + synthesis)
+            // legitimately takes 60-150s on a full board.
+            timeoutMs: 180000,
           },
         );
         report = normalizeExtractResponse(data, entries);

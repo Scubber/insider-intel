@@ -30,6 +30,7 @@ def _chat_completion(
     timeout: float,
     system: str,
     user: str,
+    max_tokens: int | None = None,
 ) -> str | None:
     """POST a JSON-mode chat completion; returns the reply text or None."""
     headers = {"Content-Type": "application/json"}
@@ -44,6 +45,8 @@ def _chat_completion(
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     url = f"{base_url}/chat/completions"
     try:
         response = httpx.post(url, json=payload, headers=headers, timeout=timeout)

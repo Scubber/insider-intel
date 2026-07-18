@@ -69,3 +69,11 @@ jobs:
             -d '{"platform":"reddit","id":"deploy-smoke-probe"}' >/dev/null
           curl -sf -X DELETE "${URL}/social/subscriptions/reddit/deploy-smoke-probe" >/dev/null
           echo "subscription round-trip OK"
+          # extract endpoint + new report models, zero LLM spend: an unindexed
+          # link short-circuits before any provider call (mode=seeds, count=0)
+          EXTRACT=$(curl -sf -X POST "${URL}/extract/ttps" \
+            -H 'Content-Type: application/json' \
+            -d '{"links":["https://example.invalid/deploy-smoke-probe"]}')
+          echo "${EXTRACT}" | grep -q '"mode":"seeds"'
+          echo "${EXTRACT}" | grep -q '"article_count":0'
+          echo "extract smoke OK"

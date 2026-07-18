@@ -167,16 +167,72 @@ class Settings(BaseSettings):
     export_api_token: str | None = Field(default=None, alias="EXPORT_API_TOKEN")
 
     # POST /extract/ttps can spend LLM credits — cap it. <=0 disables the limit.
+    # Deep extraction makes up to EXTRACT_DEEP_MAX_ARTICLES+1 LLM calls per
+    # request, so the request-rate defaults are tighter than they used to be.
     extract_rate_per_ip_hour: int = Field(
-        default=20,
+        default=6,
         alias="EXTRACT_RATE_PER_IP_HOUR",
         le=10_000,
     )
     extract_rate_global_day: int = Field(
-        default=200,
+        default=60,
         alias="EXTRACT_RATE_GLOBAL_DAY",
         le=100_000,
     )
+    # Two-stage hunt-report extraction: stage 1 deep-reads each board article
+    # (one LLM call per article, capped below), stage 2 synthesizes the
+    # cross-case technique report (one call). 0 deep articles = synthesis-only
+    # over floor-derived forensics — the cheap single-call rollback mode.
+    extract_deep_max_articles: int = Field(
+        default=10,
+        alias="EXTRACT_DEEP_MAX_ARTICLES",
+        ge=0,
+        le=40,
+    )
+    extract_stage1_filings_max_chars: int = Field(
+        default=36_000,
+        alias="EXTRACT_STAGE1_FILINGS_MAX_CHARS",
+        description="Stage-1 text budget for court filings (stored bodies are ≤40k)",
+        ge=500,
+        le=200_000,
+    )
+    extract_stage1_max_chars: int = Field(
+        default=8_000,
+        alias="EXTRACT_STAGE1_MAX_CHARS",
+        description="Stage-1 text budget for non-filing articles",
+        ge=500,
+        le=200_000,
+    )
+    extract_stage1_concurrency: int = Field(
+        default=4,
+        alias="EXTRACT_STAGE1_CONCURRENCY",
+        ge=1,
+        le=8,
+    )
+    extract_stage1_cache_size: int = Field(
+        default=256,
+        alias="EXTRACT_STAGE1_CACHE_SIZE",
+        description="In-process LRU of per-article forensics (valid: max-instances=1)",
+        ge=0,
+        le=10_000,
+    )
+    # Per-stage provider/model overrides. Unset = inherit EXTRACT_LLM_PROVIDER
+    # and the provider's default model. Recommended production split: a cheap
+    # fast model for stage 1 (claude-haiku-4-5 / gemini-2.5-flash) and the
+    # strongest configured model for stage 2 (anthropic / claude-sonnet-5) —
+    # synthesis is one call per report and is where quality is won.
+    extract_stage1_llm_provider: str | None = Field(
+        default=None,
+        alias="EXTRACT_STAGE1_LLM_PROVIDER",
+        description="auto | xai | anthropic | gemini | openai | none (None inherits)",
+    )
+    extract_stage1_model: str | None = Field(default=None, alias="EXTRACT_STAGE1_MODEL")
+    extract_stage2_llm_provider: str | None = Field(
+        default=None,
+        alias="EXTRACT_STAGE2_LLM_PROVIDER",
+        description="auto | xai | anthropic | gemini | openai | none (None inherits)",
+    )
+    extract_stage2_model: str | None = Field(default=None, alias="EXTRACT_STAGE2_MODEL")
 
     # Alert RSS URLs for web keyword discovery (comma-separated feed URLs)
     web_keyword_feed_urls: str = Field(
