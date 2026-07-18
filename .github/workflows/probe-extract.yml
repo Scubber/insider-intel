@@ -1,0 +1,43 @@
+# On-demand probe of the live extract endpoint: boards a few real filings and
+# prints the report mode/labels, so LLM wiring (EXTRACT_LLM_PROVIDER + key on
+# the API service) is verifiable from Actions without touching prod by hand.
+# Costs one rate-limited LLM call per run — dispatch it, don't schedule it.
+name: probe-extract
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract TTPs against the live API
+        run: |
+          set -euo pipefail
+          API=https://api.intel.thederpweb.com
+          echo "== /health =="
+          curl -sS "$API/health"
+          echo
+          LINKS=$(curl -sS "$API/articles?channel=filings&itm_alignment=all&limit=4&group=false" \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({"links":[r["link"] for r in d["results"][:4]]}))')
+          echo "== board links =="
+          echo "$LINKS"
+          echo "== /extract/ttps =="
+          curl -sS -X POST "$API/extract/ttps" -H 'Content-Type: application/json' \
+            --max-time 120 -d "$LINKS" > report.json
+          python3 - <<'PY'
+          import json
+
+          r = json.load(open("report.json"))
+          print("mode:", r.get("mode"))
+          print("detail:", r.get("detail"))
+          print("summary:", (r.get("summary") or "")[:400])
+          for section in (r.get("techniques") or [])[:3]:
+              print(f"\n{section['id']} — {section.get('description','')[:120]}")
+              for case in section.get("cases", [])[:2]:
+                  print(f"  {case['title'][:80]}")
+                  for bullet in case.get("bullets", [])[:4]:
+                      print(f"    - {bullet[:160]}")
+          PY
