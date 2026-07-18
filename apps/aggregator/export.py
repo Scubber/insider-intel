@@ -14,7 +14,7 @@ from shared.schemas import ProcessedArticle
 
 logger = logging.getLogger(__name__)
 
-EXPORT_SCHEMA_VERSION = "insider-intel.export.v2"
+EXPORT_SCHEMA_VERSION = "insider-intel.export.v3"
 DEFAULT_EXPORT_DIR = "dist/export"
 
 
@@ -47,6 +47,17 @@ def article_to_export_row(article: ProcessedArticle) -> dict[str, Any]:
         "keywords_hit": list(article.entities.keywords_hit),
         "cves": list(article.entities.cves),
         "domains": list(article.entities.domains),
+        "ai_summary": getattr(article, "ai_summary", None),
+        "case_record": (
+            article.case_record.model_dump(mode="json")
+            if getattr(article, "case_record", None)
+            else None
+        ),
+        "forensics": (
+            article.forensics.model_dump(mode="json")
+            if getattr(article, "forensics", None)
+            else None
+        ),
     }
 
 

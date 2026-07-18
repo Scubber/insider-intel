@@ -32,14 +32,25 @@ prefix is exactly why the API may write there) seeded from a curated catalog
 derived from `shared/taxonomy/use_cases.py`.
 
 Processing (`shared/agents/article_processor.py`, LangGraph):
-normalize → extract_entities (ITM alias match) → score → **classify** → embed →
-assemble. The classify node stamps `use_cases` (overemployment,
-data-exfiltration, credential-misuse, shadow-it) and `insider_type`
-(malicious | negligent | unintentional) via heuristics in
+normalize → extract_entities (ITM alias match) → score → **classify** →
+**enrich** → embed → assemble. The classify node stamps `use_cases`
+(overemployment, data-exfiltration, credential-misuse, shadow-it) and
+`insider_type` (malicious | negligent | unintentional) via heuristics in
 `shared/utils/classify.py`; an optional LLM refiner
 (`CLASSIFIER_LLM_PROVIDER=anthropic|openai`, `shared/llm/`) sharpens
 low-confidence social posts. A classified use case + insider type upgrades
 weak ITM alignment so first-person confessions surface under Insider Focus.
+
+The **enrich** node (`shared/agents/summarize.py`, `SUMMARIZER_LLM_PROVIDER`)
+makes **one unified LLM call per qualifying article** that produces the analyst
+note (`ai_summary`), a full forensic record (`ProcessedArticle.forensics`:
+actions with tools/quantities, observables typed by channel, per-case hunt
+queries, ITM adjudication), and derives the legacy `case_record` from it. Each
+article is billed once, ever — the graph carries `prior_forensics` forward on
+reprocess, and the corpus-refresh backfill sweep converts the existing corpus
+gradually (newest-first, then legacy `case_record`-only rows when
+`SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`. The
+hunt report reads these stored records — no LLM at read time.
 
 Provenance channels: `news | filings | tips | social` — legacy `reddit-*` RSS
 feeds stay `tips`; API-based social sources use `social-*` ids. Facets thread
@@ -85,20 +96,17 @@ legacy fallback.
   `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter — under PACER's $30
   fee waiver, so typical usage bills nothing). No-op without
   `PACER_USERNAME`/`PACER_PASSWORD`. Never add another purchase path.
-- **`POST /extract/ttps` spends LLM credits** — up to
-  `EXTRACT_DEEP_MAX_ARTICLES`+1 calls per request (two-stage extraction in
-  `apps/search/deep_extract.py`: per-article forensic reads, then one
-  synthesis call; 0 = synthesis-only rollback mode). It is rate-limited
-  (`apps/search/ratelimit.py`, env-tunable — defaults sized for the call
-  multiplier). Don't remove the limiter; the service also runs
-  `max-instances=1` as a cost/abuse ceiling (the in-process stage-1 cache
-  relies on it too). Provider is `EXTRACT_LLM_PROVIDER` (auto tries each
-  configured key in order — xAI → Anthropic → Gemini → OpenAI — falling
-  through runtime failures; no keys = evidence-only report), with per-stage
-  overrides `EXTRACT_STAGE{1,2}_LLM_PROVIDER`/`_MODEL` (recommended prod:
-  cheap fast model for stage 1, strongest model for stage 2). Keys must be
-  attached to the **API service**, not just the refresh job. Gemini/OpenAI
-  ride the OpenAI-compatible client (`shared/llm/resolve_*_compat`).
+- **`POST /extract/ttps` spends NO LLM credits** — it assembles each boarded
+  article's stored ingest-time `forensics` record (or a floor-derived one for
+  not-yet-enriched articles) into technique sections in code
+  (`apps/search/ttp_extract.py`: `_mechanical_sections` + `_attach_controls` +
+  `_aggregate_hunt_queries` + `_derive_legacy_fields`). All LLM spend lives on
+  the **corpus-refresh job** (the enrich node), never the API service — keep
+  extract-time keys off the service. The rate limiter
+  (`apps/search/ratelimit.py`) stays as a CPU/abuse guard only; don't remove
+  it. Rollout: enrichment backfills over refreshes, so reports get richer over
+  time and are never empty (floor fallback). The client-side "copy LLM prompt"
+  is the escape hatch for cross-case narrative synthesis.
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).

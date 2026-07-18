@@ -1,45 +1,30 @@
-"""Extraction-board TTP hunt report: evidence floor + two-stage LLM extraction.
+"""Extraction-board hunt report: assembled from stored ingest-time forensics.
 
-The floor is built from what the board actually shows (ITM hits, case
-records). On top of it, stage 1 (``apps.search.deep_extract``) deep-reads each
-board article into a forensic reconstruction, and stage 2 synthesizes those
-into a technique-centric report: per-technique tradecraft, the observables
-that behavior leaves in a defender's environment, and case-grounded hunt
-queries. ITM detections/preventions are attached from the catalog in code —
-the LLM only writes what code can't. Every LLM failure degrades one rung down
-the ladder (floor-derived forensics → mechanical sections → pure floor).
+Every qualifying article is enriched once at ingest
+(``shared/agents/summarize.py``) into a ``PerCaseForensics`` record; this
+module assembles the boarded records into a technique-centric report in
+code — no LLM at read time. Per technique: how each case did it (from the
+stored method actions), the forensic observables that behavior leaves in a
+defender's environment, ITM detections/preventions attached from the catalog,
+and the case-grounded hunt queries precomputed at ingest. Articles not yet
+enriched fall back to ``forensics_from_floor`` (their ITM/case-record data),
+so a report is never empty — it just gets richer as the corpus is enriched.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Any, Literal
 
-import httpx
 from pydantic import BaseModel, Field
 
-from apps.search import deep_extract
-from apps.search.deep_extract import (
-    STAGE2_MAX_TOKENS,
-    STAGE2_SYSTEM_PROMPT,
-    CaseObservable,
-    PerCaseForensics,
-    build_stage2_user_prompt,
-    forensics_from_floor,
-    parse_observables,
-    select_deep_articles,
-)
 from apps.search.index import ArticleSearchIndex
 from shared.schemas import ProcessedArticle
-from shared.schemas.articles import ControlRef, resolve_channel
+from shared.schemas.articles import ControlRef
+from shared.schemas.forensics import CaseMethod, CaseObservable, PerCaseForensics
 from shared.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
-
-XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions"
-COURTLISTENER_SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
 
 # Keep aligned with web/app.js IF038_TTP_SEEDS / docs/ttps_overemployment.md
 IF038_TTP_SEEDS: list[dict[str, Any]] = [
@@ -407,59 +392,48 @@ def seed_floor_report(
     )
 
 
-def enrich_courtlistener_snippet(
-    article: ProcessedArticle,
-    *,
-    token: str | None,
-    client: httpx.Client | None = None,
-) -> str:
-    """Best-effort free opinion/search snippet — never buys PACER PDFs."""
-    channel = resolve_channel(article.source_id, getattr(article, "channel", None))
-    if channel != "filings" and "courtlistener" not in (article.source_id or "").lower():
-        return ""
-    if not token or not token.strip():
-        return ""
+def forensics_from_floor(article: ProcessedArticle) -> PerCaseForensics:
+    """Reshape ingest-time CaseRecord/ITM data into a forensic record.
 
-    query = (article.title or "").strip()
-    if not query:
-        return ""
-
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Token {token.strip()}",
-    }
-    params = {"q": query, "type": "o", "order_by": "score desc", "page_size": 2}
-
-    owns_client = client is None
-    http = client or httpx.Client(timeout=20.0)
-    try:
-        resp = http.get(COURTLISTENER_SEARCH_URL, headers=headers, params=params)
-        if resp.status_code >= 400:
-            logger.info("CourtListener enrich HTTP %s", resp.status_code)
-            return ""
-        payload = resp.json()
-        results = payload.get("results") or []
-        snippets: list[str] = []
-        for hit in results[:2]:
-            case_name = hit.get("caseName") or hit.get("caseNameFull") or ""
-            snippet = (
-                hit.get("snippet")
-                or hit.get("meta")
-                or hit.get("text")
-                or hit.get("plain_text")
-                or ""
+    The fallback for articles the ingest enricher has not reached yet: the
+    report still shows their case-record methods and matched techniques, just
+    without the deeper reconstruction. ``extraction_status="floor"`` marks it.
+    """
+    record = getattr(article, "case_record", None)
+    methods: list[CaseMethod] = []
+    actor_bits: list[str] = []
+    detection: str | None = None
+    outcome: str | None = None
+    if record is not None:
+        actor_bits = [b for b in (record.actor_role, record.access_vector) if b]
+        detection = record.detection_trigger
+        outcome = record.outcome
+        for method in record.methods:
+            methods.append(CaseMethod(action=method))
+        for channel in record.exfil_channels:
+            methods.append(
+                CaseMethod(
+                    action=f"Exfiltration via {channel}",
+                    observables=[
+                        CaseObservable(
+                            description=f"Transfers to {channel}",
+                            artifact="egress/network logs",
+                            channel="network",
+                        )
+                    ],
+                )
             )
-            if isinstance(snippet, str) and snippet.strip():
-                snippets.append(f"{case_name}: {snippet.strip()}" if case_name else snippet.strip())
-            elif case_name:
-                snippets.append(str(case_name))
-        return "\n".join(snippets)[:2000]
-    except Exception as exc:  # noqa: BLE001 — enrich is best-effort
-        logger.info("CourtListener enrich failed: %s", exc)
-        return ""
-    finally:
-        if owns_client:
-            http.close()
+    return PerCaseForensics(
+        link=article.link,
+        title=article.title,
+        actor_profile=" — ".join(actor_bits),
+        methods=methods,
+        detection=detection,
+        outcome=outcome,
+        candidate_technique_ids=[str(h.id).upper() for h in article.entities.itm_hits or []],
+        hunt_terms=list(article.entities.operator_terms or []),
+        extraction_status="floor",
+    )
 
 
 _LEGACY_CHANNEL_FIELD = {
@@ -474,113 +448,45 @@ _LEGACY_CHANNEL_FIELD = {
 }
 
 
-def _resolve_case_link(
-    raw_link: str, raw_title: str, articles: list[ProcessedArticle]
-) -> tuple[str, str]:
-    """(link, title) resolved against the board — exact link first.
+def _aggregate_hunt_queries(report: ExtractTtpsResponse, forensics: list[PerCaseForensics]) -> None:
+    """Fold per-case hunt queries (precomputed at ingest) into their sections.
 
-    Stage 2 receives links in its input so exact match is the norm; the
-    title-token containment fallback survives for models that echo abbreviated
-    case names ("DictateMD v. Ahmadi") instead.
+    Each forensic record carries 1-2 case-grounded queries; a technique section
+    gets the union of the queries from its member cases, deduped by logic.
     """
-    for article in articles:
-        if raw_link and article.link == raw_link:
-            return article.link, article.title
-    tokens = set(re.findall(r"[a-z0-9]+", raw_title.lower()))
-    if tokens:
-        for article in articles:
-            board_tokens = set(re.findall(r"[a-z0-9]+", article.title.lower()))
-            if board_tokens and (tokens <= board_tokens or board_tokens <= tokens):
-                return article.link, article.title
-    return raw_link, raw_title
-
-
-def _parse_hunt_queries(value: Any) -> list[HuntQuery]:
-    queries: list[HuntQuery] = []
-    if not isinstance(value, list):
-        return queries
-    for raw in value[:5]:
-        if not isinstance(raw, dict):
-            continue
-        logic = str(raw.get("logic") or "").strip()[:600]
-        if not logic:
-            continue
-        queries.append(
-            HuntQuery(
-                stack=str(raw.get("stack") or "").strip()[:60] or "SIEM",
-                logic=logic,
-                rationale=str(raw.get("rationale") or "").strip()[:300],
-            )
-        )
-    return queries
-
-
-def _merge_synthesis(
-    floor: ExtractTtpsResponse,
-    synthesis: dict[str, Any],
-    *,
-    articles: list[ProcessedArticle],
-) -> ExtractTtpsResponse:
-    """Validated stage-2 sections layered over the floor.
-
-    Only real ITM catalog ids survive; sections the LLM missed but the lexical
-    floor found stay in the report so evidence never disappears.
-    """
-    report = floor.model_copy(deep=True)
-    merged = {s.id: s for s in report.techniques}
-    for raw in (synthesis.get("techniques") or [])[:24]:
-        if not isinstance(raw, dict):
-            continue
-        tid = str(raw.get("id") or "").strip().upper()
-        meta = _technique_meta(tid)
-        if not tid or meta is None:
-            continue
-        title, description = meta
-        cases: list[TtpCaseEvidence] = []
-        for case in (raw.get("cases") or [])[:8]:
-            if not isinstance(case, dict):
+    by_link = {r.link: r for r in forensics}
+    for section in report.techniques:
+        seen: set[str] = set()
+        queries: list[HuntQuery] = []
+        for case in section.cases:
+            record = by_link.get(case.link)
+            if record is None:
                 continue
-            link, case_title = _resolve_case_link(
-                str(case.get("link") or "").strip(),
-                str(case.get("title") or "").strip()[:200],
-                articles,
-            )
-            bullets = [
-                str(b).strip()[:300] for b in (case.get("bullets") or [])[:8] if str(b).strip()
-            ]
-            tradecraft = str(case.get("tradecraft") or "").strip()[:600]
-            if not (bullets or tradecraft) or not (case_title or link):
-                continue
-            cases.append(
-                TtpCaseEvidence(
-                    title=case_title or link, link=link, bullets=bullets, tradecraft=tradecraft
+            for seed in record.hunt_queries:
+                key = seed.logic.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                queries.append(
+                    HuntQuery(stack=seed.stack, logic=seed.logic, rationale=seed.rationale)
                 )
-            )
-        if not cases:
-            continue
-        merged[tid] = TtpTechniqueSection(
-            id=tid,
-            title=title,
-            description=description,
-            cases=cases,
-            tradecraft_summary=str(raw.get("tradecraft_summary") or "").strip()[:800],
-            observables=parse_observables(raw.get("observables"), limit=8),
-            detection=TechniqueDetectionGuidance(
-                hunt_queries=_parse_hunt_queries(raw.get("hunt_queries"))
-            ),
-        )
-    report.techniques = list(merged.values())[:12]
-    report.summary = str(synthesis.get("summary") or "").strip()[:900] or floor.summary
-    return report
+                if len(queries) >= 5:
+                    break
+            if len(queries) >= 5:
+                break
+        if queries:
+            section.detection.hunt_queries = queries
 
 
 def _mechanical_sections(
     floor: ExtractTtpsResponse, forensics: list[PerCaseForensics]
 ) -> ExtractTtpsResponse:
-    """Stage-2-failed fallback: group stage-1 records by their technique ids.
+    """Build technique sections from enriched forensic records, over the floor.
 
-    No prose synthesis — bullets come straight from extracted method actions,
-    observables aggregate per technique; floor sections are unioned in.
+    Bullets come straight from the stored method actions; observables aggregate
+    per technique. Floor-only records (not yet enriched) are skipped here — the
+    lexical floor already carries their sections — so the report degrades
+    gracefully as coverage fills in.
     """
     report = floor.model_copy(deep=True)
     merged = {s.id: s for s in report.techniques}
@@ -632,207 +538,21 @@ def _derive_legacy_fields(report: ExtractTtpsResponse, forensics: list[PerCaseFo
     report.seeds = _uniq(report.seeds + [t for r in forensics for t in r.hunt_terms])
 
 
-def _parse_llm_json(content: str) -> dict[str, Any] | None:
-    cleaned = (content or "").strip()
-    if not cleaned:
-        return None
-    fence = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", cleaned)
-    if fence:
-        cleaned = fence.group(1).strip()
-    try:
-        data = json.loads(cleaned)
-    except ValueError:
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if not match:
-            return None
-        data = json.loads(match.group(0))
-    return data if isinstance(data, dict) else None
-
-
-def resolve_extract_providers(
-    cfg: Settings, stage: Literal["stage1", "stage2"] | None = None
-) -> list[tuple[str, str]]:
-    """Ordered (provider, model) candidates for the extract LLM.
-
-    An explicit provider choice yields exactly that provider (or nothing if
-    its key is missing). "auto" lists every configured provider — the caller
-    tries them in order, so a provider that errors at request time (e.g. an
-    account out of credits) falls through to the next one.
-
-    ``stage`` applies the EXTRACT_STAGE{1,2}_LLM_PROVIDER / _MODEL overrides;
-    unset overrides inherit the base EXTRACT_LLM_PROVIDER behavior. A model
-    override only makes sense with an explicit provider — under "auto" it is
-    ignored (which provider it belongs to would be a guess).
-    """
-    from shared.llm import resolve_gemini_compat, resolve_openai_compat
-
-    provider_override: str | None = None
-    model_override: str | None = None
-    if stage == "stage1":
-        provider_override = cfg.extract_stage1_llm_provider
-        model_override = cfg.extract_stage1_model
-    elif stage == "stage2":
-        provider_override = cfg.extract_stage2_llm_provider
-        model_override = cfg.extract_stage2_model
-
-    choice = (provider_override or cfg.extract_llm_provider or "auto").strip().lower()
-    xai_key = (cfg.xai_api_key or "").strip()
-    anthropic_key = (cfg.anthropic_api_key or "").strip()
-    gemini_key = (cfg.gemini_api_key or "").strip()
-    openai_key = (cfg.openai_api_key or "").strip()
-
-    def with_model(default: str) -> str:
-        return (model_override or "").strip() or default
-
-    if choice == "none":
-        return []
-    if choice == "xai":
-        return [("xai", with_model(cfg.xai_model))] if xai_key else []
-    if choice == "anthropic":
-        return [("anthropic", with_model(cfg.anthropic_model))] if anthropic_key else []
-    if choice == "gemini":
-        return [("gemini", with_model(cfg.gemini_model))] if gemini_key else []
-    if choice == "openai":
-        # Explicit choice allows keyless local endpoints (Ollama etc.).
-        return [("openai", with_model(resolve_openai_compat(cfg)[1]))]
-    if model_override:
-        logger.warning("EXTRACT_%s_MODEL ignored: provider is 'auto'", (stage or "").upper())
-    # auto: every configured key, in preference order. The localhost endpoint
-    # is never auto-picked — only a real key signals intent.
-    candidates: list[tuple[str, str]] = []
-    if xai_key:
-        candidates.append(("xai", cfg.xai_model))
-    if anthropic_key:
-        candidates.append(("anthropic", cfg.anthropic_model))
-    if gemini_key:
-        candidates.append(("gemini", resolve_gemini_compat(cfg)[1]))
-    if openai_key:
-        candidates.append(("openai", resolve_openai_compat(cfg)[1]))
-    return candidates
-
-
-def _call_extract_llm(
-    *,
-    provider: str,
-    model: str,
-    system: str,
-    user: str,
-    cfg: Settings,
-    max_tokens: int = 2000,
-) -> dict[str, Any] | None:
-    if provider == "xai":
-        headers = {
-            "Authorization": f"Bearer {(cfg.xai_api_key or '').strip()}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "temperature": 0.2,
-            "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
-        }
-        with httpx.Client(timeout=75.0) as client:
-            resp = client.post(XAI_CHAT_URL, headers=headers, json=body)
-            if resp.status_code >= 400:
-                logger.warning("xAI extract HTTP %s: %s", resp.status_code, resp.text[:300])
-                return None
-            data = resp.json()
-            content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-            return _parse_llm_json(content)
-    if provider == "anthropic":
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=(cfg.anthropic_api_key or "").strip(), timeout=75.0)
-        message = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        parts = [block.text for block in message.content if getattr(block, "text", None)]
-        return _parse_llm_json("".join(parts))
-    if provider in ("openai", "gemini"):
-        from shared.llm import resolve_gemini_compat, resolve_openai_compat
-        from shared.llm.openai_provider import _chat_completion
-
-        resolver = resolve_gemini_compat if provider == "gemini" else resolve_openai_compat
-        base_url, _default_model, api_key = resolver(cfg)
-        content = _chat_completion(
-            base_url=base_url.rstrip("/"),
-            model=model,
-            api_key=api_key,
-            timeout=75.0,
-            system=system,
-            user=user,
-            max_tokens=max_tokens,
-        )
-        return _parse_llm_json(content or "")
-    logger.warning("Unknown extract provider %r", provider)
-    return None
-
-
-class _ProviderCaller:
-    """Callable running the provider fall-through chain for one stage."""
-
-    def __init__(self, candidates: list[tuple[str, str]], cfg: Settings) -> None:
-        self.candidates = candidates
-        self.cfg = cfg
-        self.last_provider: str | None = None
-        self.failures: list[str] = []
-
-    def __call__(self, system: str, user: str, max_tokens: int) -> dict[str, Any] | None:
-        for provider, model in self.candidates:
-            try:
-                data = _call_extract_llm(
-                    provider=provider,
-                    model=model,
-                    system=system,
-                    user=user,
-                    cfg=self.cfg,
-                    max_tokens=max_tokens,
-                )
-            except Exception as exc:  # noqa: BLE001 — fall through to the next provider
-                logger.warning("%s extract failed: %s", provider, exc)
-                self.failures.append(f"{provider}: {exc}")
-                continue
-            if not data:
-                self.failures.append(f"{provider}: empty reply")
-                continue
-            self.last_provider = provider
-            return data
-        return None
-
-
-def _candidate_detail_block(forensics: list[PerCaseForensics]) -> list[tuple[str, str, str]]:
-    """(id, title, first-sentence description) for likely-relevant techniques."""
-    seen: set[str] = set()
-    detail: list[tuple[str, str, str]] = []
-    for record in forensics:
-        for tid in record.candidate_technique_ids:
-            tid = tid.upper()
-            if tid in seen:
-                continue
-            seen.add(tid)
-            meta = _technique_meta(tid)
-            if meta is None:
-                continue
-            detail.append((tid, meta[0], meta[1]))
-            if len(detail) >= 20:
-                return detail
-    return detail
-
-
 def extract_ttps_for_links(
     index: ArticleSearchIndex,
     links: list[str],
     *,
     settings: Settings | None = None,
 ) -> ExtractTtpsResponse:
-    cfg = settings or get_settings()
+    """Assemble a hunt report from stored ingest-time forensic records.
+
+    No LLM at read time: each boarded article contributes its stored
+    ``forensics`` record (or a floor-derived one if not yet enriched), and the
+    report is built in code — technique sections with per-case tradecraft and
+    observables, ITM detections/preventions from the catalog, and the
+    case-grounded hunt queries precomputed at ingest.
+    """
+    _ = settings or get_settings()  # reserved for future knobs; kept for signature parity
     articles: list[ProcessedArticle] = []
     missing: list[str] = []
     for link in links:
@@ -854,79 +574,26 @@ def extract_ttps_for_links(
     if missing:
         floor.detail = f"{floor.detail}; {len(missing)} link(s) not in index"
 
-    stage1_candidates = resolve_extract_providers(cfg, stage="stage1")
-    stage2_candidates = resolve_extract_providers(cfg, stage="stage2")
-    if not stage1_candidates and not stage2_candidates:
-        if (cfg.extract_llm_provider or "auto").strip().lower() != "none":
-            floor.detail += " · LLM off (no XAI/ANTHROPIC/GEMINI/OPENAI key)"
-        return floor
-
-    # Stage 1: deep-read the richest articles; everything else gets a
-    # floor-derived forensic record so synthesis always sees the whole board.
-    deep_set = (
-        select_deep_articles(articles, max_articles=cfg.extract_deep_max_articles)
-        if stage1_candidates
-        else []
-    )
-    stage1_results: dict[str, PerCaseForensics] = {}
-    cached = 0
-    stage1_failures: list[str] = []
-    if deep_set:
-        enrich: dict[str, str] = {}
-        with httpx.Client(timeout=20.0) as client:
-            for article in deep_set:
-                extra = enrich_courtlistener_snippet(
-                    article, token=cfg.courtlistener_api_token, client=client
-                )
-                if extra:
-                    enrich[article.link] = extra
-        stage1_caller = _ProviderCaller(stage1_candidates, cfg)
-        stage1_results, cached, stage1_failures = deep_extract.run_stage1(
-            deep_set, cfg=cfg, call_llm=stage1_caller, enrich=enrich
+    forensics = [
+        (
+            article.forensics.model_copy(update={"link": article.link, "title": article.title})
+            if getattr(article, "forensics", None) is not None
+            else forensics_from_floor(article)
         )
-    forensics = [stage1_results.get(a.link) or forensics_from_floor(a) for a in articles]
-    deep_count = sum(1 for r in forensics if r.extraction_status == "llm")
-    floor_count = len(forensics) - deep_count
+        for article in articles
+    ]
+    enriched = sum(1 for r in forensics if r.extraction_status == "llm")
+    floor_count = len(forensics) - enriched
 
-    # Stage 2: one synthesis call over every forensic record.
-    synthesis: dict[str, Any] | None = None
-    stage2_caller = _ProviderCaller(stage2_candidates, cfg)
-    if stage2_candidates:
-        user = build_stage2_user_prompt(forensics, _candidate_detail_block(forensics))
-        synthesis = stage2_caller(STAGE2_SYSTEM_PROMPT, user, STAGE2_MAX_TOKENS)
-        logger.info(
-            "extract deep: %d stage1 (%d cached, %d failed) + 1 synthesis via %s",
-            len(deep_set),
-            cached,
-            len(stage1_failures),
-            stage2_caller.last_provider or "none",
-        )
-
-    if synthesis:
-        report = _merge_synthesis(floor, synthesis, articles=articles)
-        report.mode = "llm"
-        report.report_version = 2
-        report.detail = (
-            f"LLM deep ({stage2_caller.last_provider}) · "
-            f"{deep_count} deep / {floor_count} floor source(s)"
-        )
-        if stage1_failures:
-            report.detail += f" · {len(stage1_failures)} deep extraction(s) failed"
-    elif deep_count:
-        # Synthesis failed but per-article extraction worked — group mechanically.
-        report = _mechanical_sections(floor, forensics)
-        report.mode = "llm"
-        report.report_version = 2
-        report.detail = (
-            f"Synthesis failed — per-case extraction only · "
-            f"{deep_count} deep / {floor_count} floor source(s)"
-        )
-    else:
-        failures = stage1_failures + stage2_caller.failures
-        floor.detail += f" · LLM failed ({'; '.join(failures)[:400]})"
-        return floor
-
+    report = _mechanical_sections(floor, forensics)
+    _aggregate_hunt_queries(report, forensics)
     for section in report.techniques:
         _attach_controls(section)
     _derive_legacy_fields(report, forensics)
+
+    report.mode = "llm" if enriched else "seeds"
+    report.report_version = 3
+    report.detail = (
+        f"Assembled from stored forensics · {enriched} enriched / {floor_count} floor source(s)"
+    )
     return report

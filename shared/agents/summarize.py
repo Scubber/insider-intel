@@ -1,9 +1,10 @@
-"""Ingest summarizer: one LLM call → ai_summary + CaseRecord + ITM adjudication.
+"""Ingest enricher: one LLM call → ai_summary + forensic record + ITM adjudication.
 
 Shared by the article-processor graph node and the pipeline backfill sweep.
-Every failure path degrades to "no summary" — a missing record is never an
+Every failure path degrades to "no enrichment" — a missing record is never an
 error, and the heuristics-only pipeline behaves exactly as before when
-SUMMARIZER_LLM_PROVIDER is unset.
+SUMMARIZER_LLM_PROVIDER is unset. The legacy ``CaseRecord`` is derived from the
+forensic record so the existing analyst-note UI keeps working unchanged.
 """
 
 from __future__ import annotations
@@ -13,8 +14,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from shared.itm.controls import resolve_controls
-from shared.llm import get_summarizer_provider
+from shared.llm import ItmRef, get_summarizer_provider
 from shared.schemas.articles import CaseRecord, ExtractedEntities, ItmHit, resolve_channel
+from shared.schemas.forensics import (
+    PerCaseForensics,
+    case_record_from_forensics,
+    parse_forensics_json,
+)
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
 
 if TYPE_CHECKING:
@@ -182,7 +188,30 @@ def merge_llm_hits(entities: ExtractedEntities, llm_hits: list[ItmHit]) -> Extra
     )
 
 
-def summarize_fields(
+def _coerce_itm_refs(raw: object) -> list[ItmRef]:
+    """Build ItmRef objects from the LLM's raw ``itm_refs`` list, dropping junk."""
+    refs: list[ItmRef] = []
+    if not isinstance(raw, list):
+        return refs
+    for item in raw:
+        if not isinstance(item, dict) or not str(item.get("id") or "").strip():
+            continue
+        try:
+            conf = float(item.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        evidence = item.get("evidence")
+        refs.append(
+            ItmRef(
+                id=str(item["id"]).strip(),
+                confidence=max(0.0, min(1.0, conf)),
+                evidence=str(evidence).strip()[:200] if isinstance(evidence, str) else None,
+            )
+        )
+    return refs
+
+
+def enrich_fields(
     *,
     title: str,
     source: str,
@@ -191,14 +220,20 @@ def summarize_fields(
     use_cases: list[str],
     settings: Settings,
     budget: SummaryBudget,
-) -> tuple[str | None, CaseRecord | None, list[ItmHit]]:
-    """Run the summarizer LLM for one article. Never raises.
+) -> tuple[str | None, PerCaseForensics | None, CaseRecord | None, list[ItmHit]]:
+    """Run the unified enricher LLM for one article. Never raises.
 
-    Returns (ai_summary, case_record, llm_itm_hits) — all empty when the
-    provider is off, the article doesn't qualify, the budget is exhausted,
-    or the call/parse fails.
+    Returns (ai_summary, forensics, case_record, llm_itm_hits) — all empty when
+    the provider is off, the article doesn't qualify, the budget is exhausted,
+    or the call/parse fails. The forensic record is stamped by the caller with
+    the article link/title and the final merged ``candidate_technique_ids``.
     """
-    empty: tuple[str | None, CaseRecord | None, list[ItmHit]] = (None, None, [])
+    empty: tuple[str | None, PerCaseForensics | None, CaseRecord | None, list[ItmHit]] = (
+        None,
+        None,
+        None,
+        [],
+    )
     provider = get_summarizer_provider(settings)
     if provider is None:
         return empty
@@ -219,37 +254,31 @@ def summarize_fields(
 
     candidates = build_itm_candidates(text, lexical_hits)
     try:
-        result = provider.extract_case(
+        raw = provider.extract_case(
             title=title, source=source, text=text, itm_candidates=candidates
         )
-    except Exception as exc:  # noqa: BLE001 — a failed summary must not sink the article
-        logger.warning("Summarizer failed for %r: %s", title[:80], exc)
+    except Exception as exc:  # noqa: BLE001 — a failed enrichment must not sink the article
+        logger.warning("Enricher failed for %r: %s", title[:80], exc)
         return empty
-    if result is None:
-        logger.warning("Summarizer returned nothing for %r", title[:80])
+    if not raw:
+        logger.warning("Enricher returned nothing for %r", title[:80])
         return empty
 
-    summary = (result.ai_summary or "").strip() or None
-    record = CaseRecord(
-        is_insider_case=result.is_insider_case,
-        actor_role=result.actor_role,
-        access_vector=result.access_vector,
-        motive_signals=result.motive_signals,
-        methods=result.methods,
-        exfil_channels=result.exfil_channels,
-        timeframe=result.timeframe,
-        detection_trigger=result.detection_trigger,
-        outcome=result.outcome,
-        confidence=result.confidence,
-        extracted_at=datetime.now(UTC),
-        model=getattr(provider, "model_name", None),
-    ).sanitized()
-    llm_hits = _validate_itm_refs(result.itm_refs, lexical_hits)
+    forensics = parse_forensics_json(raw, link="", title=title).model_copy(
+        update={
+            "extracted_at": datetime.now(UTC),
+            "model": getattr(provider, "model_name", None),
+        }
+    )
+    summary = (str(raw.get("ai_summary") or "")).strip() or None
+    record = case_record_from_forensics(forensics)
+    llm_hits = _validate_itm_refs(_coerce_itm_refs(raw.get("itm_refs")), lexical_hits)
     logger.info(
-        "Case record extracted for %r (insider=%s, confidence=%.2f, llm_itm=%d)",
+        "Case enriched for %r (insider=%s, confidence=%.2f, methods=%d, llm_itm=%d)",
         title[:70],
-        record.is_insider_case,
-        record.confidence,
+        forensics.is_insider_case,
+        forensics.confidence,
+        len(forensics.methods),
         len(llm_hits),
     )
-    return summary, record, llm_hits
+    return summary, forensics, record, llm_hits

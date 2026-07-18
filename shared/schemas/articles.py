@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from shared.schemas.forensics import PerCaseForensics
+
 # Provenance lane for stream filters (orthogonal to Insider Focus).
 Channel = Literal["news", "filings", "tips", "social"]
 
@@ -297,7 +299,11 @@ class ProcessedArticle(BaseModel):
     ai_summary: str | None = None
     case_record: CaseRecord | None = Field(
         default=None,
-        description="Structured case facts from the ingest summarizer LLM",
+        description="Structured case facts (derived from forensics for UI back-compat)",
+    )
+    forensics: PerCaseForensics | None = Field(
+        default=None,
+        description="Ingest-time forensic reconstruction from the unified enricher LLM",
     )
     embedding: list[float] | None = None
 

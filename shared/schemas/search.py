@@ -8,6 +8,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from shared.schemas.articles import CaseRecord, ControlRef, ItmHit
+from shared.schemas.forensics import PerCaseForensics
 
 
 class SearchMode(StrEnum):
@@ -59,6 +60,10 @@ class SearchHit(BaseModel):
     case_record: CaseRecord | None = Field(
         default=None,
         description="Structured case facts from the ingest summarizer LLM",
+    )
+    forensics: PerCaseForensics | None = Field(
+        default=None,
+        description="Ingest-time forensic reconstruction (unified enricher LLM)",
     )
 
 

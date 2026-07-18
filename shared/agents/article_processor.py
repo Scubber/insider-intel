@@ -14,7 +14,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from shared.agents.summarize import SummaryBudget, merge_llm_hits, summarize_fields
+from shared.agents.summarize import SummaryBudget, enrich_fields, merge_llm_hits
 from shared.llm import get_classifier_provider
 from shared.schemas import ProcessedArticle, RawArticle
 from shared.schemas.articles import ExtractedEntities, ItmHit, resolve_channel
@@ -45,9 +45,11 @@ class ArticleProcessState(TypedDict, total=False):
     classification_confidence: float | None
     ai_summary: str | None
     case_record: dict[str, Any] | None
+    forensics: dict[str, Any] | None
     # Carry-forward inputs so reprocessing never re-bills the LLM
     prior_ai_summary: str | None
     prior_case_record: dict[str, Any] | None
+    prior_forensics: dict[str, Any] | None
     prior_llm_itm_hits: list[dict[str, Any]]
     budget: Any
     embedding: list[float]
@@ -122,24 +124,32 @@ def _llm_gate_passes(
 
 
 def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
-    """One LLM call → ai_summary + case_record + LLM ITM hits; never raises."""
+    """One LLM call → ai_summary + forensic record + LLM ITM hits; never raises."""
     entities = ExtractedEntities.model_validate(state.get("entities") or {})
     prior_summary = state.get("prior_ai_summary")
     prior_record = state.get("prior_case_record")
+    prior_forensics = state.get("prior_forensics")
     prior_llm_hits = [ItmHit.model_validate(h) for h in state.get("prior_llm_itm_hits") or []]
-    if prior_summary is not None or prior_record is not None or prior_llm_hits:
-        # Cache hit: the article was summarized in a previous run — reuse it.
+    if (
+        prior_summary is not None
+        or prior_record is not None
+        or prior_forensics is not None
+        or prior_llm_hits
+    ):
+        # Cache hit: the article was enriched in a previous run — reuse it,
+        # never re-billing the LLM.
         merged = merge_llm_hits(entities, prior_llm_hits)
         return {
             "ai_summary": prior_summary,
             "case_record": prior_record,
+            "forensics": prior_forensics,
             "entities": merged.model_dump(),
         }
 
     raw = RawArticle.model_validate(state["raw"])
     settings = get_settings()
     budget = state.get("budget") or SummaryBudget(settings.summarizer_max_articles_per_run)
-    summary, record, llm_hits = summarize_fields(
+    summary, forensics, record, llm_hits = enrich_fields(
         title=raw.title,
         source=raw.source_id,
         text=state.get("clean_text") or "",
@@ -149,9 +159,21 @@ def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
         budget=budget,
     )
     merged = merge_llm_hits(entities, llm_hits)
+    forensics_dump: dict[str, Any] | None = None
+    if forensics is not None:
+        # Stamp the article link/title and the final catalog-validated technique
+        # ids (lexical ∪ LLM-adjudicated) so the report assembles from one source.
+        forensics_dump = forensics.model_copy(
+            update={
+                "link": raw.link,
+                "title": raw.title,
+                "candidate_technique_ids": [h.id.upper() for h in merged.itm_hits],
+            }
+        ).model_dump(mode="json")
     return {
         "ai_summary": summary,
         "case_record": record.model_dump(mode="json") if record else None,
+        "forensics": forensics_dump,
         "entities": merged.model_dump(),
     }
 
@@ -203,6 +225,7 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         classification_confidence=state.get("classification_confidence"),
         ai_summary=state.get("ai_summary"),
         case_record=state.get("case_record"),
+        forensics=state.get("forensics"),
         embedding=state.get("embedding"),
     )
     return {"processed": processed.model_dump(mode="json")}
@@ -250,17 +273,25 @@ def process_article(
     """Run the LangGraph processor on a single raw article.
 
     ``prior`` carries already-paid-for LLM fields (ai_summary / case_record /
-    LLM ITM hits) through a re-process so the summarizer is never re-billed.
-    ``budget`` shares one per-run LLM allowance across many calls.
+    forensics / LLM ITM hits) through a re-process so the enricher is never
+    re-billed. ``budget`` shares one per-run LLM allowance across many calls.
+
+    A legacy row (case_record from the old summarizer, no forensics) normally
+    carries forward untouched; when ``SUMMARIZER_UPGRADE_LEGACY`` is set it is
+    left un-carried so the enricher re-bills it once to add the forensic record.
     """
     initial: dict[str, Any] = {"raw": raw.model_dump(mode="json")}
     if budget is not None:
         initial["budget"] = budget
-    if prior is not None:
+    prior_forensics = getattr(prior, "forensics", None) if prior is not None else None
+    upgrade_legacy = get_settings().summarizer_upgrade_legacy and prior_forensics is None
+    if prior is not None and not upgrade_legacy:
         if prior.ai_summary is not None:
             initial["prior_ai_summary"] = prior.ai_summary
         if prior.case_record is not None:
             initial["prior_case_record"] = prior.case_record.model_dump(mode="json")
+        if prior_forensics is not None:
+            initial["prior_forensics"] = prior_forensics.model_dump(mode="json")
         prior_llm = [
             hit.model_dump(mode="json")
             for hit in prior.entities.itm_hits
