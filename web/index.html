@@ -38,11 +38,22 @@
     <div class="atmosphere" aria-hidden="true"></div>
 
     <header class="top">
-      <div class="brand-block">
-        <h1 class="product">insider-intel</h1>
-        <p class="tagline">// INSIDER INTELLIGENCE, MADE SIMPLE</p>
+      <div class="masthead-row masthead-row-top">
+        <div class="brand-block">
+          <h1 class="product">insider-intel</h1>
+          <p class="tagline">// INSIDER INTELLIGENCE, MADE SIMPLE</p>
+        </div>
+        <nav class="masthead-nav" aria-label="Sections">
+          <button type="button" class="masthead-nav-item active" data-pane="articles">STREAM</button>
+          <button type="button" class="masthead-nav-item" data-pane="matrix">MATRIX</button>
+          <button type="button" class="masthead-nav-item" data-pane="workbench">
+            WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
+          </button>
+        </nav>
+        <span class="live-status" id="live-status">LIVE</span>
       </div>
-      <form class="search-bar" id="search-form" autocomplete="off">
+      <div class="masthead-row masthead-row-search">
+        <form class="search-bar" id="search-form" autocomplete="off">
         <label class="sr-only" for="q">Search</label>
         <input
           id="q"
@@ -84,7 +95,8 @@
           aria-label="Core Four hunt topics"
         ></div>
       </div>
-      <details class="refine-panel" id="refine-panel" open>
+      </div>
+      <details class="refine-panel" id="refine-panel">
         <summary class="refine-summary" id="refine-summary">
           <span class="refine-label">Refine</span>
           <span class="refine-state" id="refine-state">Insider · All channels</span>
@@ -259,6 +271,10 @@
             </label>
             <div class="matrix-columns" id="matrix-columns"></div>
             <ul class="matrix-control-list" id="matrix-control-list" hidden></ul>
+            <p class="itm-index-attribution">
+              ITM™ owned by Forscie Limited. Not affiliated with or endorsed by
+              Forscie.
+            </p>
           </div>
         </aside>
 
@@ -272,7 +288,7 @@
               >j/k · x flag · d dismiss · ⏎ open · / hunt</span
             >
             <button type="button" id="refresh-stream" class="ghost stream-refresh">
-              Refresh
+              Refresh ↻
             </button>
           </div>
           <div class="pane-body" id="article-panel">
@@ -328,67 +344,11 @@
               <ul id="dossier-article-list" class="article-list"></ul>
             </div>
           </div>
-        </section>
-
-        <section
-          class="pane pane-workbench"
-          data-pane-panel="workbench"
-          id="workbench"
-          aria-label="Keyword workbench"
-        >
-          <div class="pane-head">
-            <h2>Workbench</h2>
-            <button
-              type="button"
-              class="info-tip"
-              aria-label="About the Workbench"
-              aria-describedby="workbench-tip-text"
-              data-tip="The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate."
-              data-tip-pos="bottom-end"
-            >
-              ?
-            </button>
-            <span id="workbench-tip-text" class="sr-only">The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate.</span>
-          </div>
-          <div class="pane-body panel">
-            <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
-              <div class="extraction-board-head">
-                <h3>
-                  EVIDENCE BOARD
-                  <span class="board-count" id="board-count">(0)</span>
-                </h3>
-                <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-extract" data-tip="Analyze the flagged articles into a TTP hunt report." data-tip-pos="bottom-start" class="copy-btn copy-btn-primary" disabled>
-                    Extract TTPs
-                  </button>
-                  <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                    Copy LLM
-                  </button>
-                  <button type="button" id="board-clear" data-tip="Remove all articles from the board." data-tip-pos="bottom-end" class="copy-btn" disabled>Clear</button>
-                </p>
-                <p class="panel-actions extraction-board-actions">
-                  <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                    Share link
-                  </button>
-                  <button type="button" id="board-export" data-tip="Download this board as a JSON file." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                    Export
-                  </button>
-                  <button type="button" id="board-import" data-tip="Load a board from an exported JSON file." data-tip-pos="bottom-end" class="copy-btn">Import</button>
-                  <input type="file" id="board-import-file" accept="application/json,.json" hidden />
-                </p>
-              </div>
-              <p class="kw-hint board-coach">
-                Flag with <strong>+</strong> on Articles → Extract TTPs → hunt report (email / chat /
-                network / human)
-              </p>
-              <p class="kw-hint" id="board-empty">
-                No articles flagged yet. Use <strong>+</strong> on a stream card, or Add to board
-                below.
-              </p>
-              <ul id="board-list" class="board-list" hidden></ul>
-            </section>
-
-            <section class="ttp-report" id="ttp-report" hidden aria-label="TTP hunt report">
+          <div class="pane-body report-view" id="report-panel" hidden>
+            <div class="report-head">
+              <button type="button" id="report-back" class="ghost dossier-back">← Stream</button>
+            </div>
+            <section class="ttp-report" id="ttp-report" aria-label="TTP hunt report">
               <div class="workbench-header">
                 <h3>Hunt report</h3>
                 <p class="kw-hint" id="ttp-report-meta"></p>
@@ -430,6 +390,61 @@
                 <p class="kw-hint">Paste-and-run queries built from this report.</p>
                 <div id="ttp-queries" class="query-stacks"></div>
               </div>
+            </section>
+          </div>
+        </section>
+
+        <section
+          class="pane pane-workbench"
+          data-pane-panel="workbench"
+          id="workbench"
+          aria-label="Keyword workbench"
+        >
+          <div class="pane-head">
+            <h2>Workbench</h2>
+            <button
+              type="button"
+              class="info-tip"
+              aria-label="About the Workbench"
+              aria-describedby="workbench-tip-text"
+              data-tip="The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate."
+              data-tip-pos="bottom-end"
+            >
+              ?
+            </button>
+            <span id="workbench-tip-text" class="sr-only">The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate.</span>
+          </div>
+          <div class="pane-body panel">
+            <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
+              <div class="extraction-board-head">
+                <h3>
+                  EVIDENCE BOARD
+                  <span class="board-count" id="board-count">(0)</span>
+                </h3>
+              </div>
+              <p class="kw-hint" id="board-empty">
+                Nothing flagged yet. Use <strong>+ FLAG</strong> on a case to build a hunt.
+              </p>
+              <ul id="board-list" class="board-list" hidden></ul>
+              <p class="board-extract-row">
+                <button type="button" id="board-extract" data-tip="Analyze the flagged articles into a TTP hunt report." data-tip-pos="bottom-start" class="board-extract-btn" disabled>
+                  EXTRACT TTPs →
+                </button>
+              </p>
+              <p class="panel-actions extraction-board-actions board-secondary-actions">
+                <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL." data-tip-pos="bottom-start" class="copy-btn" disabled>
+                  Share
+                </button>
+                <button type="button" id="board-export" data-tip="Download this board as a JSON file." data-tip-pos="bottom-start" class="copy-btn" disabled>
+                  Export
+                </button>
+                <button type="button" id="board-import" data-tip="Load a board from an exported JSON file." data-tip-pos="bottom-start" class="copy-btn">Import</button>
+                <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard." data-tip-pos="bottom-start" class="copy-btn" disabled>
+                  Copy LLM
+                </button>
+                <button type="button" id="board-clear" data-tip="Remove all articles from the board." data-tip-pos="bottom-end" class="copy-btn" disabled>Clear</button>
+                <input type="file" id="board-import-file" accept="application/json,.json" hidden />
+              </p>
             </section>
 
             <p class="panel-empty" id="panel-empty">

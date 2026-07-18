@@ -194,6 +194,10 @@
     matrixColumns: document.getElementById("matrix-columns"),
     matrixControlList: document.getElementById("matrix-control-list"),
     articlePanel: document.getElementById("article-panel"),
+    reportPanel: document.getElementById("report-panel"),
+    reportBack: document.getElementById("report-back"),
+    navBoardCount: document.getElementById("nav-board-count"),
+    liveStatus: document.getElementById("live-status"),
     dossierPanel: document.getElementById("dossier-panel"),
     dossierBack: document.getElementById("dossier-back"),
     dossierTitle: document.getElementById("dossier-title"),
@@ -264,6 +268,9 @@
         btn.classList.toggle("active", btn.dataset.pane === next);
       });
     }
+    document.querySelectorAll(".masthead-nav-item").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.pane === next);
+    });
   }
 
   function syncPaneForViewport() {
@@ -336,8 +343,10 @@
   function setView(view) {
     state.view = view;
     const isDossier = view === "dossier";
-    if (els.articlePanel) els.articlePanel.hidden = isDossier;
+    const isReport = view === "report";
+    if (els.articlePanel) els.articlePanel.hidden = isDossier || isReport;
     if (els.dossierPanel) els.dossierPanel.hidden = !isDossier;
+    if (els.reportPanel) els.reportPanel.hidden = !isReport;
     if (!isDossier) state.dossierTechniqueId = null;
   }
 
@@ -713,7 +722,7 @@
     state.extractionBoard = {};
     saveExtractionBoard();
     state.lastTtpReport = null;
-    if (els.ttpReport) els.ttpReport.hidden = true;
+    if (state.view === "report") setView("stream");
     renderExtractionBoard();
     syncBoardToggle();
     syncStreamBoardButtons();
@@ -896,6 +905,7 @@
     const entries = boardEntries();
     const n = entries.length;
     if (els.boardCount) els.boardCount.textContent = `(${n})`;
+    if (els.navBoardCount) els.navBoardCount.textContent = `[${n}]`;
     if (els.boardExtract) els.boardExtract.disabled = n === 0;
     if (els.boardClear) els.boardClear.disabled = n === 0;
     if (els.boardCopyBrief) els.boardCopyBrief.disabled = n === 0;
@@ -1037,7 +1047,9 @@
   function renderTtpReport(report) {
     state.lastTtpReport = report;
     if (!els.ttpReport) return;
-    els.ttpReport.hidden = false;
+    // The hunt report renders in the center canvas (it needs the width) —
+    // swap the view like the technique dossier does.
+    setView("report");
     if (els.ttpReportMeta) {
       const mode = report.mode || (report.usedIf038Seeds ? "seeds" : "seeds");
       const modeLabel =
@@ -1053,9 +1065,9 @@
     fillCopyableChips(els.ttpHumanList, report.human, true);
     fillCopyableChips(els.ttpSeedList, report.seeds, true);
     renderQueryBlocks(els.ttpQueries, huntQueriesForReport(report));
-    if (isMobileLayout()) setActivePane("workbench");
+    if (isMobileLayout()) setActivePane("articles");
     try {
-      els.ttpReport.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      els.ttpReport.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch {
       /* ignore */
     }
@@ -2564,7 +2576,9 @@
     state.clusters = clusters;
     state.articles = flattenClusterMembers(clusters);
     els.streamTitle.textContent = title;
-    els.streamCount.textContent = `${clusters.length} shown`;
+    els.streamCount.textContent = state.searchMode
+      ? `${clusters.length} CASES`
+      : `${clusters.length} CASES · NEWEST FIRST`;
     els.articleList.innerHTML = "";
 
     state.cursorIndex = -1;
@@ -2803,17 +2817,14 @@
 
   function initRefinePanel() {
     if (!els.refinePanel) return;
+    // Collapsed by default on every layout (mockup: clean masthead — secondary
+    // filters live behind the Refine disclosure); remember the user's choice.
     const applyOpen = () => {
-      if (!isMobileLayout()) {
-        els.refinePanel.open = true;
-        return;
-      }
       const saved = sessionStorage.getItem(REFINE_OPEN_KEY);
       els.refinePanel.open = saved === "1";
     };
     applyOpen();
     els.refinePanel.addEventListener("toggle", () => {
-      if (!isMobileLayout()) return;
       sessionStorage.setItem(
         REFINE_OPEN_KEY,
         els.refinePanel.open ? "1" : "0",
@@ -2824,7 +2835,10 @@
   }
 
   function streamTitle() {
-    return state.sourceId ? "Source feed" : "Latest";
+    if (state.sourceId) return "Source feed";
+    // The active Core Four topic names the stream (mockup behavior).
+    if (state.useCase) return USE_CASE_LABELS[state.useCase] || "Latest";
+    return "Latest";
   }
 
   async function loadSources() {
@@ -3099,6 +3113,43 @@
     });
   }
 
+  if (els.reportBack) {
+    els.reportBack.addEventListener("click", () => {
+      setView("stream");
+      if (isMobileLayout()) setActivePane("articles");
+    });
+  }
+
+  // Masthead nav: on narrow layouts it drives the pane switch (same as the
+  // mobile tabs); on the wide 3-column layout every pane is visible, so it
+  // scrolls the section into view (and leaves the report/dossier for STREAM).
+  document.querySelectorAll(".masthead-nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pane = btn.dataset.pane || "articles";
+      if (!isWideLayout()) {
+        setActivePane(pane);
+        return;
+      }
+      document.querySelectorAll(".masthead-nav-item").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+      if (pane === "articles" && state.view !== "stream") setView("stream");
+      const target =
+        pane === "matrix"
+          ? document.querySelector(".pane-matrix")
+          : pane === "workbench"
+            ? document.getElementById("workbench")
+            : document.querySelector(".pane-articles");
+      if (target) {
+        try {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  });
+
   if (els.boardClear) {
     els.boardClear.addEventListener("click", () => clearBoard());
   }
@@ -3356,6 +3407,12 @@
         updatedAt: health.last_indexed_at || health.generated_at || null,
       };
       renderDataState();
+      if (els.liveStatus) {
+        const ts = state.dataState.updatedAt;
+        els.liveStatus.textContent = ts
+          ? `LIVE · ${formatDate(ts).toUpperCase()}`
+          : "LIVE";
+      }
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
