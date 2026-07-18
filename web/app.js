@@ -2424,19 +2424,22 @@
     }
 
     // 6. Expanded read state — un-clamps the note + points to the source.
-    const expandable = (article.summary || "").length > 160;
+    // Gate on the text actually shown (analystText = ai_summary || summary), not
+    // the raw feed summary, so READ matches the clamped note in production. The
+    // tail is built here but attached as a sibling of the card <button> below —
+    // it holds an anchor, which must not be nested inside the button.
+    const expandable = analystText.length > 160;
+    let readTail = null;
     if (expandable) {
-      const tail = document.createElement("p");
-      tail.className = "case-read-tail";
-      tail.append("— FULL TEXT VIA SOURCE · ");
+      readTail = document.createElement("p");
+      readTail.className = "case-read-tail";
+      readTail.append("— FULL TEXT VIA SOURCE · ");
       const orig = document.createElement("a");
       orig.href = article.link;
       orig.target = "_blank";
       orig.rel = "noopener";
       orig.textContent = "OPEN ORIGINAL ↗";
-      orig.addEventListener("click", (event) => event.stopPropagation());
-      tail.appendChild(orig);
-      btn.appendChild(tail);
+      readTail.appendChild(orig);
     }
 
     // Cluster siblings (other sources for the same story)
@@ -2547,7 +2550,12 @@
 
     footer.append(terms, actions);
 
-    li.append(tab, btn, footer);
+    // readTail sits between the card body and footer (a sibling of the button so
+    // its OPEN ORIGINAL anchor is never nested inside the .article-item button);
+    // it continues the card box and only shows when the row is .expanded.
+    li.append(tab, btn);
+    if (readTail) li.appendChild(readTail);
+    li.appendChild(footer);
     return li;
   }
 

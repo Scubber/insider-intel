@@ -1181,10 +1181,16 @@ body {
   white-space: pre-line;
 }
 
+/* Sibling of .article-item (not a child — it holds a link). Continues the card
+   box (panel bg + side borders, no margin) so body → read-tail → footer read as
+   one card; a dashed rule separates it from the note above. */
 .case-read-tail {
   display: none;
-  margin: 0.55rem 0 0;
-  padding-top: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 1.1rem 0.55rem;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   border-top: 1px dashed var(--line);
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -1301,6 +1307,29 @@ body {
 
 .case-stamp.insider-type-unintentional {
   color: #3f5e7a;
+}
+
+/* The stamp only renders when insider_type is set (production). Its fixed
+   classification hues read on the light dossier/cnn-lite paper but go muddy on
+   the dark backup themes — lift to legible tints and drop the opacity there. */
+[data-theme="midnight"] .case-stamp,
+[data-theme="phosphor"] .case-stamp {
+  opacity: 1;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-malicious,
+[data-theme="phosphor"] .case-stamp.insider-type-malicious {
+  color: #e07a70;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-negligent,
+[data-theme="phosphor"] .case-stamp.insider-type-negligent {
+  color: #d9ad4e;
+}
+
+[data-theme="midnight"] .case-stamp.insider-type-unintentional,
+[data-theme="phosphor"] .case-stamp.insider-type-unintentional {
+  color: #8fb3d9;
 }
 
 /* ANALYST NOTE block */
@@ -1960,16 +1989,6 @@ a.itm-chip:hover {
     min-height: 2.75rem;
   }
 
-  .article-board-btn {
-    width: 2.75rem;
-    height: 2.75rem;
-    top: 0.4rem;
-  }
-
-  .article-item {
-    padding: 0.8rem 3.1rem 0.8rem 0.35rem;
-  }
-
   .article-item .snip {
     -webkit-line-clamp: 2;
   }
@@ -2285,8 +2304,11 @@ button.chip.itm-chip {
   opacity: 0.45;
 }
 
-.article-row.dismissed .case-meta::after {
-  content: " · dismissed";
+/* On .row-meta (the flex container), not .case-meta — .case-meta truncates with
+   ellipsis and would clip this cue. As a flex item it is never clipped. */
+.article-row.dismissed .row-meta::after {
+  content: "· dismissed";
+  flex: 0 0 auto;
   color: var(--muted);
 }
 
