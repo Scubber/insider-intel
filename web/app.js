@@ -1869,10 +1869,43 @@
     if (!els.itmRail) return;
     const themes = aggregateItmRail(state.streamArticles || []);
     els.itmRail.innerHTML = "";
+
+    // Case filter: with an article selected, the rail collapses to that
+    // article's tagged techniques only (its matrix fingerprint). A case with
+    // zero hits leaves the rail unfiltered — nothing to fingerprint.
+    const caseIds = state.selectedArticleItmIds;
+    const caseFiltered = caseIds.size > 0;
+    if (caseFiltered) {
+      const filterHead = document.createElement("div");
+      filterHead.className = "itm-rail-filter";
+      const filterLabel = document.createElement("span");
+      filterLabel.textContent = "Case filter";
+      const showAll = document.createElement("button");
+      showAll.type = "button";
+      showAll.id = "itm-rail-show-all";
+      showAll.textContent = "Show all ↩";
+      showAll.title = "Show every technique observed in the stream";
+      showAll.addEventListener("click", () => {
+        state.selectedArticleItmIds = new Set();
+        renderItmRail();
+      });
+      filterHead.append(filterLabel, showAll);
+      els.itmRail.appendChild(filterHead);
+    }
+
     let any = false;
     MATRIX_THEMES.forEach((theme) => {
-      const bucket = themes.get(theme.id);
+      let bucket = themes.get(theme.id);
       if (!bucket || !bucket.techs.size) return; // hide unobserved themes
+      if (caseFiltered) {
+        const kept = new Map(
+          [...bucket.techs.entries()].filter(([id]) => caseIds.has(id)),
+        );
+        if (!kept.size) return; // theme not tagged in the selected case
+        // Header count reads truthfully while filtered: this case's
+        // technique count for the theme, not the stream article count.
+        bucket = { articleCount: kept.size, techs: kept };
+      }
       any = true;
       const head = document.createElement("div");
       head.className = "itm-rail-theme";
@@ -2004,7 +2037,7 @@
   function clearWorkbench() {
     state.selectedLink = null;
     state.selectedArticleItmIds = new Set();
-    syncItmRailCaseHighlight();
+    renderItmRail();
     els.panelEmpty.hidden = false;
     els.panelBody.hidden = true;
     syncBoardToggle();
@@ -2505,7 +2538,7 @@
     state.selectedArticleItmIds = new Set(
       (article.itm_hits || []).map((hit) => railParentId(hit && hit.id)).filter(Boolean),
     );
-    syncItmRailCaseHighlight();
+    renderItmRail();
 
     if (isMobileLayout() && !options.keepPane) setActivePane("workbench");
   }
