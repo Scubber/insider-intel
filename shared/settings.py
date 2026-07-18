@@ -93,11 +93,14 @@ class Settings(BaseSettings):
         le=200_000,
     )
     courtlistener_request_delay_seconds: float = Field(
-        default=1.0,
+        default=7.0,
         alias="COURTLISTENER_REQUEST_DELAY_SECONDS",
-        description="Politeness gap between backfill/purchase requests (burst-throttle guard)",
+        description=(
+            "Gap between backfill/purchase requests. CourtListener throttles "
+            "these endpoints at 10/min; 7s ≈ 8.5/min with margin."
+        ),
         ge=0.0,
-        le=10.0,
+        le=60.0,
     )
     courtlistener_backfill_max_dockets: int = Field(
         default=25,
