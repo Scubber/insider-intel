@@ -1,0 +1,44 @@
+name: refresh-corpus
+
+# Manually execute the corpus-refresh Cloud Run job from GitHub (keyless OIDC,
+# same identity as deploys) so on-demand refreshes are visible and auditable
+# in the Actions tab instead of ad-hoc gcloud runs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+
+concurrency:
+  group: refresh-corpus
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Execute corpus-refresh job
+        run: |
+          gcloud run jobs execute corpus-refresh \
+            --region "${REGION}" \
+            --project "${PROJECT_ID}" \
+            --wait
+      - name: Refresh highlights
+        if: always()
+        run: |
+          gcloud logging read "resource.labels.job_name=corpus-refresh" \
+            --project "${PROJECT_ID}" --freshness=40m \
+            --format='value(textPayload)' \
+            | grep -E 'PACER|backfill|Backfilled|throttled|Summar|X ingest|Skipping|reloaded|429|\[OK\]|\[FAIL\]' \
+            | head -60 || true
