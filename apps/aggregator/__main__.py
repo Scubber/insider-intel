@@ -155,6 +155,50 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(court_p)
 
+    court_text_p = sub.add_parser(
+        "backfill_courtlistener_text",
+        help=(
+            "Pull full document text (free RECAP archive / opinion bodies) "
+            "for stored court cases that only carry search metadata."
+        ),
+    )
+    court_text_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    court_text_p.add_argument(
+        "--processed-path",
+        type=str,
+        default=None,
+        help="Processed store whose LLM fields reset for enriched cases.",
+    )
+    court_text_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max fetch attempts this run (COURTLISTENER_BACKFILL_MAX_DOCKETS).",
+    )
+    _add_verbose(court_text_p)
+
+    pacer_p = sub.add_parser(
+        "purchase_pacer",
+        help=(
+            "Buy missing lead documents for qualifying cases via RECAP Fetch "
+            "(needs PACER_USERNAME/PASSWORD + COURTLISTENER_API_TOKEN; "
+            "budget-capped under the $30/quarter PACER fee waiver)."
+        ),
+    )
+    pacer_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    pacer_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max purchases this run (PACER_PURCHASE_MAX_PER_RUN).",
+    )
+    pacer_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List what would be bought without spending anything.",
+    )
+    _add_verbose(pacer_p)
+
     dtn_p = sub.add_parser(
         "ingest_datatheftnews",
         help=(
@@ -445,6 +489,36 @@ def _cmd_ingest_courtlistener(args: argparse.Namespace) -> int:
     return 1 if result.failure_count and not result.success_count else 0
 
 
+def _cmd_backfill_courtlistener_text(args: argparse.Namespace) -> int:
+    from apps.aggregator.courtlistener_pipeline import run_courtlistener_text_backfill
+
+    result = run_courtlistener_text_backfill(
+        store_path=args.store_path,
+        processed_path=args.processed_path,
+        limit=args.limit,
+    )
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_purchase_pacer(args: argparse.Namespace) -> int:
+    from apps.aggregator.pacer_purchase import run_pacer_purchases
+
+    result, plan = run_pacer_purchases(
+        store_path=args.store_path,
+        limit=args.limit,
+        dry_run=args.dry_run,
+    )
+    if args.dry_run:
+        if not plan.purchases:
+            print("Nothing to buy: no qualifying cases missing documents (or feature disabled).")
+        for p in plan.purchases:
+            print(f"WOULD BUY [{p.stage}] ~${p.estimated_cents / 100:.2f}  {p.title}  {p.link}")
+        return 0
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
 def _cmd_ingest_datatheftnews(args: argparse.Namespace) -> int:
     from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
 
@@ -651,6 +725,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_feedly(args)
     if args.command == "ingest_courtlistener":
         return _cmd_ingest_courtlistener(args)
+    if args.command == "backfill_courtlistener_text":
+        return _cmd_backfill_courtlistener_text(args)
+    if args.command == "purchase_pacer":
+        return _cmd_purchase_pacer(args)
     if args.command == "ingest_datatheftnews":
         return _cmd_ingest_datatheftnews(args)
     if args.command == "ingest_social":

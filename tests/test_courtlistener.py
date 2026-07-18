@@ -85,9 +85,7 @@ def test_opinion_hit_citation_as_string() -> None:
 
 def test_opinion_hit_to_raw_article_skips_incomplete() -> None:
     assert opinion_hit_to_raw_article({"caseName": "No link"}, query="x") is None
-    assert (
-        opinion_hit_to_raw_article({"absolute_url": "/opinion/1/"}, query="x") is None
-    )
+    assert opinion_hit_to_raw_article({"absolute_url": "/opinion/1/"}, query="x") is None
 
 
 def test_parse_types() -> None:
@@ -317,9 +315,7 @@ def _fake_search_recorder(results=None):
     return fake_search, calls
 
 
-def test_watermark_written_and_used_on_next_run(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_watermark_written_and_used_on_next_run(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from datetime import UTC, date, datetime, timedelta
 
     from apps.aggregator import courtlistener_pipeline as clp
@@ -346,9 +342,7 @@ def test_watermark_written_and_used_on_next_run(
     assert calls[1]["filed_after"] == expected
 
 
-def test_watermark_not_advanced_on_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_watermark_not_advanced_on_error(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from apps.aggregator import courtlistener_pipeline as clp
     from apps.aggregator.courtlistener import CourtListenerError
 
@@ -367,9 +361,7 @@ def test_watermark_not_advanced_on_error(
     assert not result.sources[0].success
 
 
-def test_since_overrides_watermark_read(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_since_overrides_watermark_read(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from apps.aggregator import courtlistener_pipeline as clp
 
     fake_search, calls = _fake_search_recorder()
@@ -386,9 +378,7 @@ def test_since_overrides_watermark_read(
     assert calls[0]["filed_after"] == "2020-01-01"
 
 
-def test_no_watermark_disables_read_and_write(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_no_watermark_disables_read_and_write(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from apps.aggregator import courtlistener_pipeline as clp
 
     fake_search, calls = _fake_search_recorder()
@@ -406,9 +396,7 @@ def test_no_watermark_disables_read_and_write(
     assert state.get("courtlistener:dockets") == "2026-06-01"  # unchanged
 
 
-def test_same_link_across_queries_saved_once(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_same_link_across_queries_saved_once(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from apps.aggregator import courtlistener_pipeline as clp
     from shared.schemas import RawArticle
 
@@ -438,3 +426,248 @@ def test_same_link_across_queries_saved_once(
     # Re-run: same content (first query wins) → no rewrite, nothing saved.
     result2 = clp.run_courtlistener_ingestion(**kwargs)
     assert result2.total_articles_saved == 0
+
+
+# --- Full-text backfill (RECAP archive / opinion cluster) ---------------------
+
+
+def test_parse_ids_from_links() -> None:
+    from apps.aggregator.courtlistener import parse_docket_id, parse_opinion_id
+
+    assert parse_docket_id("https://www.courtlistener.com/docket/123/us-v-x/") == 123
+    assert parse_docket_id("https://example.com/no-docket/") is None
+    assert parse_opinion_id("https://www.courtlistener.com/opinion/456/us-v-x/") == 456
+    assert parse_opinion_id(None) is None
+
+
+def test_fetch_recap_document_text_concatenates_available_docs() -> None:
+    from apps.aggregator.courtlistener import fetch_recap_document_text
+
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            text=json.dumps(
+                {
+                    "results": [
+                        {
+                            "plain_text": "COMPLAINT: the defendant copied files.",
+                            "description": "Complaint",
+                            "document_number": 1,
+                        },
+                        {"plain_text": "", "description": "Sealed", "document_number": 2},
+                        {
+                            "plain_text": "ORDER granting motion.",
+                            "description": "Order",
+                            "document_number": 3,
+                        },
+                    ]
+                }
+            ),
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        text = fetch_recap_document_text(123, client=client)
+
+    params = dict(requests[0].url.params)
+    assert params["docket_entry__docket__id"] == "123"
+    assert params["is_available"] == "true"
+    assert "plain_text" in params["fields"]
+    assert text.index("Complaint") < text.index("Order")
+    assert "defendant copied files" in text
+    assert "Sealed" not in text  # empty plain_text skipped
+
+
+def test_fetch_recap_document_text_empty_archive_is_not_an_error() -> None:
+    from apps.aggregator.courtlistener import fetch_recap_document_text
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=json.dumps({"results": []}))
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert fetch_recap_document_text(1, client=client) == ""
+
+
+def test_fetch_recap_document_text_respects_cap() -> None:
+    from apps.aggregator.courtlistener import fetch_recap_document_text
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text=json.dumps({"results": [{"plain_text": "x" * 5000, "document_number": 1}]}),
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        text = fetch_recap_document_text(1, max_chars=600, client=client)
+    assert len(text) <= 600
+
+
+def test_fetch_cluster_opinion_text_follows_sub_opinion() -> None:
+    from apps.aggregator.courtlistener import fetch_cluster_opinion_text
+
+    paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path.startswith("/api/rest/v4/clusters/"):
+            return httpx.Response(
+                200,
+                text=json.dumps(
+                    {"sub_opinions": ["https://www.courtlistener.com/api/rest/v4/opinions/9/"]}
+                ),
+            )
+        return httpx.Response(200, text=json.dumps({"plain_text": "OPINION BODY"}))
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        text = fetch_cluster_opinion_text(456, client=client)
+    assert text == "OPINION BODY"
+    assert paths == ["/api/rest/v4/clusters/456/", "/api/rest/v4/opinions/9/"]
+
+
+def test_storage_refresh_force_rewrites_content() -> None:
+    import tempfile
+    from pathlib import Path
+
+    from apps.aggregator.storage import JsonlArticleStore
+    from shared.schemas import RawArticle
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = JsonlArticleStore(Path(tmp) / "raw.jsonl")
+        original = RawArticle(
+            title="US v. X",
+            link="https://www.courtlistener.com/docket/1/us-v-x/",
+            summary="Court: SDNY",
+            content="CourtListener query: q",
+            source_id="courtlistener-recap",
+            source_name="CourtListener RECAP",
+            channel="filings",
+        )
+        store.save([original])
+
+        enriched = original.model_copy(
+            update={"content": "CourtListener query: q\nFULL DOCUMENT TEXT"}
+        )
+        # Default refresh cannot see a content-only change (same fingerprint,
+        # content already non-empty) …
+        assert store.refresh([enriched]) == (0, 0)
+        # … force rewrites it.
+        assert store.refresh([enriched], force=True) == (0, 1)
+        rows = JsonlArticleStore(Path(tmp) / "raw.jsonl").load_all()
+        assert "FULL DOCUMENT TEXT" in (rows[0].content or "")
+
+
+def _stored_docket(link: str, *, content: str = "CourtListener query: q"):
+    from shared.schemas import RawArticle
+
+    return RawArticle(
+        title=f"US v. {link.rsplit('/', 2)[-2]}",
+        link=link,
+        summary="Court: SDNY\nDocket: 1:24-cr-00001",
+        content=content,
+        source_id="courtlistener-recap",
+        source_name="CourtListener RECAP",
+        channel="filings",
+    )
+
+
+def test_text_backfill_enriches_and_resets_llm_fields(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.process_pipeline import run_processing
+    from apps.aggregator.processed_storage import JsonlProcessedStore
+    from apps.aggregator.storage import JsonlArticleStore
+    from shared.schemas import CaseRecord
+
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    store = JsonlArticleStore(raw_path)
+    store.save(
+        [
+            _stored_docket("https://www.courtlistener.com/docket/11/a/"),
+            _stored_docket(
+                "https://www.courtlistener.com/docket/12/b/",
+                content="CourtListener query: q\nALREADY HAS BODY",
+            ),
+        ]
+    )
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+
+    # Simulate a prior thin LLM extraction on the query-tag-only docket.
+    pstore = JsonlProcessedStore(processed_path)
+    rows = {r.link: r for r in pstore.load_all()}
+    thin = rows["https://www.courtlistener.com/docket/11/a/"].model_copy(
+        update={
+            "ai_summary": "thin",
+            "case_record": CaseRecord(is_insider_case=True, methods=["old"]),
+        }
+    )
+    pstore.upsert([thin])
+
+    monkeypatch.setattr(
+        clp, "fetch_recap_document_text", lambda docket_id, **kw: "FULL FILING TEXT " * 10
+    )
+    result = clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(processed_path),
+        state=clp.JsonIngestState(tmp_path / "state.json"),
+    )
+    assert result.total_articles_saved == 1  # only the query-tag-only row
+
+    raw_rows = {a.link: a for a in JsonlArticleStore(raw_path).load_all()}
+    assert "FULL FILING TEXT" in (
+        raw_rows["https://www.courtlistener.com/docket/11/a/"].content or ""
+    )
+    assert "ALREADY HAS BODY" in (
+        raw_rows["https://www.courtlistener.com/docket/12/b/"].content or ""
+    )
+
+    cleared = {r.link: r for r in JsonlProcessedStore(processed_path).load_all()}[
+        "https://www.courtlistener.com/docket/11/a/"
+    ]
+    assert cleared.ai_summary is None and cleared.case_record is None
+
+    # The enriched raw row is newer than its processed row → next processing
+    # run re-scores it with the full text in clean_text.
+    rerun = run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert rerun.articles_processed == 1
+    reprocessed = {r.link: r for r in JsonlProcessedStore(processed_path).load_all()}[
+        "https://www.courtlistener.com/docket/11/a/"
+    ]
+    assert "FULL FILING TEXT" in reprocessed.clean_text
+
+
+def test_text_backfill_respects_limit_and_retry_window(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.storage import JsonlArticleStore
+
+    raw_path = tmp_path / "raw.jsonl"
+    JsonlArticleStore(raw_path).save(
+        [_stored_docket(f"https://www.courtlistener.com/docket/{n}/case{n}/") for n in range(1, 5)]
+    )
+    calls: list[int] = []
+
+    def fake_fetch(docket_id, **kw):
+        calls.append(docket_id)
+        return ""  # archive has nothing yet
+
+    monkeypatch.setattr(clp, "fetch_recap_document_text", fake_fetch)
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+        limit=2,
+    )
+    assert len(calls) == 2  # per-run attempt cap
+
+    # Attempts are remembered: an immediate re-run moves on to fresh links
+    # instead of re-hitting the same dockets inside the retry window.
+    clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+        limit=10,
+    )
+    assert len(calls) == 4
+    assert len(set(calls)) == 4

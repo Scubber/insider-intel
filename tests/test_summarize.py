@@ -227,3 +227,32 @@ def test_search_hit_carries_summary_and_record() -> None:
     hit = ArticleSearchIndex._to_hit(enriched, 1.0)
     assert hit.ai_summary == "Analyst summary."
     assert hit.case_record is not None and hit.case_record.methods == ["USB copy"]
+
+
+def test_filings_get_the_bigger_prompt_budget(monkeypatch) -> None:
+    received: dict[str, int] = {}
+
+    class CapProbe(FakeSummarizer):
+        def extract_case(self, *, title, source, text, itm_candidates):
+            received[source] = len(text)
+            return super().extract_case(
+                title=title, source=source, text=text, itm_candidates=itm_candidates
+            )
+
+    fake = CapProbe()
+    _install(monkeypatch, fake)
+    body = "The defendant copied trade secret files to a personal drive. " * 700
+
+    process_article(
+        _raw(
+            title="United States v. Example insider threat",
+            link="https://www.courtlistener.com/docket/9/us-v-example/",
+            summary="Court: SDNY",
+            content=f"CourtListener query: q\n{body}",
+            source_id="courtlistener-recap",
+        )
+    )
+    process_article(_raw(content=body, link="https://example.com/news-cap"))
+
+    assert received["courtlistener-recap"] > 6000  # filings budget (24k default)
+    assert received["example"] <= 6000  # news budget unchanged

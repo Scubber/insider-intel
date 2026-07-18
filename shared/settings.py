@@ -85,6 +85,39 @@ class Settings(BaseSettings):
         ge=500,
         le=200_000,
     )
+    courtlistener_recap_text_max_chars: int = Field(
+        default=40_000,
+        alias="COURTLISTENER_RECAP_TEXT_MAX_CHARS",
+        description="Cap on concatenated RECAP filing text per docket (backfill)",
+        ge=500,
+        le=200_000,
+    )
+    courtlistener_backfill_max_dockets: int = Field(
+        default=25,
+        alias="COURTLISTENER_BACKFILL_MAX_DOCKETS",
+        description="Full-text backfill attempts per run (0 disables)",
+        ge=0,
+        le=200,
+    )
+    # PACER purchasing via CourtListener's RECAP Fetch API (strictly gated:
+    # both credentials AND a positive budget/cap required; no creds = no-op).
+    # Default budget stays under PACER's $30/quarter fee waiver.
+    pacer_username: str | None = Field(default=None, alias="PACER_USERNAME")
+    pacer_password: str | None = Field(default=None, alias="PACER_PASSWORD")
+    pacer_purchase_max_per_run: int = Field(
+        default=5,
+        alias="PACER_PURCHASE_MAX_PER_RUN",
+        description="Max RECAP Fetch purchases per refresh run (0 disables)",
+        ge=0,
+        le=50,
+    )
+    pacer_quarterly_budget_cents: int = Field(
+        default=2700,
+        alias="PACER_QUARTERLY_BUDGET_CENTS",
+        description="Estimated-spend ceiling per quarter ($27 < $30 waiver; 0 disables)",
+        ge=0,
+        le=100_000,
+    )
     courtlistener_lookback_days: int = Field(
         default=3,
         alias="COURTLISTENER_LOOKBACK_DAYS",
@@ -239,6 +272,13 @@ class Settings(BaseSettings):
     summarizer_max_input_chars: int = Field(
         default=6000,
         alias="SUMMARIZER_MAX_INPUT_CHARS",
+        ge=500,
+        le=50_000,
+    )
+    summarizer_filings_max_input_chars: int = Field(
+        default=24_000,
+        alias="SUMMARIZER_FILINGS_MAX_INPUT_CHARS",
+        description="Bigger prompt budget for court filings (full-document extraction)",
         ge=500,
         le=50_000,
     )

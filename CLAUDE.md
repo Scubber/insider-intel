@@ -54,6 +54,8 @@ make test / lint / fmt / precommit # same commands CI runs — green local == gr
 python -m apps.aggregator social suggest|add|remove   # manage social subscriptions
 python -m apps.aggregator ingest_social               # pull subscribed Reddit/X sources
 python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /s/ links)
+python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
+python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECAP Fetch, budget-capped)
 gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'
@@ -74,6 +76,12 @@ legacy fallback.
 - **The API's bucket access is read-only except the `config/` prefix**
   (IAM condition for `api-runtime`). Anything else the API must write is a
   design change, not a mount flag.
+- **PACER purchases spend real money** — only via `pacer_purchase.py`
+  (CourtListener RECAP Fetch), only insider-qualifying cases after the free
+  archive came up empty, capped by `PACER_PURCHASE_MAX_PER_RUN` and
+  `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter — under PACER's $30
+  fee waiver, so typical usage bills nothing). No-op without
+  `PACER_USERNAME`/`PACER_PASSWORD`. Never add another purchase path.
 - **`POST /extract/ttps` spends LLM credits** — it is rate-limited
   (`apps/search/ratelimit.py`, env-tunable). Don't remove the limiter; the
   service also runs `max-instances=1` as a cost/abuse ceiling.
