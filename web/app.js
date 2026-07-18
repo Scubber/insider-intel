@@ -152,6 +152,8 @@
     panelMeta: document.getElementById("panel-meta"),
     panelLink: document.getElementById("panel-link"),
     operatorList: document.getElementById("operator-list"),
+    caseRecordGroup: document.getElementById("case-record-group"),
+    caseRecordList: document.getElementById("case-record-list"),
     itmList: document.getElementById("itm-list"),
     detectionList: document.getElementById("detection-list"),
     copyPlaintext: document.getElementById("copy-plaintext"),
@@ -761,6 +763,7 @@
     const itmIds = (article.itm_hits || [])
       .map((h) => String(h.id || "").toUpperCase())
       .filter(Boolean);
+    const record = article.case_record || null;
     return {
       link: article.link,
       title: article.title || article.link,
@@ -768,8 +771,15 @@
       source_name: article.source_name || article.source_id || "",
       channel: article.channel || "news",
       itm_ids: itmIds,
+      itm_titles: (article.itm_hits || []).map((h) => ({
+        id: String(h.id || "").toUpperCase(),
+        title: h.title || "",
+      })),
       operator_terms: composeOperatorTerms(article),
       matched_aliases: (article.itm_hits || []).flatMap((h) => h.matched_aliases || []),
+      case_methods: record ? record.methods || [] : [],
+      case_exfil: record ? record.exfil_channels || [] : [],
+      case_detection: record ? record.detection_trigger || "" : "",
     };
   }
 
@@ -1039,6 +1049,17 @@
     return packsApi.selectPacks({ itmIds, huntQuery: state.lastHuntQuery, texts });
   }
 
+  function techniqueBehaviorText(techId, fallbackTitle) {
+    const techs = (state.itmCatalog && state.itmCatalog.techniques) || [];
+    const tech = techs.find((t) => String(t.id).toUpperCase() === techId);
+    const desc = tech && String(tech.description || "").trim();
+    if (desc) {
+      const first = desc.split(". ", 1)[0].trim();
+      return (first.endsWith(".") ? first : `${first}.`).slice(0, 220);
+    }
+    return (tech && tech.title) || fallbackTitle || techId;
+  }
+
   function uniqPush(list, seen, value) {
     const cleaned = String(value || "").trim();
     if (!cleaned) return;
@@ -1063,24 +1084,59 @@
       seeds: new Set(),
     };
 
+    // Evidence first: behavior lines from the board's own ITM techniques and
+    // case-record methods, seeds/cues from what the articles actually carry.
+    const seenBehavior = new Set();
     entries.forEach((item) => {
       (item.operator_terms || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
       (item.matched_aliases || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
-    });
-
-    // Attach the matching curated pack(s) so Extract never yields an empty
-    // hunt report; falls back to IF038 when a board matches nothing.
-    const { packs, matched } = selectTtpPacks(entries);
-    packs.forEach((pack) => {
-      pack.seeds.forEach((ttp) => {
-        behaviors.push({ id: ttp.id, text: ttp.behavior });
-        ttp.email.forEach((t) => uniqPush(email, seen.email, t));
-        ttp.chat.forEach((t) => uniqPush(chat, seen.chat, t));
-        ttp.network.forEach((t) => uniqPush(network, seen.network, t));
-        ttp.human.forEach((t) => uniqPush(human, seen.human, t));
-        ttp.seeds.forEach((t) => uniqPush(seeds, seen.seeds, t));
+      (item.itm_titles || []).forEach((tech) => {
+        if (!tech.id || seenBehavior.has(tech.id)) return;
+        seenBehavior.add(tech.id);
+        behaviors.push({ id: tech.id, text: techniqueBehaviorText(tech.id, tech.title) });
       });
+      (item.case_methods || []).forEach((m) => uniqPush(seeds, seen.seeds, m));
+      (item.case_exfil || []).forEach((c) => {
+        uniqPush(network, seen.network, c);
+        uniqPush(seeds, seen.seeds, c);
+      });
+      if (item.case_detection) uniqPush(human, seen.human, item.case_detection);
     });
+    [...new Set(entries.flatMap((e) => e.case_methods || []).filter(Boolean))].forEach(
+      (method, i) => {
+        behaviors.push({
+          id: `CASE-${String(i + 1).padStart(2, "0")}`,
+          text: `Case-observed method: ${method}`,
+        });
+      },
+    );
+
+    // Curated packs only when the board's content actually matches one; the
+    // IF038 default is a last-resort floor for evidence-free boards, labeled
+    // honestly below.
+    const { packs, matched } = selectTtpPacks(entries);
+    const useCurated = matched || behaviors.length === 0;
+    if (useCurated) {
+      packs.forEach((pack) => {
+        pack.seeds.forEach((ttp) => {
+          behaviors.push({ id: ttp.id, text: ttp.behavior });
+          ttp.email.forEach((t) => uniqPush(email, seen.email, t));
+          ttp.chat.forEach((t) => uniqPush(chat, seen.chat, t));
+          ttp.network.forEach((t) => uniqPush(network, seen.network, t));
+          ttp.human.forEach((t) => uniqPush(human, seen.human, t));
+          ttp.seeds.forEach((t) => uniqPush(seeds, seen.seeds, t));
+        });
+      });
+    }
+
+    let detail;
+    if (matched) {
+      detail = `Seed pack · ${packs.map((p) => p.label).join(" + ")}`;
+    } else if (useCurated) {
+      detail = "Generic overemployment pack — no matched evidence on board";
+    } else {
+      detail = "Evidence pack · board techniques + case records";
+    }
 
     return {
       articleCount: entries.length,
@@ -1091,12 +1147,10 @@
       network,
       human,
       seeds,
-      usedIf038Seeds: true,
+      usedIf038Seeds: useCurated,
       matchedIf038: packs.some((p) => p.id === "IF038") && matched,
       mode: "seeds",
-      detail: matched
-        ? `Seed pack · ${packs.map((p) => p.label).join(" + ")}`
-        : "Seed pack · IF038 overemployment TTP pack",
+      detail,
     };
   }
 
@@ -2513,6 +2567,36 @@
     setStatus(`${control.id} · ${(data.clusters || data.results || []).length} related stories`);
   }
 
+  function renderCaseRecord(record) {
+    if (!els.caseRecordGroup || !els.caseRecordList) return;
+    const rows = [];
+    if (record && (record.is_insider_case || (record.methods || []).length)) {
+      const add = (label, value) => {
+        const text = Array.isArray(value)
+          ? value.filter(Boolean).join(" · ")
+          : String(value || "").trim();
+        if (text) rows.push([label, text]);
+      };
+      add("ACTOR", record.actor_role);
+      add("ACCESS", record.access_vector);
+      add("MOTIVE", record.motive_signals);
+      add("METHODS", record.methods);
+      add("EXFIL", record.exfil_channels);
+      add("TIMEFRAME", record.timeframe);
+      add("DETECTED VIA", record.detection_trigger);
+      add("OUTCOME", record.outcome);
+    }
+    els.caseRecordList.innerHTML = "";
+    rows.forEach(([label, text]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = text;
+      els.caseRecordList.append(dt, dd);
+    });
+    els.caseRecordGroup.hidden = rows.length === 0;
+  }
+
   function selectArticle(article, options = {}) {
     state.selectedLink = article.link;
     document.querySelectorAll(".article-item").forEach((btn) => {
@@ -2531,6 +2615,7 @@
     els.panelMeta.textContent = `${article.source_name} · ${formatDate(article.published)}`;
     els.panelLink.href = article.link;
     fillCopyableChips(els.operatorList, composeOperatorTerms(article), true);
+    renderCaseRecord(article.case_record);
     fillItmChips(els.itmList, article.itm_hits);
     fillControlChips(els.detectionList, article.related_detections, "detection");
     syncBoardToggle();

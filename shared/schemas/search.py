@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from shared.schemas.articles import ControlRef, ItmHit
+from shared.schemas.articles import CaseRecord, ControlRef, ItmHit
 
 
 class SearchMode(StrEnum):
@@ -51,6 +51,14 @@ class SearchHit(BaseModel):
     insider_type: str | None = Field(
         default=None,
         description="negligent | malicious | unintentional | None (unclassified)",
+    )
+    ai_summary: str | None = Field(
+        default=None,
+        description="Analyst-style summary from the ingest summarizer LLM",
+    )
+    case_record: CaseRecord | None = Field(
+        default=None,
+        description="Structured case facts from the ingest summarizer LLM",
     )
 
 

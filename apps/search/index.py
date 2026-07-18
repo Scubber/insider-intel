@@ -107,9 +107,7 @@ def _article_matches_technique_ids(
     if not technique_ids:
         return False
     for tech_id in technique_ids:
-        if _article_matches_itm(
-            article, itm_id=tech_id, topic_match=topic_match
-        ):
+        if _article_matches_itm(article, itm_id=tech_id, topic_match=topic_match):
             return True
     return False
 
@@ -133,22 +131,16 @@ def _article_matches_itm(
 
     if detection_id:
         tech_ids = techniques_for_detection(detection_id)
-        if not _article_matches_technique_ids(
-            article, tech_ids, topic_match=topic_match
-        ):
+        if not _article_matches_technique_ids(article, tech_ids, topic_match=topic_match):
             return False
     if prevention_id:
         tech_ids = techniques_for_prevention(prevention_id)
-        if not _article_matches_technique_ids(
-            article, tech_ids, topic_match=topic_match
-        ):
+        if not _article_matches_technique_ids(article, tech_ids, topic_match=topic_match):
             return False
 
     if itm_id:
         needle = itm_id.strip().upper()
-        if any(
-            h.id.upper() == needle or h.id.upper().startswith(needle + ".") for h in hits
-        ):
+        if any(h.id.upper() == needle or h.id.upper().startswith(needle + ".") for h in hits):
             return True
         if topic_match and _article_matches_technique_topic(article, needle):
             return True
@@ -365,9 +357,7 @@ class ArticleSearchIndex:
                 continue
 
             for tech_id in tech_ids:
-                if _article_matches_itm(
-                    article, itm_id=tech_id, topic_match=True
-                ):
+                if _article_matches_itm(article, itm_id=tech_id, topic_match=True):
                     counts[tech_id] += 1
         return counts
 
@@ -558,14 +548,12 @@ class ArticleSearchIndex:
             keywords_hit=list(article.entities.keywords_hit),
             operator_terms=list(article.entities.operator_terms),
             itm_hits=list(article.entities.itm_hits),
-            related_detections=list(
-                getattr(article.entities, "related_detections", None) or []
-            ),
-            related_preventions=list(
-                getattr(article.entities, "related_preventions", None) or []
-            ),
+            related_detections=list(getattr(article.entities, "related_detections", None) or []),
+            related_preventions=list(getattr(article.entities, "related_preventions", None) or []),
             itm_alignment=getattr(article, "itm_alignment", None) or "weak",
             story_key=story_key,
             use_cases=list(getattr(article, "use_cases", None) or []),
             insider_type=getattr(article, "insider_type", None),
+            ai_summary=getattr(article, "ai_summary", None),
+            case_record=getattr(article, "case_record", None),
         )

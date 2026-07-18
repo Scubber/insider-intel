@@ -10,7 +10,15 @@ from apps.aggregator.pipeline import DEFAULT_STORE_PATH
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.aggregator.storage import JsonlArticleStore
 from shared.agents import process_article
-from shared.schemas import ProcessingRunResult, RawArticle
+from shared.agents.summarize import (
+    SummaryBudget,
+    article_qualifies,
+    merge_llm_hits,
+    summarize_fields,
+)
+from shared.llm import get_summarizer_provider
+from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
+from shared.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,29 +70,30 @@ def run_processing(
     for raw in raw_articles:
         by_link[raw.link] = raw
 
-    processed_at_by_link = {
-        a.link: a.processed_at for a in processed_store.load_all()
-    }
+    prior_by_link: dict[str, ProcessedArticle] = {a.link: a for a in processed_store.load_all()}
+
+    settings = get_settings()
+    budget = SummaryBudget(settings.summarizer_max_articles_per_run)
 
     batch: list = []
     reprocessed_existing = False
     for raw in by_link.values():
-        existing = processed_at_by_link.get(raw.link)
+        prior = prior_by_link.get(raw.link)
         if (
             not force
-            and existing is not None
-            and _as_utc(existing) >= _as_utc(raw.ingested_at)
+            and prior is not None
+            and _as_utc(prior.processed_at) >= _as_utc(raw.ingested_at)
         ):
             result.articles_skipped += 1
             continue
 
         try:
-            processed = process_article(raw)
+            processed = process_article(raw, prior=prior, budget=budget)
             result.articles_processed += 1
             if processed.relevance_score < min_score:
                 result.articles_skipped += 1
                 continue
-            if raw.link in processed_at_by_link:
+            if raw.link in prior_by_link:
                 reprocessed_existing = True
             batch.append(processed)
         except Exception as exc:  # noqa: BLE001 — keep processing other articles
@@ -96,6 +105,13 @@ def run_processing(
         result.articles_saved = processed_store.upsert(batch)
     else:
         result.articles_saved = processed_store.save(batch)
+
+    _backfill_summaries(
+        processed_store,
+        budget=budget,
+        settings=settings,
+        exclude_links={a.link for a in batch},
+    )
     result.finished_at = datetime.now(UTC)
     logger.info(
         "Processing complete: read=%d processed=%d saved=%d skipped=%d errors=%d",
@@ -106,6 +122,64 @@ def run_processing(
         len(result.errors),
     )
     return result
+
+
+def _backfill_summaries(
+    processed_store: JsonlProcessedStore,
+    *,
+    budget: SummaryBudget,
+    settings,
+    exclude_links: set[str],
+) -> int:
+    """Summarize stored qualifying articles that predate the summarizer.
+
+    Already-processed rows are skipped forever by the main loop, so without
+    this sweep the existing corpus would never gain case records. Newest
+    published first; bounded by the shared per-run budget, so the corpus
+    converts over successive 6h refreshes at a fixed cost ceiling.
+    """
+    if get_summarizer_provider(settings) is None or budget.remaining <= 0:
+        return 0
+
+    candidates = [
+        row
+        for row in processed_store.load_all()
+        if row.link not in exclude_links and row.case_record is None and article_qualifies(row)
+    ]
+    if not candidates:
+        return 0
+    candidates.sort(key=lambda a: _as_utc(a.published or a.processed_at), reverse=True)
+
+    updated: list[ProcessedArticle] = []
+    for row in candidates:
+        if budget.remaining <= 0:
+            break
+        summary, record, llm_hits = summarize_fields(
+            title=row.title,
+            source=row.source_id,
+            text=row.clean_text or row.summary or "",
+            lexical_hits=row.entities.itm_hits,
+            use_cases=row.use_cases,
+            settings=settings,
+            budget=budget,
+        )
+        if summary is None and record is None:
+            logger.warning("Backfill summary failed for %s", row.link)
+            continue
+        updated.append(
+            row.model_copy(
+                update={
+                    "ai_summary": summary,
+                    "case_record": record,
+                    "entities": merge_llm_hits(row.entities, llm_hits),
+                }
+            )
+        )
+
+    if updated:
+        processed_store.upsert(updated)
+        logger.info("Backfilled case records for %d article(s)", len(updated))
+    return len(updated)
 
 
 def process_raw_article(raw: RawArticle):

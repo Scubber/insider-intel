@@ -1,8 +1,10 @@
 """LangGraph agent: raw article → processed article.
 
-MVP graph: normalize → extract_entities → score → classify → embed → assemble.
-Heuristics + local hashing embeddings (no external LLM/API required);
-an optional LLM refiner sharpens use-case / insider-type labels.
+MVP graph: normalize → extract_entities → score → classify → summarize →
+embed → assemble. Heuristics + local hashing embeddings (no external LLM/API
+required); optional LLM stages refine classification (CLASSIFIER_LLM_PROVIDER)
+and write ai_summary / case_record / LLM-adjudicated ITM hits
+(SUMMARIZER_LLM_PROVIDER).
 """
 
 from __future__ import annotations
@@ -12,9 +14,10 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from shared.agents.summarize import SummaryBudget, merge_llm_hits, summarize_fields
 from shared.llm import get_classifier_provider
 from shared.schemas import ProcessedArticle, RawArticle
-from shared.schemas.articles import ExtractedEntities, resolve_channel
+from shared.schemas.articles import ExtractedEntities, ItmHit, resolve_channel
 from shared.settings import get_settings
 from shared.utils.classify import classify_insider_type, classify_use_cases
 from shared.utils.embeddings import get_default_embedder
@@ -40,6 +43,13 @@ class ArticleProcessState(TypedDict, total=False):
     insider_type: str | None
     classification_source: str | None
     classification_confidence: float | None
+    ai_summary: str | None
+    case_record: dict[str, Any] | None
+    # Carry-forward inputs so reprocessing never re-bills the LLM
+    prior_ai_summary: str | None
+    prior_case_record: dict[str, Any] | None
+    prior_llm_itm_hits: list[dict[str, Any]]
+    budget: Any
     embedding: list[float]
     processed: dict[str, Any] | None
     error: str | None
@@ -111,6 +121,41 @@ def _llm_gate_passes(
     return not use_cases or insider_type is None
 
 
+def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
+    """One LLM call → ai_summary + case_record + LLM ITM hits; never raises."""
+    entities = ExtractedEntities.model_validate(state.get("entities") or {})
+    prior_summary = state.get("prior_ai_summary")
+    prior_record = state.get("prior_case_record")
+    prior_llm_hits = [ItmHit.model_validate(h) for h in state.get("prior_llm_itm_hits") or []]
+    if prior_summary is not None or prior_record is not None or prior_llm_hits:
+        # Cache hit: the article was summarized in a previous run — reuse it.
+        merged = merge_llm_hits(entities, prior_llm_hits)
+        return {
+            "ai_summary": prior_summary,
+            "case_record": prior_record,
+            "entities": merged.model_dump(),
+        }
+
+    raw = RawArticle.model_validate(state["raw"])
+    settings = get_settings()
+    budget = state.get("budget") or SummaryBudget(settings.summarizer_max_articles_per_run)
+    summary, record, llm_hits = summarize_fields(
+        title=raw.title,
+        source=raw.source_id,
+        text=state.get("clean_text") or "",
+        lexical_hits=entities.itm_hits,
+        use_cases=list(state.get("use_cases") or []),
+        settings=settings,
+        budget=budget,
+    )
+    merged = merge_llm_hits(entities, llm_hits)
+    return {
+        "ai_summary": summary,
+        "case_record": record.model_dump(mode="json") if record else None,
+        "entities": merged.model_dump(),
+    }
+
+
 def _node_embed(state: ArticleProcessState) -> ArticleProcessState:
     text = state.get("clean_text") or ""
     embedding = get_default_embedder().embed(text)
@@ -156,6 +201,8 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         insider_type=insider_type,  # type: ignore[arg-type]
         classification_source=state.get("classification_source"),  # type: ignore[arg-type]
         classification_confidence=state.get("classification_confidence"),
+        ai_summary=state.get("ai_summary"),
+        case_record=state.get("case_record"),
         embedding=state.get("embedding"),
     )
     return {"processed": processed.model_dump(mode="json")}
@@ -168,6 +215,7 @@ def build_article_processor():
     graph.add_node("extract_entities", _node_extract_entities)
     graph.add_node("score", _node_score)
     graph.add_node("classify", _node_classify)
+    graph.add_node("summarize", _node_summarize)
     graph.add_node("embed", _node_embed)
     graph.add_node("assemble", _node_assemble)
 
@@ -175,7 +223,8 @@ def build_article_processor():
     graph.add_edge("normalize", "extract_entities")
     graph.add_edge("extract_entities", "score")
     graph.add_edge("score", "classify")
-    graph.add_edge("classify", "embed")
+    graph.add_edge("classify", "summarize")
+    graph.add_edge("summarize", "embed")
     graph.add_edge("embed", "assemble")
     graph.add_edge("assemble", END)
 
@@ -192,11 +241,37 @@ def get_article_processor():
     return _PROCESSOR
 
 
-def process_article(raw: RawArticle) -> ProcessedArticle:
-    """Run the LangGraph processor on a single raw article."""
+def process_article(
+    raw: RawArticle,
+    *,
+    prior: ProcessedArticle | None = None,
+    budget: SummaryBudget | None = None,
+) -> ProcessedArticle:
+    """Run the LangGraph processor on a single raw article.
+
+    ``prior`` carries already-paid-for LLM fields (ai_summary / case_record /
+    LLM ITM hits) through a re-process so the summarizer is never re-billed.
+    ``budget`` shares one per-run LLM allowance across many calls.
+    """
+    initial: dict[str, Any] = {"raw": raw.model_dump(mode="json")}
+    if budget is not None:
+        initial["budget"] = budget
+    if prior is not None:
+        if prior.ai_summary is not None:
+            initial["prior_ai_summary"] = prior.ai_summary
+        if prior.case_record is not None:
+            initial["prior_case_record"] = prior.case_record.model_dump(mode="json")
+        prior_llm = [
+            hit.model_dump(mode="json")
+            for hit in prior.entities.itm_hits
+            if getattr(hit, "source", "lexical") == "llm"
+        ]
+        if prior_llm:
+            initial["prior_llm_itm_hits"] = prior_llm
+
     processor = get_article_processor()
     try:
-        result = processor.invoke({"raw": raw.model_dump(mode="json")})
+        result = processor.invoke(initial)
     except Exception as exc:
         logger.exception("Article processor failed for %s", raw.link)
         raise RuntimeError(f"processing failed for {raw.link}: {exc}") from exc

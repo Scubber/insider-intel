@@ -80,6 +80,14 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
 - **Scheduled ingest:** Cloud Scheduler → `corpus-refresh` job → full
   `python -m apps.aggregator all` → POST `/reload` on the service.
   Run it manually anytime: `gcloud run jobs execute corpus-refresh --region us-east1`.
+- **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
+  the env on the **job only** (the API never calls the LLM):
+  `gcloud run jobs update corpus-refresh --region us-east1
+  --set-env-vars SUMMARIZER_LLM_PROVIDER=anthropic
+  --set-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
+  Spend is capped by `SUMMARIZER_MAX_ARTICLES_PER_RUN` (default 15/run ≈
+  $3-4/mo on Haiku); results persist in the corpus so each article is billed
+  once, and the backfill sweep converts the existing corpus gradually.
 - **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
   Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
 - **Endpoint guards:** `POST /extract/ttps` is rate-limited

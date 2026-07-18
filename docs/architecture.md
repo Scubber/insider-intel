@@ -20,7 +20,7 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   hosting per [`hosting.md`](hosting.md). Sourcing runbook:
   [`docs/sourcing.md`](sourcing.md). News seat budget: prefer **$0**; hard cap
   **&lt;$100/year** total (no Law360).
-- **Later:** expand archive sources, Postgres + pgvector, LLM summaries.
+- **Later:** expand archive sources, Postgres + pgvector.
 - Product maturity (auth, read/unread, detection generation pipelines, etc.) stays out of MVP.
 - **Corporate boundary:** export OSINT *out* only; never read Graph/Teams/email/SIEM from this repo.
 
@@ -150,14 +150,30 @@ Flag from Articles stream (“+” on card)
   → Optional: Copy agent brief → CourtListener MCP in Cursor
 ```
 
-Extract reads indexed title/summary/text (plus best-effort CourtListener REST
-snippets for filings). With `XAI_API_KEY`, xAI fills the same channel slots and
-merges onto the curated IF038 seed floor. Without a key (or on API failure),
-Extract returns the seed pack and labels the report honestly.
+Extract reads indexed title/summary/text plus the persisted `case_record`
+(and best-effort CourtListener REST snippets for filings). The seed floor is
+evidence-first: behaviors come from the selection's own ITM hits and
+case-record methods; the curated IF038 overemployment pack is emitted only
+when IF038 actually matched, or as an explicitly-labeled generic fallback for
+evidence-free selections. With `XAI_API_KEY`, xAI fills the same channel slots
+and merges on top.
 
-**Still later:** full multi-article CTI markdown template, server-side flags,
-persisted `ai_summary` on every article. (Social ingest beyond Reddit RSS
-shipped — see Ingestion Layer above.)
+**Ingest summarizer (opt-in).** Setting `SUMMARIZER_LLM_PROVIDER=anthropic|openai`
+adds a `summarize` node to the processing graph (after `classify`): one LLM
+call per qualifying article (has ITM hits or a classified use case) writes a
+2-4 sentence `ai_summary`, a structured `case_record` (actor role, access
+vector, motive signals, methods, exfil channels, timeframe, detection trigger,
+outcome, confidence), and adjudicates a shortlist of candidate ITM techniques
+(lexical hits + nearest by hashing-embedding similarity) — accepted refs merge
+into `entities.itm_hits` with `source: "llm"`, so the rail/matrix/facets light
+up without UI changes. Cost controls: `SUMMARIZER_MAX_ARTICLES_PER_RUN`
+(default 15) caps each run, results persist in the corpus and carry forward
+through re-processing (`--force` included) so each article is billed once,
+ever, and a bounded newest-first backfill sweep converts the pre-existing
+corpus over successive 6h refreshes.
+
+**Still later:** full multi-article CTI markdown template, server-side flags.
+(Social ingest beyond Reddit RSS shipped — see Ingestion Layer above.)
 
 ### 6. Hosting (develop here → deploy later)
 
