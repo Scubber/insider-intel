@@ -102,7 +102,15 @@ def run_full_pipeline(
             store_path=raw_path,
             processed_path=processed_path,
         )
-        court_result = _merge_ingestion(court_result, text_result)
+        # Buy missing lead documents for qualifying cases (no-op without
+        # PACER credentials; budget-capped under the $30/quarter fee waiver).
+        from apps.aggregator.pacer_purchase import run_pacer_purchases
+
+        purchase_result, _plan = run_pacer_purchases(
+            store_path=raw_path,
+            processed_path=processed_path,
+        )
+        court_result = _merge_ingestion(court_result, text_result, purchase_result)
     web_result: IngestionRunResult | None = None
     if not skip_web_keywords:
         web_result = run_web_keyword_ingestion(

@@ -81,8 +81,19 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `python -m apps.aggregator all` → POST `/reload` on the service.
   Run it manually anytime: `gcloud run jobs execute corpus-refresh --region us-east1`.
   Each run also backfills full court-document text from the free RECAP
-  archive (≤ `COURTLISTENER_BACKFILL_MAX_DOCKETS`, default 25 attempts/run;
-  never a PACER purchase) before processing.
+  archive (≤ `COURTLISTENER_BACKFILL_MAX_DOCKETS`, default 25 attempts/run)
+  before processing.
+- **PACER purchasing (opt-in):** to let the refresh job buy missing lead
+  documents for qualifying cases via RECAP Fetch, store the PACER account
+  credentials + a CourtListener token in Secret Manager and attach them to
+  the **job only**:
+  `gcloud run jobs update corpus-refresh --region us-east1
+  --set-secrets PACER_USERNAME=PACER_USERNAME:latest,PACER_PASSWORD=PACER_PASSWORD:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest`.
+  Spend is capped at `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter —
+  under PACER's $30 fee waiver, so typical usage bills $0) and
+  `PACER_PURCHASE_MAX_PER_RUN` (default 5). Estimated spend is tracked in
+  `state/ingest_state.json` (`pacer_spend:YYYY-Qn`). Purchased documents
+  join the public RECAP archive.
 - **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
   the env on the **job only** (the API never calls the LLM):
   `gcloud run jobs update corpus-refresh --region us-east1

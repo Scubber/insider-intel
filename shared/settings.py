@@ -99,6 +99,25 @@ class Settings(BaseSettings):
         ge=0,
         le=200,
     )
+    # PACER purchasing via CourtListener's RECAP Fetch API (strictly gated:
+    # both credentials AND a positive budget/cap required; no creds = no-op).
+    # Default budget stays under PACER's $30/quarter fee waiver.
+    pacer_username: str | None = Field(default=None, alias="PACER_USERNAME")
+    pacer_password: str | None = Field(default=None, alias="PACER_PASSWORD")
+    pacer_purchase_max_per_run: int = Field(
+        default=5,
+        alias="PACER_PURCHASE_MAX_PER_RUN",
+        description="Max RECAP Fetch purchases per refresh run (0 disables)",
+        ge=0,
+        le=50,
+    )
+    pacer_quarterly_budget_cents: int = Field(
+        default=2700,
+        alias="PACER_QUARTERLY_BUDGET_CENTS",
+        description="Estimated-spend ceiling per quarter ($27 < $30 waiver; 0 disables)",
+        ge=0,
+        le=100_000,
+    )
     courtlistener_lookback_days: int = Field(
         default=3,
         alias="COURTLISTENER_LOOKBACK_DAYS",

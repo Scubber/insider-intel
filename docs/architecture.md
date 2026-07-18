@@ -59,6 +59,14 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   archived text yet are retried weekly. Enriched rows get a force-refresh
   (fresh `ingested_at`) and their prior LLM fields cleared, so the next
   processing pass re-scores and re-extracts them over the full filing.
+- **PACER purchasing (opt-in)**: when `PACER_USERNAME`/`PACER_PASSWORD` are
+  set, insider-qualifying cases whose documents aren't in the free archive
+  get their lead document (docket report first, then complaint/indictment)
+  bought via CourtListener's RECAP Fetch API — capped per run (5) and per
+  quarter ($27 estimated, under PACER's $30 fee waiver → typically $0
+  billed). Purchases land in the public RECAP archive (enriching the
+  commons); the text backfill harvests them on a later refresh.
+  `purchase_pacer --dry-run` previews what would be bought.
 - Optional Feedly boards and Google Alerts-style RSS (`WEB_KEYWORD_FEED_URLS`);
   prefer Alerts for cross-domain discovery (see [`sourcing.md`](sourcing.md))
 - **Social lane (`channel=social`)**: Reddit subreddit listings (OAuth app auth

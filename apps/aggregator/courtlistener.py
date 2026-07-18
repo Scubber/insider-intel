@@ -1,7 +1,9 @@
-"""CourtListener search → RawArticle (no PACER login / PDF purchase).
+"""CourtListener search → RawArticle, plus free-archive and Fetch clients.
 
 Uses the public Search API (type=r = federal RECAP dockets,
-type=o = case law opinions).
+type=o = case law opinions). All reads are free. The one paid surface is
+``request_pacer_fetch`` (RECAP Fetch API) — every purchase decision lives in
+apps/aggregator/pacer_purchase.py behind credentials + budget caps.
 Docs: https://www.courtlistener.com/help/api/rest/search/
 """
 
@@ -26,6 +28,12 @@ COURTLISTENER_SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
 COURTLISTENER_OPINION_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/opinions/"
 COURTLISTENER_RECAP_DOCS_URL = "https://www.courtlistener.com/api/rest/v4/recap-documents/"
 COURTLISTENER_CLUSTER_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/clusters/"
+COURTLISTENER_DOCKET_ENTRIES_URL = "https://www.courtlistener.com/api/rest/v4/docket-entries/"
+COURTLISTENER_FETCH_URL = "https://www.courtlistener.com/api/rest/v4/recap-fetch/"
+
+# RECAP Fetch request types (https://www.courtlistener.com/help/api/rest/v4/recap/)
+FETCH_TYPE_DOCKET = 1  # buy/refresh a docket report (populates entries)
+FETCH_TYPE_PDF = 2  # buy one document PDF by recap_document id
 COURTLISTENER_BASE = "https://www.courtlistener.com"
 
 DEFAULT_QUERIES: list[str] = [
@@ -421,6 +429,113 @@ def fetch_recap_document_text(
         if total >= max_chars:
             break
     return "\n\n".join(parts)
+
+
+def fetch_docket_entries(
+    docket_id: int,
+    *,
+    token: str | None = None,
+    page_size: int = 5,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """Slim leading docket entries (the complaint/indictment lives up front).
+
+    Returns [{entry_number, recap_documents: [{id, is_available,
+    document_number}]}] in entry order. Free metadata read.
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(
+                COURTLISTENER_DOCKET_ENTRIES_URL,
+                headers=headers,
+                params={
+                    "docket": docket_id,
+                    "order_by": "entry_number",
+                    "page_size": max(1, min(page_size, 20)),
+                    "fields": "entry_number,recap_documents",
+                },
+            )
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"docket {docket_id} entries fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"docket {docket_id} entries HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+    finally:
+        if own_client:
+            http.close()
+
+    entries: list[dict[str, Any]] = []
+    for entry in payload.get("results") or []:
+        if not isinstance(entry, dict):
+            continue
+        docs = []
+        for doc in entry.get("recap_documents") or []:
+            if isinstance(doc, dict) and doc.get("id") is not None:
+                docs.append(
+                    {
+                        "id": doc["id"],
+                        "is_available": bool(doc.get("is_available")),
+                        "document_number": doc.get("document_number"),
+                    }
+                )
+        entries.append({"entry_number": entry.get("entry_number"), "recap_documents": docs})
+    return entries
+
+
+def request_pacer_fetch(
+    *,
+    request_type: int,
+    token: str,
+    pacer_username: str,
+    pacer_password: str,
+    recap_document: int | None = None,
+    docket: int | None = None,
+    client: httpx.Client | None = None,
+) -> int | None:
+    """Queue a PACER purchase via the RECAP Fetch API. Returns the request id.
+
+    This SPENDS MONEY on the caller's PACER account ($0.10/page, $3/document
+    cap; fees waived under $30/quarter). The purchased content joins the
+    public RECAP archive, where the text backfill harvests it. Callers own
+    all budget/qualification gating.
+    """
+    payload: dict[str, Any] = {
+        "request_type": request_type,
+        "pacer_username": pacer_username,
+        "pacer_password": pacer_password,
+    }
+    if recap_document is not None:
+        payload["recap_document"] = recap_document
+    if docket is not None:
+        payload["docket"] = docket
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Token {token.strip()}",
+    }
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.post(COURTLISTENER_FETCH_URL, headers=headers, data=payload)
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"recap-fetch request failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(f"recap-fetch HTTP {resp.status_code}: {resp.text[:300]}")
+        body = resp.json()
+    finally:
+        if own_client:
+            http.close()
+    fetch_id = body.get("id")
+    return int(fetch_id) if isinstance(fetch_id, int) else None
 
 
 SEARCH_TYPES: dict[str, SearchTypeSpec] = {
