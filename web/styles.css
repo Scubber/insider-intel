@@ -752,8 +752,7 @@ body {
 }
 
 .matrix-search-wrap {
-  /* In the rail's flex column a 14rem basis becomes HEIGHT — keep it natural. */
-  flex: 0 0 auto;
+  flex: 1 1 16rem;
   max-width: 28rem;
 }
 
@@ -767,14 +766,13 @@ body {
   font-size: 0.85rem;
 }
 
+/* Center-canvas matrix: theme columns as a responsive grid (collapses to one
+   column on phones without extra media queries). The page scrolls naturally. */
 .matrix-columns {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
 }
 
 .matrix-col {
@@ -929,6 +927,133 @@ body {
 
 .matrix-sub-list {
   margin: 0.2rem 0 0.35rem 1.35rem;
+}
+
+/* Observed-only ITM INDEX rail ------------------------------------------- */
+.itm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.itm-rail-theme {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink, var(--fg));
+}
+
+.itm-rail-theme:first-child {
+  margin-top: 0.1rem;
+}
+
+.itm-rail-leader {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted color-mix(in srgb, var(--muted) 55%, transparent);
+  transform: translateY(-3px);
+}
+
+.itm-rail-count {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.itm-rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.itm-rail-btn {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.32rem 0.4rem;
+  width: 100%;
+}
+
+.itm-rail-btn .matrix-tech-id {
+  color: var(--accent);
+  font-size: 0.66rem;
+  flex: 0 0 auto;
+}
+
+.itm-rail-btn .matrix-tech-title {
+  font-size: 0.84rem;
+}
+
+/* Techniques observed in the SELECTED case get an evidence tick. */
+.itm-rail-btn.case-hit {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.itm-rail-empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.itm-rail-browse {
+  margin-top: 0.9rem;
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+}
+
+.itm-rail-browse:hover,
+.itm-rail-browse:focus-visible {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Center-canvas matrix view chrome --------------------------------------- */
+.matrix-view-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.matrix-view-head h3 {
+  margin: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink, var(--fg));
+}
+
+.matrix-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+#matrix-panel .matrix-control-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.4rem;
 }
 
 .matrix-col-empty {
@@ -1343,6 +1468,15 @@ body {
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Multi-paragraph notes: flat while clamped, breathing room when expanded. */
+.snip .snip-para {
+  margin: 0;
+}
+
+.article-row.expanded .snip .snip-para + .snip-para {
+  margin-top: 0.55rem;
 }
 
 .cluster-sources {

@@ -193,6 +193,10 @@
     matrixModeTabs: document.getElementById("matrix-mode-tabs"),
     matrixColumns: document.getElementById("matrix-columns"),
     matrixControlList: document.getElementById("matrix-control-list"),
+    itmRail: document.getElementById("itm-rail"),
+    matrixBrowseAll: document.getElementById("matrix-browse-all"),
+    matrixPanel: document.getElementById("matrix-panel"),
+    matrixBack: document.getElementById("matrix-back"),
     articlePanel: document.getElementById("article-panel"),
     reportPanel: document.getElementById("report-panel"),
     reportBack: document.getElementById("report-back"),
@@ -240,6 +244,8 @@
     extractionBoard: {},
     lastTtpReport: null,
     view: "stream",
+    streamArticles: [],
+    selectedArticleItmIds: new Set(),
     dossierTechniqueId: null,
     dataState: null,
     dismissed: new Set(),
@@ -344,10 +350,47 @@
     state.view = view;
     const isDossier = view === "dossier";
     const isReport = view === "report";
-    if (els.articlePanel) els.articlePanel.hidden = isDossier || isReport;
+    const isMatrix = view === "matrix";
+    if (els.articlePanel) els.articlePanel.hidden = isDossier || isReport || isMatrix;
     if (els.dossierPanel) els.dossierPanel.hidden = !isDossier;
     if (els.reportPanel) els.reportPanel.hidden = !isReport;
+    if (els.matrixPanel) els.matrixPanel.hidden = !isMatrix;
     if (!isDossier) state.dossierTechniqueId = null;
+    if (!isMatrix) syncMastheadNavFromMatrix();
+  }
+
+  function syncMastheadNav(pane) {
+    document.querySelectorAll(".masthead-nav-item").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.pane === pane);
+    });
+  }
+
+  function syncMastheadNavFromMatrix() {
+    const item = document.querySelector('.masthead-nav-item[data-pane="matrix"]');
+    if (item && item.classList.contains("active")) syncMastheadNav("articles");
+  }
+
+  function openMatrixView() {
+    // The matrix panel lives inside pane-articles: on narrow/mid layouts a
+    // lingering data-pane="matrix" takeover would hide it, so land on the
+    // articles pane first (this also resets the nav classes — re-assert after).
+    if (!isWideLayout()) setActivePane("articles");
+    setView("matrix");
+    syncMastheadNav("matrix");
+    ensureItmCatalog()
+      .then(() => renderMatrixBrowse())
+      .catch((err) => setStatus(`Matrix load failed: ${err.message}`));
+    if (isWideLayout()) {
+      const target = document.querySelector(".pane-articles");
+      if (target) {
+        try {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+          /* older browsers: no smooth scroll */
+        }
+      }
+    }
+    setStatus("Insider Threat Matrix");
   }
 
   const THEME_KEY = "insider-intel-theme";
@@ -497,14 +540,50 @@
    * them as clean prose. Parsing as inert HTML strips real tags and decodes
    * entities without mangling literal comparison text ("<5% but >2 …"); the
    * parsed document never executes scripts or loads resources. */
-  function cleanSummary(raw) {
+  // Feed-summary boilerplate that adds nothing to an analyst note: syndication
+  // tails, "read more" teasers, and bare truncation stubs.
+  const SUMMARY_TAIL_RES = [
+    /\s*\bThe post\b[^.]{0,160}\bappeared first on\b[^.]{0,120}\.?\s*$/i,
+    /\s*\b(?:Read more|Read the (?:full|original|rest of the) (?:story|article|post)|Continue reading|Click here to read(?: more)?|Learn more)\b[^]{0,160}$/i,
+    /\s*\[(?:…|\.{3,})\]\s*$/,
+  ];
+
+  function stripSummaryBoilerplate(text) {
+    let out = String(text || "");
+    let prev;
+    do {
+      prev = out;
+      SUMMARY_TAIL_RES.forEach((re) => {
+        out = out.replace(re, "");
+      });
+    } while (out !== prev);
+    return out.trim();
+  }
+
+  /** Paragraph-preserving variant for the expanded read view. */
+  function summaryParagraphs(raw) {
     let text = String(raw || "");
-    if (!text) return "";
+    if (!text) return [];
     if (_domParser) {
       const doc = _domParser.parseFromString(text, "text/html");
-      text = (doc.body && doc.body.textContent) || "";
+      if (doc.body) {
+        // Materialize block boundaries as newlines before flattening.
+        doc.body.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+        doc.body
+          .querySelectorAll("p, div, li, blockquote, h1, h2, h3, h4")
+          .forEach((el) => el.append("\n"));
+        text = doc.body.textContent || "";
+      }
     }
-    return text.replace(/\s+/g, " ").trim();
+    return stripSummaryBoilerplate(text)
+      .split(/\n+/)
+      .map((part) => part.replace(/\s+/g, " ").trim())
+      .map((part) => stripSummaryBoilerplate(part))
+      .filter(Boolean);
+  }
+
+  function cleanSummary(raw) {
+    return summaryParagraphs(raw).join(" ");
   }
 
   function itmUrl(hit) {
@@ -1731,6 +1810,122 @@
     return byId;
   }
 
+  function railParentId(id) {
+    const s = String(id || "");
+    const dot = s.indexOf(".");
+    return (dot > 0 ? s.slice(0, dot) : s).toUpperCase();
+  }
+
+  /* Observed-only rail aggregation: unique-article counts per technique and
+     per theme, subsection ids rolled up to their parent technique. Distinct
+     from aggregateItmFromArticles (per-hit counts, no roll-up), which the
+     hunt map depends on. */
+  function aggregateItmRail(articles) {
+    const catalog = (state.itmCatalog && state.itmCatalog.techniques) || [];
+    const catalogById = new Map(catalog.map((t) => [t.id, t]));
+    const themes = new Map();
+    (articles || []).forEach((article) => {
+      const seenTech = new Set();
+      const seenTheme = new Set();
+      (article.itm_hits || []).forEach((hit) => {
+        if (!hit || !hit.id) return;
+        const id = railParentId(hit.id);
+        const cat = catalogById.get(id);
+        const theme = (cat && cat.theme) || hit.theme || "";
+        if (!theme) return;
+        let bucket = themes.get(theme);
+        if (!bucket) {
+          bucket = { articleCount: 0, techs: new Map() };
+          themes.set(theme, bucket);
+        }
+        if (!seenTheme.has(theme)) {
+          seenTheme.add(theme);
+          bucket.articleCount += 1;
+        }
+        if (seenTech.has(id)) return;
+        seenTech.add(id);
+        const prev = bucket.techs.get(id) || {
+          id,
+          title: (cat && cat.title) || hit.title || id,
+          articleCount: 0,
+        };
+        prev.articleCount += 1;
+        if (cat && cat.title) prev.title = cat.title;
+        bucket.techs.set(id, prev);
+      });
+    });
+    return themes;
+  }
+
+  function syncItmRailCaseHighlight() {
+    if (!els.itmRail) return;
+    const ids = state.selectedArticleItmIds;
+    els.itmRail.querySelectorAll(".itm-rail-btn").forEach((btn) => {
+      btn.classList.toggle("case-hit", ids.has(btn.dataset.techId || ""));
+    });
+  }
+
+  function renderItmRail() {
+    if (!els.itmRail) return;
+    const themes = aggregateItmRail(state.streamArticles || []);
+    els.itmRail.innerHTML = "";
+    let any = false;
+    MATRIX_THEMES.forEach((theme) => {
+      const bucket = themes.get(theme.id);
+      if (!bucket || !bucket.techs.size) return; // hide unobserved themes
+      any = true;
+      const head = document.createElement("div");
+      head.className = "itm-rail-theme";
+      const label = document.createElement("span");
+      label.className = "itm-rail-theme-label";
+      label.textContent = theme.label;
+      const leader = document.createElement("span");
+      leader.className = "itm-rail-leader";
+      const count = document.createElement("span");
+      count.className = "itm-rail-count";
+      count.textContent = String(bucket.articleCount);
+      head.append(label, leader, count);
+      els.itmRail.appendChild(head);
+
+      const list = document.createElement("ul");
+      list.className = "itm-rail-list";
+      [...bucket.techs.values()]
+        .sort((a, b) => b.articleCount - a.articleCount || a.id.localeCompare(b.id))
+        .forEach((tech) => {
+          const li = document.createElement("li");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          // ui_smoke contract: rail rows must stay .matrix-tech-btn
+          btn.className = "matrix-tech-btn itm-rail-btn";
+          btn.dataset.techId = tech.id;
+          if (tech.id === state.selectedTechniqueId) btn.classList.add("active");
+          btn.title = `${tech.id} · ${tech.articleCount} in stream`;
+          const idSpan = document.createElement("span");
+          idSpan.className = "matrix-tech-id";
+          idSpan.textContent = tech.id;
+          const titleSpan = document.createElement("span");
+          titleSpan.className = "matrix-tech-title";
+          titleSpan.textContent = tech.title;
+          btn.append(idSpan, titleSpan);
+          btn.addEventListener("click", () => {
+            selectTechnique(tech.id).catch((err) =>
+              setStatus(`Technique load failed: ${err.message}`),
+            );
+          });
+          li.appendChild(btn);
+          list.appendChild(li);
+        });
+      els.itmRail.appendChild(list);
+    });
+    if (!any) {
+      const empty = document.createElement("p");
+      empty.className = "itm-rail-empty";
+      empty.textContent = "No ITM techniques observed in the current stream.";
+      els.itmRail.appendChild(empty);
+    }
+    syncItmRailCaseHighlight();
+  }
+
   function buildHuntMapEntries(query, articles) {
     const catalog = matchQueryToTechniques(query);
     const fromArticles = aggregateItmFromArticles(articles);
@@ -1808,6 +2003,8 @@
 
   function clearWorkbench() {
     state.selectedLink = null;
+    state.selectedArticleItmIds = new Set();
+    syncItmRailCaseHighlight();
     els.panelEmpty.hidden = false;
     els.panelBody.hidden = true;
     syncBoardToggle();
@@ -2031,6 +2228,7 @@
   }
 
   function renderMatrixBrowse() {
+    renderItmRail();
     const mode = state.matrixMode || "techniques";
     const isTech = mode === "techniques";
     if (els.matrixColumns) els.matrixColumns.hidden = !isTech;
@@ -2282,7 +2480,7 @@
     setStatus(`${control.id} · ${(data.clusters || data.results || []).length} related stories`);
   }
 
-  function selectArticle(article) {
+  function selectArticle(article, options = {}) {
     state.selectedLink = article.link;
     document.querySelectorAll(".article-item").forEach((btn) => {
       const links = (btn.dataset.links || btn.dataset.link || "")
@@ -2304,7 +2502,12 @@
     fillControlChips(els.detectionList, article.related_detections, "detection");
     syncBoardToggle();
 
-    if (isMobileLayout()) setActivePane("workbench");
+    state.selectedArticleItmIds = new Set(
+      (article.itm_hits || []).map((hit) => railParentId(hit && hit.id)).filter(Boolean),
+    );
+    syncItmRailCaseHighlight();
+
+    if (isMobileLayout() && !options.keepPane) setActivePane("workbench");
   }
 
   // Case-file card helpers (Dossier redesign) ---------------------------------
@@ -2419,8 +2622,15 @@
     h3.textContent = article.title;
 
     // 5. ANALYST NOTE — LLM summary when present, else trimmed feed summary.
-    const analystText =
-      String(article.ai_summary || "").trim() || cleanSummary(article.summary);
+    // Kept as paragraphs so the expanded read view isn't one wall of text.
+    const aiSummary = String(article.ai_summary || "").trim();
+    const noteParas = aiSummary
+      ? aiSummary
+          .split(/\n{2,}/)
+          .map((part) => part.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+      : summaryParagraphs(article.summary);
+    const analystText = noteParas.join(" ");
     btn.append(meta, h3);
     if (analystText) {
       const note = document.createElement("div");
@@ -2428,9 +2638,18 @@
       const label = document.createElement("span");
       label.className = "analyst-note-label";
       label.textContent = "ANALYST NOTE";
-      const snip = document.createElement("p");
+      const snip = document.createElement("div");
       snip.className = "snip";
-      snip.textContent = analystText;
+      if (noteParas.length > 1) {
+        noteParas.forEach((part) => {
+          const p = document.createElement("p");
+          p.className = "snip-para";
+          p.textContent = part;
+          snip.appendChild(p);
+        });
+      } else {
+        snip.textContent = analystText;
+      }
       note.append(label, snip);
       btn.appendChild(note);
     }
@@ -2475,7 +2694,26 @@
       });
       btn.appendChild(sources);
     }
-    btn.addEventListener("click", () => selectArticle(article));
+    // Shared expand toggle — the READ button and the mobile tap both use it.
+    let expandBtn = null;
+    const setCardExpanded = (expanded) => {
+      li.classList.toggle("expanded", expanded);
+      if (!expandBtn) return;
+      expandBtn.textContent = expanded ? "CLOSE ⌃" : "READ ⌄";
+      expandBtn.title = expanded ? "Collapse" : "Read in place";
+      expandBtn.setAttribute("aria-label", expandBtn.title);
+    };
+
+    btn.addEventListener("click", () => {
+      if (isMobileLayout()) {
+        // Mobile tap = read the analyst note in place; stay on the stream
+        // (the workbench detail remains reachable via its tab).
+        selectArticle(article, { keepPane: true });
+        if (expandable) setCardExpanded(true);
+        return;
+      }
+      selectArticle(article);
+    });
 
     // 7. Footer — hunt-term chips + inverted ITM chip (left) · actions (right).
     const footer = document.createElement("div");
@@ -2544,7 +2782,7 @@
     actions.append(boardBtn, openBtn);
 
     if (expandable) {
-      const expandBtn = document.createElement("button");
+      expandBtn = document.createElement("button");
       expandBtn.type = "button";
       expandBtn.className = "article-expand-btn";
       expandBtn.textContent = "READ ⌄";
@@ -2552,10 +2790,7 @@
       expandBtn.setAttribute("aria-label", expandBtn.title);
       expandBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        const expanded = li.classList.toggle("expanded");
-        expandBtn.textContent = expanded ? "CLOSE ⌃" : "READ ⌄";
-        expandBtn.title = expanded ? "Collapse" : "Read in place";
-        expandBtn.setAttribute("aria-label", expandBtn.title);
+        setCardExpanded(!li.classList.contains("expanded"));
       });
       actions.appendChild(expandBtn);
     }
@@ -2575,6 +2810,10 @@
     const clusters = clustersFromResponse(dataOrResults);
     state.clusters = clusters;
     state.articles = flattenClusterMembers(clusters);
+    // Rail snapshot: renderDossierArticles also overwrites state.articles, so
+    // the observed-only ITM rail reads this stream-only copy.
+    state.streamArticles = state.articles;
+    renderItmRail();
     els.streamTitle.textContent = title;
     els.streamCount.textContent = state.searchMode
       ? `${clusters.length} CASES`
@@ -3120,26 +3359,37 @@
     });
   }
 
+  if (els.matrixBack) {
+    els.matrixBack.addEventListener("click", () => {
+      setView("stream");
+      if (isMobileLayout()) setActivePane("articles");
+    });
+  }
+
+  if (els.matrixBrowseAll) {
+    els.matrixBrowseAll.addEventListener("click", () => openMatrixView());
+  }
+
   // Masthead nav: on narrow layouts it drives the pane switch (same as the
   // mobile tabs); on the wide 3-column layout every pane is visible, so it
   // scrolls the section into view (and leaves the report/dossier for STREAM).
   document.querySelectorAll(".masthead-nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const pane = btn.dataset.pane || "articles";
+      if (pane === "matrix") {
+        openMatrixView();
+        return;
+      }
       if (!isWideLayout()) {
         setActivePane(pane);
         return;
       }
-      document.querySelectorAll(".masthead-nav-item").forEach((b) => {
-        b.classList.toggle("active", b === btn);
-      });
+      syncMastheadNav(pane);
       if (pane === "articles" && state.view !== "stream") setView("stream");
       const target =
-        pane === "matrix"
-          ? document.querySelector(".pane-matrix")
-          : pane === "workbench"
-            ? document.getElementById("workbench")
-            : document.querySelector(".pane-articles");
+        pane === "workbench"
+          ? document.getElementById("workbench")
+          : document.querySelector(".pane-articles");
       if (target) {
         try {
           target.scrollIntoView({ behavior: "smooth", block: "start" });
