@@ -54,6 +54,7 @@ make test / lint / fmt / precommit # same commands CI runs — green local == gr
 python -m apps.aggregator social suggest|add|remove   # manage social subscriptions
 python -m apps.aggregator ingest_social               # pull subscribed Reddit/X sources
 python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /s/ links)
+python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
 gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'

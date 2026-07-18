@@ -8,6 +8,7 @@ Docs: https://www.courtlistener.com/help/api/rest/search/
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 COURTLISTENER_SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
 COURTLISTENER_OPINION_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/opinions/"
+COURTLISTENER_RECAP_DOCS_URL = "https://www.courtlistener.com/api/rest/v4/recap-documents/"
+COURTLISTENER_CLUSTER_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/clusters/"
 COURTLISTENER_BASE = "https://www.courtlistener.com"
 
 DEFAULT_QUERIES: list[str] = [
@@ -57,6 +60,9 @@ SNIPPET_MAX_CHARS = 500
 
 # Full opinion bodies feed ITM scoring via RawArticle.content; cap the size.
 DEFAULT_OPINION_TEXT_MAX_CHARS = 20_000
+
+# Concatenated RECAP filing bodies (complaint/indictment first) per docket.
+DEFAULT_RECAP_TEXT_MAX_CHARS = 40_000
 
 # Opinion detail text fields, in preference order (plain_text first).
 _OPINION_TEXT_FIELDS = "plain_text,html,html_lawbox,html_columbia,xml_harvard"
@@ -156,9 +162,7 @@ def _opinion_snippet(hit: dict[str, Any]) -> str | None:
     candidates: list[Any] = []
     opinions = hit.get("opinions")
     if isinstance(opinions, list):
-        candidates.extend(
-            op.get("snippet") for op in opinions if isinstance(op, dict)
-        )
+        candidates.extend(op.get("snippet") for op in opinions if isinstance(op, dict))
     candidates.append(hit.get("snippet"))
     for candidate in candidates:
         if isinstance(candidate, str) and candidate.strip():
@@ -291,6 +295,134 @@ def enrich_opinion_article(
     return article.model_copy(update={"content": combined})
 
 
+_DOCKET_LINK_RE = re.compile(r"/docket/(\d+)/")
+_OPINION_LINK_RE = re.compile(r"/opinion/(\d+)/")
+
+
+def parse_docket_id(link: str | None) -> int | None:
+    """Docket id from a stored article link (/docket/{id}/{slug}/)."""
+    match = _DOCKET_LINK_RE.search(link or "")
+    return int(match.group(1)) if match else None
+
+
+def parse_opinion_id(link: str | None) -> int | None:
+    """Opinion cluster id from a stored article link (/opinion/{id}/{slug}/)."""
+    match = _OPINION_LINK_RE.search(link or "")
+    return int(match.group(1)) if match else None
+
+
+def fetch_cluster_opinion_text(
+    cluster_id: int,
+    *,
+    token: str | None = None,
+    max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """Full text for an opinion *cluster* (what /opinion/{id}/ links carry).
+
+    Cluster detail → first sub-opinion id → fetch_opinion_text. Two free GETs.
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(
+                f"{COURTLISTENER_CLUSTER_DETAIL_URL}{cluster_id}/",
+                headers=headers,
+                params={"fields": "sub_opinions"},
+            )
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"cluster {cluster_id} fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"cluster {cluster_id} HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+        opinion_id: int | None = None
+        for sub in payload.get("sub_opinions") or []:
+            match = re.search(r"/opinions/(\d+)/", str(sub))
+            if match:
+                opinion_id = int(match.group(1))
+                break
+        if opinion_id is None:
+            return None
+        return fetch_opinion_text(opinion_id, token=token, max_chars=max_chars, client=http)
+    finally:
+        if own_client:
+            http.close()
+
+
+def fetch_recap_document_text(
+    docket_id: int,
+    *,
+    token: str | None = None,
+    max_chars: int = DEFAULT_RECAP_TEXT_MAX_CHARS,
+    page_size: int = 10,
+    client: httpx.Client | None = None,
+) -> str:
+    """Concatenated plain text of a docket's RECAP documents.
+
+    Free endpoint only: reads documents already uploaded to the RECAP archive
+    (``is_available=true``) — never triggers a PACER purchase. Documents come
+    back in id order, so the complaint/indictment (entry 1) leads. Returns ""
+    when the archive has no text for this docket yet — common, not an error.
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(
+                COURTLISTENER_RECAP_DOCS_URL,
+                headers=headers,
+                params={
+                    "docket_entry__docket__id": docket_id,
+                    "is_available": "true",
+                    "order_by": "id",
+                    "page_size": max(1, min(page_size, 20)),
+                    "fields": "plain_text,description,document_number",
+                },
+            )
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"docket {docket_id} recap fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"docket {docket_id} recap HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+    finally:
+        if own_client:
+            http.close()
+
+    parts: list[str] = []
+    total = 0
+    for doc in payload.get("results") or []:
+        if not isinstance(doc, dict):
+            continue
+        text = doc.get("plain_text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        desc = str(doc.get("description") or "").strip()
+        number = doc.get("document_number")
+        header = f"--- Document {number or '?'}{(': ' + desc) if desc else ''} ---"
+        body = f"{header}\n{text.strip()}"
+        if total + len(body) > max_chars:
+            body = body[: max(0, max_chars - total)]
+        if body:
+            parts.append(body)
+            total += len(body) + 2
+        if total >= max_chars:
+            break
+    return "\n\n".join(parts)
+
+
 SEARCH_TYPES: dict[str, SearchTypeSpec] = {
     "dockets": SearchTypeSpec(
         api_type="r",
@@ -371,13 +503,10 @@ def _search(
 
             if resp.status_code == 401:
                 raise CourtListenerError(
-                    "unauthorized — set COURTLISTENER_API_TOKEN "
-                    "(Free Law Project token)"
+                    "unauthorized — set COURTLISTENER_API_TOKEN " "(Free Law Project token)"
                 )
             if resp.status_code >= 400:
-                raise CourtListenerError(
-                    f"HTTP {resp.status_code}: {resp.text[:300]}"
-                )
+                raise CourtListenerError(f"HTTP {resp.status_code}: {resp.text[:300]}")
 
             payload = resp.json()
             for hit in payload.get("results") or []:
@@ -496,8 +625,7 @@ def parse_types(raw: str | None) -> list[str]:
         else:
             valid = ", ".join(sorted({*_TYPE_ALIASES.values(), "all"}))
             raise ValueError(
-                f"unknown CourtListener search type {part.strip()!r} "
-                f"(expected one of: {valid})"
+                f"unknown CourtListener search type {part.strip()!r} " f"(expected one of: {valid})"
             )
         for name in expanded:
             if name not in resolved:

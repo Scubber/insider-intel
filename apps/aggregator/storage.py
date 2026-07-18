@@ -61,9 +61,7 @@ class JsonlArticleStore:
                         link = payload.get("link")
                         if link:
                             index[link] = (
-                                article_fingerprint(
-                                    payload.get("title"), payload.get("summary")
-                                ),
+                                article_fingerprint(payload.get("title"), payload.get("summary")),
                                 bool(payload.get("content")),
                             )
                     except json.JSONDecodeError:
@@ -103,12 +101,15 @@ class JsonlArticleStore:
         logger.info("Saved %d new article(s) to %s", len(new_articles), self.path)
         return len(new_articles)
 
-    def refresh(self, articles: list[RawArticle]) -> tuple[int, int]:
+    def refresh(self, articles: list[RawArticle], *, force: bool = False) -> tuple[int, int]:
         """Save new articles and rewrite ones whose content changed.
 
         A stored row is replaced when its title/summary fingerprint differs
         or when the incoming article carries a full-text ``content`` body the
-        stored row lacks (one-time backfill). Returns (new, updated).
+        stored row lacks (one-time backfill). With ``force=True`` every known
+        link in ``articles`` is rewritten unconditionally — used by content
+        backfills that replace an existing (non-empty) ``content`` body, which
+        the fingerprint gate cannot see. Returns (new, updated).
         """
         if not articles:
             return (0, 0)
@@ -117,6 +118,9 @@ class JsonlArticleStore:
         for article in articles:
             existing = self._index.get(article.link)
             if existing is None:
+                continue
+            if force:
+                updates.append(article)
                 continue
             fingerprint, has_content = existing
             new_fingerprint, new_has_content = self._index_entry(article)
@@ -148,9 +152,7 @@ class JsonlArticleStore:
         for article in updates:
             self._index[article.link] = self._index_entry(article)
 
-        logger.info(
-            "Refreshed store %s: %d new, %d updated", self.path, saved, len(updates)
-        )
+        logger.info("Refreshed store %s: %d new, %d updated", self.path, saved, len(updates))
         return (saved, len(updates))
 
     def load_all(self) -> list[RawArticle]:

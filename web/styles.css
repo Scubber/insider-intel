@@ -1316,6 +1316,20 @@ body {
   -webkit-line-clamp: unset;
   overflow: visible;
   white-space: pre-line;
+  max-width: 68ch; /* readable measure for the full read view */
+  line-height: 1.65;
+}
+
+/* Case-record fact strip inside the note: only useful at reading size. */
+.note-facts {
+  display: none;
+}
+
+.article-row.expanded .note-facts {
+  display: grid;
+  margin: 0 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--border);
 }
 
 /* Sibling of .article-item (not a child — it holds a link). Continues the card

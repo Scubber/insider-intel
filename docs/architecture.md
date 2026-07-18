@@ -50,7 +50,15 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 
 ### 1. Ingestion Layer
 - Pulls RSS / Atom feeds (easy add via config or JSON)
-- CourtListener RECAP search for federal dockets (no PACER purchase)
+- CourtListener RECAP search for federal dockets (no PACER purchase), plus a
+  bounded **full-text backfill** each run: stored cases whose `content` is only
+  the ingest query tag pull whole document bodies from the free RECAP archive
+  (`recap-documents`, `is_available=true`) or the opinion cluster detail —
+  capped by `COURTLISTENER_RECAP_TEXT_MAX_CHARS` (40k/docket) and
+  `COURTLISTENER_BACKFILL_MAX_DOCKETS` (25 attempts/run); dockets with no
+  archived text yet are retried weekly. Enriched rows get a force-refresh
+  (fresh `ingested_at`) and their prior LLM fields cleared, so the next
+  processing pass re-scores and re-extracts them over the full filing.
 - Optional Feedly boards and Google Alerts-style RSS (`WEB_KEYWORD_FEED_URLS`);
   prefer Alerts for cross-domain discovery (see [`sourcing.md`](sourcing.md))
 - **Social lane (`channel=social`)**: Reddit subreddit listings (OAuth app auth
@@ -163,7 +171,9 @@ adds a `summarize` node to the processing graph (after `classify`): one LLM
 call per qualifying article (has ITM hits or a classified use case) writes a
 2-4 sentence `ai_summary`, a structured `case_record` (actor role, access
 vector, motive signals, methods, exfil channels, timeframe, detection trigger,
-outcome, confidence), and adjudicates a shortlist of candidate ITM techniques
+outcome, confidence — court filings get the larger
+`SUMMARIZER_FILINGS_MAX_INPUT_CHARS` prompt budget, default 24k, so whole
+complaints/indictments are read), and adjudicates a shortlist of candidate ITM techniques
 (lexical hits + nearest by hashing-embedding similarity) — accepted refs merge
 into `entities.itm_hits` with `source: "llm"`, so the rail/matrix/facets light
 up without UI changes. Cost controls: `SUMMARIZER_MAX_ARTICLES_PER_RUN`

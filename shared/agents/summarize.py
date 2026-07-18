@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from shared.itm.controls import resolve_controls
 from shared.llm import get_summarizer_provider
-from shared.schemas.articles import CaseRecord, ExtractedEntities, ItmHit
+from shared.schemas.articles import CaseRecord, ExtractedEntities, ItmHit, resolve_channel
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
 
 if TYPE_CHECKING:
@@ -206,6 +206,16 @@ def summarize_fields(
         return empty
     if not budget.take():
         return empty
+
+    # Court filings get the bigger prompt budget — full-document extraction is
+    # the point there. The provider's own cap is the max of both settings, so
+    # this per-channel truncation is the effective one.
+    cap = (
+        settings.summarizer_filings_max_input_chars
+        if resolve_channel(source) == "filings"
+        else settings.summarizer_max_input_chars
+    )
+    text = (text or "")[:cap]
 
     candidates = build_itm_candidates(text, lexical_hits)
     try:

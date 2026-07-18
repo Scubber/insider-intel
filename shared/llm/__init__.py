@@ -94,7 +94,10 @@ def get_summarizer_provider(settings: Settings) -> SummarizerProvider | None:
                 instance = AnthropicSummarizer(
                     api_key=settings.anthropic_api_key,
                     model=settings.summarizer_model or settings.anthropic_model,
-                    max_input_chars=settings.summarizer_max_input_chars,
+                    max_input_chars=max(
+                        settings.summarizer_max_input_chars,
+                        settings.summarizer_filings_max_input_chars,
+                    ),
                 )
             except ImportError:
                 logger.warning("anthropic package not installed; run: uv add anthropic")
@@ -105,7 +108,10 @@ def get_summarizer_provider(settings: Settings) -> SummarizerProvider | None:
             base_url=settings.openai_compat_base_url,
             model=settings.summarizer_model or settings.openai_compat_model,
             api_key=settings.openai_compat_api_key,
-            max_input_chars=settings.summarizer_max_input_chars,
+            max_input_chars=max(
+                settings.summarizer_max_input_chars,
+                settings.summarizer_filings_max_input_chars,
+            ),
         )
     else:
         logger.warning("Unknown SUMMARIZER_LLM_PROVIDER=%r; summaries stay off", provider)

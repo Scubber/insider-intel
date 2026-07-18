@@ -18,6 +18,8 @@ from shared.settings import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 MAX_TEXT_CHARS = 3500
+# Court filings carry full RECAP/opinion bodies worth reading in depth.
+FILINGS_TEXT_MAX_CHARS = 12_000
 XAI_CHAT_URL = "https://api.x.ai/v1/chat/completions"
 COURTLISTENER_SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
 
@@ -311,8 +313,10 @@ def _article_text_pack(article: ProcessedArticle, extra: str = "") -> str:
     if extra:
         parts.append(f"CourtListener enrich:\n{extra}")
     blob = "\n\n".join(parts)
-    if len(blob) > MAX_TEXT_CHARS:
-        return blob[: MAX_TEXT_CHARS - 20] + "\n…[truncated]"
+    channel = resolve_channel(article.source_id, getattr(article, "channel", None))
+    cap = FILINGS_TEXT_MAX_CHARS if channel == "filings" else MAX_TEXT_CHARS
+    if len(blob) > cap:
+        return blob[: cap - 20] + "\n…[truncated]"
     return blob
 
 

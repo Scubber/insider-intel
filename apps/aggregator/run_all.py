@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from apps.aggregator.config import get_enabled_feeds, load_feeds_from_file
-from apps.aggregator.courtlistener_pipeline import run_courtlistener_ingestion
+from apps.aggregator.courtlistener_pipeline import (
+    run_courtlistener_ingestion,
+    run_courtlistener_text_backfill,
+)
 from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
 from apps.aggregator.feedly_pipeline import run_feedly_ingestion
 from apps.aggregator.pipeline import DEFAULT_STORE_PATH, run_ingestion
@@ -93,6 +96,13 @@ def run_full_pipeline(
             store_path=raw_path,
             include_raw=include_raw,
         )
+        # Pull full RECAP/opinion document text for stored cases before
+        # processing, so re-scoring + LLM extraction see whole filings.
+        text_result = run_courtlistener_text_backfill(
+            store_path=raw_path,
+            processed_path=processed_path,
+        )
+        court_result = _merge_ingestion(court_result, text_result)
     web_result: IngestionRunResult | None = None
     if not skip_web_keywords:
         web_result = run_web_keyword_ingestion(

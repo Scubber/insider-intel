@@ -588,6 +588,45 @@
     return summaryParagraphs(raw).join(" ");
   }
 
+  // Sentence-level chunking: feed summaries and LLM notes usually arrive as
+  // one long paragraph, which reads as a wall of text when expanded. Split
+  // anything over ~280 chars into 2-sentence paragraphs. Abbreviations that
+  // litter legal prose (v., No., U.S., Inc. …) must not create boundaries.
+  const CHUNK_MIN_CHARS = 280;
+  const ABBREV_RE =
+    /\b(?:v|vs|No|Nos|U\.S|U\.S\.C|Inc|Corp|Co|Ltd|LLC|Mr|Mrs|Ms|Dr|Jr|Sr|St|Fed|Dist|Cir|Dep't|approx|etc|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.$/;
+
+  function splitSentences(text) {
+    const out = [];
+    let start = 0;
+    const re = /[.!?]["')\]]?\s+(?=["'([]?[A-Z0-9])/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const candidate = text.slice(start, m.index + m[0].length).trim();
+      if (ABBREV_RE.test(candidate)) continue; // "United States v." — keep going
+      if (candidate) out.push(candidate);
+      start = m.index + m[0].length;
+    }
+    const tail = text.slice(start).trim();
+    if (tail) out.push(tail);
+    return out;
+  }
+
+  function sentenceChunks(paras) {
+    const chunks = [];
+    (paras || []).forEach((para) => {
+      if (para.length <= CHUNK_MIN_CHARS) {
+        chunks.push(para);
+        return;
+      }
+      const sentences = splitSentences(para);
+      for (let i = 0; i < sentences.length; i += 2) {
+        chunks.push(sentences.slice(i, i + 2).join(" "));
+      }
+    });
+    return chunks.filter(Boolean);
+  }
+
   function itmUrl(hit) {
     const articleId = hit.article_id || THEME_ARTICLE[hit.theme] || "AR4";
     const sectionId = String(hit.id || "").split(".")[0];
@@ -2688,6 +2727,35 @@
     return Math.round(n <= 1 ? n * 100 : n);
   }
 
+  // Compact case-record fact strip for the analyst note (expanded view only —
+  // CSS hides it while the note is clamped). Mirrors the workbench dl.
+  function buildNoteFacts(record) {
+    if (!record) return null;
+    const rows = [];
+    const add = (label, value) => {
+      const text = Array.isArray(value)
+        ? value.filter(Boolean).join(" · ")
+        : String(value || "").trim();
+      if (text) rows.push([label, text]);
+    };
+    add("ACTOR", record.actor_role);
+    add("METHODS", record.methods);
+    add("EXFIL", record.exfil_channels);
+    add("DETECTED VIA", record.detection_trigger);
+    add("OUTCOME", record.outcome);
+    if (!rows.length) return null;
+    const dl = document.createElement("dl");
+    dl.className = "case-record-list note-facts";
+    rows.forEach(([label, text]) => {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = text;
+      dl.append(dt, dd);
+    });
+    return dl;
+  }
+
   function buildArticleRow(cluster) {
     const article = cluster.primary;
     const siblings = cluster.siblings || [];
@@ -2740,14 +2808,17 @@
     h3.textContent = article.title;
 
     // 5. ANALYST NOTE — LLM summary when present, else trimmed feed summary.
-    // Kept as paragraphs so the expanded read view isn't one wall of text.
+    // Sentence-chunked into short paragraphs so the expanded read view is
+    // scannable prose, never one wall of text.
     const aiSummary = String(article.ai_summary || "").trim();
-    const noteParas = aiSummary
-      ? aiSummary
-          .split(/\n{2,}/)
-          .map((part) => part.replace(/\s+/g, " ").trim())
-          .filter(Boolean)
-      : summaryParagraphs(article.summary);
+    const noteParas = sentenceChunks(
+      aiSummary
+        ? aiSummary
+            .split(/\n{2,}/)
+            .map((part) => part.replace(/\s+/g, " ").trim())
+            .filter(Boolean)
+        : summaryParagraphs(article.summary),
+    );
     const analystText = noteParas.join(" ");
     btn.append(meta, h3);
     if (analystText) {
@@ -2756,6 +2827,9 @@
       const label = document.createElement("span");
       label.className = "analyst-note-label";
       label.textContent = "ANALYST NOTE";
+      note.appendChild(label);
+      const facts = buildNoteFacts(article.case_record);
+      if (facts) note.appendChild(facts);
       const snip = document.createElement("div");
       snip.className = "snip";
       if (noteParas.length > 1) {
@@ -2768,7 +2842,7 @@
       } else {
         snip.textContent = analystText;
       }
-      note.append(label, snip);
+      note.appendChild(snip);
       btn.appendChild(note);
     }
 

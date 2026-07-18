@@ -13,8 +13,8 @@ Brand hub and sibling apex aliases live in **https://github.com/Scubber/thederpw
 | `https://api.intel.thederpweb.com` | FastAPI | Cloud Run |
 | `https://scubber.github.io/insider-intel/` | Same Pages site | GitHub Pages project URL |
 
-**DNS:** `intel` CNAME → `scubber.github.io`; `td3.dev` apex A/AAAA → GitHub Pages anycast (or CNAME flattening).  
-**UI primary:** `web/CNAME` = `intel.thederpweb.com`.  
+**DNS:** `intel` CNAME → `scubber.github.io`; `td3.dev` apex A/AAAA → GitHub Pages anycast (or CNAME flattening).
+**UI primary:** `web/CNAME` = `intel.thederpweb.com`.
 **API:** map `api.intel.thederpweb.com` to the Cloud Run service (below).
 
 ### Fix “404 / insecure” on custom domains
@@ -80,6 +80,9 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
 - **Scheduled ingest:** Cloud Scheduler → `corpus-refresh` job → full
   `python -m apps.aggregator all` → POST `/reload` on the service.
   Run it manually anytime: `gcloud run jobs execute corpus-refresh --region us-east1`.
+  Each run also backfills full court-document text from the free RECAP
+  archive (≤ `COURTLISTENER_BACKFILL_MAX_DOCKETS`, default 25 attempts/run;
+  never a PACER purchase) before processing.
 - **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
   the env on the **job only** (the API never calls the LLM):
   `gcloud run jobs update corpus-refresh --region us-east1

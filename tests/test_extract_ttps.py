@@ -131,3 +131,35 @@ def test_seed_floor_empty_evidence_labels_generic_fallback() -> None:
     assert any(b.id == "TTP-OE-01" for b in report.behaviors)  # never-empty floor
     assert report.matched_if038 is False
     assert "no matched evidence" in report.detail
+
+
+def test_filings_pack_carries_full_document_text() -> None:
+    from apps.search.ttp_extract import FILINGS_TEXT_MAX_CHARS, MAX_TEXT_CHARS, _article_text_pack
+
+    body = "The defendant exfiltrated schematics. " * 500  # ~19k chars
+    filing = process_article(
+        RawArticle(
+            title="United States v. Example",
+            link="https://www.courtlistener.com/docket/9/us-v-example/",
+            summary="Court: SDNY\nDocket: 1:24-cr-00001",
+            content=f"CourtListener query: q\n{body}",
+            source_id="courtlistener-recap",
+            source_name="CourtListener RECAP",
+            channel="filings",
+        )
+    )
+    pack = _article_text_pack(filing)
+    assert len(pack) > MAX_TEXT_CHARS  # filings are not clipped to the news cap
+    assert len(pack) <= FILINGS_TEXT_MAX_CHARS
+
+    news = process_article(
+        RawArticle(
+            title="Insider threat news",
+            link="https://example.com/news",
+            summary="Data exfiltration by an employee.",
+            content=body,
+            source_id="example",
+            source_name="Example",
+        )
+    )
+    assert len(_article_text_pack(news)) <= MAX_TEXT_CHARS

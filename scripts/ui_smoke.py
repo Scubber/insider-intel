@@ -118,16 +118,35 @@ def run(base_url: str, headed: bool) -> int:
         snips = page.locator("#article-list .snip").all_text_contents()
         joined = " ".join(snips)
         entity_leak = any(tok in joined for tok in ["&nbsp;", "&#", "&amp;", "&quot;"])
-        checks.check("snippets decode HTML entities", not entity_leak,
-                     "found literal entity in a snippet")
+        checks.check(
+            "snippets decode HTML entities", not entity_leak, "found literal entity in a snippet"
+        )
+
+        # Long analyst notes are sentence-chunked into short paragraphs, not
+        # one wall of text (chunks are built at render time, even clamped).
+        chunked = page.evaluate(
+            """() => {
+              const rows = [...document.querySelectorAll('#article-list .article-row')];
+              const row = rows.find(
+                (r) => ((r.querySelector('.snip') || {}).textContent || '').length > 300
+              );
+              return row ? row.querySelectorAll('.snip-para').length : -1;
+            }"""
+        )
+        checks.check("long notes are sentence-chunked", chunked >= 2, f"snip-para count={chunked}")
 
         # Observed-only ITM rail: grouped theme headers present, and the rail
         # never renders zero-coverage taxonomy rows.
         theme_headers = page.locator(".pane-matrix .itm-rail-theme").count()
-        checks.check("rail shows observed theme groups", 1 <= theme_headers <= 5,
-                     f"{theme_headers} theme headers")
-        checks.check("rail has no zero-coverage rows",
-                     page.locator(".pane-matrix .matrix-tech-zero").count() == 0)
+        checks.check(
+            "rail shows observed theme groups",
+            1 <= theme_headers <= 5,
+            f"{theme_headers} theme headers",
+        )
+        checks.check(
+            "rail has no zero-coverage rows",
+            page.locator(".pane-matrix .matrix-tech-zero").count() == 0,
+        )
 
         # Case click collapses the rail to that article's tagged techniques.
         full_rows = page.locator(".itm-rail-btn").count()
@@ -135,12 +154,16 @@ def run(base_url: str, headed: bool) -> int:
         row_with_hit.locator(".article-item").click()
         case_rows = page.locator(".itm-rail-btn").count()
         case_hits = page.locator(".itm-rail-btn.case-hit").count()
-        checks.check("selected case filters rail to its techniques",
-                     1 <= case_rows < full_rows and case_hits == case_rows,
-                     f"full={full_rows} case={case_rows} hits={case_hits}")
+        checks.check(
+            "selected case filters rail to its techniques",
+            1 <= case_rows < full_rows and case_hits == case_rows,
+            f"full={full_rows} case={case_rows} hits={case_hits}",
+        )
         page.click("#itm-rail-show-all")
-        checks.check("SHOW ALL restores the full observed rail",
-                     page.locator(".itm-rail-btn").count() == full_rows)
+        checks.check(
+            "SHOW ALL restores the full observed rail",
+            page.locator(".itm-rail-btn").count() == full_rows,
+        )
 
         # Masthead MATRIX opens the center full-matrix browser and comes back.
         page.click(".masthead-nav-item[data-pane='matrix']")
@@ -161,10 +184,12 @@ def run(base_url: str, headed: bool) -> int:
         page.wait_for_selector(".matrix-tech-btn", state="visible", timeout=10000)
         page.click(".matrix-tech-btn")
         page.wait_for_selector("#dossier-panel:not([hidden])", timeout=10000)
-        checks.check("technique opens dossier",
-                     bool((page.text_content("#dossier-title") or "").strip()))
-        checks.check("dossier has query blocks",
-                     page.locator("#dossier-queries .query-stack").count() > 0)
+        checks.check(
+            "technique opens dossier", bool((page.text_content("#dossier-title") or "").strip())
+        )
+        checks.check(
+            "dossier has query blocks", page.locator("#dossier-queries .query-stack").count() > 0
+        )
 
         # Hunt -> crumb
         page.goto(demo)
@@ -173,17 +198,18 @@ def run(base_url: str, headed: bool) -> int:
         page.press("#q", "Enter")
         page.wait_for_selector("#hunt-map:not([hidden])", timeout=10000)
         crumbs = page.locator("#filter-crumbs .crumb").all_text_contents()
-        checks.check("hunt shows a filter crumb",
-                     any("Hunt:" in c for c in crumbs))
+        checks.check("hunt shows a filter crumb", any("Hunt:" in c for c in crumbs))
 
         # Board -> extract -> report with query blocks
         page.click("#article-list .article-board-btn")
         page.click("#board-extract")
         page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
-        checks.check("extract renders hunt report",
-                     page.locator("#ttp-behavior-list li").count() > 0)
-        checks.check("report has run-it query blocks",
-                     page.locator("#ttp-queries .query-stack").count() > 0)
+        checks.check(
+            "extract renders hunt report", page.locator("#ttp-behavior-list li").count() > 0
+        )
+        checks.check(
+            "report has run-it query blocks", page.locator("#ttp-queries .query-stack").count() > 0
+        )
 
         # Themes apply. The picker lives behind the collapsed Refine
         # disclosure — open it first, as a user would.
@@ -235,13 +261,15 @@ def run(base_url: str, headed: bool) -> int:
                 }"""
             )
             visible = geo["top"] < geo["innerH"] and geo["h"] > 60
-            checks.check(f"landscape {tag}: first article visible", visible,
-                         f"top={geo['top']} h={geo['h']} innerH={geo['innerH']}")
+            checks.check(
+                f"landscape {tag}: first article visible",
+                visible,
+                f"top={geo['top']} h={geo['h']} innerH={geo['innerH']}",
+            )
             checks.check(f"landscape {tag}: footer hidden", not geo["footerShown"])
             lp.close()
 
-        checks.check("no uncaught page errors", not errors,
-                     "; ".join(errors[:3]))
+        checks.check("no uncaught page errors", not errors, "; ".join(errors[:3]))
         browser.close()
 
     total = checks.passed + len(checks.failures)
@@ -255,9 +283,7 @@ def run(base_url: str, headed: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        "--url", help="Test a running instance instead of building the preview"
-    )
+    ap.add_argument("--url", help="Test a running instance instead of building the preview")
     ap.add_argument("--headed", action="store_true", help="Run with a visible browser")
     args = ap.parse_args()
 
