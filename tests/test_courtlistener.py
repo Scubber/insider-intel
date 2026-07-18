@@ -756,3 +756,39 @@ def test_legacy_attempt_markers_are_retried(tmp_path, monkeypatch) -> None:
     )
     assert result.total_articles_saved == 1
     assert (state.get(clp._TEXT_ATTEMPT_KEY.format(link=link)) or "").startswith("checked @")
+
+
+def test_throttle_wait_and_retry_honors_hint(tmp_path, monkeypatch) -> None:
+    """A 429 with a refill hint waits it out once and retries, then succeeds."""
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.courtlistener import CourtListenerError
+    from apps.aggregator.storage import JsonlArticleStore
+
+    monkeypatch.setenv("COURTLISTENER_REQUEST_DELAY_SECONDS", "0.01")
+    raw_path = tmp_path / "raw.jsonl"
+    link = "https://www.courtlistener.com/docket/1/a/"
+    JsonlArticleStore(raw_path).save([_stored_docket(link)])
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(clp.time, "sleep", lambda s: sleeps.append(s))
+
+    calls = {"n": 0}
+
+    def flaky_then_ok(docket_id, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise CourtListenerError(
+                'docket 1 recap HTTP 429: {"detail":"Request was throttled. '
+                'Rate limit exceeded: 10/min. Expected available in 51 seconds."}'
+            )
+        return "FULL TEXT " * 5
+
+    monkeypatch.setattr(clp, "fetch_recap_document_text", flaky_then_ok)
+    result = clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=clp.JsonIngestState(tmp_path / "state.json"),
+    )
+    assert calls["n"] == 2
+    assert result.total_articles_saved == 1
+    assert any(50 < s < 60 for s in sleeps)  # honored "51 seconds" + margin
