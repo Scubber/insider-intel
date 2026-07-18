@@ -15,7 +15,8 @@ Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
 **Start here:** [`CLAUDE.md`](CLAUDE.md) — the agent operating manual
 (architecture map, commands, production invariants, hard-won gotchas).
 Dev environment: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · hosting:
-[`docs/hosting.md`](docs/hosting.md) · process: [`docs/PROCESS.md`](docs/PROCESS.md).
+[`docs/hosting.md`](docs/hosting.md) · process: [`docs/PROCESS.md`](docs/PROCESS.md) ·
+roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 Older handoff notes: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
 
 ## Release status
@@ -171,8 +172,8 @@ and RSS sources still run.
 Copy `.env.example` → `.env`. For hosted UI later, set `CORS_ORIGINS` and
 `web/config.js` API base URL. See [docs/hosting.md](docs/hosting.md).
 
-**Public UI:** `https://intel.thederpweb.com` (GitHub Pages).  
-**Public API:** `https://api.intel.thederpweb.com` (Cloud Run — see [docs/hosting.md](docs/hosting.md)).  
+**Public UI:** `https://intel.thederpweb.com` (GitHub Pages).
+**Public API:** `https://api.intel.thederpweb.com` (Cloud Run — see [docs/hosting.md](docs/hosting.md)).
 The shipped UI talks only to the live API; if it's unreachable it shows a
 retryable error state (no snapshot fallback).
 
