@@ -85,18 +85,14 @@ def ingest_archive_source(
         articles: list[RawArticle] = []
         for i, url in enumerate(candidates):
             try:
-                extracted = fetch_and_extract(
-                    url, client=http, include_raw=include_raw
-                )
+                extracted = fetch_and_extract(url, client=http, include_raw=include_raw)
             except HtmlExtractError as exc:
                 logger.debug("Skip %s: %s", url, exc)
                 if delay_seconds > 0:
                     time.sleep(delay_seconds)
                 continue
 
-            if not _keywords_match_url_or_text(
-                url, extracted.title, extracted.summary, keywords
-            ):
+            if not _keywords_match_url_or_text(url, extracted.title, extracted.summary, keywords):
                 if delay_seconds > 0:
                     time.sleep(delay_seconds)
                 continue

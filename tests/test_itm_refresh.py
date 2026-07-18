@@ -46,9 +46,7 @@ def test_slim_matrix_extracts_sections_and_subsections() -> None:
     }
     slim = slim_matrix(payload, source_url="file://test")
     assert slim["itm_version"] == "9.9.9"
-    assert slim["articles"] == [
-        {"id": "AR4", "title": "Infringement", "theme": "infringement"}
-    ]
+    assert slim["articles"] == [{"id": "AR4", "title": "Infringement", "theme": "infringement"}]
     ids = {t["id"] for t in slim["techniques"]}
     assert ids == {"IF002", "IF002.001"}
     parent = next(t for t in slim["techniques"] if t["id"] == "IF002")

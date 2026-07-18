@@ -133,6 +133,172 @@ def test_seed_floor_empty_evidence_labels_generic_fallback() -> None:
     assert "no matched evidence" in report.detail
 
 
+def test_seed_floor_builds_technique_sections_with_case_bullets() -> None:
+    from apps.search.ttp_extract import seed_floor_report
+    from shared.schemas import CaseRecord
+
+    article = _processed(
+        "DictateMD, Inc. v. Ahmadi",
+        "https://example.com/dictatemd",
+        "Departing employee accused of trade secret theft and data exfiltration.",
+    ).model_copy(
+        update={
+            "case_record": CaseRecord(
+                is_insider_case=True,
+                methods=["downloaded customer database before resignation"],
+                exfil_channels=["personal Dropbox"],
+                detection_trigger="forensic review of the laptop",
+            )
+        }
+    )
+    assert article.entities.itm_hits
+    report = seed_floor_report([article])
+
+    assert report.techniques
+    section = report.techniques[0]
+    assert section.id == article.entities.itm_hits[0].id.upper()
+    assert section.description
+    assert section.cases and section.cases[0].title == "DictateMD, Inc. v. Ahmadi"
+    bullets = section.cases[0].bullets
+    assert "downloaded customer database before resignation" in bullets
+    assert any(b.startswith("Exfil channel:") for b in bullets)
+    assert any(b.startswith("Detected via:") for b in bullets)
+    assert report.summary and "ITM technique" in report.summary
+    # Honest labeling — no "seed pack / no XAI_API_KEY" wording for evidence.
+    assert "Evidence pack" in report.detail
+    assert "XAI_API_KEY" not in report.detail
+
+
+def test_extract_ttps_endpoint_reports_llm_off(tmp_path, monkeypatch) -> None:
+    article = process_article(
+        RawArticle(
+            title="Insider threat: engineer exfiltrated trade secrets",
+            link="https://example.com/exfil-endpoint",
+            summary="Disgruntled employee used removable media for data exfiltration.",
+            published=datetime(2024, 6, 1, tzinfo=UTC),
+            source_id="example",
+            source_name="Example",
+        )
+    )
+    path = tmp_path / "processed.jsonl"
+    JsonlProcessedStore(path).save([article])
+    settings = Settings(
+        PROCESSED_ARTICLES_PATH=str(path),
+        RAW_ARTICLES_PATH=str(tmp_path / "raw.jsonl"),
+        CORS_ORIGINS="http://127.0.0.1:5500",
+        XAI_API_KEY=None,
+        ANTHROPIC_API_KEY=None,
+    )
+    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.search.api.get_settings", lambda: settings)
+    service.get_index(path, reload=True)
+
+    client = TestClient(app)
+    res = client.post("/extract/ttps", json={"links": [article.link]})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["techniques"]
+    assert "LLM off" in body["detail"]
+
+
+def test_resolve_extract_provider_auto_and_explicit() -> None:
+    from apps.search.ttp_extract import resolve_extract_provider
+
+    base = dict(CORS_ORIGINS="http://127.0.0.1:5500")
+    assert resolve_extract_provider(Settings(**base)) is None
+    assert resolve_extract_provider(Settings(**base, XAI_API_KEY="x"))[0] == "xai"
+    assert resolve_extract_provider(Settings(**base, ANTHROPIC_API_KEY="a"))[0] == "anthropic"
+    # xAI wins auto when both keys exist; explicit choice overrides.
+    both = Settings(**base, XAI_API_KEY="x", ANTHROPIC_API_KEY="a")
+    assert resolve_extract_provider(both)[0] == "xai"
+    forced = Settings(
+        **base, XAI_API_KEY="x", ANTHROPIC_API_KEY="a", EXTRACT_LLM_PROVIDER="anthropic"
+    )
+    assert resolve_extract_provider(forced)[0] == "anthropic"
+    off = Settings(**base, XAI_API_KEY="x", EXTRACT_LLM_PROVIDER="none")
+    assert resolve_extract_provider(off) is None
+
+
+def test_merge_llm_sections_validates_ids_and_resolves_links() -> None:
+    from apps.search.ttp_extract import _merge_llm_into_floor, seed_floor_report
+
+    article = _processed(
+        "DictateMD, Inc. v. Ahmadi",
+        "https://example.com/dictatemd-merge",
+        "Departing employee accused of trade secret theft and data exfiltration.",
+    )
+    floor = seed_floor_report([article])
+    real_id = floor.techniques[0].id
+    llm = {
+        "summary": "One departing employee stole trade secrets.",
+        "techniques": [
+            {
+                "id": real_id,
+                "cases": [
+                    {
+                        "title": "DictateMD v. Ahmadi",
+                        "bullets": ["Synced the customer list to a personal drive"],
+                    }
+                ],
+            },
+            {"id": "ZZ999", "cases": [{"title": "Fake", "bullets": ["invented"]}]},
+        ],
+    }
+    merged = _merge_llm_into_floor(
+        floor, llm, links_by_title={article.title: article.link}, provider="anthropic"
+    )
+    assert merged.mode == "llm"
+    assert merged.summary == "One departing employee stole trade secrets."
+    ids = {s.id for s in merged.techniques}
+    assert real_id in ids and "ZZ999" not in ids
+    enriched = next(s for s in merged.techniques if s.id == real_id)
+    # Loose title match resolves back to the board link + canonical title.
+    assert enriched.cases[0].link == article.link
+    assert enriched.cases[0].title == article.title
+    assert enriched.cases[0].bullets == ["Synced the customer list to a personal drive"]
+    assert "anthropic" in merged.detail
+
+
+def test_articles_text_endpoint_returns_filing_body(tmp_path, monkeypatch) -> None:
+    from apps.aggregator.storage import JsonlArticleStore
+
+    body = "The defendant exfiltrated schematics to a personal drive."
+    raw = RawArticle(
+        title="United States v. Example",
+        link="https://www.courtlistener.com/docket/9/us-v-example/",
+        summary="Court: SDNY",
+        content=f"CourtListener query: insider\n--- Document 1: Complaint ---\n{body}",
+        source_id="courtlistener-recap",
+        source_name="CourtListener RECAP",
+        channel="filings",
+    )
+    filing = process_article(raw)
+    path = tmp_path / "processed.jsonl"
+    JsonlProcessedStore(path).save([filing])
+    raw_path = tmp_path / "raw.jsonl"
+    JsonlArticleStore(raw_path).save([raw])
+    settings = Settings(
+        PROCESSED_ARTICLES_PATH=str(path),
+        RAW_ARTICLES_PATH=str(raw_path),
+        CORS_ORIGINS="http://127.0.0.1:5500",
+    )
+    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.search.api.get_settings", lambda: settings)
+    service.get_index(path, reload=True)
+
+    client = TestClient(app)
+    res = client.get("/articles/text", params={"link": filing.link})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["channel"] == "filings"
+    assert body in data["text"]
+    assert "CourtListener query:" not in data["text"]
+    assert "--- Document 1: Complaint ---" in data["text"]  # raw line breaks kept
+
+    missing = client.get("/articles/text", params={"link": "https://example.com/nope"})
+    assert missing.status_code == 404
+
+
 def test_filings_pack_carries_full_document_text() -> None:
     from apps.search.ttp_extract import FILINGS_TEXT_MAX_CHARS, MAX_TEXT_CHARS, _article_text_pack
 

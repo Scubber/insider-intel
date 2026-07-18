@@ -57,12 +57,14 @@ def resolve_controls(
 
 
 @lru_cache(maxsize=1)
-def _control_reverse_maps() -> tuple[
-    dict[str, tuple[str, ...]],
-    dict[str, tuple[str, ...]],
-    dict[str, str],
-    dict[str, str],
-]:
+def _control_reverse_maps() -> (
+    tuple[
+        dict[str, tuple[str, ...]],
+        dict[str, tuple[str, ...]],
+        dict[str, str],
+        dict[str, str],
+    ]
+):
     """Build detection/prevention → technique ids and id→title catalogs."""
     dt_to_tech: dict[str, list[str]] = {}
     pv_to_tech: dict[str, list[str]] = {}

@@ -200,8 +200,15 @@ def run(base_url: str, headed: bool) -> int:
         crumbs = page.locator("#filter-crumbs .crumb").all_text_contents()
         checks.check("hunt shows a filter crumb", any("Hunt:" in c for c in crumbs))
 
-        # Board -> extract -> report with query blocks
-        page.click("#article-list .article-board-btn")
+        # Board -> extract -> report with query blocks. Board a row that carries
+        # ITM evidence so the v2 per-technique sections have something to show.
+        itm_row_btn = page.locator(
+            "#article-list .article-row:has(.itm-id-chip) .article-board-btn"
+        )
+        if itm_row_btn.count():
+            itm_row_btn.first.click()
+        else:
+            page.click("#article-list .article-board-btn")
         page.click("#board-extract")
         page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
         checks.check(
@@ -209,6 +216,21 @@ def run(base_url: str, headed: bool) -> int:
         )
         checks.check(
             "report has run-it query blocks", page.locator("#ttp-queries .query-stack").count() > 0
+        )
+        # Report v2: boards with ITM evidence get per-technique case sections.
+        checks.check(
+            "report has per-technique case sections",
+            page.locator("#ttp-technique-sections .ttp-technique .ttp-case-bullets li").count() > 0,
+        )
+        checks.check(
+            "report shows analyst summary",
+            bool((page.text_content("#ttp-summary") or "").strip()),
+        )
+        # Channel chip reads "Cases" (display label; API param stays filings).
+        checks.check(
+            "channel chip labeled Cases",
+            (page.text_content("#channel-filters [data-channel='filings']") or "").strip()
+            == "Cases",
         )
 
         # Themes apply. The picker lives behind the collapsed Refine

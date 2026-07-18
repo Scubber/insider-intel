@@ -111,9 +111,7 @@ def test_llm_refines_thin_heuristics(monkeypatch: pytest.MonkeyPatch) -> None:
     from shared.agents import process_article
 
     stub = _StubProvider(
-        ClassificationResult(
-            use_cases=["shadow-it"], insider_type="negligent", confidence=0.9
-        )
+        ClassificationResult(use_cases=["shadow-it"], insider_type="negligent", confidence=0.9)
     )
     monkeypatch.setattr(processor, "get_classifier_provider", lambda settings: stub)
     processed = process_article(_social_raw())
@@ -164,9 +162,7 @@ def test_llm_error_falls_back_to_heuristic(monkeypatch: pytest.MonkeyPatch) -> N
         def classify(self, *, title: str, text: str):
             raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(
-        processor, "get_classifier_provider", lambda settings: ExplodingProvider()
-    )
+    monkeypatch.setattr(processor, "get_classifier_provider", lambda settings: ExplodingProvider())
     processed = process_article(_social_raw())
     assert processed.use_cases == []
     assert processed.insider_type is None
@@ -177,8 +173,7 @@ def test_llm_error_falls_back_to_heuristic(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_parse_result_strict_json() -> None:
     result = _parse_result(
-        '{"use_cases": ["overemployment"], "insider_type": "negligent",'
-        ' "confidence": 0.9}'
+        '{"use_cases": ["overemployment"], "insider_type": "negligent",' ' "confidence": 0.9}'
     )
     assert result is not None
     assert result.use_cases == ["overemployment"]

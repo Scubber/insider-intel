@@ -105,8 +105,16 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `PACER_PURCHASE_MAX_PER_RUN` (default 5). Estimated spend is tracked in
   `state/ingest_state.json` (`pacer_spend:YYYY-Qn`). Purchased documents
   join the public RECAP archive.
+- **Extract-report LLM (opt-in):** `POST /extract/ttps` enriches the hunt
+  report with per-technique case bullets + an analyst summary via
+  `EXTRACT_LLM_PROVIDER` (default `auto`: uses `XAI_API_KEY` if set, else
+  `ANTHROPIC_API_KEY`; without either it returns the evidence-only report).
+  The key goes on the **service** (the endpoint runs there):
+  `gcloud run services update insider-intel-api --region us-east1
+  --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
 - **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
-  the env on the **job only** (the API never calls the LLM):
+  the env on the **job only** (the extract endpoint above is the API's only
+  LLM use):
   `gcloud run jobs update corpus-refresh --region us-east1
   --set-env-vars SUMMARIZER_LLM_PROVIDER=anthropic
   --set-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.

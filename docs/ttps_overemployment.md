@@ -1,6 +1,6 @@
 # Overemployment TTPs (IF038) — investigator hunt cues
 
-**ITM:** [IF038 — Undisclosed Concurrent Employment](https://insiderthreatmatrix.org/)  
+**ITM:** [IF038 — Undisclosed Concurrent Employment](https://insiderthreatmatrix.org/)
 **Hunt meaning here:** human investigation across **email, chat, network, and HR/legal** — not SOC-only.
 
 ## MVP scope note
@@ -105,6 +105,6 @@ Treat each docket as a lead to read — do not assert case facts from metadata a
 
 ## Later (not MVP)
 
-- LLM batch over opinion PDFs / MCP-fetched text → per-case structured TTPs  
-- Persist `ai_summary` + channel-tagged hunt cues on each filing  
-- Workbench UI grouped Email | Chat | Network | Human  
+- LLM batch over opinion PDFs / MCP-fetched text → per-case structured TTPs
+- Persist `ai_summary` + channel-tagged hunt cues on each filing
+- Workbench UI grouped Email | Chat | Network | Human

@@ -55,9 +55,4 @@ def test_technique_article_counts_respect_source() -> None:
         ]
     )
     assert index.technique_article_counts(topic_match=False).get("IF038", 0) == 2
-    assert (
-        index.technique_article_counts(topic_match=False, source_id="krebs").get(
-            "IF038", 0
-        )
-        == 1
-    )
+    assert index.technique_article_counts(topic_match=False, source_id="krebs").get("IF038", 0) == 1

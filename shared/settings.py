@@ -211,6 +211,13 @@ class Settings(BaseSettings):
     # xAI / Grok — optional LLM fill for POST /extract/ttps
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_model: str = Field(default="grok-3-mini", alias="XAI_MODEL")
+    # Which LLM enriches the extract report. "auto" picks the first configured
+    # key (xAI, then Anthropic); "openai" means any OpenAI-compatible endpoint.
+    extract_llm_provider: str = Field(
+        default="auto",
+        alias="EXTRACT_LLM_PROVIDER",
+        description="auto | xai | anthropic | openai | none",
+    )
 
     # Social — Reddit. Public JSON works from residential IPs; cloud IPs get
     # 429'd, so set a free "script" app's credentials for OAuth app auth.

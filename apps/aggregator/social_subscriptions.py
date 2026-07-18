@@ -118,9 +118,7 @@ class SocialSubscriptionStore:
     def remove(self, platform: str, handle: str) -> bool:
         normalized = normalize_handle(platform, handle)
         current = self.list()
-        kept = [
-            s for s in current if not (s.platform == platform and s.id == normalized)
-        ]
+        kept = [s for s in current if not (s.platform == platform and s.id == normalized)]
         if len(kept) == len(current):
             return False
         self._write(kept)
@@ -132,9 +130,8 @@ class SocialSubscriptionStore:
     def _write(self, subscriptions: list[SocialSubscription]) -> None:
         payload: dict[str, Any] = {
             "subscriptions": [
-                s.model_dump(mode="json") for s in sorted(
-                    subscriptions, key=lambda s: (s.platform, s.id)
-                )
+                s.model_dump(mode="json")
+                for s in sorted(subscriptions, key=lambda s: (s.platform, s.id))
             ],
         }
         self._path.parent.mkdir(parents=True, exist_ok=True)

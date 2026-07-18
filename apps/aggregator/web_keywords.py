@@ -36,9 +36,7 @@ def _strip_html(value: str | None) -> str:
 
 def _entry_published(entry: Any) -> datetime | None:
     for key in ("published", "updated"):
-        raw = getattr(entry, key, None) or (
-            entry.get(key) if isinstance(entry, dict) else None
-        )
+        raw = getattr(entry, key, None) or (entry.get(key) if isinstance(entry, dict) else None)
         if not raw:
             continue
         try:
@@ -61,9 +59,7 @@ def entry_to_raw_article(
     link = (getattr(entry, "link", None) or "").strip()
     if not title or not link.startswith("http"):
         return None
-    summary = _strip_html(
-        getattr(entry, "summary", None) or getattr(entry, "description", None)
-    )
+    summary = _strip_html(getattr(entry, "summary", None) or getattr(entry, "description", None))
     host = urlparse(feed_url).netloc or "alert-rss"
     note = f"Alert feed: {host}"
     body = f"{summary}\n\n{note}".strip() if summary else note
@@ -133,9 +129,7 @@ def run_web_keyword_ingestion(
     article_store: ArticleStore = store or JsonlArticleStore(store_path)
 
     if not urls:
-        logger.info(
-            "Web keyword ingest skipped (set WEB_KEYWORD_FEED_URLS to enable)"
-        )
+        logger.info("Web keyword ingest skipped (set WEB_KEYWORD_FEED_URLS to enable)")
         result.finished_at = datetime.now(UTC)
         return result
 

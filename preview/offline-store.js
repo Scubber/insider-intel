@@ -503,11 +503,45 @@
             (ttp.seeds || []).forEach((t) => seedSet.add(t));
           });
         });
+        // Report v2 mirror: per-technique sections built from the snapshot's
+        // own ITM hits + case records (same evidence floor as the live API).
+        const sections = new Map();
+        picked.forEach((a) => {
+          const record = a.case_record || null;
+          const caseBullets = record
+            ? [
+                ...(record.methods || []),
+                ...(record.exfil_channels || []).map((c) => `Exfil channel: ${c}`),
+                ...(record.detection_trigger ? [`Detected via: ${record.detection_trigger}`] : []),
+              ]
+            : [];
+          (a.itm_hits || []).forEach((h) => {
+            const tid = String(h.id || "").toUpperCase();
+            if (!tid) return;
+            if (!sections.has(tid)) {
+              sections.set(tid, { id: tid, title: h.title || tid, description: "", cases: [] });
+            }
+            const section = sections.get(tid);
+            if (section.cases.some((c) => c.link === a.link)) return;
+            const bullets = [...caseBullets];
+            const aliases = (h.matched_aliases || []).slice(0, 6).join(", ");
+            if (aliases) bullets.push(`Matched in text: ${aliases}`);
+            section.cases.push({ title: a.title, link: a.link, bullets });
+          });
+        });
+        const techniques = Array.from(sections.values());
+        const summary = techniques.length
+          ? `${picked.length} board case(s) show ${techniques.length} ITM technique(s): ` +
+            `${techniques.map((s) => s.id).join(", ")}.`
+          : "";
+
         const label = selection.packs.map((p) => p.label).join(" + ");
         return {
           mode: "seeds",
           article_count: picked.length,
           titles,
+          summary,
+          techniques,
           behaviors,
           email,
           chat,
@@ -515,7 +549,7 @@
           human,
           seeds: Array.from(seedSet),
           matched_if038: selection.matched && selection.packs.some((p) => p.id === "IF038"),
-          detail: `Demo seed pack · ${label || "IF038 overemployment"} (static snapshot — set XAI_API_KEY on live API for LLM)`,
+          detail: `Demo evidence pack · ${label || "board evidence"} (static snapshot — live API adds LLM enrichment)`,
         };
       }
       throw new Error(`Demo mode does not support ${method} ${path}`);

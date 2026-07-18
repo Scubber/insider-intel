@@ -87,7 +87,10 @@ legacy fallback.
   `PACER_USERNAME`/`PACER_PASSWORD`. Never add another purchase path.
 - **`POST /extract/ttps` spends LLM credits** — it is rate-limited
   (`apps/search/ratelimit.py`, env-tunable). Don't remove the limiter; the
-  service also runs `max-instances=1` as a cost/abuse ceiling.
+  service also runs `max-instances=1` as a cost/abuse ceiling. Provider is
+  `EXTRACT_LLM_PROVIDER` (auto: xAI key, else Anthropic key, else
+  evidence-only report); the key must be attached to the **API service**,
+  not just the refresh job.
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).

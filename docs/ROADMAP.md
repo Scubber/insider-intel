@@ -26,7 +26,12 @@ mapped to the Insider Threat Matrix™.
   fee waiver; every purchase enriches the public archive)
 - Rolling historical sweep: 90-day windows of insider prosecutions walking
   back to 2015 (~10 days to seed the decade at 4 refreshes/day)
-- Evidence-gated workbench extraction (no more unconditional seed packs)
+- Evidence-gated workbench extraction (no more unconditional seed packs);
+  hunt report v2: analyst summary + per-technique sections with per-case
+  "how they did it" bullets, LLM-enriched via `EXTRACT_LLM_PROVIDER`
+  (xAI/Anthropic/OpenAI-compatible), honest evidence-pack labeling
+- Read-the-filing: full court-document text on demand in the case card
+  (`GET /articles/text`)
 - Free-tier-sized X lane (consumer-key bearer minting, 48h cadence)
 
 ## In flight
@@ -37,6 +42,9 @@ mapped to the Insider Threat Matrix™.
 - First PACER purchase → first Free Law Project contribution
 
 ## Next up
+
+Tracked as GitHub issues (the working kanban):
+<https://github.com/Scubber/insider-intel/issues>
 
 - **Syndication — let other sites/tools consume insider-intel** (see below)
 - Reddit OAuth creds → un-block the social tips lane from GCP

@@ -35,9 +35,7 @@ def _article(
 
 def test_pr041_aliases_match_credential_theft() -> None:
     clear_itm_cache()
-    hits = match_itm_techniques(
-        "Amazon extension flaw leads to cloud credential theft by insider"
-    )
+    hits = match_itm_techniques("Amazon extension flaw leads to cloud credential theft by insider")
     assert any(h.id == "PR041" for h in hits)
 
 

@@ -35,9 +35,7 @@ def run_datatheftnews_ingestion(
     started = datetime.now(UTC)
     article_store = store or JsonlArticleStore(store_path)
     max_posts = limit if limit is not None else settings.datatheftnews_limit
-    url = (supabase_url or settings.datatheftnews_supabase_url or DEFAULT_SUPABASE_URL).rstrip(
-        "/"
-    )
+    url = (supabase_url or settings.datatheftnews_supabase_url or DEFAULT_SUPABASE_URL).rstrip("/")
 
     try:
         key = resolve_anon_key(anon_key or settings.datatheftnews_anon_key)

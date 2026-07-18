@@ -171,6 +171,9 @@
     boardBadge: document.getElementById("board-badge"),
     ttpReport: document.getElementById("ttp-report"),
     ttpReportMeta: document.getElementById("ttp-report-meta"),
+    ttpSummary: document.getElementById("ttp-summary"),
+    ttpTechniqueGroup: document.getElementById("ttp-technique-group"),
+    ttpTechniqueSections: document.getElementById("ttp-technique-sections"),
     ttpBehaviorList: document.getElementById("ttp-behavior-list"),
     ttpEmailList: document.getElementById("ttp-email-list"),
     ttpChatList: document.getElementById("ttp-chat-list"),
@@ -655,7 +658,7 @@
       return "No indexed articles for this matrix selection yet.";
     }
     if (state.searchMode && state.huntMappedIds.length) {
-      return `Mapped to ${state.huntMappedIds.join(", ")} — no indexed stories yet for this Source/Channel. Try Filings, clear Source, or Refresh after ingest.`;
+      return `Mapped to ${state.huntMappedIds.join(", ")} — no indexed stories yet for this Source/Channel. Try Cases, clear Source, or Refresh after ingest.`;
     }
     if (state.searchMode && els.q && els.q.value.trim()) {
       return `No ITM map for “${els.q.value.trim()}”. Add an alias in shared/itm/aliases.py if this is a real insider-risk phrase.`;
@@ -1126,13 +1129,36 @@
     // Evidence first: behavior lines from the board's own ITM techniques and
     // case-record methods, seeds/cues from what the articles actually carry.
     const seenBehavior = new Set();
+    const sections = new Map();
     entries.forEach((item) => {
       (item.operator_terms || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
       (item.matched_aliases || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
+      const caseBullets = [
+        ...(item.case_methods || []),
+        ...(item.case_exfil || []).map((c) => `Exfil channel: ${c}`),
+      ];
+      if (item.case_detection) caseBullets.push(`Detected via: ${item.case_detection}`);
+      const aliasBullet = (item.matched_aliases || []).slice(0, 6).join(", ");
+      if (aliasBullet) caseBullets.push(`Matched in text: ${aliasBullet}`);
       (item.itm_titles || []).forEach((tech) => {
-        if (!tech.id || seenBehavior.has(tech.id)) return;
-        seenBehavior.add(tech.id);
-        behaviors.push({ id: tech.id, text: techniqueBehaviorText(tech.id, tech.title) });
+        if (!tech.id) return;
+        if (!seenBehavior.has(tech.id)) {
+          seenBehavior.add(tech.id);
+          behaviors.push({ id: tech.id, text: techniqueBehaviorText(tech.id, tech.title) });
+        }
+        const tid = String(tech.id).toUpperCase();
+        if (!sections.has(tid)) {
+          sections.set(tid, {
+            id: tid,
+            title: tech.title || tid,
+            description: techniqueBehaviorText(tech.id, tech.title),
+            cases: [],
+          });
+        }
+        const section = sections.get(tid);
+        if (!section.cases.some((c) => c.link === item.link)) {
+          section.cases.push({ title: item.title, link: item.link, bullets: caseBullets });
+        }
       });
       (item.case_methods || []).forEach((m) => uniqPush(seeds, seen.seeds, m));
       (item.case_exfil || []).forEach((c) => {
@@ -1177,9 +1203,19 @@
       detail = "Evidence pack · board techniques + case records";
     }
 
+    const techniques = [...sections.values()];
+    let summary = "";
+    if (techniques.length) {
+      summary =
+        `${entries.length} board case(s) show ${techniques.length} ITM technique(s): ` +
+        `${techniques.map((s) => s.id).join(", ")}.`;
+    }
+
     return {
       articleCount: entries.length,
       titles: entries.map((e) => e.title),
+      summary,
+      techniques,
       behaviors,
       email,
       chat,
@@ -1216,6 +1252,52 @@
     }
   }
 
+  // Per-technique sections: ID + what the technique is, then how each boarded
+  // case actually did it (LLM-enriched bullets, or case-record facts offline).
+  function renderTtpTechniques(container, techniques) {
+    if (!container) return;
+    container.innerHTML = "";
+    (techniques || []).forEach((section) => {
+      const wrap = document.createElement("article");
+      wrap.className = "ttp-technique";
+
+      const head = document.createElement("p");
+      head.className = "ttp-technique-head";
+      const id = document.createElement("span");
+      id.className = "ttp-id";
+      id.textContent = section.id || "";
+      head.appendChild(id);
+      head.appendChild(document.createTextNode(` ${section.description || section.title || ""}`));
+      wrap.appendChild(head);
+
+      (section.cases || []).forEach((caseItem) => {
+        const caseHead = document.createElement("p");
+        caseHead.className = "ttp-case-title";
+        if (caseItem.link) {
+          const a = document.createElement("a");
+          a.href = caseItem.link;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = caseItem.title;
+          caseHead.appendChild(a);
+        } else {
+          caseHead.textContent = caseItem.title;
+        }
+        wrap.appendChild(caseHead);
+        const ul = document.createElement("ul");
+        ul.className = "ttp-case-bullets";
+        (caseItem.bullets || []).forEach((bullet) => {
+          const li = document.createElement("li");
+          li.textContent = bullet;
+          ul.appendChild(li);
+        });
+        if (ul.children.length) wrap.appendChild(ul);
+      });
+
+      container.appendChild(wrap);
+    });
+  }
+
   function renderTtpReport(report) {
     state.lastTtpReport = report;
     if (!els.ttpReport) return;
@@ -1230,6 +1312,13 @@
           : report.detail || `Seed pack · ${report.articleCount} article(s)`;
       els.ttpReportMeta.textContent = modeLabel;
     }
+    if (els.ttpSummary) {
+      els.ttpSummary.textContent = report.summary || "";
+      els.ttpSummary.hidden = !report.summary;
+    }
+    const techniques = report.techniques || [];
+    if (els.ttpTechniqueGroup) els.ttpTechniqueGroup.hidden = !techniques.length;
+    renderTtpTechniques(els.ttpTechniqueSections, techniques);
     fillPlainList(els.ttpBehaviorList, report.behaviors, true);
     fillCopyableChips(els.ttpEmailList, report.email, true);
     fillCopyableChips(els.ttpChatList, report.chat, true);
@@ -1265,11 +1354,21 @@
           ...queries.flatMap((q) => [``, `## ${q.stack} (${q.lang})`, q.query]),
         ]
       : [];
+    const techniqueLines = (report.techniques || []).flatMap((section) => [
+      "",
+      `${section.id} — ${section.description || section.title || ""}`,
+      ...(section.cases || []).flatMap((c) => [
+        `  ${c.title}`,
+        ...(c.bullets || []).map((b) => `  - ${b}`),
+      ]),
+    ]);
     const lines = [
       "insider-intel hunt report (extraction board)",
       `Mode: ${report.mode || "seeds"}`,
       `Articles (${report.articleCount}):`,
       ...report.titles.map((t) => `- ${t}`),
+      ...(report.summary ? ["", `Summary: ${report.summary}`] : []),
+      ...(techniqueLines.length ? ["", "Techniques observed:", ...techniqueLines] : []),
       "",
       "Behaviors:",
       ...(report.behaviors.length
@@ -1323,6 +1422,15 @@
       `Mode: ${report.mode || "seeds"}`,
       `Source articles (${report.articleCount || 0}):`,
       ...(report.titles || []).map((t) => `- ${t}`),
+      ...(report.summary ? ["", `Summary: ${report.summary}`] : []),
+      ...(report.techniques || []).flatMap((s) => [
+        "",
+        `${s.id} — ${s.description || s.title || ""}`,
+        ...(s.cases || []).flatMap((c) => [
+          `  Case: ${c.title}`,
+          ...(c.bullets || []).map((b) => `  - ${b}`),
+        ]),
+      ]),
       "",
       "Behaviors:",
       ...behaviorLines,
@@ -1360,6 +1468,8 @@
       mode: data.mode || "seeds",
       articleCount: data.article_count != null ? data.article_count : fallbackEntries.length,
       titles: data.titles || fallbackEntries.map((e) => e.title),
+      summary: data.summary || "",
+      techniques: data.techniques || [],
       behaviors,
       email: data.email || [],
       chat: data.chat || [],
@@ -1423,7 +1533,8 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ links: entries.map((e) => e.link) }),
-            timeoutMs: 10000,
+            // LLM enrichment (xAI/Anthropic) legitimately takes 20-60s.
+            timeoutMs: 75000,
           },
         );
         report = normalizeExtractResponse(data, entries);
@@ -2851,12 +2962,51 @@
     // the raw feed summary, so READ matches the clamped note in production. The
     // tail is built here but attached as a sibling of the card <button> below —
     // it holds an anchor, which must not be nested inside the button.
-    const expandable = analystText.length > 160;
+    const isCase = caseKindLabel(article) === "CASE";
+    const expandable = analystText.length > 160 || isCase;
     let readTail = null;
     if (expandable) {
       readTail = document.createElement("p");
       readTail.className = "case-read-tail";
-      readTail.append("— FULL TEXT VIA SOURCE · ");
+      if (isCase) {
+        // Court cases carry their backfilled RECAP/opinion text server-side;
+        // fetch it on demand so the stream payload stays light.
+        const loadBtn = document.createElement("button");
+        loadBtn.type = "button";
+        loadBtn.className = "filing-load-btn";
+        loadBtn.textContent = "READ FILING ⇩";
+        loadBtn.title = "Load the full court document text";
+        let filingBox = null;
+        loadBtn.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          if (filingBox) {
+            const nowHidden = !filingBox.hidden;
+            filingBox.hidden = nowHidden;
+            loadBtn.textContent = nowHidden ? "READ FILING ⇩" : "HIDE FILING ⇧";
+            return;
+          }
+          loadBtn.disabled = true;
+          loadBtn.textContent = "LOADING…";
+          try {
+            const data = await api("/articles/text", { link: article.link });
+            filingBox = document.createElement("div");
+            filingBox.className = "filing-text";
+            filingBox.textContent =
+              data && data.text
+                ? data.text
+                : "Full document text not archived yet — use OPEN ORIGINAL for the docket.";
+            readTail.before(filingBox);
+            loadBtn.textContent = "HIDE FILING ⇧";
+          } catch (err) {
+            loadBtn.textContent = "READ FILING ⇩";
+            setStatus(`Filing load failed: ${err && err.message ? err.message : err}`);
+          } finally {
+            loadBtn.disabled = false;
+          }
+        });
+        readTail.append(loadBtn, " · ");
+      }
+      if (!isCase) readTail.append("— FULL TEXT VIA SOURCE · ");
       const orig = document.createElement("a");
       orig.href = article.link;
       orig.target = "_blank";
@@ -3149,7 +3299,7 @@
     }
 
     if (state.channel && state.channel !== "all") {
-      const labels = { news: "News", filings: "Filings", tips: "Tips", social: "Social" };
+      const labels = { news: "News", filings: "Cases", tips: "Tips", social: "Social" };
       items.push(
         buildCrumb(labels[state.channel] || state.channel, () => {
           state.channel = "all";
@@ -3227,7 +3377,7 @@
       state.itmAlignment === "all" ? "All indexed" : "Insider";
     let channelLabel = "All channels";
     if (state.channel === "news") channelLabel = "News";
-    else if (state.channel === "filings") channelLabel = "Filings";
+    else if (state.channel === "filings") channelLabel = "Cases";
     else if (state.channel === "tips") channelLabel = "Tips";
     else if (state.channel === "social") channelLabel = "Social";
     let sourceLabel = "";
@@ -3424,7 +3574,7 @@
       {
         huntEmpty:
           results.length === 0 && state.huntMappedIds.length > 0
-            ? `Mapped to ${state.huntMappedIds.join(", ")} — no indexed stories yet for this Source/Channel. Try Filings, clear Source, or Refresh after ingest.`
+            ? `Mapped to ${state.huntMappedIds.join(", ")} — no indexed stories yet for this Source/Channel. Try Cases, clear Source, or Refresh after ingest.`
             : results.length === 0 && state.huntMappedIds.length === 0
               ? `No ITM map for “${query}”. Add an alias in shared/itm/aliases.py if this is a real insider-risk phrase.`
               : "",
