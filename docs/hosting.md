@@ -107,17 +107,21 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   join the public RECAP archive.
 - **Extract-report LLM (opt-in):** `POST /extract/ttps` enriches the hunt
   report with per-technique case bullets + an analyst summary via
-  `EXTRACT_LLM_PROVIDER` (default `auto`: uses `XAI_API_KEY` if set, else
-  `ANTHROPIC_API_KEY`; without either it returns the evidence-only report).
-  The key goes on the **service** (the endpoint runs there):
+  `EXTRACT_LLM_PROVIDER` (default `auto`: tries every configured key in
+  order xAI → Anthropic → Gemini → OpenAI, skipping providers that error —
+  e.g. an account out of credits; with no keys it returns the evidence-only
+  report). Keys go on the **service** (the endpoint runs there):
   `gcloud run services update insider-intel-api --region us-east1
-  --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
+  --update-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest`.
+  Gemini uses an AI Studio key (default model `gemini-2.5-flash`); a bare
+  `OPENAI_API_KEY` targets real OpenAI (`gpt-4o-mini`) — `OPENAI_COMPAT_*`
+  overrides still win for self-hosted endpoints.
 - **Ingest summarizer (opt-in):** to enable LLM case records + summaries, set
-  the env on the **job only** (the extract endpoint above is the API's only
-  LLM use):
+  the provider env + key on the **job only** (the extract endpoint above is
+  the API's only LLM use). Providers: `anthropic | openai | gemini`:
   `gcloud run jobs update corpus-refresh --region us-east1
-  --set-env-vars SUMMARIZER_LLM_PROVIDER=anthropic
-  --set-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
+  --update-env-vars SUMMARIZER_LLM_PROVIDER=gemini
+  --update-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest`.
   Spend is capped by `SUMMARIZER_MAX_ARTICLES_PER_RUN` (default 15/run ≈
   $3-4/mo on Haiku); results persist in the corpus so each article is billed
   once, and the backfill sweep converts the existing corpus gradually.

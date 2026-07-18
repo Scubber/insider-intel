@@ -280,7 +280,7 @@ class Settings(BaseSettings):
     classifier_llm_provider: str = Field(
         default="none",
         alias="CLASSIFIER_LLM_PROVIDER",
-        description="none | anthropic | openai (any OpenAI-compatible endpoint)",
+        description="none | anthropic | openai | gemini (openai = any compatible endpoint)",
     )
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_MODEL")
@@ -291,6 +291,13 @@ class Settings(BaseSettings):
     )
     openai_compat_api_key: str | None = Field(default=None, alias="OPENAI_COMPAT_API_KEY")
     openai_compat_model: str = Field(default="llama3.1:8b", alias="OPENAI_COMPAT_MODEL")
+    # Real OpenAI: setting OPENAI_API_KEY (and no OPENAI_COMPAT_* overrides)
+    # retargets the openai provider from local Ollama to api.openai.com.
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    # Google Gemini (AI Studio key) — served through Gemini's OpenAI-compatible
+    # endpoint, so it shares the openai-compat client code.
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     classify_llm_channels: str = Field(
         default="social",
         alias="CLASSIFY_LLM_CHANNELS",
@@ -303,7 +310,7 @@ class Settings(BaseSettings):
     summarizer_llm_provider: str = Field(
         default="none",
         alias="SUMMARIZER_LLM_PROVIDER",
-        description="none | anthropic | openai (any OpenAI-compatible endpoint)",
+        description="none | anthropic | openai | gemini (openai = any compatible endpoint)",
     )
     summarizer_model: str | None = Field(
         default=None,

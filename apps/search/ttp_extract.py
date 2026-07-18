@@ -591,25 +591,44 @@ def _parse_llm_json(content: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def resolve_extract_provider(cfg: Settings) -> tuple[str, str] | None:
-    """(provider, model) for the extract LLM, or None when no LLM is usable."""
+def resolve_extract_providers(cfg: Settings) -> list[tuple[str, str]]:
+    """Ordered (provider, model) candidates for the extract LLM.
+
+    An explicit EXTRACT_LLM_PROVIDER yields exactly that provider (or nothing
+    if its key is missing). "auto" lists every configured provider — the
+    caller tries them in order, so a provider that errors at request time
+    (e.g. an account out of credits) falls through to the next one.
+    """
+    from shared.llm import resolve_gemini_compat, resolve_openai_compat
+
     choice = (cfg.extract_llm_provider or "auto").strip().lower()
     xai_key = (cfg.xai_api_key or "").strip()
     anthropic_key = (cfg.anthropic_api_key or "").strip()
+    gemini_key = (cfg.gemini_api_key or "").strip()
+    openai_key = (cfg.openai_api_key or "").strip()
     if choice == "none":
-        return None
+        return []
     if choice == "xai":
-        return ("xai", cfg.xai_model) if xai_key else None
+        return [("xai", cfg.xai_model)] if xai_key else []
     if choice == "anthropic":
-        return ("anthropic", cfg.anthropic_model) if anthropic_key else None
+        return [("anthropic", cfg.anthropic_model)] if anthropic_key else []
+    if choice == "gemini":
+        return [("gemini", cfg.gemini_model)] if gemini_key else []
     if choice == "openai":
-        return ("openai", cfg.openai_compat_model)
-    # auto: first configured key wins; never auto-picks the localhost endpoint.
+        # Explicit choice allows keyless local endpoints (Ollama etc.).
+        return [("openai", resolve_openai_compat(cfg)[1])]
+    # auto: every configured key, in preference order. The localhost endpoint
+    # is never auto-picked — only a real key signals intent.
+    candidates: list[tuple[str, str]] = []
     if xai_key:
-        return ("xai", cfg.xai_model)
+        candidates.append(("xai", cfg.xai_model))
     if anthropic_key:
-        return ("anthropic", cfg.anthropic_model)
-    return None
+        candidates.append(("anthropic", cfg.anthropic_model))
+    if gemini_key:
+        candidates.append(("gemini", resolve_gemini_compat(cfg)[1]))
+    if openai_key:
+        candidates.append(("openai", resolve_openai_compat(cfg)[1]))
+    return candidates
 
 
 def _call_extract_llm(
@@ -654,13 +673,16 @@ def _call_extract_llm(
         )
         parts = [block.text for block in message.content if getattr(block, "text", None)]
         return _parse_llm_json("".join(parts))
-    if provider == "openai":
+    if provider in ("openai", "gemini"):
+        from shared.llm import resolve_gemini_compat, resolve_openai_compat
         from shared.llm.openai_provider import _chat_completion
 
+        resolver = resolve_gemini_compat if provider == "gemini" else resolve_openai_compat
+        base_url, _default_model, api_key = resolver(cfg)
         content = _chat_completion(
-            base_url=cfg.openai_compat_base_url.rstrip("/"),
+            base_url=base_url.rstrip("/"),
             model=model,
-            api_key=cfg.openai_compat_api_key,
+            api_key=api_key,
             timeout=75.0,
             system=system,
             user=user,
@@ -708,27 +730,29 @@ def extract_ttps_for_links(
             )
             packs.append(_article_text_pack(article, extra=extra))
 
-    resolved = resolve_extract_provider(cfg)
-    if resolved is None:
+    candidates = resolve_extract_providers(cfg)
+    if not candidates:
         if (cfg.extract_llm_provider or "auto").strip().lower() != "none":
-            floor.detail += " · LLM off (no XAI_API_KEY / ANTHROPIC_API_KEY)"
+            floor.detail += " · LLM off (no XAI/ANTHROPIC/GEMINI/OPENAI key)"
         return floor
-    provider, model = resolved
 
     candidate_ids = [s.id for s in floor.techniques]
     user = _build_extract_user_prompt(packs, candidate_ids)
-    try:
-        llm = _call_extract_llm(
-            provider=provider, model=model, system=EXTRACT_SYSTEM_PROMPT, user=user, cfg=cfg
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("%s extract failed: %s", provider, exc)
-        floor.detail += f" · LLM error ({provider}): {exc}"
-        return floor
+    failures: list[str] = []
+    for provider, model in candidates:
+        try:
+            llm = _call_extract_llm(
+                provider=provider, model=model, system=EXTRACT_SYSTEM_PROMPT, user=user, cfg=cfg
+            )
+        except Exception as exc:  # noqa: BLE001 — fall through to the next provider
+            logger.warning("%s extract failed: %s", provider, exc)
+            failures.append(f"{provider}: {exc}")
+            continue
+        if not llm:
+            failures.append(f"{provider}: empty reply")
+            continue
+        links_by_title = {a.title: a.link for a in articles}
+        return _merge_llm_into_floor(floor, llm, links_by_title=links_by_title, provider=provider)
 
-    if not llm:
-        floor.detail += f" · LLM empty reply ({provider})"
-        return floor
-
-    links_by_title = {a.title: a.link for a in articles}
-    return _merge_llm_into_floor(floor, llm, links_by_title=links_by_title, provider=provider)
+    floor.detail += f" · LLM failed ({'; '.join(failures)[:400]})"
+    return floor
