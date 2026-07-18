@@ -1,0 +1,10 @@
+{
+  "shape": "package",
+  "pkg": "insider-intel-dossier-ui",
+  "globalName": "DossierUI",
+  "buildCmd": "npm run build",
+  "cssEntry": "dist/index.css",
+  "provider": {
+    "component": "DossierProvider"
+  }
+}
