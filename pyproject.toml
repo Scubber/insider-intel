@@ -13,6 +13,9 @@ dependencies = [
     "langgraph>=0.2",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    # Core, not an extra: the Cloud Run image installs only [project.dependencies],
+    # and both the ingest summarizer and /extract/ttps can use Anthropic.
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]

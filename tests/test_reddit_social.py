@@ -63,9 +63,7 @@ def test_subreddit_source_normalizes() -> None:
     )
 
 
-def test_pipeline_saves_and_dedupes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pipeline_saves_and_dedupes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         reddit_pipeline,
         "fetch_subreddit_new",

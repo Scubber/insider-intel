@@ -36,7 +36,5 @@ class SlidingWindowLimiter:
         window.append(now)
         self._all.append(now)
         if len(self._by_ip) > _MAX_TRACKED_IPS:
-            self._by_ip = defaultdict(
-                deque, {k: v for k, v in self._by_ip.items() if v}
-            )
+            self._by_ip = defaultdict(deque, {k: v for k, v in self._by_ip.items() if v})
         return True

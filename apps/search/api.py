@@ -126,6 +126,7 @@ def list_sources(
         insider_type=insider_type,
     )
 
+
 @app.get("/itm", response_model=ItmCatalogResponse)
 def list_itm(
     source_id: str | None = Query(
@@ -347,6 +348,52 @@ def articles_by_links(body: ArticlesByLinksRequest) -> ArticlesByLinksResponse:
     return ArticlesByLinksResponse(results=results, missing=missing)
 
 
+class ArticleTextResponse(BaseModel):
+    title: str
+    link: str
+    channel: str = "news"
+    text: str = ""
+
+
+@app.get("/articles/text", response_model=ArticleTextResponse)
+def article_text(link: str = Query(..., min_length=8)) -> ArticleTextResponse:
+    """Full stored document text for one indexed article (read-the-filing).
+
+    Court cases carry their backfilled RECAP/opinion bodies in clean_text,
+    which the list endpoints deliberately omit — this returns it on demand.
+    """
+    from shared.schemas.articles import resolve_channel
+
+    article = service.get_index().get_by_link(link.strip())
+    if article is None:
+        raise HTTPException(status_code=404, detail="link not in index")
+    # Prefer the raw store's content: it keeps the document's real line breaks,
+    # which processing's clean_text deliberately collapses for matching.
+    text = ""
+    try:
+        from apps.aggregator.storage import JsonlArticleStore
+
+        store = JsonlArticleStore(get_settings().raw_articles_path)
+        for raw in store.load_all():
+            if raw.link == article.link:
+                text = raw.content or ""
+                break
+    except Exception:  # noqa: BLE001 — raw store is best-effort enrichment
+        text = ""
+    if not text:
+        text = article.clean_text or ""
+    # Drop the ingest query-marker line so readers see the document, not our tag.
+    text = "\n".join(
+        line for line in text.splitlines() if not line.strip().startswith("CourtListener query:")
+    ).strip()
+    return ArticleTextResponse(
+        title=article.title,
+        link=article.link,
+        channel=resolve_channel(article.source_id, getattr(article, "channel", None)),
+        text=text,
+    )
+
+
 _extract_limiter: SlidingWindowLimiter | None = None
 
 
@@ -375,7 +422,8 @@ def extract_ttps(body: ExtractTtpsRequest, request: Request) -> ExtractTtpsRespo
     """Build a multi-channel hunt report from extraction-board article links.
 
     Uses indexed title/summary/text, optional CourtListener REST snippets for
-    filings, and xAI when XAI_API_KEY is set. Falls back to curated IF038 seeds.
+    filings, and an LLM (EXTRACT_LLM_PROVIDER: xAI/Anthropic/OpenAI-compatible)
+    for per-technique case bullets + summary. Evidence-only report without one.
     """
     limiter = _get_extract_limiter()
     if limiter is not None and not limiter.allow(_client_ip(request)):

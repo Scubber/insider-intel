@@ -11,9 +11,7 @@ import pytest
 import apps.aggregator.reddit as reddit
 from apps.aggregator.reddit import fetch_subreddit_new
 
-LISTING = json.loads(
-    (Path(__file__).parent / "fixtures" / "reddit_new_listing.json").read_text()
-)
+LISTING = json.loads((Path(__file__).parent / "fixtures" / "reddit_new_listing.json").read_text())
 
 
 @pytest.fixture(autouse=True)
@@ -34,9 +32,7 @@ def test_oauth_listing_uses_bearer_and_caches_token() -> None:
         if request.url.path == "/api/v1/access_token":
             calls["token"] += 1
             assert request.headers["Authorization"].startswith("Basic ")
-            return httpx.Response(
-                200, json={"access_token": "tok-1", "expires_in": 3600}
-            )
+            return httpx.Response(200, json={"access_token": "tok-1", "expires_in": 3600})
         calls["listing"] += 1
         assert request.url.host == "oauth.reddit.com"
         assert request.headers["Authorization"] == "bearer tok-1"
@@ -48,7 +44,7 @@ def test_oauth_listing_uses_bearer_and_caches_token() -> None:
         posts = fetch_subreddit_new(
             "jobsearchhacks",
             client_id="cid",
-            client_secret="sec",
+            client_secret="sec",  # pragma: allowlist secret
             client=client,
         )
         assert posts and posts[0]["subreddit"] == "jobsearchhacks"
@@ -71,7 +67,10 @@ def test_oauth_401_mints_fresh_token_once() -> None:
         return httpx.Response(200, json=LISTING)
 
     posts = fetch_subreddit_new(
-        "jobsearchhacks", client_id="cid", client_secret="sec", client=_client(handler)
+        "jobsearchhacks",
+        client_id="cid",
+        client_secret="sec",  # pragma: allowlist secret
+        client=_client(handler),
     )
     assert posts
     assert calls["token"] == 2

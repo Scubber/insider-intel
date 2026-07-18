@@ -89,9 +89,7 @@ def test_generic_cyber_news_scores_lower_than_insider_exfil() -> None:
         "Departing employee staged files on USB removable media before "
         "exfiltration via physical medium. Insider threat investigation opened."
     )
-    assert score_relevance(insider, text_length=100) > score_relevance(
-        generic, text_length=80
-    )
+    assert score_relevance(insider, text_length=100) > score_relevance(generic, text_length=80)
 
 
 def test_operator_terms_exclude_itm_ids() -> None:

@@ -1358,6 +1358,42 @@ body {
   display: block;
 }
 
+.case-read-tail .filing-load-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  cursor: pointer;
+}
+
+/* On-demand court-document body; sibling of .case-read-tail inside the card. */
+.filing-text {
+  display: none;
+  margin: 0;
+  padding: 0.7rem 1.1rem;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-top: 1px dashed var(--border);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 26rem;
+  overflow-y: auto;
+  max-width: 72ch;
+}
+
+.article-row.expanded .filing-text {
+  display: block;
+}
+
+.article-row.expanded .filing-text[hidden] {
+  display: none;
+}
+
 @media (max-width: 960px) {
   .hunt-usecase::after {
     display: none;
@@ -1744,6 +1780,63 @@ body {
   font-size: 0.72rem;
   color: var(--accent);
   margin-right: 0.35rem;
+}
+
+/* Report v2: analyst summary + per-technique case-evidence sections. */
+.ttp-summary {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  max-width: 68ch;
+}
+
+.ttp-technique-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+.ttp-technique {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--panel) 90%, var(--accent) 6%);
+  padding: 0.5rem 0.65rem 0.55rem;
+}
+
+.ttp-technique-head {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.ttp-technique-head .ttp-id {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-right: 0.35rem;
+}
+
+.ttp-case-title {
+  margin: 0.55rem 0 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.ttp-case-title a {
+  color: inherit;
+}
+
+.ttp-case-bullets {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.ttp-case-bullets li {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0.15rem 0;
 }
 
 .board-badge {

@@ -61,16 +61,12 @@ def _client(tmp_path, monkeypatch) -> TestClient:
 
 def test_channel_use_case_and_insider_type_filters(tmp_path, monkeypatch) -> None:
     with _client(tmp_path, monkeypatch) as client:
-        social = client.get(
-            "/articles", params={"channel": "social", "itm_alignment": "all"}
-        )
+        social = client.get("/articles", params={"channel": "social", "itm_alignment": "all"})
         assert social.status_code == 200
         links = {r["link"] for r in social.json()["results"]}
         assert links == {"https://www.reddit.com/r/jobsearchhacks/comments/abc123/post/"}
 
-        oe = client.get(
-            "/articles", params={"use_case": "overemployment", "itm_alignment": "all"}
-        )
+        oe = client.get("/articles", params={"use_case": "overemployment", "itm_alignment": "all"})
         assert oe.status_code == 200
         hits = oe.json()["results"]
         assert len(hits) == 1
@@ -81,9 +77,7 @@ def test_channel_use_case_and_insider_type_filters(tmp_path, monkeypatch) -> Non
             "/articles", params={"insider_type": "malicious", "itm_alignment": "all"}
         )
         assert malicious.status_code == 200
-        assert {r["link"] for r in malicious.json()["results"]} == {
-            "https://example.com/insider"
-        }
+        assert {r["link"] for r in malicious.json()["results"]} == {"https://example.com/insider"}
 
         none_match = client.get(
             "/articles",
@@ -121,10 +115,7 @@ def test_legacy_rows_without_classification_fields(tmp_path, monkeypatch) -> Non
         for candidate in tmp_path.glob("processed.jsonl"):
             settings_path = candidate
         assert settings_path is not None
-        rows = [
-            json.loads(line)
-            for line in settings_path.read_text(encoding="utf-8").splitlines()
-        ]
+        rows = [json.loads(line) for line in settings_path.read_text(encoding="utf-8").splitlines()]
         for row in rows:
             for key in (
                 "use_cases",
@@ -133,17 +124,13 @@ def test_legacy_rows_without_classification_fields(tmp_path, monkeypatch) -> Non
                 "classification_confidence",
             ):
                 row.pop(key, None)
-        settings_path.write_text(
-            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
-        )
+        settings_path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
         assert client.post("/reload").status_code == 200
 
         everything = client.get("/articles", params={"itm_alignment": "all"})
         assert everything.json()["count"] == 2
 
-        oe = client.get(
-            "/articles", params={"use_case": "overemployment", "itm_alignment": "all"}
-        )
+        oe = client.get("/articles", params={"use_case": "overemployment", "itm_alignment": "all"})
         assert oe.json()["count"] == 0  # unclassified until process --force
 
         unclassified = client.get(
@@ -196,8 +183,5 @@ def test_social_catalog_and_subscriptions(tmp_path, monkeypatch) -> None:
         removed = client.delete("/social/subscriptions/reddit/overemployed")
         assert removed.status_code == 200
         assert client.get("/social/subscriptions").json() == []
-        assert (
-            client.delete("/social/subscriptions/reddit/overemployed").status_code
-            == 404
-        )
+        assert client.delete("/social/subscriptions/reddit/overemployed").status_code == 404
         assert client.delete("/social/subscriptions/facebook/foo").status_code == 400

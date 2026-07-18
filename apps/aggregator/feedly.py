@@ -167,9 +167,7 @@ def fetch_stream_entries(
         if response.status_code == 403:
             raise FeedlyError("Feedly forbidden (403) — token may lack access to this stream")
         if response.status_code >= 400:
-            raise FeedlyError(
-                f"Feedly HTTP {response.status_code}: {response.text[:300]}"
-            )
+            raise FeedlyError(f"Feedly HTTP {response.status_code}: {response.text[:300]}")
         payload = response.json()
     except httpx.HTTPError as exc:
         raise FeedlyError(f"Feedly request failed: {exc}") from exc

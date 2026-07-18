@@ -193,10 +193,7 @@ def social_catalog() -> SocialCatalogResponse:
     """Curated suggestions + current subscriptions, with indexed article counts."""
     from apps.aggregator.social_catalog import build_catalog, subscription_to_info
 
-    counts = {
-        sid: count
-        for sid, _name, count in get_index().list_sources(channel="social")
-    }
+    counts = {sid: count for sid, _name, count in get_index().list_sources(channel="social")}
     subscriptions = [subscription_to_info(s) for s in _social_store().list()]
     subscribed_keys = {(s.platform, s.id) for s in subscriptions if s.subscribed}
 
@@ -244,10 +241,7 @@ def remove_social_subscription(platform: str, handle: str) -> bool:
 def list_use_cases() -> list[UseCaseInfo]:
     from shared.taxonomy.use_cases import USE_CASES
 
-    return [
-        UseCaseInfo(id=uc.id, label=uc.label, description=uc.description)
-        for uc in USE_CASES
-    ]
+    return [UseCaseInfo(id=uc.id, label=uc.label, description=uc.description) for uc in USE_CASES]
 
 
 def itm_catalog(
@@ -268,9 +262,7 @@ def itm_catalog(
     return ItmCatalogResponse(
         itm_version=index.itm_version,
         refreshed_at=index.refreshed_at,
-        articles=[
-            ItmArticleSummary(id=a.id, title=a.title, theme=a.theme) for a in index.articles
-        ],
+        articles=[ItmArticleSummary(id=a.id, title=a.title, theme=a.theme) for a in index.articles],
         techniques=[
             ItmTechniqueSummary(
                 id=t.id,
@@ -281,12 +273,8 @@ def itm_catalog(
                 description=t.description_text or "",
                 aliases=list(t.aliases or []),
                 article_count=int(article_counts.get(t.id, 0)),
-                detections=[
-                    ControlRef(id=c.id, title=c.title) for c in t.detections
-                ],
-                preventions=[
-                    ControlRef(id=c.id, title=c.title) for c in t.preventions
-                ],
+                detections=[ControlRef(id=c.id, title=c.title) for c in t.detections],
+                preventions=[ControlRef(id=c.id, title=c.title) for c in t.preventions],
             )
             for t in index.techniques
         ],

@@ -110,9 +110,7 @@ def _oauth_get_json(
     client = client or httpx.Client(timeout=timeout, follow_redirects=True)
     try:
         for attempt in (1, 2):
-            token = _get_app_token(
-                client_id, client_secret, user_agent=user_agent, client=client
-            )
+            token = _get_app_token(client_id, client_secret, user_agent=user_agent, client=client)
             response = client.get(
                 url,
                 params=params,
@@ -240,9 +238,7 @@ def post_to_article(
 
     created = post.get("created_utc")
     published = (
-        datetime.fromtimestamp(float(created), tz=UTC)
-        if isinstance(created, (int, float))
-        else None
+        datetime.fromtimestamp(float(created), tz=UTC) if isinstance(created, int | float) else None
     )
     source_id, source_name = subreddit_source(sub)
 

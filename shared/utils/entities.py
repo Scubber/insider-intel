@@ -238,9 +238,7 @@ def classify_itm_alignment(entities: ExtractedEntities) -> Literal["insider", "w
     """
     if not entities.itm_hits:
         return "weak"
-    framing_hits = [
-        kw for kw in entities.keywords_hit if kw in INSIDER_FRAMING_KEYWORDS
-    ]
+    framing_hits = [kw for kw in entities.keywords_hit if kw in INSIDER_FRAMING_KEYWORDS]
     has_motive = any(hit.theme.lower() == "motive" for hit in entities.itm_hits)
     if framing_hits or has_motive:
         return "insider"
@@ -266,9 +264,7 @@ def score_relevance(entities: ExtractedEntities, *, text_length: int = 0) -> flo
         cap = 0.35 if theme in {"infringement", "preparation", "anti-forensics"} else 0.25
         score += min(value, cap)
 
-    framing_hits = [
-        kw for kw in entities.keywords_hit if kw in INSIDER_FRAMING_KEYWORDS
-    ]
+    framing_hits = [kw for kw in entities.keywords_hit if kw in INSIDER_FRAMING_KEYWORDS]
     if framing_hits:
         score += min(0.08 + 0.04 * len(framing_hits), 0.2)
 

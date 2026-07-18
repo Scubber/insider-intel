@@ -92,10 +92,7 @@ def _phrase_matches(phrase: str, lowered: str) -> bool:
     """Substring for multi-word / long phrases; word-boundary for short tokens."""
     if " " in phrase or len(phrase) >= 8:
         return phrase in lowered
-    return (
-        re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered)
-        is not None
-    )
+    return re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", lowered) is not None
 
 
 def _itm_hit_ids(entities: ExtractedEntities | None) -> set[str]:
@@ -126,9 +123,7 @@ def classify_use_cases(
             matched.append(uc.id)
             continue
         strong = [
-            kw
-            for kw in uc.keywords
-            if kw not in uc.weak_keywords and _phrase_matches(kw, lowered)
+            kw for kw in uc.keywords if kw not in uc.weak_keywords and _phrase_matches(kw, lowered)
         ]
         weak = [kw for kw in uc.weak_keywords if _phrase_matches(kw, lowered)]
         if strong or len(weak) >= 2:

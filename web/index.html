@@ -129,7 +129,7 @@
               <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
                 <button type="button" class="pill active" data-channel="all">All channels</button>
                 <button type="button" class="pill" data-channel="news">News</button>
-                <button type="button" class="pill" data-channel="filings">Filings</button>
+                <button type="button" class="pill" data-channel="filings">Cases</button>
                 <button type="button" class="pill" data-channel="tips">Tips</button>
                 <button type="button" class="pill" data-channel="social">Social</button>
               </div>
@@ -337,6 +337,11 @@
                     Copy LLM query
                   </button>
                 </p>
+              </div>
+              <p class="ttp-summary" id="ttp-summary" hidden></p>
+              <div class="kw-group" id="ttp-technique-group" hidden>
+                <h4>Techniques observed</h4>
+                <div id="ttp-technique-sections" class="ttp-technique-sections"></div>
               </div>
               <div class="kw-group">
                 <h4>Behaviors</h4>

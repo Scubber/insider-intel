@@ -5,25 +5,25 @@
 
 # Cursor Handoff — insider-intel
 
-**Read this first** when continuing work on `insider-intel`.  
+**Read this first** when continuing work on `insider-intel`.
 Then follow: `.cursor/rules/project-rules.md` and `docs/architecture.md`.
 
-**Last updated:** 2026-07-15  
-**Repo location:** `insider-intel` standalone (`Scubber/insider-intel`)  
+**Last updated:** 2026-07-15
+**Repo location:** `insider-intel` standalone (`Scubber/insider-intel`)
 **Release status:** **MVP prototype candidate** (`mvp-prototype-0.1`). Process: **Kanban + milestone gates** (M1 Prototype → M2 Hosted MVP). Backend + Matrix/Articles/Workbench UI, **ITM-aligned tagging**, CourtListener opinions on `main`. **Develop locally; harden host in M2** — see `docs/hosting.md` and `docs/PROCESS.md`. Public UI: `https://intel.thederpweb.com`.
 
 ---
 
 ## What this project is
 
-**Insider-threat OSINT aggregator** (Feedly-style articles) whose job is to map public reporting to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) and mint **operator search terms** (Teams/email/SIEM paste) plus ITM filter tags.  
-Articles join to **Detections (DT\*)** / **Preventions (PV\*)** via matched techniques (not by scanning news for Event IDs).  
-**Workbench** = TTP extraction surface (operator terms + channel hunt cues).  
+**Insider-threat OSINT aggregator** (Feedly-style articles) whose job is to map public reporting to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) and mint **operator search terms** (Teams/email/SIEM paste) plus ITM filter tags.
+Articles join to **Detections (DT\*)** / **Preventions (PV\*)** via matched techniques (not by scanning news for Event IDs).
+**Workbench** = TTP extraction surface (operator terms + channel hunt cues).
 **Extraction board** = flag via Articles **+** or Workbench → **Extract TTPs**
-(`POST /extract/ttps`, optional `XAI_API_KEY`) → channel hunt report.  
+(`POST /extract/ttps`, optional `XAI_API_KEY`) → channel hunt report.
 **Copy agent brief** = Cursor + CourtListener MCP deep path. First Hunt Package
 slice — see architecture §5.
-**Layout (POC):** Hunt + Matrix refine + Articles + Workbench; secondary Insider Focus / Source.  
+**Layout (POC):** Hunt + Matrix refine + Articles + Workbench; secondary Insider Focus / Source.
 Brand / product title in UI: **insider-intel**. Goals: cheap, low-maintenance, serverless-friendly, LangGraph-based agents.
 
 Not a general cyber news Feedly. Sitemap archive backfill (`ingest_archive`)
@@ -110,8 +110,8 @@ python scripts/launch_local.py   # API :8000 + UI :5500, opens browser
 # python -m http.server 5500 --directory web
 ```
 
-**Env:** copy `.env.example` → `.env`.  
-**Python:** `>=3.12`.  
+**Env:** copy `.env.example` → `.env`.
+**Python:** `>=3.12`.
 **CI:** `thederpweb/.github/workflows/insider-intel-ci.yml`.
 
 ### Useful CLI flags
