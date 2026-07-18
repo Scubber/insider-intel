@@ -85,14 +85,20 @@ legacy fallback.
   `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter — under PACER's $30
   fee waiver, so typical usage bills nothing). No-op without
   `PACER_USERNAME`/`PACER_PASSWORD`. Never add another purchase path.
-- **`POST /extract/ttps` spends LLM credits** — it is rate-limited
-  (`apps/search/ratelimit.py`, env-tunable). Don't remove the limiter; the
-  service also runs `max-instances=1` as a cost/abuse ceiling. Provider is
-  `EXTRACT_LLM_PROVIDER` (auto tries each configured key in order —
-  xAI → Anthropic → Gemini → OpenAI — falling through runtime failures;
-  no keys = evidence-only report); keys must be attached to the
-  **API service**, not just the refresh job. Gemini/OpenAI ride the
-  OpenAI-compatible client (`shared/llm/resolve_*_compat`).
+- **`POST /extract/ttps` spends LLM credits** — up to
+  `EXTRACT_DEEP_MAX_ARTICLES`+1 calls per request (two-stage extraction in
+  `apps/search/deep_extract.py`: per-article forensic reads, then one
+  synthesis call; 0 = synthesis-only rollback mode). It is rate-limited
+  (`apps/search/ratelimit.py`, env-tunable — defaults sized for the call
+  multiplier). Don't remove the limiter; the service also runs
+  `max-instances=1` as a cost/abuse ceiling (the in-process stage-1 cache
+  relies on it too). Provider is `EXTRACT_LLM_PROVIDER` (auto tries each
+  configured key in order — xAI → Anthropic → Gemini → OpenAI — falling
+  through runtime failures; no keys = evidence-only report), with per-stage
+  overrides `EXTRACT_STAGE{1,2}_LLM_PROVIDER`/`_MODEL` (recommended prod:
+  cheap fast model for stage 1, strongest model for stage 2). Keys must be
+  attached to the **API service**, not just the refresh job. Gemini/OpenAI
+  ride the OpenAI-compatible client (`shared/llm/resolve_*_compat`).
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).
