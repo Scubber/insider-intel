@@ -1,0 +1,12 @@
+{
+  "shape": "package",
+  "pkg": "insider-intel-dossier-ui",
+  "globalName": "DossierUI",
+  "buildCmd": "npm run build",
+  "cssEntry": "dist/index.css",
+  "provider": {
+    "component": "DossierProvider"
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "projectId": "29c26c75-ed6d-4479-ae0d-c60179961ab7"
+}
