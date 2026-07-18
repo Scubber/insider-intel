@@ -24,7 +24,9 @@ Ingestion lanes (all emit `RawArticle` → `data/raw/articles.jsonl`): RSS
 (`config.py::DEFAULT_FEEDS`), Feedly, CourtListener, DataTheftNews, sitemap
 archive, web-keyword RSS, and **social** — Reddit (`reddit_pipeline.py`, OAuth
 app auth when `REDDIT_CLIENT_ID/SECRET` set, public JSON otherwise) and X
-(`x_pipeline.py`, needs `X_BEARER_TOKEN`). Social sources are user-picked
+(`x_pipeline.py`, needs `X_BEARER_TOKEN` or `X_CONSUMER_KEY`/`SECRET` — the
+pipeline mints the bearer; pulls are cadence-capped for the free tier via
+`X_INGEST_EVERY_HOURS`). Social sources are user-picked
 subscriptions (`data/config/social_subscriptions.json` — the `config/` GCS
 prefix is exactly why the API may write there) seeded from a curated catalog
 derived from `shared/taxonomy/use_cases.py`.
@@ -117,7 +119,9 @@ legacy fallback.
   which otherwise silently eats clicks. The panes have `overflow: hidden` —
   tooltips inside them must open inward (`data-tip-pos` variants).
 - **Reddit 429s cloud IPs** on its public JSON endpoints; Reddit ingest fails
-  from GCP until OAuth creds exist. X ingest needs `X_BEARER_TOKEN`.
+  from GCP until OAuth creds exist. X ingest needs `X_BEARER_TOKEN` or the
+  consumer key/secret pair; free-tier reads (~100 posts/mo) are protected by
+  the 48h default cadence + 5-post pulls — don't loosen without a paid tier.
 - **GHA runners run containers with a different uid** than the checkout owner:
   tests must write only under `tmp_path` / patched settings paths (see
   `tests/test_extract_rate_limit.py`).

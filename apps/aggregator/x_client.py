@@ -20,6 +20,65 @@ logger = logging.getLogger(__name__)
 
 API_ORIGIN = "https://api.twitter.com"
 DEFAULT_USER_ID_CACHE = "data/state/x_user_ids.json"
+DEFAULT_BEARER_CACHE = "data/state/x_bearer.json"
+
+
+def mint_bearer_token(
+    consumer_key: str,
+    consumer_secret: str,
+    *,
+    cache_path: str | Path = DEFAULT_BEARER_CACHE,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """App-only OAuth2 bearer from the app's consumer key/secret.
+
+    Bearer tokens are long-lived; the minted token is cached on disk so
+    each refresh run reuses it instead of re-hitting oauth2/token.
+    Returns None on failure (the X lane then skips gracefully).
+    """
+    path = Path(cache_path)
+    if path.exists():
+        try:
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            token = cached.get("access_token")
+            if isinstance(token, str) and token.strip():
+                return token.strip()
+        except (ValueError, OSError):
+            pass
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=20.0)
+    try:
+        response = http.post(
+            f"{API_ORIGIN}/oauth2/token",
+            auth=(consumer_key, consumer_secret),
+            data={"grant_type": "client_credentials"},
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "X bearer mint failed (HTTP %s): %s",
+                response.status_code,
+                response.text[:200],
+            )
+            return None
+        token = response.json().get("access_token")
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("X bearer mint failed: %s", exc)
+        return None
+    finally:
+        if own_client:
+            http.close()
+
+    if not (isinstance(token, str) and token.strip()):
+        return None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"access_token": token}) + "\n", encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        logger.warning("Could not cache X bearer token: %s", exc)
+    return token.strip()
 
 
 def handle_source(handle: str) -> tuple[str, str]:
@@ -29,8 +88,13 @@ def handle_source(handle: str) -> tuple[str, str]:
 
 
 class XClient:
-    def __init__(self, *, bearer_token: str, timeout: float = 20.0,
-                 user_id_cache_path: str | Path = DEFAULT_USER_ID_CACHE) -> None:
+    def __init__(
+        self,
+        *,
+        bearer_token: str,
+        timeout: float = 20.0,
+        user_id_cache_path: str | Path = DEFAULT_USER_ID_CACHE,
+    ) -> None:
         self._headers = {"Authorization": f"Bearer {bearer_token}"}
         self._timeout = timeout
         self._cache_path = Path(user_id_cache_path)

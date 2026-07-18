@@ -213,14 +213,26 @@ class Settings(BaseSettings):
         le=200_000,
     )
 
-    # Social — X/Twitter API v2 (optional; requires paid bearer token)
+    # Social — X/Twitter API v2. Provide X_BEARER_TOKEN directly, or the
+    # app's consumer key/secret and the pipeline mints an app-only bearer.
+    # Defaults are sized for the free tier (~100 post-reads/month): 5 posts
+    # per handle at most every 48h. Paid tiers raise both via env.
     x_bearer_token: str | None = Field(default=None, alias="X_BEARER_TOKEN")
+    x_consumer_key: str | None = Field(default=None, alias="X_CONSUMER_KEY")
+    x_consumer_secret: str | None = Field(default=None, alias="X_CONSUMER_SECRET")
     x_handles: str = Field(
         default="",
         alias="X_HANDLES",
         description="Comma-separated fallback handles when no subscription file",
     )
-    x_max_results: int = Field(default=25, alias="X_MAX_RESULTS", ge=5, le=100)
+    x_max_results: int = Field(default=5, alias="X_MAX_RESULTS", ge=5, le=100)
+    x_ingest_every_hours: int = Field(
+        default=48,
+        alias="X_INGEST_EVERY_HOURS",
+        description="Minimum hours between X pulls (0 = every refresh run)",
+        ge=0,
+        le=336,
+    )
 
     # Social subscriptions store (user-picked subreddits / X follows)
     social_subscriptions_path: str = Field(
