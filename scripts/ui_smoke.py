@@ -153,7 +153,11 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("report has run-it query blocks",
                      page.locator("#ttp-queries .query-stack").count() > 0)
 
-        # Themes apply
+        # Themes apply. The picker lives behind the collapsed Refine
+        # disclosure — open it first, as a user would.
+        page.evaluate(
+            "() => { const r = document.getElementById('refine-panel'); if (r) r.open = true; }"
+        )
         theme_ok = True
         for theme in ("cnn-lite", "midnight", "phosphor"):
             page.select_option("#theme-select", theme)

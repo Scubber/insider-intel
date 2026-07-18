@@ -138,20 +138,9 @@ body {
   margin-top: 0.45rem;
 }
 
-/* Desktop: filters always visible; hide Refine chrome */
-@media (min-width: 961px) {
-  .refine-panel > .refine-summary {
-    display: none;
-  }
-
-  .refine-panel {
-    margin-top: 0.55rem;
-  }
-
-  .refine-body {
-    margin-top: 0;
-  }
-
+/* The Refine disclosure works on every layout (mockup: clean masthead). */
+.refine-panel {
+  margin-top: 0.55rem;
 }
 
 .brand,
@@ -242,31 +231,34 @@ body {
   max-width: 40rem;
 }
 
+/* Core Four topic pills — Courier uppercase squares; active pill inverts (mockup). */
 .hunt-usecase {
-  font: inherit;
-  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-size: 0.69rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   line-height: 1.2;
   cursor: pointer;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--top-line, var(--line));
-  padding: 0.35rem 0.7rem;
-  min-height: 2rem;
+  padding: 0.34rem 0.75rem;
   background: transparent;
   color: var(--top-muted, var(--muted));
+  white-space: nowrap;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .hunt-usecase:hover,
 .hunt-usecase:focus-visible {
   color: var(--top-ink, var(--ink));
-  border-color: var(--accent);
+  border-color: var(--top-ink, var(--ink));
   outline: none;
 }
 
 .hunt-usecase.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--signal-soft);
+  color: var(--top-bg, var(--paper));
+  border-color: var(--top-ink, var(--ink));
+  background: var(--top-ink, var(--ink));
 }
 
 .stream-filters.stream-filters-secondary {
@@ -443,37 +435,22 @@ body {
 }
 
 .workbench,
+/* ── Layout: document flow + sticky rails (Dossier) ─────────────────────────
+   The page scrolls naturally; the ITM INDEX and EVIDENCE BOARD rails stick to
+   the top of the viewport (mockup: grid 250px | 1fr | 300px, align-items:start).
+   No fixed shell height, no internal pane scrollbars. */
 .app-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: calc(100vh - 12rem);
   animation: rise 0.85s ease-out 0.08s both;
-}
-
-.app-shell {
-  height: calc(100vh - 11rem);
-  min-height: 28rem;
-  max-height: calc(100vh - 11rem);
-  overflow: hidden;
 }
 
 .pane-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 26rem);
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  align-items: start;
 }
 
 .pane {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
   background: var(--panel);
   border-right: 1px solid var(--line);
 }
@@ -482,10 +459,32 @@ body {
   border-right: 0;
 }
 
-/* Hunt-first desktop: Articles + Workbench. Matrix is a tab, not a permanent sidebar. */
 .pane-matrix {
   display: none;
-  background: color-mix(in srgb, var(--side-bg) 88%, transparent);
+}
+
+/* Side rails stick while the case stream scrolls. Their own overflow appears
+   only when a rail is taller than the viewport. */
+@media (min-width: 1200px) {
+  .pane-grid {
+    grid-template-columns: 250px minmax(0, 1fr) 300px;
+  }
+
+  .pane-matrix {
+    display: block;
+  }
+
+  .pane-matrix,
+  .pane-workbench {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+
+  nav#mobile-tabs {
+    display: none;
+  }
 }
 
 /* Below the wide breakpoint the Matrix is a tab that takes over the grid. */
@@ -495,26 +494,11 @@ body {
   }
 
   .app-shell[data-pane="matrix"] .pane-matrix {
-    display: flex;
+    display: block;
   }
 
   .app-shell[data-pane="matrix"] .pane-articles,
   .app-shell[data-pane="matrix"] .pane-workbench {
-    display: none;
-  }
-}
-
-/* Wide desktop: research cockpit — Matrix rail | content | Workbench. */
-@media (min-width: 1200px) {
-  .pane-grid {
-    grid-template-columns: minmax(14rem, 19rem) minmax(0, 1.2fr) minmax(18rem, 24rem);
-  }
-
-  .pane-matrix {
-    display: flex;
-  }
-
-  nav#mobile-tabs {
     display: none;
   }
 }
@@ -561,11 +545,8 @@ body {
 }
 
 .pane-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+  /* Document-flow layout: panes grow with content; the page scrolls, not the pane. */
   padding: 0.75rem 1rem 1rem;
-  -webkit-overflow-scrolling: touch;
 }
 
 .pane-body.panel {
@@ -771,7 +752,8 @@ body {
 }
 
 .matrix-search-wrap {
-  flex: 1 1 14rem;
+  /* In the rail's flex column a 14rem basis becomes HEIGHT — keep it natural. */
+  flex: 0 0 auto;
   max-width: 28rem;
 }
 
@@ -2043,7 +2025,7 @@ a.itm-chip:hover {
   .app-shell[data-pane="articles"] .pane-articles,
   .app-shell[data-pane="matrix"] .pane-matrix,
   .app-shell[data-pane="workbench"] .pane-workbench {
-    display: flex;
+    display: block;
   }
 
   .app-shell[data-pane="matrix"] .pane-articles,
@@ -2451,6 +2433,249 @@ button.chip.itm-chip {
   min-width: 0;
 }
 
+/* ── Masthead rows: brand + nav + LIVE (row 1), search + Core Four (row 2) ── */
+.masthead-row-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.masthead-row-top .brand-block {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.masthead-row-top .product {
+  font-size: 1.65rem;
+  white-space: nowrap;
+}
+
+.masthead-row-top .tagline {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.masthead-nav {
+  display: flex;
+  gap: 1.15rem;
+  margin-left: auto;
+  align-items: baseline;
+}
+
+.masthead-nav-item {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--top-muted, var(--muted));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 0 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.masthead-nav-item:hover {
+  color: var(--top-ink, var(--ink));
+}
+
+.masthead-nav-item.active {
+  color: var(--top-ink, var(--ink));
+  border-bottom-color: var(--accent);
+}
+
+.live-status {
+  font-family: var(--font-mono);
+  font-size: 0.69rem;
+  letter-spacing: 0.04em;
+  color: var(--top-muted, var(--muted));
+  white-space: nowrap;
+}
+
+.masthead-row-search {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.masthead-row-search .search-bar {
+  flex: 1 1 18rem;
+  max-width: 33rem;
+  margin-top: 0;
+}
+
+.masthead-row-search .hunt-usecases-block {
+  margin-top: 0;
+}
+
+.masthead-row-search .hunt-usecases-block > .filter-label {
+  display: none; /* the pills speak for themselves in the masthead row */
+}
+
+.masthead-row-search .hunt-usecases {
+  margin-top: 0;
+}
+
+/* Phones: the sticky mobile tabs drive the pane switch — the masthead nav
+   would duplicate them, so it steps back. LIVE keeps the row honest. */
+@media (max-width: 960px) {
+  .masthead-nav {
+    display: none;
+  }
+
+  .live-status {
+    margin-left: auto;
+  }
+}
+
+/* ── Rail headings (ITM INDEX / EVIDENCE BOARD) — mockup index-label style ── */
+.pane-head {
+  border-bottom: 0;
+  padding-bottom: 0.35rem;
+}
+
+.pane-head h2 {
+  font-family: var(--font-mono);
+  letter-spacing: 0.14em;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 0.45rem;
+  flex: 1 1 auto;
+}
+
+.itm-index-attribution {
+  margin: 1.25rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+}
+
+/* Stream head: Newsreader title (topic name), mono count, red REFRESH text.
+   The rail-heading underline above applies only to the side rails' labels. */
+.pane-head-main h2 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-transform: none;
+  color: var(--ink);
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.pane-head-main .meta {
+  font-family: var(--font-mono);
+  font-size: 0.69rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.stream-refresh,
+.stream-refresh.ghost {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.69rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.stream-refresh:hover {
+  filter: brightness(0.8);
+}
+
+/* ── Center report view (hunt report moved out of the rail) ── */
+.report-head {
+  margin-bottom: 0.75rem;
+}
+
+/* ── Evidence board rail: rows, EXTRACT TTPs, secondary text actions ── */
+.extraction-board {
+  border-bottom: 0;
+}
+
+.extraction-board-head h3 {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 0.45rem;
+  width: 100%;
+}
+
+.board-item {
+  border-bottom: 1px dotted var(--line);
+}
+
+.board-extract-row {
+  margin: 0.9rem 0 0;
+}
+
+.board-extract-btn {
+  display: block;
+  width: 100%;
+  padding: 0.65rem;
+  background: var(--ink);
+  color: var(--btn-fg);
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.board-extract-btn:hover:not(:disabled) {
+  filter: brightness(1.35);
+}
+
+.board-extract-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.board-secondary-actions {
+  margin-top: 0.65rem;
+}
+
+.board-secondary-actions .copy-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.board-secondary-actions .copy-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.board-secondary-actions .copy-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    DOSSIER THEME — high-fidelity overrides (default theme).
    The card structure above is theme-agnostic; these tune the exact classified-
@@ -2487,8 +2712,10 @@ button.chip.itm-chip {
   background: var(--paper);
 }
 
-/* Rail headings in the reused "index label" style */
-[data-theme="dossier"] .pane-head h2 {
+/* Rail headings in the reused "index label" style (side rails only — the
+   center stream title stays Newsreader). */
+[data-theme="dossier"] .pane-matrix .pane-head h2,
+[data-theme="dossier"] .pane-workbench .pane-head h2 {
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.14em;
