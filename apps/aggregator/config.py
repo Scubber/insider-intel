@@ -381,6 +381,67 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="tips-reddit",
         channel="tips",
     ),
+    # Insider-focused research + Scattered-Spider / attribution-forensics sources
+    FeedSource(
+        id="sei-insider-threat",
+        name="CMU SEI Blog",
+        url="https://insights.sei.cmu.edu/blog/feeds/latest.rss",
+        category="insider-osint",
+    ),
+    FeedSource(
+        id="404media",
+        name="404 Media",
+        url="https://www.404media.co/rss/",
+        category="insider-osint",
+    ),
+    FeedSource(
+        id="cybernews",
+        name="Cybernews",
+        url="https://cybernews.com/feed/",
+        category="insider-osint",
+    ),
+    FeedSource(
+        id="dtex-i3",
+        name="DTEX i3 Blog",
+        url="https://www.dtexsystems.com/feed/",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="google-threat-intel",
+        name="Google Threat Intelligence",
+        url="https://cloudblog.withgoogle.com/topics/threat-intelligence/rss/",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="talos",
+        name="Cisco Talos",
+        url="https://blog.talosintelligence.com/rss/",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="microsoft-security",
+        name="Microsoft Security Blog",
+        url="https://www.microsoft.com/en-us/security/blog/feed/",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="darkatlas",
+        name="DarkAtlas",
+        url="https://darkatlas.io/blog/rss.xml",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="dfir-report",
+        name="The DFIR Report",
+        url="https://thedfirreport.com/feed/",
+        category="threat-research",
+    ),
+    FeedSource(
+        id="securityonline",
+        name="SecurityOnline",
+        url="https://securityonline.info/feed/",
+        category="threat-research",
+    ),
 ]
 
 
