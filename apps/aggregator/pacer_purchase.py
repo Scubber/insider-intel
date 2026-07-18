@@ -37,6 +37,7 @@ from apps.aggregator.courtlistener import (
 from apps.aggregator.courtlistener_pipeline import (
     _TEXT_ATTEMPT_KEY,
     _is_throttled,
+    _throttle_wait_seconds,
     needs_full_text,
 )
 from apps.aggregator.ingest_state import DEFAULT_STATE_PATH, JsonIngestState
@@ -171,6 +172,7 @@ def run_pacer_purchases(
     purchased = 0
     errors: list[str] = []
     attempted = 0
+    throttle_waits = 0
     delay = settings.courtlistener_request_delay_seconds
     own_client = client is None
     http = client or httpx.Client(timeout=45.0, follow_redirects=True)
@@ -196,11 +198,30 @@ def run_pacer_purchases(
             try:
                 entries = fetch_docket_entries(docket_id, token=cl_token, client=http)
             except CourtListenerError as exc:
-                errors.append(f"{article.link}: {exc}")
-                if _is_throttled(exc):
-                    logger.warning("CourtListener throttled (429) — stopping purchases this run")
-                    break
-                continue
+                if _is_throttled(exc) and throttle_waits < 1 and delay > 0:
+                    wait = _throttle_wait_seconds(exc)
+                    throttle_waits += 1
+                    logger.warning(
+                        "CourtListener throttled — waiting %.0fs, then retrying purchases",
+                        wait,
+                    )
+                    time.sleep(wait)
+                    try:
+                        entries = fetch_docket_entries(docket_id, token=cl_token, client=http)
+                    except CourtListenerError as exc2:
+                        errors.append(f"{article.link}: {exc2}")
+                        if _is_throttled(exc2):
+                            logger.warning("Still throttled — stopping purchases this run")
+                            break
+                        continue
+                else:
+                    errors.append(f"{article.link}: {exc}")
+                    if _is_throttled(exc):
+                        logger.warning(
+                            "CourtListener throttled (429) — stopping purchases this run"
+                        )
+                        break
+                    continue
 
             lead_doc = None
             for entry in entries:

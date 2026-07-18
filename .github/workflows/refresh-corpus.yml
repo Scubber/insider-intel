@@ -38,7 +38,7 @@ jobs:
         if: always()
         run: |
           gcloud logging read "resource.labels.job_name=corpus-refresh" \
-            --project "${PROJECT_ID}" --freshness=40m \
+            --project "${PROJECT_ID}" --freshness=12m \
             --format='value(textPayload)' \
             | grep -E 'PACER|backfill|Backfilled|throttled|Summar|X ingest|Skipping|reloaded|429|\[OK\]|\[FAIL\]' \
             | head -60 || true

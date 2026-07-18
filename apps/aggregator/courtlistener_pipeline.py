@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import UTC, date, datetime, timedelta
 
@@ -143,7 +144,12 @@ def run_courtlistener_ingestion(
             # the same case look "updated" on every overlapping query.
             collected: dict[str, RawArticle] = {}
             errors: list[str] = []
-            for query in query_list:
+            delay = settings.courtlistener_request_delay_seconds
+            for i, query in enumerate(query_list):
+                # The 10/min throttle is account-wide; unspaced search queries
+                # would drain the whole budget before backfill/purchases run.
+                if i > 0 and delay > 0:
+                    time.sleep(delay)
                 try:
                     articles = _search(
                         search_type=search_type,
@@ -247,6 +253,20 @@ def _is_throttled(exc: CourtListenerError) -> bool:
     return "429" in str(exc)
 
 
+# CourtListener's 429 body says exactly when the bucket refills, e.g.
+# 'Expected available in 51 seconds.' — honor it (bounded) instead of guessing.
+_THROTTLE_WAIT_RE = re.compile(r"available in (\d+(?:\.\d+)?) seconds")
+_MAX_THROTTLE_WAIT = 90.0
+# At most this many wait-and-retry pauses per sweep; then abort until next run.
+_MAX_THROTTLE_WAITS = 2
+
+
+def _throttle_wait_seconds(exc: CourtListenerError) -> float:
+    match = _THROTTLE_WAIT_RE.search(str(exc))
+    wait = float(match.group(1)) if match else 60.0
+    return min(wait, _MAX_THROTTLE_WAIT) + 2.0
+
+
 def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
     """Drop paid-for LLM fields for links whose source text just changed.
 
@@ -330,48 +350,67 @@ def run_courtlistener_text_backfill(
     own_client = client is None
     http = client or httpx.Client(timeout=45.0, follow_redirects=True)
     try:
+
+        def _fetch_text(article: RawArticle) -> str:
+            if article.source_id == SOURCE_ID:
+                docket_id = parse_docket_id(article.link)
+                if docket_id is None:
+                    return ""
+                return fetch_recap_document_text(
+                    docket_id, token=api_token, max_chars=cap, client=http
+                )
+            cluster_id = parse_opinion_id(article.link)
+            if cluster_id is None:
+                return ""
+            return (
+                fetch_cluster_opinion_text(cluster_id, token=api_token, max_chars=cap, client=http)
+                or ""
+            )
+
         attempts = 0
+        throttle_waits = 0
         for article in candidates:
             if attempts >= attempts_allowed:
                 break
             if _attempted_recently(ingest_state, article.link, started_at):
                 continue
             if attempts > 0 and delay > 0:
-                time.sleep(delay)  # burst politeness — CourtListener 429s rapid fire
+                time.sleep(delay)  # account-wide 10/min throttle
             attempts += 1
             fetched += 1
-            text = ""
             try:
-                if article.source_id == SOURCE_ID:
-                    docket_id = parse_docket_id(article.link)
-                    if docket_id is not None:
-                        text = fetch_recap_document_text(
-                            docket_id, token=api_token, max_chars=cap, client=http
-                        )
-                else:
-                    cluster_id = parse_opinion_id(article.link)
-                    if cluster_id is not None:
-                        text = (
-                            fetch_cluster_opinion_text(
-                                cluster_id,
-                                token=api_token,
-                                max_chars=cap,
-                                client=http,
-                            )
-                            or ""
-                        )
+                text = _fetch_text(article)
             except CourtListenerError as exc:
-                # Not marked as attempted — the archive was never actually
-                # consulted, so the next run retries instead of waiting 7 days.
-                logger.warning("Text backfill failed for %s: %s", article.link, exc)
-                errors.append(f"{article.link}: {exc}")
-                if _is_throttled(exc):
+                if _is_throttled(exc) and throttle_waits < _MAX_THROTTLE_WAITS and delay > 0:
+                    # The search phase may have drained the shared budget; the
+                    # 429 body says when it refills — wait it out once, retry.
+                    wait = _throttle_wait_seconds(exc)
+                    throttle_waits += 1
                     logger.warning(
-                        "CourtListener throttled (429) — stopping this sweep; "
-                        "remaining links retry next refresh"
+                        "CourtListener throttled — waiting %.0fs for the bucket, then retrying",
+                        wait,
                     )
-                    break
-                continue
+                    time.sleep(wait)
+                    try:
+                        text = _fetch_text(article)
+                    except CourtListenerError as exc2:
+                        errors.append(f"{article.link}: {exc2}")
+                        if _is_throttled(exc2):
+                            logger.warning("Still throttled after waiting — stopping this sweep")
+                            break
+                        continue
+                else:
+                    # Not marked as attempted — the archive was never actually
+                    # consulted, so the next run retries instead of waiting 7 days.
+                    logger.warning("Text backfill failed for %s: %s", article.link, exc)
+                    errors.append(f"{article.link}: {exc}")
+                    if _is_throttled(exc):
+                        logger.warning(
+                            "CourtListener throttled (429) — stopping this sweep; "
+                            "remaining links retry next refresh"
+                        )
+                        break
+                    continue
 
             ingest_state.set(
                 _TEXT_ATTEMPT_KEY.format(link=article.link),
