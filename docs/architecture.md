@@ -71,7 +71,11 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   prefer Alerts for cross-domain discovery (see [`sourcing.md`](sourcing.md))
 - **Social lane (`channel=social`)**: Reddit subreddit listings (OAuth app auth
   when `REDDIT_CLIENT_ID/SECRET` set; public JSON fallback) and X handles
-  (API v2, `X_BEARER_TOKEN`). Sources are user-picked subscriptions
+  (API v2 — `X_BEARER_TOKEN`, or `X_CONSUMER_KEY`/`X_CONSUMER_SECRET` from
+  which the pipeline mints and caches an app-only bearer. Free-tier quota
+  guard: pulls run at most every `X_INGEST_EVERY_HOURS` (48h default) at
+  `X_MAX_RESULTS` (5) posts per handle ≈ 75 post-reads/month, under the
+  ~100/month free cap). Sources are user-picked subscriptions
   (`data/config/social_subscriptions.json`) seeded from a curated per-use-case
   catalog (`shared/taxonomy/use_cases.py` → `social_catalog.py`); single posts
   flag in via `ingest_social_url` / `POST /social/ingest_url` (handles `/s/`

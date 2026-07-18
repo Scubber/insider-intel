@@ -89,6 +89,14 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   the **job only**:
   `gcloud run jobs update corpus-refresh --region us-east1
   --set-secrets PACER_USERNAME=PACER_USERNAME:latest,PACER_PASSWORD=PACER_PASSWORD:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest`.
+- **X/Twitter lane (opt-in):** store the developer app's consumer pair and
+  attach to the job (secret names in Secret Manager may be lowercase — the
+  mapping renames them):
+  `gcloud run jobs update corpus-refresh --region us-east1
+  --set-secrets X_CONSUMER_KEY=x_consumer_key:latest,X_CONSUMER_SECRET=x_consumer_secret:latest`.
+  The pipeline mints/caches the bearer token itself; defaults
+  (`X_INGEST_EVERY_HOURS=48`, `X_MAX_RESULTS=5`) fit the free tier's
+  ~100 post-reads/month.
   Spend is capped at `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter —
   under PACER's $30 fee waiver, so typical usage bills $0) and
   `PACER_PURCHASE_MAX_PER_RUN` (default 5). Estimated spend is tracked in

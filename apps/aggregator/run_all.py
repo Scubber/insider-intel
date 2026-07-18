@@ -125,9 +125,16 @@ def run_full_pipeline(
         )
     social_result: IngestionRunResult | None = None
     if not skip_social:
+        from apps.aggregator.ingest_state import DEFAULT_STATE_PATH, JsonIngestState
+
         social_result = _merge_ingestion(
             run_reddit_ingestion(store_path=raw_path, include_raw=include_raw),
-            run_x_ingestion(store_path=raw_path, include_raw=include_raw),
+            # state enables the X cadence guard (free-tier quota sizing)
+            run_x_ingestion(
+                store_path=raw_path,
+                include_raw=include_raw,
+                state=JsonIngestState(DEFAULT_STATE_PATH),
+            ),
         )
     processing = run_processing(
         raw_path=raw_path,
