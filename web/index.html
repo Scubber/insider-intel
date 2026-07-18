@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>insider-intel</title>
+    <!-- Dossier-theme typefaces (Newsreader + Courier Prime). Only the default
+         "dossier" theme references these families in themes.css; backup themes
+         use system stacks. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Courier+Prime:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
     <script>
       /* Short-alias host: td3.dev → canonical intel UI. */
       (function () {
@@ -18,9 +27,9 @@
     <link rel="stylesheet" href="./styles.css" />
     <script>
       (function () {
-        var allowed = ["cnn-lite", "midnight", "phosphor"];
-        var t = localStorage.getItem("insider-intel-theme") || "cnn-lite";
-        if (allowed.indexOf(t) === -1) t = "cnn-lite";
+        var allowed = ["dossier", "cnn-lite", "midnight", "phosphor"];
+        var t = localStorage.getItem("insider-intel-theme") || "dossier";
+        if (allowed.indexOf(t) === -1) t = "dossier";
         document.documentElement.setAttribute("data-theme", t);
       })();
     </script>
@@ -31,10 +40,7 @@
     <header class="top">
       <div class="brand-block">
         <h1 class="product">insider-intel</h1>
-        <p class="tagline">
-          OSINT stream mapped to the Insider Threat Matrix™ — browse techniques,
-          mint hunt terms, hand off to SIEM.
-        </p>
+        <p class="tagline">// INSIDER INTELLIGENCE, MADE SIMPLE</p>
       </div>
       <form class="search-bar" id="search-form" autocomplete="off">
         <label class="sr-only" for="q">Search</label>
@@ -42,7 +48,7 @@
           id="q"
           name="q"
           type="search"
-          placeholder="Hunt an insider scenario — try moonlighting, stolen files, shared logins…"
+          placeholder="SEARCH SCENARIOS — data theft, moonlighting, shared logins, sabotage…"
         />
         <button type="submit" class="hunt-submit" aria-label="Hunt" title="Hunt">
           <svg class="hunt-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -196,6 +202,7 @@
             <div class="theme-picker" id="theme-picker">
               <label class="filter-label" for="theme-select">Theme</label>
               <select id="theme-select" aria-label="Color theme">
+                <option value="dossier">Dossier</option>
                 <option value="cnn-lite">Light</option>
                 <option value="midnight">Dark</option>
                 <option value="phosphor">Terminal</option>
@@ -222,7 +229,7 @@
       <div class="pane-grid">
         <aside class="pane pane-matrix" data-pane-panel="matrix" aria-label="ITM taxonomy">
           <div class="pane-head">
-            <h2>ITM matrix</h2>
+            <h2>ITM INDEX</h2>
             <div class="pane-head-actions">
               <button type="button" class="ghost matrix-latest-btn" id="matrix-latest">
                 Latest
@@ -347,7 +354,7 @@
             <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
               <div class="extraction-board-head">
                 <h3>
-                  Extraction board
+                  EVIDENCE BOARD
                   <span class="board-count" id="board-count">(0)</span>
                 </h3>
                 <p class="panel-actions extraction-board-actions">
