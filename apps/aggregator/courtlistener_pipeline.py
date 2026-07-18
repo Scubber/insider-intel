@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
@@ -211,6 +212,10 @@ def run_courtlistener_ingestion(
 _QUERY_TAG_PREFIX = "CourtListener query:"
 _TEXT_ATTEMPT_KEY = "courtlistener_text:{link}"
 _TEXT_RETRY_DAYS = 7
+# Attempt markers are prefixed so only genuine "CourtListener answered, no
+# text yet" results start the 7-day retry clock. Legacy/unprefixed values
+# (including markers poisoned by a 429 storm) are treated as never-attempted.
+_CHECKED_PREFIX = "checked @ "
 
 
 def needs_full_text(article: RawArticle) -> bool:
@@ -227,15 +232,19 @@ def needs_full_text(article: RawArticle) -> bool:
 
 def _attempted_recently(state: JsonIngestState, link: str, now: datetime) -> bool:
     stored = state.get(_TEXT_ATTEMPT_KEY.format(link=link))
-    if not stored:
+    if not stored or not stored.startswith(_CHECKED_PREFIX):
         return False
     try:
-        attempted = datetime.fromisoformat(stored)
+        attempted = datetime.fromisoformat(stored[len(_CHECKED_PREFIX) :])
     except ValueError:
         return False
     if attempted.tzinfo is None:
         attempted = attempted.replace(tzinfo=UTC)
     return (now - attempted) < timedelta(days=_TEXT_RETRY_DAYS)
+
+
+def _is_throttled(exc: CourtListenerError) -> bool:
+    return "429" in str(exc)
 
 
 def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
@@ -279,6 +288,7 @@ def run_courtlistener_text_backfill(
     store: ArticleStore | None = None,
     store_path: str = DEFAULT_STORE_PATH,
     processed_path: str | None = None,
+    request_delay: float | None = None,
     client: httpx.Client | None = None,
 ) -> IngestionRunResult:
     """Pull full document text for stored CourtListener cases (free endpoints).
@@ -296,6 +306,9 @@ def run_courtlistener_text_backfill(
     api_token = token if token is not None else settings.courtlistener_api_token
     cap = max_chars if max_chars is not None else settings.courtlistener_recap_text_max_chars
     attempts_allowed = limit if limit is not None else settings.courtlistener_backfill_max_dockets
+    delay = (
+        request_delay if request_delay is not None else settings.courtlistener_request_delay_seconds
+    )
     ingest_state = state or JsonIngestState(state_path)
     article_store: ArticleStore = store or JsonlArticleStore(store_path)
 
@@ -323,6 +336,8 @@ def run_courtlistener_text_backfill(
                 break
             if _attempted_recently(ingest_state, article.link, started_at):
                 continue
+            if attempts > 0 and delay > 0:
+                time.sleep(delay)  # burst politeness — CourtListener 429s rapid fire
             attempts += 1
             fetched += 1
             text = ""
@@ -346,10 +361,22 @@ def run_courtlistener_text_backfill(
                             or ""
                         )
             except CourtListenerError as exc:
+                # Not marked as attempted — the archive was never actually
+                # consulted, so the next run retries instead of waiting 7 days.
                 logger.warning("Text backfill failed for %s: %s", article.link, exc)
                 errors.append(f"{article.link}: {exc}")
+                if _is_throttled(exc):
+                    logger.warning(
+                        "CourtListener throttled (429) — stopping this sweep; "
+                        "remaining links retry next refresh"
+                    )
+                    break
+                continue
 
-            ingest_state.set(_TEXT_ATTEMPT_KEY.format(link=article.link), started_at.isoformat())
+            ingest_state.set(
+                _TEXT_ATTEMPT_KEY.format(link=article.link),
+                f"{_CHECKED_PREFIX}{started_at.isoformat()}",
+            )
             if not text.strip():
                 continue
             base = (article.content or "").strip()

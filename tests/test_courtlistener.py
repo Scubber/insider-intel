@@ -671,3 +671,88 @@ def test_text_backfill_respects_limit_and_retry_window(tmp_path, monkeypatch) ->
     )
     assert len(calls) == 4
     assert len(set(calls)) == 4
+
+
+def test_text_backfill_429_aborts_sweep_without_marking_attempts(tmp_path, monkeypatch) -> None:
+    """A throttled run must not burn the 7-day retry window for its links."""
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.courtlistener import CourtListenerError
+    from apps.aggregator.storage import JsonlArticleStore
+
+    raw_path = tmp_path / "raw.jsonl"
+    links = [f"https://www.courtlistener.com/docket/{n}/case{n}/" for n in range(1, 4)]
+    JsonlArticleStore(raw_path).save([_stored_docket(link) for link in links])
+    calls: list[int] = []
+
+    def throttled(docket_id, **kw):
+        calls.append(docket_id)
+        raise CourtListenerError(f"docket {docket_id} recap HTTP 429: throttled")
+
+    monkeypatch.setattr(clp, "fetch_recap_document_text", throttled)
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+        limit=10,
+    )
+    assert len(calls) == 1  # first 429 stops the sweep — no hammering
+    for link in links:
+        assert state.get(clp._TEXT_ATTEMPT_KEY.format(link=link)) is None
+
+    # Once the throttle clears, the very next run fetches normally.
+    monkeypatch.setattr(clp, "fetch_recap_document_text", lambda docket_id, **kw: "FULL TEXT " * 5)
+    result = clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+        limit=10,
+    )
+    assert result.total_articles_saved == 3
+
+
+def test_non_throttle_error_does_not_start_retry_clock(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.courtlistener import CourtListenerError
+    from apps.aggregator.storage import JsonlArticleStore
+
+    raw_path = tmp_path / "raw.jsonl"
+    link = "https://www.courtlistener.com/docket/1/a/"
+    JsonlArticleStore(raw_path).save([_stored_docket(link)])
+
+    def flaky(docket_id, **kw):
+        raise CourtListenerError("docket 1 recap fetch failed: connection reset")
+
+    monkeypatch.setattr(clp, "fetch_recap_document_text", flaky)
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+    )
+    assert state.get(clp._TEXT_ATTEMPT_KEY.format(link=link)) is None
+
+
+def test_legacy_attempt_markers_are_retried(tmp_path, monkeypatch) -> None:
+    """Markers written before the 'checked @' format (incl. 429-poisoned ones)
+    must not lock links out — they are treated as never-attempted once."""
+    from datetime import UTC, datetime
+
+    import apps.aggregator.courtlistener_pipeline as clp
+    from apps.aggregator.storage import JsonlArticleStore
+
+    raw_path = tmp_path / "raw.jsonl"
+    link = "https://www.courtlistener.com/docket/1/a/"
+    JsonlArticleStore(raw_path).save([_stored_docket(link)])
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    # Legacy format: bare ISO timestamp from a pre-fix (possibly throttled) run.
+    state.set(clp._TEXT_ATTEMPT_KEY.format(link=link), datetime.now(UTC).isoformat())
+
+    monkeypatch.setattr(clp, "fetch_recap_document_text", lambda docket_id, **kw: "FULL TEXT " * 5)
+    result = clp.run_courtlistener_text_backfill(
+        store_path=str(raw_path),
+        processed_path=str(tmp_path / "processed.jsonl"),
+        state=state,
+    )
+    assert result.total_articles_saved == 1
+    assert (state.get(clp._TEXT_ATTEMPT_KEY.format(link=link)) or "").startswith("checked @")

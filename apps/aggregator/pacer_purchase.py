@@ -19,6 +19,7 @@ OCR'd text on a later refresh.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -33,7 +34,11 @@ from apps.aggregator.courtlistener import (
     parse_docket_id,
     request_pacer_fetch,
 )
-from apps.aggregator.courtlistener_pipeline import _TEXT_ATTEMPT_KEY, needs_full_text
+from apps.aggregator.courtlistener_pipeline import (
+    _TEXT_ATTEMPT_KEY,
+    _is_throttled,
+    needs_full_text,
+)
 from apps.aggregator.ingest_state import DEFAULT_STATE_PATH, JsonIngestState
 from apps.aggregator.pipeline import DEFAULT_STORE_PATH
 from apps.aggregator.process_pipeline import DEFAULT_PROCESSED_PATH
@@ -166,6 +171,7 @@ def run_pacer_purchases(
     purchased = 0
     errors: list[str] = []
     attempted = 0
+    delay = settings.courtlistener_request_delay_seconds
     own_client = client is None
     http = client or httpx.Client(timeout=45.0, follow_redirects=True)
     try:
@@ -183,12 +189,17 @@ def run_pacer_purchases(
             if docket_id is None:
                 continue
             prior_stage = _purchase_stage(ingest_state, article.link)
+            if attempted > 0 and delay > 0:
+                time.sleep(delay)  # burst politeness — CourtListener 429s rapid fire
             attempted += 1
 
             try:
                 entries = fetch_docket_entries(docket_id, token=cl_token, client=http)
             except CourtListenerError as exc:
                 errors.append(f"{article.link}: {exc}")
+                if _is_throttled(exc):
+                    logger.warning("CourtListener throttled (429) — stopping purchases this run")
+                    break
                 continue
 
             lead_doc = None
