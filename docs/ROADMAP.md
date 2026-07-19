@@ -66,6 +66,7 @@ mapped to the Insider Threat Matrix™.
 Tracked as GitHub issues (the working kanban):
 <https://github.com/Scubber/insider-intel/issues>
 
+- **Collaborative analyst notes — a per-card journal + comment auth** (see below)
 - **Syndication — let other sites/tools consume insider-intel** (see below)
 - Reddit OAuth creds → un-block the social tips lane from GCP
 - Behavior→telemetry hunt terms with provenance (workbench track 2)
@@ -136,6 +137,42 @@ record, gradual and cheap.
 the discovery logic are validated in production.** Re-billing the corpus before
 the prompt and gates are proven would just pay to bake in a standard we're
 still tuning.
+
+## Collaborative analyst notes (proposed — not started)
+
+Turn each card into a living case log: alongside the title + LLM analyst summary,
+a **timestamped journal of analyst notes/updates**, so multiple people can
+annotate a case over time. Reading stays fully public.
+
+**The gating decision is auth** — should posting require a login wall? Settle
+this before building; it shapes everything else:
+
+- **Closed team → shared-passphrase gate.** Reuse the existing
+  `_require_export_token` bearer pattern (`apps/search/api.py`) — nearly free, no
+  public write endpoint, real accountability. No per-person identity (pair with a
+  self-entered handle). Best if commenters are a known few.
+- **Public + attributed → GitHub/Google OAuth on the comment POST only.** Free
+  identity (handle/avatar), low friction, bot-resistant; the truest
+  "collaborative journal." Optionally allowlist accounts for a closed team.
+- **Anonymous → not recommended.** Cheapest, but a public unauthenticated write
+  endpoint is a spam magnet; needs rate-limiting + moderation and gives no real
+  attribution.
+- **Custom email/password accounts → out of scope** (security burden, overkill at
+  this scale).
+
+**Design constraints / reuse (already understood):**
+- Comments are *writes*, and the API is read-only except the `config/` prefix, so
+  notes live in a `config/` JSON store reusing the `SocialSubscriptionStore`
+  atomic pattern (`apps/aggregator/social_subscriptions.py`) — the existing
+  write-through-the-API precedent.
+- Attach notes to **`story_key`** (they follow the clustered incident across
+  sources, matching how the hunt report groups cases), not a single article link.
+- Reuse `apps/search/ratelimit.py` (abuse guard), the social-subscriptions CRUD
+  routes as the endpoint template, and the analyst-note render area in
+  `web/app.js` for the UI.
+- Open: moderation/delete story; and whether the app trends toward **site-wide
+  auth**, which would reframe commenting as the first authed surface rather than a
+  one-off.
 
 ## Syndication design (proposed)
 
