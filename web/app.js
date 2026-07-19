@@ -3362,6 +3362,16 @@
         : summaryParagraphs(article.summary),
     );
     const analystText = noteParas.join(" ");
+    // Feeds commonly truncate summaries at the source ("…", "[...]", or a
+    // clean mid-sentence cut). Only fallback summaries can be truncated —
+    // LLM notes are written whole. Detect it so the expanded view says so
+    // instead of silently ending mid-thought.
+    const sourceTruncated =
+      !aiSummary &&
+      Boolean(analystText) &&
+      (/(?:…|\.{3})[\s"'”)\]]*$/.test(String(article.summary || "").trim()) ||
+        !/[.!?…"'”)\]]$/.test(analystText.trim()));
+    const isCase = caseKindLabel(article) === "CASE";
     btn.append(meta, h3);
     if (analystText) {
       const note = document.createElement("div");
@@ -3386,6 +3396,14 @@
         snip.textContent = analystText;
       }
       note.appendChild(snip);
+      if (sourceTruncated) {
+        const cut = document.createElement("span");
+        cut.className = "note-truncated";
+        cut.textContent = isCase
+          ? "⚠ SUMMARY TRUNCATED AT SOURCE — USE READ FILING FOR THE FULL DOCUMENT"
+          : "⚠ SUMMARY TRUNCATED AT SOURCE — FULL TEXT VIA OPEN ↗";
+        note.appendChild(cut);
+      }
       btn.appendChild(note);
     }
 
@@ -3394,8 +3412,7 @@
     // the raw feed summary, so READ matches the clamped note in production. The
     // tail is built here but attached as a sibling of the card <button> below —
     // it holds an anchor, which must not be nested inside the button.
-    const isCase = caseKindLabel(article) === "CASE";
-    const expandable = analystText.length > 160 || isCase;
+    const expandable = analystText.length > 160 || isCase || sourceTruncated;
     let readTail = null;
     if (expandable) {
       readTail = document.createElement("p");

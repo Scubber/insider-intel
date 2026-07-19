@@ -3330,3 +3330,18 @@ html[data-redacted="true"] .analyst-note * {
 .article-copy-btn:hover {
   color: var(--accent);
 }
+
+/* Source-truncation notice inside the analyst note — only meaningful once the
+   note is un-clamped, so it stays hidden while the card is collapsed. */
+.analyst-note .note-truncated {
+  display: none;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--signal);
+}
+
+.article-row.expanded .analyst-note .note-truncated {
+  display: block;
+}
