@@ -70,8 +70,11 @@ jobs:
         #    fallback to its mini default. OPENAI_COMPAT_MODEL=gpt-4o pins the
         #    openai link; anthropic uses ANTHROPIC_MODEL (job env / default),
         #    sol comes from LLM_CUSTOM_PROVIDERS, gemini/xai use their defaults.
-        #  - Cap 100/run + 30m timeout: ~100 calls add ~8-13 min over the ~8-10 min
-        #    base run, so the default 10-min timeout would sever the sweep.
+        #  - Cap 100/run + 45m timeout: filings enrich at full document length
+        #    (~15-25s/call), so a filings-heavy sweep can pass 30 min; a timeout
+        #    triggers a Cloud Run task RETRY that re-bills whatever wasn't yet
+        #    checkpointed. The backfill checkpoints every 5 conversions, but the
+        #    timeout should still comfortably cover one full sweep.
         #  - BACKFILL_RESERVE=60: the fresh-news batch may spend at most 40 of
         #    the 100; 60+ is guaranteed to the filings-first backlog sweep.
         #    Drop toward the library default (6) once the backlog is converted.
@@ -83,7 +86,7 @@ jobs:
             --image "${IMAGE}:${GITHUB_SHA::7}" \
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
-            --task-timeout=30m \
+            --task-timeout=45m \
             --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MODEL=##OPENAI_COMPAT_MODEL=gpt-4o##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##SUMMARIZER_BACKFILL_RESERVE=60##DISCOVERER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##DISCOVERER_MAX_ARTICLES_PER_RUN=15##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
       - name: Smoke test
         run: |
