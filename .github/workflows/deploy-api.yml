@@ -52,11 +52,19 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}"
       - name: Roll refresh job to same image
+        # Also re-assert the enrichment-throughput config (GitOps: repo is the
+        # source of truth). --update-env-vars merges, so the provider/model/secret
+        # mappings set on the job are preserved. Cap 100/run + 30m task timeout:
+        # ~100 gpt-4o calls add ~8-13 min on top of the ~8-10 min base run, so the
+        # default 10-min timeout would sever the sweep. Filing qualification uses
+        # the code default (SUMMARIZER_FILING_MIN_TEXT_CHARS=1500 — full-text gate).
         run: |
           gcloud run jobs update corpus-refresh \
             --image "${IMAGE}:${GITHUB_SHA::7}" \
             --region "${REGION}" \
-            --project "${PROJECT_ID}"
+            --project "${PROJECT_ID}" \
+            --task-timeout=30m \
+            --update-env-vars SUMMARIZER_MAX_ARTICLES_PER_RUN=100
       - name: Smoke test
         run: |
           URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')

@@ -62,8 +62,10 @@ Tracked as GitHub issues (the working kanban):
 - Reddit OAuth creds → un-block the social tips lane from GCP
 - Behavior→telemetry hunt terms with provenance (workbench track 2)
 - Feed-list hygiene pass (dead/blocked RSS sources)
-- GitOps job configuration: declare corpus-refresh env/secrets mappings in
-  deploy-api.yml so every deploy re-asserts config from the repo
+- GitOps job configuration: `deploy-api.yml` now re-asserts the enrichment
+  throughput knobs (`SUMMARIZER_MAX_ARTICLES_PER_RUN`, task timeout) on every
+  deploy; still to move into the repo — the provider/model/secret mappings
+  (currently set on the job by hand)
 
 ## Novel-technique discovery pass (proposed — the product's north star)
 
