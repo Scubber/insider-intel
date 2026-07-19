@@ -21,7 +21,9 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Must outlast the Cloud Run job's 45m task timeout, or the watcher dies
+    # (and stops reporting) while the refresh is still legitimately running.
+    timeout-minutes: 50
     steps:
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:

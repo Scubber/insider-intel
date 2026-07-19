@@ -203,6 +203,11 @@ def _backfill_summaries(
     legacy.sort(key=order, reverse=True)
     candidates = fresh + legacy
 
+    # Flush every few conversions: enrichment is paid-for work, and a task
+    # timeout (Cloud Run kills + retries the whole run) must never discard a
+    # swept batch — losing it re-bills the same articles on the retry.
+    checkpoint_every = 5
+    total_saved = 0
     updated: list[ProcessedArticle] = []
     for row in candidates:
         if budget.remaining <= 0:
@@ -246,11 +251,17 @@ def _backfill_summaries(
                 }
             )
         )
+        if len(updated) >= checkpoint_every:
+            processed_store.upsert(updated)
+            total_saved += len(updated)
+            updated = []
 
     if updated:
         processed_store.upsert(updated)
-        logger.info("Backfilled forensic records for %d article(s)", len(updated))
-    return len(updated)
+        total_saved += len(updated)
+    if total_saved:
+        logger.info("Backfilled forensic records for %d article(s)", total_saved)
+    return total_saved
 
 
 def _backfill_discovery(
