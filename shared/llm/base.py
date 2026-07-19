@@ -155,8 +155,12 @@ Enum values (use exactly these strings):
   civil_suit | settlement | none | unknown — the document's stage, not a guess.
 
 Rules:
-- ai_summary: who did what, how it was found, what happened. Always write one,
-  even for commentary.
+- ai_summary: 3-5 plain sentences — who did what, how it was found, and what
+  happened — ENDING with one sentence on why the case matters to an
+  insider-threat program: the insider behavior it evidences, the
+  digital-forensics angle when the text states one (what artifacts or review
+  surfaced the conduct), and anything genuinely novel about the technique.
+  Always write one, even for commentary.
 - is_insider_case: true only for a concrete incident/case involving an insider
   (employee, contractor, ex-staff). false for commentary, vendor content,
   policy pieces, or general news — still fill ai_summary for those.
@@ -164,7 +168,11 @@ Rules:
   set claim_status from the source's own framing (an indictment = "alleged",
   never "adjudicated"). evidence_quote is a short verbatim snippet from the text
   that supports the action — "" only if no snippet fits. Keep tool names and
-  quantities verbatim where present; no invented facts.
+  quantities verbatim where present; no invented facts. Be tactically
+  specific: name every application, service, device, or protocol the source
+  mentions (Zoom, Telegram, rclone, AnyDesk, USB drive, personal Gmail…) in
+  the action and its tools[], one method per distinct action — these named
+  tools are what defenders search for. Put each such name in hunt_terms too.
 - observables are a DEFENDER's inference about traces, not the court record.
   Describe the CLASS of trace (e.g. "large outbound transfer to personal
   cloud") — do NOT name a specific vendor, product, or log source the text
@@ -176,8 +184,10 @@ Rules:
 - itm_refs: from CANDIDATE TECHNIQUES only, ids whose behavior the article
   actually evidences, each with confidence and a short evidence phrase; [] if
   none apply. Never use an id outside the candidate list.
-- hunt_terms / hunt_queries: only when is_insider_case is true; 1-2 hunt
-  queries at most, [] otherwise. logic must be PORTABLE pseudo-logic using
+- hunt_terms / hunt_queries: only when is_insider_case is true, [] otherwise.
+  Up to 4 hunt queries, each covering a DIFFERENT stack for a different
+  observed behavior (e.g. Splunk/SIEM, email gateway, chat/collab audit,
+  EDR) — never 4 variants of one idea. logic must be PORTABLE pseudo-logic using
   <angle_bracket_placeholders> for anything the source doesn't supply — e.g.
   FROM <outbound_email_log> WHERE recipient_domain NOT IN <approved_domains>.
   Never invent concrete index names, sourcetypes, event IDs, or field names.
