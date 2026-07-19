@@ -40,4 +40,24 @@ jobs:
                   print(f"  {case['title'][:80]}")
                   for bullet in case.get("bullets", [])[:4]:
                       print(f"    - {bullet[:160]}")
+              det = section.get("detection") or {}
+              for q in (det.get("hunt_queries") or [])[:2]:
+                  print(f"  [{q.get('stack','')}] {q.get('logic','')[:140]}")
           PY
+      - name: Enrichment coverage (analyst notes on recent filings)
+        run: |
+          set -euo pipefail
+          API=https://api.intel.thederpweb.com
+          curl -sS "$API/articles?channel=filings&itm_alignment=all&limit=10&group=false" \
+            | python3 -c '
+          import json, sys
+
+          rows = json.load(sys.stdin)["results"]
+          enriched = 0
+          for r in rows:
+              note = (r.get("ai_summary") or "").replace("\n", " ").strip()
+              enriched += bool(note)
+              status = note[:200] if note else "ai_summary: NULL (not yet enriched)"
+              print(f"- {r[\"title\"][:70]}\n    {status}")
+          print(f"\n{enriched}/{len(rows)} recent filings enriched")
+          '

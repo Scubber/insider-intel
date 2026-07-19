@@ -403,3 +403,20 @@ def test_filings_get_the_bigger_prompt_budget(monkeypatch) -> None:
 
     assert received["courtlistener-recap"] > 8000  # filings budget (36k default)
     assert received["example"] <= 8000  # news budget (8k default)
+
+
+def test_enrich_prompt_carries_relevance_and_tactical_guidance() -> None:
+    """The prompt must ask for the insider-threat relevance sentence, verbatim
+    tool naming (the tactical TTP layer defenders search for), and multi-stack
+    hunt queries — regressions here silently degrade every future enrichment."""
+    from shared.llm.base import ENRICH_SYSTEM_PROMPT as p
+
+    assert "why the case matters to an" in p and "insider-threat program" in p
+    assert "digital-forensics angle" in p
+    assert "name every application, service, device, or protocol" in p
+    assert "Telegram" in p and "rclone" in p
+    assert "Up to 4 hunt queries" in p
+    assert "DIFFERENT stack" in p
+    # The source-vs-inference discipline must survive the edits.
+    assert "do NOT name a specific vendor, product, or log source" in p
+    assert "PORTABLE pseudo-logic" in p
