@@ -33,6 +33,8 @@ def _reply(**overrides: object) -> dict:
         "ai_summary": "A departing engineer copied schematics to USB before resigning.",
         "is_insider_case": True,
         "confidence": 0.9,
+        "source_type": "court_filing",
+        "legal_posture": "indictment",
         "actor_profile": "departing engineer — engineering file share",
         "actor_role": "departing engineer",
         "access_vector": "engineering file share",
@@ -40,11 +42,14 @@ def _reply(**overrides: object) -> dict:
             {
                 "action": "USB copy of design files",
                 "tools": ["USB drive"],
+                "claim_status": "alleged",
+                "evidence_quote": "copied the design files to a personal USB drive",
                 "observables": [
                     {
                         "description": "mass file copy to removable media",
                         "artifact": "EDR removable-media events",
                         "channel": "endpoint",
+                        "basis": "mechanically_implied",
                     }
                 ],
             }
@@ -146,6 +151,48 @@ def test_qualifying_article_gets_note_forensics_and_llm_hits(monkeypatch) -> Non
     assert "IF038" in by_id and by_id["IF038"].source == "llm"
     assert "ZZ999" not in by_id and "AF001" not in by_id
     assert "IF038" in processed.entities.keywords_hit
+
+
+def test_evidence_rigor_fields_persist(monkeypatch) -> None:
+    """claim_status / evidence_quote / observable basis / posture round-trip."""
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    forensics = process_article(_raw()).forensics
+    assert forensics is not None
+    assert forensics.source_type == "court_filing"
+    assert forensics.legal_posture == "indictment"
+    method = forensics.methods[0]
+    assert method.claim_status == "alleged"
+    assert "USB" in method.evidence_quote
+    assert method.observables[0].basis == "mechanically_implied"
+
+
+def test_evidence_rigor_bad_values_fall_back_to_safe_defaults(monkeypatch) -> None:
+    """Unknown enums degrade to the weaker/unknown default, never raise."""
+    fake = FakeEnricher(
+        _reply(
+            source_type="tabloid",  # not in the allowed set
+            legal_posture="vibes",  # not in the allowed set
+            methods=[
+                {
+                    "action": "USB copy of design files",
+                    "claim_status": "definitely",  # invalid enum
+                    "observables": [
+                        {"description": "file copy", "basis": "hunch"}  # invalid enum
+                    ],
+                }
+            ],
+        )
+    )
+    _install(monkeypatch, fake)
+    forensics = process_article(_raw()).forensics
+    assert forensics is not None
+    assert forensics.source_type == "unknown"
+    assert forensics.legal_posture == "unknown"
+    method = forensics.methods[0]
+    assert method.claim_status == "unclear"
+    assert method.evidence_quote == ""
+    assert method.observables[0].basis == "analyst_inference"
 
 
 def test_provider_failure_still_processes_article(monkeypatch) -> None:

@@ -1258,6 +1258,19 @@
   // behavior leaves behind, and detect & hunt guidance (ITM DT*/PV* controls
   // plus case-grounded queries). Every deep field is guarded — floor/offline
   // reports simply render without them.
+  // Legal-posture badge (indictment / plea / conviction / …). "unknown"/"none"
+  // and empty values render nothing — allegations must read distinctly from
+  // findings, but an absent posture should not add noise.
+  function appendPostureBadge(target, posture) {
+    const value = String(posture || "").trim().toLowerCase();
+    if (!value || value === "unknown" || value === "none") return;
+    const badge = document.createElement("span");
+    badge.className = `ttp-posture-badge ttp-posture-${value}`;
+    badge.textContent = value;
+    target.appendChild(document.createTextNode(" "));
+    target.appendChild(badge);
+  }
+
   function renderTtpTechniques(container, techniques) {
     if (!container) return;
     container.innerHTML = "";
@@ -1294,6 +1307,7 @@
         } else {
           caseHead.textContent = caseItem.title;
         }
+        appendPostureBadge(caseHead, caseItem.legal_posture);
         wrap.appendChild(caseHead);
         if (caseItem.tradecraft) {
           const tc = document.createElement("p");
@@ -1347,6 +1361,14 @@
           const chip = document.createElement("span");
           chip.className = "ttp-channel-chip";
           chip.textContent = o.channel;
+          li.appendChild(document.createTextNode(" "));
+          li.appendChild(chip);
+        }
+        if (o.basis === "analyst_inference") {
+          const chip = document.createElement("span");
+          chip.className = "ttp-inferred-chip";
+          chip.textContent = "inferred";
+          chip.title = "Analyst inference — not a source-stated trace";
           li.appendChild(document.createTextNode(" "));
           li.appendChild(chip);
         }
@@ -3131,6 +3153,7 @@
       label.className = "analyst-note-label";
       label.textContent = "ANALYST NOTE";
       note.appendChild(label);
+      appendPostureBadge(label, article.forensics && article.forensics.legal_posture);
       const facts = buildNoteFacts(article.case_record);
       if (facts) note.appendChild(facts);
       const snip = document.createElement("div");

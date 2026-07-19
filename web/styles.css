@@ -1878,6 +1878,50 @@ body {
   vertical-align: middle;
 }
 
+/* "inferred" marker: a defender's inference, not a source-stated trace. */
+.ttp-inferred-chip {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-style: italic;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+/* Legal-posture badge — allegations must read distinctly from findings.
+   Charge-stage postures skew caution; proven ones read as settled. */
+.ttp-posture-badge {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.ttp-posture-indictment,
+.ttp-posture-complaint,
+.ttp-posture-civil_suit {
+  border-color: #c2842a;
+  color: #c2842a;
+}
+
+.ttp-posture-plea,
+.ttp-posture-conviction,
+.ttp-posture-sentencing,
+.ttp-posture-settlement {
+  border-color: #2f8f5b;
+  color: #2f8f5b;
+}
+
 .ttp-control-chips {
   margin: 0.2rem 0 0.35rem;
   line-height: 1.9;

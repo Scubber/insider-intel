@@ -33,6 +33,17 @@ mapped to the Insider Threat Matrix™.
 - Read-the-filing: full court-document text on demand in the case card
   (`GET /articles/text`)
 - Free-tier-sized X lane (consumer-key bearer minting, 48h cadence)
+- **Ingest-time forensic enrichment** (one LLM call per case → analyst note +
+  `PerCaseForensics`); the hunt report assembles stored records in code, no
+  read-time LLM
+- **Evidence rigor** on the forensic record: methods carry `claim_status`
+  (alleged / admitted / adjudicated / reported) + a source `evidence_quote`;
+  observables carry a `basis` (mechanically_implied vs analyst_inference); each
+  case carries `source_type` + `legal_posture`. The prompt forbids laundering
+  allegations into findings and forbids inventing defender telemetry (vendor
+  names, log sources, index/sourcetype/event-id/field names). UI shows a
+  posture badge and marks inferred observables. These are the inputs the
+  discovery pass (below) gates promotion on.
 
 ## In flight
 
@@ -46,14 +57,47 @@ mapped to the Insider Threat Matrix™.
 Tracked as GitHub issues (the working kanban):
 <https://github.com/Scubber/insider-intel/issues>
 
+- **Novel-technique discovery pass** — the north star; see below
 - **Syndication — let other sites/tools consume insider-intel** (see below)
 - Reddit OAuth creds → un-block the social tips lane from GCP
 - Behavior→telemetry hunt terms with provenance (workbench track 2)
-- Novel-TTP discovery loop: residual embedding vs ITM descriptions →
-  alias candidates + novelty queue (workbench track 3)
 - Feed-list hygiene pass (dead/blocked RSS sources)
 - GitOps job configuration: declare corpus-refresh env/secrets mappings in
   deploy-api.yml so every deploy re-asserts config from the repo
+
+## Novel-technique discovery pass (proposed — the product's north star)
+
+The goal of the product is to identify, tag, and **discover** insider &
+forensic techniques — including novel ones not yet in any catalog. ITM mapping
+is the reference substrate we diff against to tell known behavior from novel
+behavior; discovery is the point.
+
+A second synthesis pass consumes the **extraction JSON** (never the raw
+filing — the point is to reason over already-vetted facts), maps each method
+against the ITM, and for behavior the ITM doesn't cover proposes a **seed
+candidate** with a promotion lifecycle:
+
+- 1 detailed case → **seed**
+- 2 independent cases, same portable behavior → **corroborated**
+- corroborated + clearly distinct from every ITM technique → **eligible** for a
+  new technique id
+- same behavior, different tool → a **procedure / variant**, not a new technique
+
+It separates `portable_behavior` (reusable across cases) from
+`case_specific_procedure`, and gates promotion on the evidence-rigor fields
+this repo now stores:
+
+- never mint from an `analyst_inference`-only observable (needs a
+  mechanically-implied trace or a source-stated fact)
+- a strong seed needs `claim_status` above `alleged` (admitted / adjudicated),
+  or independent corroboration
+- `legal_posture` + `evidence_quote` travel with the candidate for human review
+
+Trade-offs to plan for: a second LLM call per case (ingest cost), a human
+review / dedup workflow before an id is permanent, and storage for seed
+candidates alongside the ITM. Tier 1+2 (the evidence foundation) shipped first
+precisely so this pass consumes trustworthy input instead of laundered
+allegations and hallucinated telemetry.
 
 ## Syndication design (proposed)
 
