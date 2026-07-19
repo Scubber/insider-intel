@@ -271,8 +271,17 @@ def test_carry_forward_never_rebills(monkeypatch, tmp_path: Path) -> None:
 def test_backfill_converts_existing_corpus_bounded_by_cap(monkeypatch, tmp_path: Path) -> None:
     raw_path = tmp_path / "raw.jsonl"
     processed_path = tmp_path / "processed.jsonl"
-    links = [f"https://example.com/case-{n}" for n in range(3)]
-    JsonlArticleStore(raw_path).save([_raw(link=link) for link in links])
+    # Distinct titles → distinct story_keys, so the syndication dedupe doesn't
+    # collapse them: this test is about the per-run cap, not dedupe.
+    JsonlArticleStore(raw_path).save(
+        [
+            _raw(
+                link=f"https://example.com/case-{n}",
+                title=f"Insider threat case {n}: data exfiltration via CVE-2024-1111{n}",
+            )
+            for n in range(3)
+        ]
+    )
 
     # First run without any provider: rows exist, no records (pre-feature corpus).
     run_processing(raw_path=raw_path, processed_path=processed_path)
@@ -292,6 +301,52 @@ def test_backfill_converts_existing_corpus_bounded_by_cap(monkeypatch, tmp_path:
     assert fake.calls == 3
     rows = JsonlProcessedStore(processed_path).load_all()
     assert all(r.forensics is not None for r in rows)
+
+
+def test_backfill_dedupes_syndicated_story(monkeypatch, tmp_path: Path) -> None:
+    """Same title+day under three domains = one story = one enrichment bill."""
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save(
+        [
+            _raw(link=f"https://outlet-{n}.example.com/story", source_id=f"outlet-{n}")
+            for n in range(3)
+        ]
+    )
+    # Rows land un-enriched (no provider), all sharing one story_key.
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    rows = JsonlProcessedStore(processed_path).load_all()
+    assert len({r.story_key for r in rows}) == 1
+
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 1  # one sibling billed, not three
+    rows = JsonlProcessedStore(processed_path).load_all()
+    assert sum(1 for r in rows if r.forensics is not None) == 1
+
+    # Siblings of an enriched story are never billed on later runs either.
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 1
+
+
+def test_fresh_ingest_dedupes_syndicated_story(monkeypatch, tmp_path: Path) -> None:
+    """Syndicated siblings arriving in one ingest bill once in the main loop."""
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save(
+        [
+            _raw(link=f"https://outlet-{n}.example.com/story", source_id=f"outlet-{n}")
+            for n in range(3)
+        ]
+    )
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 1
+    rows = JsonlProcessedStore(processed_path).load_all()
+    assert len(rows) == 3  # siblings still land as floor rows
+    assert sum(1 for r in rows if r.forensics is not None) == 1
 
 
 def test_backfill_upgrades_legacy_rows_when_enabled(monkeypatch, tmp_path: Path) -> None:

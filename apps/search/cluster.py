@@ -35,8 +35,11 @@ def _safe_timestamp(pub: datetime | None) -> float:
 
 
 def _primary_sort_key(hit: SearchHit) -> tuple:
-    # Prefer higher relevance, newer date, non-reddit sources
+    # Prefer the enriched member (it carries the analyst note — enrichment is
+    # deduped per story, so usually exactly one sibling has it), then higher
+    # relevance, newer date, non-reddit sources.
     return (
+        1 if (hit.ai_summary or "").strip() else 0,
         hit.relevance_score,
         _safe_timestamp(hit.published),
         0 if _is_redditish(hit.source_id) else 1,

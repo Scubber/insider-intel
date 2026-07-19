@@ -22,6 +22,7 @@ from shared.llm import get_discoverer_provider, get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
 from shared.schemas.articles import resolve_channel
 from shared.settings import get_settings
+from shared.utils.story_key import compute_story_key
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,18 @@ def run_processing(
     budget = SummaryBudget(cap - reserve)
     discover_budget = SummaryBudget(settings.discoverer_max_articles_per_run)
 
+    # Fresh-ingest syndication dedupe: outlets that publish the identical story
+    # under several domains (same title+day → same story_key) get one enrichment,
+    # not one per link — siblings are processed with a zero LLM budget and still
+    # land as floor rows. Filings are exempt: their keys are case-number based
+    # and dockets don't syndicate.
+    zero_budget = SummaryBudget(0)
+    enriched_story_keys: set[str] = {
+        a.story_key
+        for a in prior_by_link.values()
+        if a.forensics is not None and (a.story_key or "").strip()
+    }
+
     batch: list = []
     reprocessed_existing = False
     for raw in by_link.values():
@@ -96,10 +109,22 @@ def run_processing(
             result.articles_skipped += 1
             continue
 
+        is_filing = resolve_channel(raw.source_id, raw.channel) == "filings"
+        raw_key = (
+            ""
+            if is_filing
+            else compute_story_key(raw.title, raw.published, fallback=raw.ingested_at)
+        )
+        sibling_enriched = bool(raw_key) and raw_key in enriched_story_keys
         try:
             processed = process_article(
-                raw, prior=prior, budget=budget, discover_budget=discover_budget
+                raw,
+                prior=prior,
+                budget=zero_budget if sibling_enriched else budget,
+                discover_budget=zero_budget if sibling_enriched else discover_budget,
             )
+            if processed.forensics is not None and (processed.story_key or "").strip():
+                enriched_story_keys.add(processed.story_key)
             result.articles_processed += 1
             if processed.relevance_score < min_score:
                 result.articles_skipped += 1
@@ -179,10 +204,20 @@ def _backfill_summaries(
     fresh: list[ProcessedArticle] = []
     legacy: list[ProcessedArticle] = []
     filing_min_chars = settings.summarizer_filing_min_text_chars
+    # Syndication dedupe: one enrichment per story. ISMG-style outlets publish
+    # the identical article under several domains (distinct links, same
+    # story_key) — billing each sibling separately is pure waste, and the
+    # cluster card only surfaces one member anyway (pick_primary prefers the
+    # enriched one).
+    enriched_keys: set[str] = set()
+    for row in processed_store.load_all():
+        if row.forensics is not None and (row.story_key or "").strip():
+            enriched_keys.add(row.story_key)
     for row in processed_store.load_all():
         if (
             row.link in exclude_links
             or row.forensics is not None
+            or (row.story_key or "").strip() in enriched_keys
             or not article_qualifies(row, filing_min_chars=filing_min_chars)
         ):
             continue
@@ -213,6 +248,11 @@ def _backfill_summaries(
     for row in candidates:
         if budget.remaining <= 0:
             break
+        # Same-run syndication dedupe: the sort put the best representative of
+        # each story first; its siblings are skipped once it enriches.
+        row_key = (row.story_key or "").strip()
+        if row_key and row_key in enriched_keys:
+            continue
         summary, forensics, record, llm_hits = enrich_fields(
             title=row.title,
             source=row.source_id,
@@ -252,6 +292,8 @@ def _backfill_summaries(
                 }
             )
         )
+        if row_key:
+            enriched_keys.add(row_key)
         if len(updated) >= checkpoint_every:
             processed_store.upsert(updated)
             total_saved += len(updated)
@@ -287,7 +329,14 @@ def _backfill_discovery(
     if get_discoverer_provider(settings) is None or budget.remaining <= 0:
         return 0
 
+    # One discovery per story: syndicated siblings share a story_key, and the
+    # seed store counts corroboration by distinct story_key anyway — a second
+    # sibling adds spend, not signal.
+    discovered_keys: set[str] = set()
     candidates: list[ProcessedArticle] = []
+    for row in processed_store.load_all():
+        if row.discovery is not None and (row.story_key or "").strip():
+            discovered_keys.add(row.story_key)
     for row in processed_store.load_all():
         if row.link in exclude_links or row.discovery is not None:
             continue
@@ -303,10 +352,15 @@ def _backfill_discovery(
     for row in candidates:
         if budget.remaining <= 0:
             break
+        row_key = (row.story_key or "").strip()
+        if row_key and row_key in discovered_keys:
+            continue
         discovery = discover_case(forensics=row.forensics, settings=settings, budget=budget)
         if discovery is None:
             continue
         updated.append(row.model_copy(update={"discovery": discovery}))
+        if row_key:
+            discovered_keys.add(row_key)
 
     if updated:
         processed_store.upsert(updated)

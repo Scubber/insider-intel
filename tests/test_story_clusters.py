@@ -81,6 +81,19 @@ def test_pick_primary_prefers_non_reddit() -> None:
     assert pick_primary(members).source_id == "krebs"
 
 
+def test_pick_primary_prefers_enriched_member() -> None:
+    """The sibling carrying the analyst note fronts the cluster card, even when
+    a sibling scores higher — enrichment is deduped per story, so only one
+    member has the note and hiding it behind an un-enriched primary loses it."""
+    enriched = _hit(title="T", source_id="bankinfosecurity", score=0.3)
+    enriched.ai_summary = "An insider copied files before resigning."
+    members = [
+        _hit(title="T", source_id="govinfosecurity", score=0.9),
+        enriched,
+    ]
+    assert pick_primary(members).source_id == "bankinfosecurity"
+
+
 def test_cluster_handles_missing_published() -> None:
     """None / pre-epoch dates must not crash on Windows (timestamp OSError)."""
     bare = SearchHit(
