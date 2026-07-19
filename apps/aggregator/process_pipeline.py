@@ -125,11 +125,16 @@ def run_processing(
         exclude_links=batch_links,
     )
     # Recompute the novel-candidate view from the whole corpus (cheap, no LLM).
-    rebuild_technique_seeds(
-        processed_store,
-        store=TechniqueSeedStore(settings.technique_seeds_path),
-        generated_at=datetime.now(UTC),
-    )
+    # Best-effort: it's a derived cache, so a non-writable state dir degrades to
+    # a stale view rather than sinking the whole ingest run.
+    try:
+        rebuild_technique_seeds(
+            processed_store,
+            store=TechniqueSeedStore(settings.technique_seeds_path),
+            generated_at=datetime.now(UTC),
+        )
+    except OSError as exc:
+        logger.warning("Could not write technique-seeds view: %s", exc)
     result.finished_at = datetime.now(UTC)
     logger.info(
         "Processing complete: read=%d processed=%d saved=%d skipped=%d errors=%d",

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 
 from apps.aggregator.technique_seeds import TechniqueSeedStore
+from apps.search import service
 from apps.search.api import app
 from shared.schemas.discovery import (
     CandidateCatalogResponse,
@@ -14,6 +15,21 @@ from shared.schemas.discovery import (
     SupportingCase,
 )
 from shared.settings import Settings
+
+
+def _client(tmp_path, monkeypatch, seeds_path) -> TestClient:
+    """Fully isolate the API from repo default paths / the shared index cache."""
+    settings = Settings(
+        CORS_ORIGINS="http://127.0.0.1:5500",
+        PROCESSED_ARTICLES_PATH=str(tmp_path / "processed.jsonl"),
+        RAW_ARTICLES_PATH=str(tmp_path / "raw.jsonl"),
+        TECHNIQUE_SEEDS_PATH=str(seeds_path),
+    )
+    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.search.api.get_settings", lambda: settings)
+    monkeypatch.setattr(service, "_index", None)
+    monkeypatch.setattr(service, "_index_path", None)
+    return TestClient(app)
 
 
 def _seed_store(path) -> None:
@@ -48,13 +64,7 @@ def _seed_store(path) -> None:
 def test_candidates_endpoint_returns_store(tmp_path, monkeypatch) -> None:
     seeds_path = tmp_path / "seeds.json"
     _seed_store(seeds_path)
-    settings = Settings(
-        CORS_ORIGINS="http://127.0.0.1:5500",
-        TECHNIQUE_SEEDS_PATH=str(seeds_path),
-    )
-    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
-
-    with TestClient(app) as client:
+    with _client(tmp_path, monkeypatch, seeds_path) as client:
         resp = client.get("/techniques/candidates")
     assert resp.status_code == 200
     body = resp.json()
@@ -68,12 +78,7 @@ def test_candidates_endpoint_returns_store(tmp_path, monkeypatch) -> None:
 
 
 def test_candidates_endpoint_empty_when_no_store(tmp_path, monkeypatch) -> None:
-    settings = Settings(
-        CORS_ORIGINS="http://127.0.0.1:5500",
-        TECHNIQUE_SEEDS_PATH=str(tmp_path / "missing.json"),
-    )
-    monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
-    with TestClient(app) as client:
+    with _client(tmp_path, monkeypatch, tmp_path / "missing.json") as client:
         resp = client.get("/techniques/candidates")
     assert resp.status_code == 200
     assert resp.json()["candidate_count"] == 0
