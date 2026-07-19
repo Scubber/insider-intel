@@ -95,6 +95,40 @@ def _install(monkeypatch, provider) -> None:
     )
 
 
+def test_filing_with_full_text_qualifies_without_lexical_hit() -> None:
+    """Full-text court filings qualify even with no ITM/use-case signal."""
+    from shared.agents.summarize import qualifies
+
+    body = "x" * 1_500
+    # A real document body → qualifies on the filings branch.
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=body)
+    # A docket-entry stub → below the threshold → does not qualify.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text="INDICTMENT")
+    # News with the same empty signal never rides the filings branch.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=body)
+    # A lexical hit still qualifies regardless of channel/text.
+    assert qualifies(itm_hits=["IF002"], use_cases=[], channel="news", text="")
+
+
+def test_article_qualifies_reads_channel_and_text() -> None:
+    """The backfill-path wrapper resolves channel + clean_text from the row."""
+    from types import SimpleNamespace
+
+    from shared.agents.summarize import article_qualifies
+
+    entities = SimpleNamespace(itm_hits=[])
+    full = SimpleNamespace(
+        source_id="courtlistener-recap", clean_text="y" * 2_000, use_cases=[], entities=entities
+    )
+    stub = SimpleNamespace(
+        source_id="courtlistener-recap", clean_text="COMPLAINT", use_cases=[], entities=entities
+    )
+    assert article_qualifies(full)
+    assert not article_qualifies(stub)
+    # Threshold is tunable; 0 enriches every filing.
+    assert article_qualifies(stub, filing_min_chars=0)
+
+
 def test_provider_unset_is_a_noop() -> None:
     processed = process_article(_raw())
     assert processed.ai_summary is None

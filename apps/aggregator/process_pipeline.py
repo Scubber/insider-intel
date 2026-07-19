@@ -146,8 +146,13 @@ def _backfill_summaries(
     upgrade_legacy = settings.summarizer_upgrade_legacy
     fresh: list[ProcessedArticle] = []
     legacy: list[ProcessedArticle] = []
+    filing_min_chars = settings.summarizer_filing_min_text_chars
     for row in processed_store.load_all():
-        if row.link in exclude_links or row.forensics is not None or not article_qualifies(row):
+        if (
+            row.link in exclude_links
+            or row.forensics is not None
+            or not article_qualifies(row, filing_min_chars=filing_min_chars)
+        ):
             continue
         if row.case_record is None:
             fresh.append(row)

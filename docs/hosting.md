@@ -118,10 +118,19 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
   `SUMMARIZER_MODEL` overrides the model (a stronger model is worth it now that
   the call produces the full forensic record). Spend is capped by
-  `SUMMARIZER_MAX_ARTICLES_PER_RUN` (default 15/run); each article is billed
+  `SUMMARIZER_MAX_ARTICLES_PER_RUN` (library default 15/run; the **prod job is
+  set to 100/run** by `deploy-api.yml`, which also sets `--task-timeout=30m` so
+  the extra LLM calls don't sever the run — re-asserted on every deploy, so tune
+  those two in the workflow, not by hand); each article is billed
   once (results persist), the backfill sweep converts the existing corpus
   gradually, and `SUMMARIZER_UPGRADE_LEGACY` (default on) re-bills legacy
-  `case_record`-only rows once to add the forensic record.
+  `case_record`-only rows once to add the forensic record. Enrichment normally
+  fires only on articles with a lexical ITM/use-case hit; court filings (already
+  insider-pre-filtered by the CourtListener query) additionally qualify once
+  their full document body is present — `clean_text` ≥
+  `SUMMARIZER_FILING_MIN_TEXT_CHARS` (default 1500; set 0 to enrich every
+  filing) — so their stream cards get an analyst summary instead of the raw
+  docket description.
 - **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
   Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
 - **Endpoint guards:** `POST /extract/ttps` is rate-limited

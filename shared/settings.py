@@ -337,6 +337,19 @@ class Settings(BaseSettings):
             "until their source text changes."
         ),
     )
+    summarizer_filing_min_text_chars: int = Field(
+        default=1_500,
+        alias="SUMMARIZER_FILING_MIN_TEXT_CHARS",
+        description=(
+            "Court filings are pre-filtered as insider-relevant by the ingestion "
+            "query, so once their full document body is present (clean_text at or "
+            "above this length, not just a docket-entry stub) they qualify for "
+            "enrichment even without a lexical ITM/use-case hit — that is where an "
+            "analyst summary is most valuable. Set 0 to enrich all filings."
+        ),
+        ge=0,
+        le=200_000,
+    )
 
     def cors_origin_list(self) -> list[str]:
         return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
