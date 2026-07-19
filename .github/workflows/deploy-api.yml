@@ -73,7 +73,7 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --task-timeout=30m \
-            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
+            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=openai,sol,gemini,anthropic,xai##SUMMARIZER_MODEL=gpt-4o##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
       - name: Smoke test
         run: |
           URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')

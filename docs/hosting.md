@@ -120,7 +120,7 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   whichever provider keys you want *available* to the job (Secret Manager), and
   the chain uses whichever are present, in order. The chain itself lives in
   `deploy-api.yml` (**edit + merge, not gcloud** — the prod job is set to
-  `openai,gemini,anthropic`), so model/provider changes are versioned. A
+  `openai,sol,gemini,anthropic,xai`, `SUMMARIZER_MODEL=gpt-4o` on the primary), so model/provider changes are versioned. A
   third-party OpenAI-compatible model (e.g. SOL) plugs in via `LLM_CUSTOM_PROVIDERS`
   — a JSON map `{"sol": {"base_url": "…/v1", "model": "sol-5.6", "api_key_env":
   "SOL_API_KEY"}}` — then just name `sol` in the chain. `SUMMARIZER_MODEL`
@@ -157,7 +157,7 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
     chains, use a capable *long-context* model first for high-volume enrichment
     (the extraction is foundational — don't downgrade it) and your *strongest
     reasoning* model first for the subtler discovery/novelty judgment — e.g.
-    enrichment `openai,gemini,anthropic`, discovery `anthropic,openai,gemini`.
+    enrichment `openai,sol,gemini,anthropic,xai`, `SUMMARIZER_MODEL=gpt-4o` on the primary, discovery `anthropic,openai,gemini`.
     The "best model for forensics" is less about the provider than about
     hallucination-restraint + schema-following + long-context; when unsure, run a
     ~15-case bake-off comparing the JSON quality rather than guessing.
