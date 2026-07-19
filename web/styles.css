@@ -3291,3 +3291,42 @@ html[data-redacted="true"] .analyst-note * {
   accent-color: var(--accent);
   margin: 0;
 }
+
+/* Inline SHOW MORE / SHOW LESS bar under the clamped analyst note. Continues
+   the card box the same way .case-read-tail does. */
+.note-more {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0;
+  padding: 0.3rem 1.1rem 0.4rem;
+  background: var(--panel);
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.note-more:hover {
+  color: var(--focus);
+  background: var(--hover);
+}
+
+/* Copy-card button (⧉) — sits with the footer actions; the glyph carries it. */
+.article-copy-btn {
+  border: 0;
+  background: none;
+  padding: 0 0.2rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.article-copy-btn:hover {
+  color: var(--accent);
+}

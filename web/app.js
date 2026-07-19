@@ -3262,10 +3262,10 @@
     return Math.round(n <= 1 ? n * 100 : n);
   }
 
-  // Compact case-record fact strip for the analyst note (expanded view only —
-  // CSS hides it while the note is clamped). Mirrors the workbench dl.
-  function buildNoteFacts(record) {
-    if (!record) return null;
+  /** Case-record facts as [label, text] rows — shared by the note strip and
+   * the card copy text. */
+  function noteFactRows(record) {
+    if (!record) return [];
     const rows = [];
     const add = (label, value) => {
       const text = Array.isArray(value)
@@ -3278,6 +3278,13 @@
     add("EXFIL", record.exfil_channels);
     add("DETECTED VIA", record.detection_trigger);
     add("OUTCOME", record.outcome);
+    return rows;
+  }
+
+  // Compact case-record fact strip for the analyst note (expanded view only —
+  // CSS hides it while the note is clamped). Mirrors the workbench dl.
+  function buildNoteFacts(record) {
+    const rows = noteFactRows(record);
     if (!rows.length) return null;
     const dl = document.createElement("dl");
     dl.className = "case-record-list note-facts";
@@ -3461,14 +3468,21 @@
       });
       btn.appendChild(sources);
     }
-    // Shared expand toggle — the READ button and the mobile tap both use it.
+    // Shared expand toggle — the READ button, the note's SHOW MORE bar, and
+    // the mobile tap all use it.
     let expandBtn = null;
+    let moreBtn = null;
     const setCardExpanded = (expanded) => {
       li.classList.toggle("expanded", expanded);
-      if (!expandBtn) return;
-      expandBtn.textContent = expanded ? "CLOSE ⌃" : "READ ⌄";
-      expandBtn.title = expanded ? "Collapse" : "Read in place";
-      expandBtn.setAttribute("aria-label", expandBtn.title);
+      if (expandBtn) {
+        expandBtn.textContent = expanded ? "CLOSE ⌃" : "READ ⌄";
+        expandBtn.title = expanded ? "Collapse" : "Read in place";
+        expandBtn.setAttribute("aria-label", expandBtn.title);
+      }
+      if (moreBtn) {
+        moreBtn.textContent = expanded ? "SHOW LESS ⌃" : "SHOW MORE ⌄";
+        moreBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+      }
     };
 
     btn.addEventListener("click", () => {
@@ -3521,6 +3535,28 @@
     const actions = document.createElement("div");
     actions.className = "case-actions";
 
+    // Copy the whole card as plain text (tab, headline, meta, facts, full
+    // analyst note, link) — the ⧉ button mirrors code-block copy affordances.
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "article-copy-btn";
+    copyBtn.textContent = "⧉";
+    copyBtn.title = "Copy card text";
+    copyBtn.setAttribute("aria-label", copyBtn.title);
+    copyBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const lines = [
+        `${caseKindLabel(article)} ${caseNumber(article)} · ${article.title}`,
+        metaText.textContent,
+      ];
+      noteFactRows(article.case_record).forEach(([label, text]) => {
+        lines.push(`${label}: ${text}`);
+      });
+      if (analystText) lines.push("", "ANALYST NOTE", ...noteParas);
+      lines.push("", article.link);
+      copyText(lines.filter((l) => l != null).join("\n"), "Copied card");
+    });
+
     const boardBtn = document.createElement("button");
     boardBtn.type = "button";
     boardBtn.className = "article-board-btn";
@@ -3546,7 +3582,7 @@
     openBtn.setAttribute("aria-label", openBtn.title);
     openBtn.addEventListener("click", (event) => event.stopPropagation());
 
-    actions.append(boardBtn, openBtn);
+    actions.append(copyBtn, boardBtn, openBtn);
 
     if (expandable) {
       expandBtn = document.createElement("button");
@@ -3564,10 +3600,25 @@
 
     footer.append(terms, actions);
 
+    // Inline SHOW MORE bar under the clamped note — the discoverable twin of
+    // the footer READ button. A sibling of the card <button> (a control can't
+    // nest inside it), styled to continue the card box.
+    if (expandable && analystText) {
+      moreBtn = document.createElement("button");
+      moreBtn.type = "button";
+      moreBtn.className = "note-more";
+      moreBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setCardExpanded(!li.classList.contains("expanded"));
+      });
+      setCardExpanded(li.classList.contains("expanded"));
+    }
+
     // readTail sits between the card body and footer (a sibling of the button so
     // its OPEN ORIGINAL anchor is never nested inside the .article-item button);
     // it continues the card box and only shows when the row is .expanded.
     li.append(tab, btn);
+    if (moreBtn) li.appendChild(moreBtn);
     if (readTail) li.appendChild(readTail);
     li.appendChild(footer);
     return li;
