@@ -14,7 +14,27 @@ export type DossierTheme =
   | "Ice Archive"
   | "Earth Archive"
   | "Ultramarines"
-  | "Perplexity";
+  | "Perplexity"
+  | "Linear"
+  | "Vercel"
+  | "ChatGPT"
+  | "Doom 3"
+  | "Diablo II"
+  | "StarCraft"
+  | "Brood War"
+  | "GoldenEye 64"
+  | "Warcraft III"
+  | "Bleach"
+  | "Ultima Online"
+  | "Evangelion"
+  | "EVA-01"
+  | "EVA-02"
+  | "EVA-03"
+  | "Cryostat"
+  | "Vermillion Court"
+  | "Blood Ravens"
+  | "Black Templars"
+  | "Raven Guard";
 
 export interface DossierProviderProps {
   /** Visual theme; "dossier" (kraft-paper classified file) is the brand default. */
