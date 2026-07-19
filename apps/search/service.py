@@ -10,6 +10,7 @@ from apps.search.index import ArticleSearchIndex
 from shared.itm.index import load_itm_index
 from shared.schemas import (
     ArticleListResponse,
+    CandidateCatalogResponse,
     ControlRef,
     ItmCatalogResponse,
     SearchMode,
@@ -242,6 +243,13 @@ def list_use_cases() -> list[UseCaseInfo]:
     from shared.taxonomy.use_cases import USE_CASES
 
     return [UseCaseInfo(id=uc.id, label=uc.label, description=uc.description) for uc in USE_CASES]
+
+
+def candidate_catalog() -> CandidateCatalogResponse:
+    """The novel-technique candidate view (job-written state; read-only here)."""
+    from apps.aggregator.technique_seeds import TechniqueSeedStore
+
+    return TechniqueSeedStore(get_settings().technique_seeds_path).read()
 
 
 def itm_catalog(

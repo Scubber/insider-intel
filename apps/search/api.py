@@ -19,6 +19,7 @@ from apps.search.ratelimit import SlidingWindowLimiter
 from apps.search.ttp_extract import ExtractTtpsRequest, ExtractTtpsResponse, extract_ttps_for_links
 from shared.schemas import (
     ArticleListResponse,
+    CandidateCatalogResponse,
     ItmCatalogResponse,
     SearchHit,
     SearchMode,
@@ -140,6 +141,18 @@ def list_itm(
 ) -> ItmCatalogResponse:
     """Return slim Insider Threat Matrix™ catalog for UI filters."""
     return service.itm_catalog(source_id=source_id, channel=channel)
+
+
+@app.get("/techniques/candidates", response_model=CandidateCatalogResponse)
+def list_technique_candidates() -> CandidateCatalogResponse:
+    """Novel-technique candidates discovered across the corpus (auto-computed).
+
+    A materialized view rebuilt by the refresh job — behaviors the Insider
+    Threat Matrix does not yet cover, with a seed → corroborated → eligible
+    lifecycle. Eligible candidates are flagged for human review, never
+    auto-minted into a permanent technique id.
+    """
+    return service.candidate_catalog()
 
 
 @app.get("/articles", response_model=ArticleListResponse)

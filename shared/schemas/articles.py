@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from shared.schemas.discovery import CaseDiscovery
 from shared.schemas.forensics import PerCaseForensics
 
 # Provenance lane for stream filters (orthogonal to Insider Focus).
@@ -304,6 +305,10 @@ class ProcessedArticle(BaseModel):
     forensics: PerCaseForensics | None = Field(
         default=None,
         description="Ingest-time forensic reconstruction from the unified enricher LLM",
+    )
+    discovery: CaseDiscovery | None = Field(
+        default=None,
+        description="Second-pass novel-technique assessment (independent of forensics)",
     )
     embedding: list[float] | None = None
 

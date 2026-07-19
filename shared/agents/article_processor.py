@@ -46,12 +46,15 @@ class ArticleProcessState(TypedDict, total=False):
     ai_summary: str | None
     case_record: dict[str, Any] | None
     forensics: dict[str, Any] | None
+    discovery: dict[str, Any] | None
     # Carry-forward inputs so reprocessing never re-bills the LLM
     prior_ai_summary: str | None
     prior_case_record: dict[str, Any] | None
     prior_forensics: dict[str, Any] | None
+    prior_discovery: dict[str, Any] | None
     prior_llm_itm_hits: list[dict[str, Any]]
     budget: Any
+    discover_budget: Any
     embedding: list[float]
     processed: dict[str, Any] | None
     error: str | None
@@ -178,6 +181,35 @@ def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
     }
 
 
+def _node_discover(state: ArticleProcessState) -> ArticleProcessState:
+    """Second LLM pass: map the forensic record's methods vs the ITM or flag
+    novel behavior. Reads state["forensics"] (never the raw filing); never raises.
+    """
+    prior_discovery = state.get("prior_discovery")
+    if prior_discovery is not None:
+        # Cache hit: discovery already paid for on a previous run — reuse it.
+        return {"discovery": prior_discovery}
+
+    forensics_payload = state.get("forensics")
+    if not forensics_payload:
+        return {"discovery": None}
+
+    from shared.agents.discover import discover_case
+    from shared.schemas.forensics import PerCaseForensics
+
+    settings = get_settings()
+    budget = state.get("discover_budget") or SummaryBudget(
+        settings.discoverer_max_articles_per_run
+    )
+    try:
+        forensics = PerCaseForensics.model_validate(forensics_payload)
+        discovery = discover_case(forensics=forensics, settings=settings, budget=budget)
+    except Exception as exc:  # noqa: BLE001 — discovery must never sink an article
+        logger.warning("Discovery node failed: %s", exc)
+        return {"discovery": None}
+    return {"discovery": discovery.model_dump(mode="json") if discovery is not None else None}
+
+
 def _node_embed(state: ArticleProcessState) -> ArticleProcessState:
     text = state.get("clean_text") or ""
     embedding = get_default_embedder().embed(text)
@@ -226,6 +258,7 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         ai_summary=state.get("ai_summary"),
         case_record=state.get("case_record"),
         forensics=state.get("forensics"),
+        discovery=state.get("discovery"),
         embedding=state.get("embedding"),
     )
     return {"processed": processed.model_dump(mode="json")}
@@ -239,6 +272,7 @@ def build_article_processor():
     graph.add_node("score", _node_score)
     graph.add_node("classify", _node_classify)
     graph.add_node("summarize", _node_summarize)
+    graph.add_node("discover", _node_discover)
     graph.add_node("embed", _node_embed)
     graph.add_node("assemble", _node_assemble)
 
@@ -247,7 +281,8 @@ def build_article_processor():
     graph.add_edge("extract_entities", "score")
     graph.add_edge("score", "classify")
     graph.add_edge("classify", "summarize")
-    graph.add_edge("summarize", "embed")
+    graph.add_edge("summarize", "discover")
+    graph.add_edge("discover", "embed")
     graph.add_edge("embed", "assemble")
     graph.add_edge("assemble", END)
 
@@ -269,6 +304,7 @@ def process_article(
     *,
     prior: ProcessedArticle | None = None,
     budget: SummaryBudget | None = None,
+    discover_budget: SummaryBudget | None = None,
 ) -> ProcessedArticle:
     """Run the LangGraph processor on a single raw article.
 
@@ -283,6 +319,8 @@ def process_article(
     initial: dict[str, Any] = {"raw": raw.model_dump(mode="json")}
     if budget is not None:
         initial["budget"] = budget
+    if discover_budget is not None:
+        initial["discover_budget"] = discover_budget
     prior_forensics = getattr(prior, "forensics", None) if prior is not None else None
     upgrade_legacy = get_settings().summarizer_upgrade_legacy and prior_forensics is None
     if prior is not None and not upgrade_legacy:
@@ -292,6 +330,12 @@ def process_article(
             initial["prior_case_record"] = prior.case_record.model_dump(mode="json")
         if prior_forensics is not None:
             initial["prior_forensics"] = prior_forensics.model_dump(mode="json")
+        # Discovery carries independently: a row can have forensics but no
+        # discovery yet (added after forensics) — leave prior_discovery unset so
+        # the node runs discovery fresh on the carried-forward forensics.
+        prior_discovery = getattr(prior, "discovery", None)
+        if prior_discovery is not None:
+            initial["prior_discovery"] = prior_discovery.model_dump(mode="json")
         prior_llm = [
             hit.model_dump(mode="json")
             for hit in prior.entities.itm_hits

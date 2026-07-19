@@ -239,6 +239,7 @@
     lastTotalIndexed: 0,
     itmCatalog: null,
     itmCatalogKey: "",
+    candidates: null,
     matrixQuery: "",
     matrixMode: "techniques",
     selectedTechniqueId: null,
@@ -2072,6 +2073,126 @@
     return state.itmCatalog;
   }
 
+  async function ensureCandidates(force = false) {
+    if (!force && state.candidates) return state.candidates;
+    try {
+      state.candidates = await api("/techniques/candidates");
+    } catch (err) {
+      state.candidates = { candidates: [], candidate_count: 0, counts_by_status: {} };
+      setStatus(`Novel candidates unavailable (${err.message})`);
+    }
+    return state.candidates;
+  }
+
+  const CANDIDATE_STATUS_LABELS = {
+    eligible: "Eligible for review",
+    corroborated: "Corroborated",
+    seed: "Seed",
+  };
+
+  // Novel-technique candidates discovered across the corpus, grouped by
+  // lifecycle status (eligible first). Read-only: the promotion is auto-computed
+  // by the refresh job; eligible ones are flagged, never minted.
+  function renderCandidates() {
+    const container = els.matrixColumns;
+    if (!container) return;
+    container.innerHTML = "";
+    const data = state.candidates || {};
+    const candidates = data.candidates || [];
+    if (!candidates.length) {
+      container.innerHTML =
+        '<p class="matrix-empty">No novel candidates yet — they accrue as the corpus is enriched and discovered.</p>';
+      return;
+    }
+    const order = ["eligible", "corroborated", "seed"];
+    const groups = new Map(order.map((s) => [s, []]));
+    candidates.forEach((c) => {
+      if (!groups.has(c.status)) groups.set(c.status, []);
+      groups.get(c.status).push(c);
+    });
+    order.forEach((status) => {
+      const items = groups.get(status) || [];
+      if (!items.length) return;
+      const col = document.createElement("details");
+      col.className = "matrix-col";
+      col.open = status !== "seed";
+      const summary = document.createElement("summary");
+      summary.className = "matrix-col-summary";
+      summary.innerHTML = `${CANDIDATE_STATUS_LABELS[status] || status} <span class="matrix-col-count">${items.length}</span>`;
+      col.appendChild(summary);
+      items.forEach((c) => col.appendChild(candidateCard(c)));
+      container.appendChild(col);
+    });
+  }
+
+  function candidateCard(c) {
+    const card = document.createElement("article");
+    card.className = "candidate-card";
+
+    const head = document.createElement("p");
+    head.className = "candidate-head";
+    const label = document.createElement("span");
+    label.className = "candidate-label";
+    label.textContent = c.label || "(unnamed behavior)";
+    head.appendChild(label);
+    const strength = document.createElement("span");
+    strength.className = `candidate-strength candidate-strength-${c.evidence_strength || "weak"}`;
+    strength.textContent = c.evidence_strength || "weak";
+    head.appendChild(strength);
+    if (c.flagged_for_review) {
+      const flag = document.createElement("span");
+      flag.className = "candidate-flag";
+      flag.textContent = "flagged for review";
+      head.appendChild(flag);
+    }
+    card.appendChild(head);
+
+    if (c.portable_behavior) {
+      const body = document.createElement("p");
+      body.className = "candidate-behavior";
+      body.textContent = c.portable_behavior;
+      card.appendChild(body);
+    }
+
+    const meta = document.createElement("p");
+    meta.className = "candidate-meta";
+    const parts = [`${c.corroboration_count || 0} case(s)`];
+    if (c.nearest_itm_id) {
+      parts.push(`nearest ITM ${c.nearest_itm_id} (${Math.round((c.max_itm_similarity || 0) * 100)}%)`);
+    }
+    meta.textContent = parts.join(" · ");
+    card.appendChild(meta);
+
+    const cases = c.supporting_cases || [];
+    if (cases.length) {
+      const ul = document.createElement("ul");
+      ul.className = "candidate-cases";
+      cases.slice(0, 6).forEach((sc) => {
+        const li = document.createElement("li");
+        if (sc.link) {
+          const a = document.createElement("a");
+          a.href = sc.link;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = sc.title || sc.link;
+          li.appendChild(a);
+        } else {
+          li.textContent = sc.title || "";
+        }
+        if (sc.claim_status) {
+          const chip = document.createElement("span");
+          chip.className = "candidate-claim-chip";
+          chip.textContent = sc.claim_status;
+          li.appendChild(document.createTextNode(" "));
+          li.appendChild(chip);
+        }
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+    }
+    return card;
+  }
+
   function mergeArticleLists(...lists) {
     const byLink = new Map();
     lists.flat().forEach((item) => {
@@ -2682,15 +2803,26 @@
     renderItmRail();
     const mode = state.matrixMode || "techniques";
     const isTech = mode === "techniques";
-    if (els.matrixColumns) els.matrixColumns.hidden = !isTech;
-    if (els.matrixControlList) els.matrixControlList.hidden = isTech;
+    const isCandidates = mode === "candidates";
+    const showColumns = isTech || isCandidates;
+    if (els.matrixColumns) els.matrixColumns.hidden = !showColumns;
+    if (els.matrixControlList) els.matrixControlList.hidden = showColumns;
     if (els.matrixQ) {
       els.matrixQ.placeholder =
         mode === "techniques"
           ? "Search techniques (id or title)…"
           : mode === "detections"
             ? "Search detections (id or title)…"
-            : "Search preventions (id or title)…";
+            : mode === "candidates"
+              ? "Search novel candidates…"
+              : "Search preventions (id or title)…";
+    }
+    if (isCandidates) {
+      if (els.matrixColumns) {
+        els.matrixColumns.innerHTML = '<p class="matrix-empty">Loading candidates…</p>';
+      }
+      ensureCandidates().then(renderCandidates);
+      return;
     }
     document.querySelectorAll("#matrix-mode-tabs .matrix-mode-tab").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.matrixMode === mode);

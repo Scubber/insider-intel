@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from shared.llm.base import (
     ClassificationResult,
     ClassifierProvider,
+    DiscovererProvider,
     ItmRef,
     SummarizerProvider,
 )
@@ -25,14 +26,17 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ClassificationResult",
     "ClassifierProvider",
+    "DiscovererProvider",
     "ItmRef",
     "SummarizerProvider",
     "get_classifier_provider",
+    "get_discoverer_provider",
     "get_summarizer_provider",
 ]
 
 _PROVIDER_CACHE: dict[str, ClassifierProvider | None] = {}
 _SUMMARIZER_CACHE: dict[str, SummarizerProvider | None] = {}
+_DISCOVERER_CACHE: dict[str, DiscovererProvider | None] = {}
 
 _OPENAI_COMPAT_DEFAULT_BASE = "http://localhost:11434/v1"
 _OPENAI_COMPAT_DEFAULT_MODEL = "llama3.1:8b"
@@ -169,7 +173,63 @@ def get_summarizer_provider(settings: Settings) -> SummarizerProvider | None:
     return instance
 
 
+def get_discoverer_provider(settings: Settings) -> DiscovererProvider | None:
+    """Provider for the novel-technique discovery pass.
+
+    Provider/model default to the summarizer's when the ``DISCOVERER_*`` settings
+    are unset, so ops only has to configure one key. Cached per resolved
+    provider name (with a ``d:`` prefix so it never collides with the summarizer
+    cache, which caches by the bare provider name).
+    """
+    provider = (settings.discoverer_llm_provider or settings.summarizer_llm_provider or "none")
+    provider = provider.strip().lower()
+    if provider in ("", "none"):
+        return None
+    cache_key = f"d:{provider}"
+    if cache_key in _DISCOVERER_CACHE:
+        return _DISCOVERER_CACHE[cache_key]
+
+    model_override = settings.discoverer_model or settings.summarizer_model
+    instance: DiscovererProvider | None = None
+    if provider == "anthropic":
+        if not settings.anthropic_api_key:
+            logger.warning("DISCOVERER_LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY unset")
+        else:
+            try:
+                from shared.llm.anthropic_provider import AnthropicDiscoverer
+
+                instance = AnthropicDiscoverer(
+                    api_key=settings.anthropic_api_key,
+                    model=model_override or settings.anthropic_model,
+                )
+            except ImportError:
+                logger.warning("anthropic package not installed; run: uv add anthropic")
+    elif provider == "openai":
+        from shared.llm.openai_provider import OpenAICompatDiscoverer
+
+        base_url, model, api_key = resolve_openai_compat(settings)
+        instance = OpenAICompatDiscoverer(
+            base_url=base_url, model=model_override or model, api_key=api_key
+        )
+    elif provider == "gemini":
+        if not settings.gemini_api_key:
+            logger.warning("DISCOVERER_LLM_PROVIDER=gemini but GEMINI_API_KEY unset")
+        else:
+            from shared.llm.openai_provider import OpenAICompatDiscoverer
+
+            base_url, model, api_key = resolve_gemini_compat(settings)
+            instance = OpenAICompatDiscoverer(
+                base_url=base_url, model=model_override or model, api_key=api_key
+            )
+    else:
+        logger.warning("Unknown DISCOVERER_LLM_PROVIDER=%r; discovery stays off", provider)
+
+    _DISCOVERER_CACHE[cache_key] = instance
+    return instance
+
+
 def reset_provider_cache() -> None:
     """Test hook."""
     _PROVIDER_CACHE.clear()
     _SUMMARIZER_CACHE.clear()
+    _DISCOVERER_CACHE.clear()

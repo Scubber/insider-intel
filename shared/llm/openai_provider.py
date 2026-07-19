@@ -10,8 +10,10 @@ import httpx
 
 from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
+    DISCOVER_SYSTEM_PROMPT,
     ENRICH_SYSTEM_PROMPT,
     ClassificationResult,
+    build_discover_prompt,
     build_enrich_prompt,
     build_user_prompt,
 )
@@ -19,6 +21,8 @@ from shared.llm.base import (
 # Unified enrichment produces a large JSON (analyst note + full forensic
 # record + hunt queries); the summary path needs the headroom.
 ENRICH_MAX_TOKENS = 4000
+# Discovery output is just per-method assessments — far smaller than enrich.
+DISCOVER_MAX_TOKENS = 2000
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +134,44 @@ class OpenAICompatSummarizer:
         if content is None:
             return None
         return _parse_json_object(content, label="Enricher")
+
+
+class OpenAICompatDiscoverer:
+    """Second-pass novel-technique discovery over the forensic record."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        max_input_chars: int = 12000,
+        timeout: float = 90.0,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._max_input_chars = max_input_chars
+        self._timeout = timeout
+        self.model_name = model
+
+    def discover_techniques(self, *, forensics_json: str, itm_shortlist: str) -> dict | None:
+        content = _chat_completion(
+            base_url=self._base_url,
+            model=self._model,
+            api_key=self._api_key,
+            timeout=self._timeout,
+            system=DISCOVER_SYSTEM_PROMPT,
+            user=build_discover_prompt(
+                forensics_json=forensics_json,
+                itm_shortlist=itm_shortlist,
+                max_chars=self._max_input_chars,
+            ),
+            max_tokens=DISCOVER_MAX_TOKENS,
+        )
+        if content is None:
+            return None
+        return _parse_json_object(content, label="Discoverer")
 
 
 def _parse_json_object(content: str, *, label: str) -> dict | None:
