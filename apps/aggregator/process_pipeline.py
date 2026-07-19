@@ -192,6 +192,7 @@ def _backfill_summaries(
             legacy.append(row)
     if not fresh and not legacy:
         return 0
+
     # Court filings first, then newest: a filing's `published` is its filing
     # date (often historical), so pure recency starves the court cases — the
     # richest forensic sources — behind every fresh news day.
@@ -255,6 +256,11 @@ def _backfill_summaries(
             processed_store.upsert(updated)
             total_saved += len(updated)
             updated = []
+            logger.info(
+                "Backfill checkpoint: %d saved this run, %d budget remaining",
+                total_saved,
+                budget.remaining,
+            )
 
     if updated:
         processed_store.upsert(updated)
