@@ -452,6 +452,49 @@
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
+  // View tweaks (design-handoff pack): density / layout / redaction, stored
+  // per-user and applied as data-* attributes on <html> (see the pre-paint
+  // stamp in index.html; styles.css carries the matching rules).
+  const TWEAKS = [
+    {
+      key: "insider-intel-density",
+      attr: "data-density",
+      el: document.getElementById("density-select"),
+      values: new Set(["compact", "standard", "comfy"]),
+      fallback: "standard",
+    },
+    {
+      key: "insider-intel-layout",
+      attr: "data-layout",
+      el: document.getElementById("layout-select"),
+      values: new Set(["split", "stacked"]),
+      fallback: "split",
+    },
+  ];
+  TWEAKS.forEach(({ key, attr, el, values, fallback }) => {
+    if (!el) return;
+    const apply = (raw) => {
+      const value = values.has(raw) ? raw : fallback;
+      if (value === fallback) document.documentElement.removeAttribute(attr);
+      else document.documentElement.setAttribute(attr, value);
+      localStorage.setItem(key, value);
+      el.value = value;
+    };
+    apply(localStorage.getItem(key) || fallback);
+    el.addEventListener("change", () => apply(el.value));
+  });
+  const redactToggle = document.getElementById("redact-toggle");
+  if (redactToggle) {
+    const applyRedacted = (on) => {
+      if (on) document.documentElement.setAttribute("data-redacted", "true");
+      else document.documentElement.removeAttribute("data-redacted");
+      localStorage.setItem("insider-intel-redacted", String(on));
+      redactToggle.checked = on;
+    };
+    applyRedacted(localStorage.getItem("insider-intel-redacted") === "true");
+    redactToggle.addEventListener("change", () => applyRedacted(redactToggle.checked));
+  }
+
   function setStatus(text) {
     els.status.textContent = text;
   }

@@ -28,10 +28,19 @@
     <link rel="stylesheet" href="./styles.css" />
     <script>
       (function () {
-        var allowed = ["dossier", "cnn-lite", "midnight", "phosphor"];
-        var t = localStorage.getItem("insider-intel-theme") || "Dossier Sage";
-        if (allowed.indexOf(t) === -1) t = "dossier";
-        document.documentElement.setAttribute("data-theme", t);
+        // Pre-paint stamps: theme + view tweaks. app.js re-validates against
+        // its THEMES set; an unknown stored name only costs one repaint.
+        var root = document.documentElement;
+        root.setAttribute(
+          "data-theme",
+          localStorage.getItem("insider-intel-theme") || "Dossier Sage"
+        );
+        var density = localStorage.getItem("insider-intel-density");
+        if (density === "compact" || density === "comfy") root.setAttribute("data-density", density);
+        if (localStorage.getItem("insider-intel-layout") === "stacked")
+          root.setAttribute("data-layout", "stacked");
+        if (localStorage.getItem("insider-intel-redacted") === "true")
+          root.setAttribute("data-redacted", "true");
       })();
     </script>
   </head>
@@ -250,6 +259,23 @@
                 <option value="Cryostat">Cryostat</option>
                 <option value="Vermillion Court">Vermillion Court</option>
               </select>
+            </div>
+            <div class="theme-picker view-tweaks" id="view-tweaks">
+              <label class="filter-label" for="density-select">Density</label>
+              <select id="density-select" aria-label="Text density">
+                <option value="compact">Compact</option>
+                <option value="standard">Standard</option>
+                <option value="comfy">Comfy</option>
+              </select>
+              <label class="filter-label" for="layout-select">Layout</label>
+              <select id="layout-select" aria-label="Pane layout">
+                <option value="split">Split</option>
+                <option value="stacked">Stacked</option>
+              </select>
+              <label class="filter-label redact-toggle" for="redact-toggle">
+                <input type="checkbox" id="redact-toggle" aria-label="Redact case details" />
+                Redact
+              </label>
             </div>
           </div>
         </div>
