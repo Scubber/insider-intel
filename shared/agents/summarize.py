@@ -55,16 +55,41 @@ class SummaryBudget:
         return max(0, self.limit - self.spent)
 
 
-def qualifies(*, itm_hits: list, use_cases: list[str]) -> bool:
-    """Spend LLM calls only where the article shows some insider signal."""
-    return bool(itm_hits) or bool(use_cases)
+def qualifies(
+    *,
+    itm_hits: list,
+    use_cases: list[str],
+    channel: str = "",
+    text: str = "",
+    filing_min_chars: int = 1_500,
+) -> bool:
+    """Spend LLM calls only where the article shows some insider signal.
+
+    A lexical ITM hit or a matched use-case always qualifies. Court filings
+    are additionally pre-filtered as insider-relevant by the CourtListener
+    ingestion query, so once their full document body is present — ``text``
+    (clean_text) at or above ``filing_min_chars``, not just a docket-entry
+    stub — they qualify even without a lexical hit. That is exactly the card
+    where an analyst summary matters and the raw docket text reads worst.
+    """
+    if itm_hits or use_cases:
+        return True
+    if channel == "filings" and len((text or "").strip()) >= max(1, filing_min_chars):
+        return True
+    return False
 
 
-def article_qualifies(article) -> bool:
+def article_qualifies(article, *, filing_min_chars: int = 1_500) -> bool:
     """`qualifies` for a ProcessedArticle-shaped object (backfill path)."""
     entities = getattr(article, "entities", None)
     hits = list(getattr(entities, "itm_hits", None) or [])
-    return qualifies(itm_hits=hits, use_cases=list(getattr(article, "use_cases", None) or []))
+    return qualifies(
+        itm_hits=hits,
+        use_cases=list(getattr(article, "use_cases", None) or []),
+        channel=resolve_channel(getattr(article, "source_id", "") or ""),
+        text=getattr(article, "clean_text", "") or "",
+        filing_min_chars=filing_min_chars,
+    )
 
 
 _TECH_VECTORS: list[tuple[str, list[float]]] | None = None
@@ -237,7 +262,13 @@ def enrich_fields(
     provider = get_summarizer_provider(settings)
     if provider is None:
         return empty
-    if not qualifies(itm_hits=lexical_hits, use_cases=use_cases):
+    if not qualifies(
+        itm_hits=lexical_hits,
+        use_cases=use_cases,
+        channel=resolve_channel(source),
+        text=text,
+        filing_min_chars=settings.summarizer_filing_min_text_chars,
+    ):
         return empty
     if not budget.take():
         return empty
