@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from shared.itm.controls import resolve_controls
-from shared.llm import ItmRef, get_summarizer_provider
+from shared.llm import ItmRef, get_summarizer_chain
 from shared.schemas.articles import CaseRecord, ExtractedEntities, ItmHit, resolve_channel
 from shared.schemas.forensics import (
     PerCaseForensics,
@@ -259,8 +259,8 @@ def enrich_fields(
         None,
         [],
     )
-    provider = get_summarizer_provider(settings)
-    if provider is None:
+    chain = get_summarizer_chain(settings)
+    if not chain:
         return empty
     if not qualifies(
         itm_hits=lexical_hits,
@@ -284,21 +284,34 @@ def enrich_fields(
     text = (text or "")[:cap]
 
     candidates = build_itm_candidates(text, lexical_hits)
-    try:
-        raw = provider.extract_case(
-            title=title, source=source, text=text, itm_candidates=candidates
-        )
-    except Exception as exc:  # noqa: BLE001 — a failed enrichment must not sink the article
-        logger.warning("Enricher failed for %r: %s", title[:80], exc)
-        return empty
+    # Fallback chain: try each provider until one returns a usable reply. Budget
+    # is taken once above, so fallbacks after a failure never cost extra spend.
+    raw = None
+    used_model = None
+    for provider in chain:
+        try:
+            raw = provider.extract_case(
+                title=title, source=source, text=text, itm_candidates=candidates
+            )
+        except Exception as exc:  # noqa: BLE001 — a failed provider must not sink the article
+            logger.warning(
+                "Enricher %s failed for %r: %s",
+                getattr(provider, "model_name", "?"),
+                title[:80],
+                exc,
+            )
+            raw = None
+        if raw:
+            used_model = getattr(provider, "model_name", None)
+            break
     if not raw:
-        logger.warning("Enricher returned nothing for %r", title[:80])
+        logger.warning("All enrichment providers failed/empty for %r", title[:80])
         return empty
 
     forensics = parse_forensics_json(raw, link="", title=title).model_copy(
         update={
             "extracted_at": datetime.now(UTC),
-            "model": getattr(provider, "model_name", None),
+            "model": used_model,
         }
     )
     summary = (str(raw.get("ai_summary") or "")).strip() or None

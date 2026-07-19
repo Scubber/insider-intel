@@ -86,13 +86,13 @@ def _fake_enrich(title: str):
 def _install(monkeypatch, discoverer, *, enrich_title="US v. Example") -> None:
     monkeypatch.setattr("shared.agents.article_processor.enrich_fields", _fake_enrich(enrich_title))
     monkeypatch.setattr(
-        "shared.agents.discover.get_discoverer_provider", lambda settings: discoverer
+        "shared.agents.discover.get_discoverer_chain", lambda settings: [discoverer]
     )
 
 
 def test_provider_unset_is_a_noop(monkeypatch) -> None:
     monkeypatch.setattr("shared.agents.article_processor.enrich_fields", _fake_enrich("t"))
-    monkeypatch.setattr("shared.agents.discover.get_discoverer_provider", lambda settings: None)
+    monkeypatch.setattr("shared.agents.discover.get_discoverer_chain", lambda settings: [])
     processed = process_article(_raw())
     assert processed.forensics is not None  # enriched
     assert processed.discovery is None  # but no discovery provider
@@ -129,7 +129,7 @@ def test_non_insider_case_never_calls_discoverer(monkeypatch) -> None:
 
     fake = FakeDiscoverer()
     monkeypatch.setattr("shared.agents.article_processor.enrich_fields", _enrich)
-    monkeypatch.setattr("shared.agents.discover.get_discoverer_provider", lambda settings: fake)
+    monkeypatch.setattr("shared.agents.discover.get_discoverer_chain", lambda settings: [fake])
     processed = process_article(_raw())
     assert fake.calls == 0
     assert processed.discovery is None

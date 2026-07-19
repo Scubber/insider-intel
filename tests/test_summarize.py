@@ -86,8 +86,10 @@ class ExplodingEnricher(FakeEnricher):
 
 
 def _install(monkeypatch, provider) -> None:
+    # enrich_fields iterates the provider chain; the backfill gate still checks
+    # get_summarizer_provider, so patch both to the fake.
     monkeypatch.setattr(
-        "shared.agents.summarize.get_summarizer_provider", lambda settings: provider
+        "shared.agents.summarize.get_summarizer_chain", lambda settings: [provider]
     )
     monkeypatch.setattr(
         "apps.aggregator.process_pipeline.get_summarizer_provider",
