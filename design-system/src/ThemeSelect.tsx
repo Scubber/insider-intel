@@ -1,12 +1,19 @@
 import type { DossierTheme } from "./DossierProvider";
 
-export const DOSSIER_THEMES: DossierTheme[] = ["dossier", "midnight", "phosphor", "cnn-lite"];
+export const DOSSIER_THEMES: DossierTheme[] = [
+  "dossier",
+  "midnight",
+  "phosphor",
+  "cnn-lite",
+  "diablo",
+];
 
 const THEME_LABELS: Record<DossierTheme, string> = {
   dossier: "Dossier",
   midnight: "Midnight",
   phosphor: "Phosphor",
   "cnn-lite": "CNN Lite",
+  diablo: "Diablo",
 };
 
 export interface ThemeSelectProps {

@@ -170,6 +170,41 @@
   --radius: 0;
 }
 
+/* Diablo — black iron and embers: hellfire red accents, parchment-gold ink,
+   a faint furnace glow rising from the bottom of the page. */
+[data-theme="diablo"] {
+  --ink: #e6cfa3;
+  --muted: #97794f;
+  --paper: #0c0505;
+  --panel: rgba(26, 12, 10, 0.94);
+  --line: rgba(210, 90, 50, 0.22);
+  --signal: #ff5a1f;
+  --signal-soft: rgba(255, 90, 31, 0.14);
+  --accent: #d31c24;
+  --accent-soft: rgba(211, 28, 36, 0.16);
+  --focus: #ff5a1f;
+  --btn-fg: #170807;
+  --input-bg: rgba(30, 14, 10, 0.92);
+  --side-bg: rgba(20, 9, 7, 0.6);
+  --hover: rgba(255, 90, 31, 0.08);
+  --brand-glow: 0 0 18px rgba(255, 70, 20, 0.35);
+  --atmosphere:
+    radial-gradient(ellipse 90% 45% at 50% 108%, rgba(214, 60, 15, 0.32), transparent 60%),
+    radial-gradient(ellipse 55% 35% at 12% -5%, rgba(179, 18, 27, 0.14), transparent 55%),
+    linear-gradient(180deg, #120707 0%, #0c0505 55%, #070302 100%);
+  --scanlines: none;
+  --font-display: Georgia, "Times New Roman", Times, serif;
+  --font-body: Georgia, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  --brand-weight: 700;
+  --brand-tracking: 0.02em;
+  --brand-transform: uppercase;
+  --headline-weight: 700;
+  --headline-tracking: -0.01em;
+  --headline-transform: none;
+  --radius: 0;
+}
+
 /* lite.cnn.com — white page, CNN red, serif headlines, sparse chrome */
 [data-theme="cnn-lite"] {
   --ink: #0c0c0c;
