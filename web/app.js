@@ -157,6 +157,7 @@
     itmList: document.getElementById("itm-list"),
     detectionList: document.getElementById("detection-list"),
     copyPlaintext: document.getElementById("copy-plaintext"),
+    showCaseReport: document.getElementById("show-case-report"),
     boardToggle: document.getElementById("board-toggle"),
     boardCount: document.getElementById("board-count"),
     boardList: document.getElementById("board-list"),
@@ -1665,21 +1666,23 @@
     return lines.join("\n");
   }
 
-  async function runBoardExtract() {
-    const entries = boardEntries();
+  // Shared by the board "Extract TTPs" and the single-case "Show hunt report":
+  // both POST the same /extract/ttps endpoint (which accepts 1–40 links) and
+  // render into the same report view. Since the report is assembled from
+  // stored forensics, one case is as cheap as many.
+  async function extractAndRenderReport(entries, { button, busyLabel, idleLabel, noun }) {
     if (!entries.length) {
-      setStatus("Add articles to the extraction board first");
+      setStatus("Nothing to build a report from");
       return;
     }
-    // Mobile: show Workbench immediately so Extracting… / report are visible.
+    // Mobile: show Workbench immediately so Building… / report are visible.
     setActivePane("workbench");
-    const extractBtn = els.boardExtract;
-    const prevLabel = extractBtn ? extractBtn.textContent : "";
-    if (extractBtn) {
-      extractBtn.disabled = true;
-      extractBtn.textContent = "Extracting…";
+    const prevLabel = button ? button.textContent : "";
+    if (button) {
+      button.disabled = true;
+      button.textContent = busyLabel;
     }
-    setStatus(`Building hunt report · ${entries.length} case(s)…`);
+    setStatus(`Building hunt report · ${entries.length} ${noun}…`);
     try {
       let report;
       try {
@@ -1705,22 +1708,53 @@
       }
       renderTtpReport(report);
       if (report.mode === "llm") {
-        setStatus(`Hunt report · stored case forensics · ${entries.length} article(s)`);
+        setStatus(`Hunt report · stored case forensics · ${entries.length} ${noun}`);
       } else if (!String(els.status?.textContent || "").startsWith("Extract offline")) {
         setStatus(
-          `Hunt report · seed pack · ${entries.length} article(s)` +
+          `Hunt report · seed pack · ${entries.length} ${noun}` +
             (report.detail ? ` · ${report.detail}` : ""),
         );
       }
     } catch (err) {
       console.error(err);
-      setStatus(`Extract failed: ${err && err.message ? err.message : err}`);
+      setStatus(`Report failed: ${err && err.message ? err.message : err}`);
     } finally {
-      if (extractBtn) {
-        extractBtn.textContent = prevLabel || "Extract TTPs";
-        extractBtn.disabled = boardEntries().length === 0;
+      if (button) {
+        button.textContent = prevLabel || idleLabel;
+        button.disabled = false;
       }
     }
+  }
+
+  async function runBoardExtract() {
+    const entries = boardEntries();
+    if (!entries.length) {
+      setStatus("Add articles to the extraction board first");
+      return;
+    }
+    await extractAndRenderReport(entries, {
+      button: els.boardExtract,
+      busyLabel: "Extracting…",
+      idleLabel: "Extract TTPs",
+      noun: "article(s)",
+    });
+    if (els.boardExtract) els.boardExtract.disabled = boardEntries().length === 0;
+  }
+
+  // Single selected case → its own hunt report (assembled from stored
+  // forensics; no board needed). Swaps to the same report view.
+  async function runCaseReport() {
+    const article = selectedArticle();
+    if (!article) {
+      setStatus("Select a case first");
+      return;
+    }
+    await extractAndRenderReport([article], {
+      button: els.showCaseReport,
+      busyLabel: "Building…",
+      idleLabel: "Show hunt report",
+      noun: "case",
+    });
   }
 
   function clustersFromResponse(data) {
@@ -3832,6 +3866,12 @@
 
   if (els.copyPlaintext) {
     els.copyPlaintext.addEventListener("click", () => runCopyExport("plaintext"));
+  }
+
+  if (els.showCaseReport) {
+    els.showCaseReport.addEventListener("click", () => {
+      runCaseReport().catch((err) => setStatus(`Report failed: ${err.message}`));
+    });
   }
 
   if (els.boardToggle) {
