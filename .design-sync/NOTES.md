@@ -38,3 +38,11 @@
   live corpus but that's cosmetic.
 - Remote Google Fonts import means offline renders fall back to
   Georgia/Courier New.
+
+- 2026-07 Dossier Theme Pack: 9 handoff themes (Dossier Sage/Soft/Fog, four
+  Archives, Ultramarines, Perplexity) landed verbatim in both
+  `web/themes.css` and `design-system/src/styles.css` — theme names contain
+  spaces and are case-sensitive (`data-theme="Dossier Sage"`). IBM Plex Mono
+  added to both Google Fonts imports (Ultramarines/Perplexity mono). The
+  pack's density/layout/redaction "tweak controls" are NOT yet implemented
+  in the site — follow-up work if wanted.

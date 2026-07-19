@@ -402,7 +402,22 @@
 
   const THEME_KEY = "insider-intel-theme";
   const DEFAULT_THEME = "dossier";
-  const THEMES = new Set(["dossier", "cnn-lite", "midnight", "phosphor", "diablo"]);
+  const THEMES = new Set([
+    "dossier",
+    "cnn-lite",
+    "midnight",
+    "phosphor",
+    "diablo",
+    "Dossier Sage",
+    "Dossier Soft",
+    "Dossier Fog",
+    "Air Archive",
+    "Cinder Archive",
+    "Ice Archive",
+    "Earth Archive",
+    "Ultramarines",
+    "Perplexity",
+  ]);
   const themeSelect = document.getElementById("theme-select");
 
   function applyTheme(name) {

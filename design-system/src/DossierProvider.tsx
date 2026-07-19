@@ -1,6 +1,20 @@
 import type { ReactNode } from "react";
 
-export type DossierTheme = "dossier" | "midnight" | "phosphor" | "cnn-lite" | "diablo";
+export type DossierTheme =
+  | "dossier"
+  | "midnight"
+  | "phosphor"
+  | "cnn-lite"
+  | "diablo"
+  | "Dossier Sage"
+  | "Dossier Soft"
+  | "Dossier Fog"
+  | "Air Archive"
+  | "Cinder Archive"
+  | "Ice Archive"
+  | "Earth Archive"
+  | "Ultramarines"
+  | "Perplexity";
 
 export interface DossierProviderProps {
   /** Visual theme; "dossier" (kraft-paper classified file) is the brand default. */

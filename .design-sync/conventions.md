@@ -11,7 +11,10 @@ Wrap every screen in exactly one `DossierProvider` — it stamps the theme's
 CSS tokens (`data-theme`), the paper/atmosphere background, and the body
 typeface. Without it, components sit on an unthemed background (token
 fallbacks still apply, but the page loses its paper). Themes: `dossier`
-(default), `midnight`, `phosphor`, `cnn-lite`.
+(default), `midnight`, `phosphor`, `cnn-lite`, `diablo`, plus the Dossier
+Theme Pack: `Dossier Sage`, `Dossier Soft`, `Dossier Fog`, `Air Archive`,
+`Cinder Archive`, `Ice Archive`, `Earth Archive`, `Ultramarines`,
+`Perplexity`.
 
 ```tsx
 import { DossierProvider, Panel, CaseCard, ItmChip, Chip, ActionButton } from "insider-intel-dossier-ui";
@@ -48,7 +51,7 @@ states, technique bars, primary buttons). Corners are near-square
 
 ## Where the truth lives
 
-Read `styles.css` (tokens for all four themes + every `ds-*` component
+Read `styles.css` (tokens for every theme + every `ds-*` component
 class) before inventing styling; per-component APIs and examples are in
 each component's doc card. Components: DossierProvider, Panel, CaseCard,
 FactList, Chip, ItmChip, Pill, ActionButton, CopyButton, TechniqueSection,

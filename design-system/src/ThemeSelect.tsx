@@ -6,6 +6,15 @@ export const DOSSIER_THEMES: DossierTheme[] = [
   "phosphor",
   "cnn-lite",
   "diablo",
+  "Dossier Sage",
+  "Dossier Soft",
+  "Dossier Fog",
+  "Air Archive",
+  "Cinder Archive",
+  "Ice Archive",
+  "Earth Archive",
+  "Ultramarines",
+  "Perplexity",
 ];
 
 const THEME_LABELS: Record<DossierTheme, string> = {
@@ -14,6 +23,15 @@ const THEME_LABELS: Record<DossierTheme, string> = {
   phosphor: "Phosphor",
   "cnn-lite": "CNN Lite",
   diablo: "Diablo",
+  "Dossier Sage": "Dossier Sage",
+  "Dossier Soft": "Dossier Soft",
+  "Dossier Fog": "Dossier Fog",
+  "Air Archive": "Air Archive",
+  "Cinder Archive": "Cinder Archive",
+  "Ice Archive": "Ice Archive",
+  "Earth Archive": "Earth Archive",
+  Ultramarines: "Ultramarines",
+  Perplexity: "Perplexity",
 };
 
 export interface ThemeSelectProps {
