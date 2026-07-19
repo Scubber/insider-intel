@@ -14,7 +14,7 @@ import json
 import logging
 
 from shared.agents.summarize import SummaryBudget, _technique_vectors
-from shared.llm import get_discoverer_provider
+from shared.llm import get_discoverer_chain
 from shared.schemas.discovery import CaseDiscovery, parse_discovery_json
 from shared.schemas.forensics import PerCaseForensics
 from shared.settings import Settings
@@ -88,8 +88,8 @@ def discover_case(
     """
     if not forensics.is_insider_case or not forensics.methods:
         return None
-    provider = get_discoverer_provider(settings)
-    if provider is None:
+    chain = get_discoverer_chain(settings)
+    if not chain:
         return None
     if not budget.take():
         return None
@@ -98,11 +98,25 @@ def discover_case(
         forensics.model_dump(mode="json", exclude_none=True), ensure_ascii=False
     )
     shortlist = build_discovery_shortlist(forensics)
-    try:
-        raw = provider.discover_techniques(forensics_json=forensics_json, itm_shortlist=shortlist)
-    except Exception as exc:  # noqa: BLE001 — provider failures never sink an article
-        logger.warning("Discovery call failed for %s: %s", forensics.link, exc)
-        return None
+    # Fallback chain: budget taken once, so retries after a failure are free.
+    raw = None
+    used_model = None
+    for provider in chain:
+        try:
+            raw = provider.discover_techniques(
+                forensics_json=forensics_json, itm_shortlist=shortlist
+            )
+        except Exception as exc:  # noqa: BLE001 — provider failures never sink an article
+            logger.warning(
+                "Discovery %s failed for %s: %s",
+                getattr(provider, "model_name", "?"),
+                forensics.link,
+                exc,
+            )
+            raw = None
+        if raw is not None:
+            used_model = getattr(provider, "model_name", None)
+            break
     if raw is None:
         return None
 
@@ -114,7 +128,7 @@ def discover_case(
     discovery = discovery.model_copy(
         update={
             "discovered_at": datetime.now(UTC),
-            "model": getattr(provider, "model_name", None),
+            "model": used_model,
         }
     )
     novel = len(discovery.novel_assessments())

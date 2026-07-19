@@ -111,13 +111,22 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   Reports get richer as the corpus is enriched (floor fallback until then).
 - **Ingest enricher (opt-in — the only LLM use):** one unified call per
   qualifying article writes the analyst note + forensic record that the hunt
-  report reads. Set the provider env + key on the **job only**. Providers:
-  `anthropic | openai | gemini`:
-  `gcloud run jobs update corpus-refresh --region us-east1
-  --update-env-vars SUMMARIZER_LLM_PROVIDER=anthropic
-  --update-secrets ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest`.
-  `SUMMARIZER_MODEL` overrides the model (a stronger model is worth it now that
-  the call produces the full forensic record). Spend is capped by
+  report reads. `SUMMARIZER_LLM_PROVIDER` is an **ordered fallback chain**
+  (comma-separated) — each provider is tried until one succeeds, and any provider
+  without a key is skipped, so one being down / out of credits / rate-limited no
+  longer drops the whole pass to floor. Names: `anthropic | openai | gemini |
+  xai` (Grok — set `XAI_API_KEY`, exact model via `XAI_MODEL`) `| any key in
+  LLM_CUSTOM_PROVIDERS`. **Fund once, fallback automatically:** attach
+  whichever provider keys you want *available* to the job (Secret Manager), and
+  the chain uses whichever are present, in order. The chain itself lives in
+  `deploy-api.yml` (**edit + merge, not gcloud** — the prod job is set to
+  `openai,gemini,anthropic`), so model/provider changes are versioned. A
+  third-party OpenAI-compatible model (e.g. SOL) plugs in via `LLM_CUSTOM_PROVIDERS`
+  — a JSON map `{"sol": {"base_url": "…/v1", "model": "sol-5.6", "api_key_env":
+  "SOL_API_KEY"}}` — then just name `sol` in the chain. `SUMMARIZER_MODEL`
+  overrides the model of the **primary** provider (fallbacks keep their
+  per-provider default: `ANTHROPIC_MODEL`, `GEMINI_MODEL`, the OpenAI-compat
+  model). Spend is capped by
   `SUMMARIZER_MAX_ARTICLES_PER_RUN` (library default 15/run; the **prod job is
   set to 100/run** by `deploy-api.yml`, which also sets `--task-timeout=30m` so
   the extra LLM calls don't sever the run — re-asserted on every deploy, so tune
@@ -137,13 +146,21 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   job clusters novel behaviors across the corpus into a candidate view
   (`data/state/technique_seeds.json`, served at `GET /techniques/candidates`)
   with a seed → corroborated → eligible lifecycle (eligible = flagged for
-  review, never auto-minted). Config mirrors the enricher and **inherits the
-  summarizer's provider/key when unset** — set only the cap to turn it on:
-  `gcloud run jobs update corpus-refresh --region us-east1
-  --update-env-vars DISCOVERER_MAX_ARTICLES_PER_RUN=15` (0 disables it;
-  `DISCOVERER_LLM_PROVIDER`/`DISCOVERER_MODEL` override the inherited defaults).
-  This roughly **doubles** ingest LLM spend, so it is capped and backfills over
-  refreshes exactly like enrichment.
+  review, never auto-minted). `DISCOVERER_LLM_PROVIDER` is the same ordered
+  fallback-chain syntax as the enricher and **inherits the summarizer chain when
+  unset**. To turn it on declaratively, set `DISCOVERER_LLM_PROVIDER` (and the
+  cap) in `deploy-api.yml`; `DISCOVERER_MODEL` overrides the primary provider's
+  model. This roughly **doubles** ingest LLM spend, so it is capped
+  (`DISCOVERER_MAX_ARTICLES_PER_RUN`, 0 disables) and backfills over refreshes
+  exactly like enrichment.
+  - **Model split (recommended):** because enrichment and discovery are separate
+    chains, use a capable *long-context* model first for high-volume enrichment
+    (the extraction is foundational — don't downgrade it) and your *strongest
+    reasoning* model first for the subtler discovery/novelty judgment — e.g.
+    enrichment `openai,gemini,anthropic`, discovery `anthropic,openai,gemini`.
+    The "best model for forensics" is less about the provider than about
+    hallucination-restraint + schema-following + long-context; when unsure, run a
+    ~15-case bake-off comparing the JSON quality rather than guessing.
 - **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
   Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
 - **Endpoint guards:** `POST /extract/ttps` is rate-limited

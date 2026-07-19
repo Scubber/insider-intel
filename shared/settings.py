@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -276,7 +278,7 @@ class Settings(BaseSettings):
     classifier_llm_provider: str = Field(
         default="none",
         alias="CLASSIFIER_LLM_PROVIDER",
-        description="none | anthropic | openai | gemini (openai = any compatible endpoint)",
+        description="none | anthropic | openai | gemini | xai (openai = any compatible endpoint)",
     )
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_MODEL")
@@ -294,6 +296,19 @@ class Settings(BaseSettings):
     # endpoint, so it shares the openai-compat client code.
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    # xAI Grok — served through xAI's OpenAI-compatible API, so it shares the
+    # openai-compat client. Set XAI_MODEL to the exact Grok model you want.
+    xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
+    xai_model: str = Field(default="grok-4", alias="XAI_MODEL")
+    # Extra OpenAI-compatible providers usable by name in any *_LLM_PROVIDER chain
+    # (e.g. a third-party model like SOL). JSON map, one entry per provider:
+    #   {"sol": {"base_url": "https://…/v1", "model": "sol-5.6", "api_key_env": "SOL_API_KEY"}}
+    # The key is read from the named env var (kept a secret), never inlined here.
+    llm_custom_providers: str = Field(
+        default="",
+        alias="LLM_CUSTOM_PROVIDERS",
+        description="JSON map of custom OpenAI-compatible providers, keyed by chain name",
+    )
     classify_llm_channels: str = Field(
         default="social",
         alias="CLASSIFY_LLM_CHANNELS",
@@ -306,7 +321,12 @@ class Settings(BaseSettings):
     summarizer_llm_provider: str = Field(
         default="none",
         alias="SUMMARIZER_LLM_PROVIDER",
-        description="none | anthropic | openai | gemini (openai = any compatible endpoint)",
+        description=(
+            "Ordered fallback chain, comma-separated — each is tried until one "
+            "succeeds (e.g. 'openai,gemini,anthropic'). Names: anthropic | openai "
+            "| gemini | xai | any key in LLM_CUSTOM_PROVIDERS. none/empty disables. A "
+            "provider with no key is skipped, so an unfunded entry is harmless."
+        ),
     )
     summarizer_model: str | None = Field(
         default=None,
@@ -360,10 +380,11 @@ class Settings(BaseSettings):
         default="",
         alias="DISCOVERER_LLM_PROVIDER",
         description=(
-            "Provider for the novel-technique discovery pass (anthropic|openai|gemini). "
-            "Empty inherits SUMMARIZER_LLM_PROVIDER so ops sets one key. This is a "
-            "SECOND LLM call per qualifying case on top of enrichment — it roughly "
-            "doubles ingest LLM spend; bound it with DISCOVERER_MAX_ARTICLES_PER_RUN."
+            "Ordered fallback chain for the discovery pass (same syntax as "
+            "SUMMARIZER_LLM_PROVIDER). Empty inherits the summarizer chain so ops "
+            "sets one place. This is a SECOND LLM call per qualifying case on top "
+            "of enrichment — it roughly doubles ingest LLM spend; bound it with "
+            "DISCOVERER_MAX_ARTICLES_PER_RUN."
         ),
     )
     discoverer_model: str | None = Field(
@@ -381,6 +402,41 @@ class Settings(BaseSettings):
 
     def cors_origin_list(self) -> list[str]:
         return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
+
+    @staticmethod
+    def _provider_chain(value: str) -> list[str]:
+        """Parse a comma-separated provider chain, dropping none/empty entries."""
+        out: list[str] = []
+        for part in (value or "").split(","):
+            name = part.strip().lower()
+            if name and name != "none" and name not in out:
+                out.append(name)
+        return out
+
+    def summarizer_provider_chain(self) -> list[str]:
+        return self._provider_chain(self.summarizer_llm_provider)
+
+    def discoverer_provider_chain(self) -> list[str]:
+        """Discovery chain; inherits the summarizer chain when unset."""
+        chain = self._provider_chain(self.discoverer_llm_provider)
+        return chain or self.summarizer_provider_chain()
+
+    def custom_llm_provider_map(self) -> dict[str, dict]:
+        """Named custom OpenAI-compatible providers from LLM_CUSTOM_PROVIDERS JSON.
+
+        Malformed JSON degrades to {} rather than raising — a bad config disables
+        the custom providers, it doesn't sink the process.
+        """
+        raw = (self.llm_custom_providers or "").strip()
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(k).strip().lower(): v for k, v in data.items() if isinstance(v, dict)}
 
     def feedly_stream_id_list(self) -> list[str]:
         return [part.strip() for part in self.feedly_stream_ids.split(",") if part.strip()]
