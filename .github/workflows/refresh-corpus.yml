@@ -40,5 +40,5 @@ jobs:
           gcloud logging read "resource.labels.job_name=corpus-refresh" \
             --project "${PROJECT_ID}" --freshness=12m \
             --format='value(textPayload)' \
-            | grep -iE 'PACER|backfill|throttled|summar|case record|anthropic|gemini|openai|LLM|X ingest|Skipping|reloaded|429|\[OK\]|\[FAIL\]' \
-            | head -80 || true
+            | grep -iE 'PACER|backfill|throttled|summar|enrich|discover|technique seeds|case record|anthropic|gemini|openai|xai|LLM|X ingest|Skipping|reloaded|429|\[OK\]|\[FAIL\]' \
+            | head -120 || true

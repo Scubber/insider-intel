@@ -123,10 +123,12 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `openai,gemini,anthropic`), so model/provider changes are versioned. A
   third-party OpenAI-compatible model (e.g. SOL) plugs in via `LLM_CUSTOM_PROVIDERS`
   — a JSON map `{"sol": {"base_url": "…/v1", "model": "sol-5.6", "api_key_env":
-  "SOL_API_KEY"}}` — then just name `sol` in the chain. `SUMMARIZER_MODEL`
-  overrides the model of the **primary** provider (fallbacks keep their
-  per-provider default: `ANTHROPIC_MODEL`, `GEMINI_MODEL`, the OpenAI-compat
-  model). Spend is capped by
+  "SOL_API_KEY"}}` — then just name `sol` in the chain. **Prefer per-provider
+  model vars in a mixed chain** (`ANTHROPIC_MODEL`, `OPENAI_COMPAT_MODEL`,
+  `GEMINI_MODEL`, `XAI_MODEL`): the role-level `SUMMARIZER_MODEL` override only
+  hits the chain's *first named* provider, so a stale value there can hand the
+  wrong vendor's model id to the primary — which is why `deploy-api.yml` asserts
+  it empty and pins `OPENAI_COMPAT_MODEL=gpt-4o` instead. Spend is capped by
   `SUMMARIZER_MAX_ARTICLES_PER_RUN` (library default 15/run; the **prod job is
   set to 100/run** by `deploy-api.yml`, which also sets `--task-timeout=30m` so
   the extra LLM calls don't sever the run — re-asserted on every deploy, so tune
@@ -140,7 +142,8 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `SUMMARIZER_FILING_MIN_TEXT_CHARS` (default 1500; set 0 to enrich every
   filing) — so their stream cards get an analyst summary instead of the raw
   docket description.
-- **Novel-technique discovery (opt-in — a SECOND LLM call per case):** after
+- **Novel-technique discovery (a SECOND LLM call per case — on whenever
+  enrichment is):** after
   enrichment, a discovery pass reads the forensic record (never the raw filing)
   and, per method, maps it to an ITM technique or flags it novel; the refresh
   job clusters novel behaviors across the corpus into a candidate view
@@ -148,11 +151,12 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   with a seed → corroborated → eligible lifecycle (eligible = flagged for
   review, never auto-minted). `DISCOVERER_LLM_PROVIDER` is the same ordered
   fallback-chain syntax as the enricher and **inherits the summarizer chain when
-  unset**. To turn it on declaratively, set `DISCOVERER_LLM_PROVIDER` (and the
-  cap) in `deploy-api.yml`; `DISCOVERER_MODEL` overrides the primary provider's
-  model. This roughly **doubles** ingest LLM spend, so it is capped
-  (`DISCOVERER_MAX_ARTICLES_PER_RUN`, 0 disables) and backfills over refreshes
-  exactly like enrichment.
+  unset — so discovery is active by default once enrichment is configured**
+  (cap defaults to 15/run). Both the chain and the cap are asserted explicitly
+  in `deploy-api.yml`; set `DISCOVERER_MAX_ARTICLES_PER_RUN=0` there to turn the
+  pass off. `DISCOVERER_MODEL` overrides the primary provider's
+  model. This roughly **doubles** ingest LLM spend, so it is capped and
+  backfills over refreshes exactly like enrichment.
   - **Model split (recommended):** because enrichment and discovery are separate
     chains, use a capable *long-context* model first for high-volume enrichment
     (the extraction is foundational — don't downgrade it) and your *strongest
