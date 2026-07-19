@@ -38,3 +38,12 @@
   live corpus but that's cosmetic.
 - Remote Google Fonts import means offline renders fall back to
   Georgia/Courier New.
+
+- 2026-07 Dark Diablo Dossier pack: ALL 29 handoff themes (the README's 9
+  "deployed" plus the 20 extras — Diablo II, StarCraft/Brood War, EVA units,
+  Space Marine chapters, Linear/Vercel/ChatGPT, etc.) landed verbatim in both
+  `web/themes.css` and `design-system/src/styles.css`. Theme names contain
+  spaces and are case-sensitive (`data-theme="Dossier Sage"`). Extra Google
+  Fonts added to both imports: IBM Plex Mono, Space Grotesk, Space Mono,
+  Cormorant Garamond, Xanh Mono. The pack's density/layout/redaction "tweak
+  controls" are NOT yet implemented in the site — follow-up work if wanted.

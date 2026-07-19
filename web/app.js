@@ -401,8 +401,43 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const DEFAULT_THEME = "dossier";
-  const THEMES = new Set(["dossier", "cnn-lite", "midnight", "phosphor", "diablo"]);
+  const DEFAULT_THEME = "Dossier Sage";
+  const THEMES = new Set([
+    "dossier",
+    "cnn-lite",
+    "midnight",
+    "phosphor",
+    "diablo",
+    "Dossier Sage",
+    "Dossier Soft",
+    "Dossier Fog",
+    "Air Archive",
+    "Cinder Archive",
+    "Ice Archive",
+    "Earth Archive",
+    "Ultramarines",
+    "Blood Ravens",
+    "Black Templars",
+    "Raven Guard",
+    "Perplexity",
+    "Linear",
+    "Vercel",
+    "ChatGPT",
+    "Doom 3",
+    "Diablo II",
+    "StarCraft",
+    "Brood War",
+    "GoldenEye 64",
+    "Warcraft III",
+    "Bleach",
+    "Ultima Online",
+    "Evangelion",
+    "EVA-01",
+    "EVA-02",
+    "EVA-03",
+    "Cryostat",
+    "Vermillion Court",
+  ]);
   const themeSelect = document.getElementById("theme-select");
 
   function applyTheme(name) {
