@@ -34,6 +34,30 @@ ObservableChannel = Literal[
     "email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human"
 ]
 
+# Whether an observable is a mechanical consequence of the stated action or a
+# defender's inference. Unlabeled observables default to the weaker claim.
+ObservableBasis = Literal["mechanically_implied", "analyst_inference"]
+OBSERVABLE_BASES = ("mechanically_implied", "analyst_inference")
+
+# How strongly the SOURCE frames a method — an allegation must never read as a
+# finding. Unlabeled methods default to "unclear".
+CLAIM_STATUSES = ("alleged", "admitted", "adjudicated", "reported", "unclear")
+
+# Document provenance / legal stage, validated against these sets; anything
+# else falls back to "unknown".
+SOURCE_TYPES = ("court_filing", "news", "blog", "social", "press_release", "unknown")
+LEGAL_POSTURES = (
+    "indictment",
+    "complaint",
+    "plea",
+    "conviction",
+    "sentencing",
+    "civil_suit",
+    "settlement",
+    "none",
+    "unknown",
+)
+
 
 class CaseObservable(BaseModel):
     """One concrete trace a behavior leaves in a defender's environment."""
@@ -44,6 +68,10 @@ class CaseObservable(BaseModel):
         description="Log source / record it appears in, e.g. 'email gateway logs'",
     )
     channel: ObservableChannel = "network"
+    basis: ObservableBasis = Field(
+        default="analyst_inference",
+        description="mechanically_implied (guaranteed by the action) vs analyst_inference",
+    )
 
 
 class CaseMethod(BaseModel):
@@ -53,6 +81,14 @@ class CaseMethod(BaseModel):
     tools: list[str] = Field(default_factory=list)
     target_data: str | None = None
     quantity: str | None = None
+    claim_status: Literal["alleged", "admitted", "adjudicated", "reported", "unclear"] = Field(
+        default="unclear",
+        description="How the source frames the action — allegation vs proven finding",
+    )
+    evidence_quote: str = Field(
+        default="",
+        description="Short verbatim excerpt from the source supporting this action",
+    )
     observables: list[CaseObservable] = Field(default_factory=list)
 
 
@@ -76,6 +112,12 @@ class PerCaseForensics(BaseModel):
 
     link: str
     title: str
+    source_type: str = Field(
+        default="unknown", description="Document provenance: court_filing|news|blog|social|…"
+    )
+    legal_posture: str = Field(
+        default="unknown", description="Legal stage: indictment|complaint|plea|conviction|…"
+    )
     actor_profile: str = ""
     timeline: list[str] = Field(default_factory=list)
     methods: list[CaseMethod] = Field(default_factory=list)
@@ -153,11 +195,13 @@ def parse_observables(value: object, *, limit: int = 6) -> list[CaseObservable]:
         if not desc:
             continue
         channel = str(obs.get("channel") or "").strip().lower()
+        basis = str(obs.get("basis") or "").strip().lower()
         observables.append(
             CaseObservable(
                 description=desc,
                 artifact=_s(obs.get("artifact"), 120),
                 channel=channel if channel in OBSERVABLE_CHANNELS else "network",
+                basis=basis if basis in OBSERVABLE_BASES else "analyst_inference",
             )
         )
     return observables
@@ -194,12 +238,15 @@ def _coerce_methods(value: object) -> list[CaseMethod]:
         action = _s(raw.get("action"), 400)
         if not action:
             continue
+        claim = str(raw.get("claim_status") or "").strip().lower()
         methods.append(
             CaseMethod(
                 action=action,
                 tools=_slist(raw.get("tools"), 6, 80),
                 target_data=_s(raw.get("target_data"), 200) or None,
                 quantity=_s(raw.get("quantity"), 100) or None,
+                claim_status=claim if claim in CLAIM_STATUSES else "unclear",
+                evidence_quote=_s(raw.get("evidence_quote"), 400),
                 observables=parse_observables(raw.get("observables")),
             )
         )
@@ -218,9 +265,13 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         confidence = float(data.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
+    source_type = str(data.get("source_type") or "").strip().lower()
+    legal_posture = str(data.get("legal_posture") or "").strip().lower()
     return PerCaseForensics(
         link=link,
         title=title,
+        source_type=source_type if source_type in SOURCE_TYPES else "unknown",
+        legal_posture=legal_posture if legal_posture in LEGAL_POSTURES else "unknown",
         actor_profile=_s(data.get("actor_profile"), 300),
         timeline=_slist(data.get("timeline"), 10, 300),
         methods=_coerce_methods(data.get("methods")),

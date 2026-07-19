@@ -44,17 +44,22 @@ def _forensics(link: str, title: str) -> PerCaseForensics:
         link=link,
         title=title,
         is_insider_case=True,
+        source_type="court_filing",
+        legal_posture="indictment",
         actor_profile="departing engineer — repo access",
         methods=[
             CaseMethod(
                 action="synced 9,700 design files to a personal Dropbox",
                 tools=["Dropbox"],
                 quantity="9,700 files",
+                claim_status="alleged",
+                evidence_quote="synced roughly 9,700 files to a personal Dropbox",
                 observables=[
                     CaseObservable(
                         description="Bulk uploads to dropbox.com",
                         artifact="proxy/egress logs",
                         channel="cloud",
+                        basis="analyst_inference",
                     )
                 ],
             )
@@ -93,7 +98,11 @@ def test_report_assembles_from_stored_forensics(tmp_path) -> None:
     section = next(s for s in report.techniques if s.id == "IF002")
     # Bullets come from the stored method actions.
     assert section.cases[0].bullets == ["synced 9,700 design files to a personal Dropbox"]
+    # Legal posture rides onto the case evidence for the UI badge.
+    assert section.cases[0].legal_posture == "indictment"
     assert section.observables and section.observables[0].channel == "cloud"
+    # The analyst-inference basis survives assembly into the section.
+    assert section.observables[0].basis == "analyst_inference"
     # Hunt queries precomputed at ingest surface on the section.
     assert section.detection.hunt_queries[0].logic.startswith("index=proxy")
 
@@ -154,7 +163,18 @@ def test_parse_forensics_json_coerces_and_never_raises() -> None:
     f = parse_forensics_json(
         {
             "actor_profile": 42,
-            "methods": [{"action": 1}, "nope", {"action": "ok", "observables": "bad"}],
+            "source_type": "tabloid",  # not allowed → unknown
+            "legal_posture": "vibes",  # not allowed → unknown
+            "methods": [
+                {"action": 1},
+                "nope",
+                {
+                    "action": "ok",
+                    "observables": "bad",
+                    "claim_status": "definitely",  # invalid → unclear
+                    "evidence_quote": 99,  # non-str → ""
+                },
+            ],
             "hunt_queries": [{"logic": "index=x"}, "junk"],
             "is_insider_case": "yes",
             "confidence": "high",
@@ -165,6 +185,10 @@ def test_parse_forensics_json_coerces_and_never_raises() -> None:
     )
     assert [m.action for m in f.methods] == ["ok"]
     assert f.methods[0].observables == []  # bad observables dropped
+    assert f.methods[0].claim_status == "unclear"  # invalid enum → default
+    assert f.methods[0].evidence_quote == ""  # non-str → default
+    assert f.source_type == "unknown"  # invalid enum → default
+    assert f.legal_posture == "unknown"  # invalid enum → default
     assert f.hunt_queries[0].logic == "index=x"
     assert f.confidence == 0.0  # non-numeric coerced
     assert f.exfil_channels == ["USB"]

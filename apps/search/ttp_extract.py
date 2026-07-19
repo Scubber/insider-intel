@@ -185,6 +185,7 @@ class TtpCaseEvidence(BaseModel):
     link: str = ""
     bullets: list[str] = Field(default_factory=list)
     tradecraft: str = ""
+    legal_posture: str = ""
 
 
 class TtpTechniqueSection(BaseModel):
@@ -505,8 +506,14 @@ def _mechanical_sections(
                 section = TtpTechniqueSection(id=tid, title=title, description=description)
                 merged[tid] = section
             if not any(c.link == record.link for c in section.cases):
+                posture = getattr(record, "legal_posture", "") or ""
                 section.cases.append(
-                    TtpCaseEvidence(title=record.title, link=record.link, bullets=bullets)
+                    TtpCaseEvidence(
+                        title=record.title,
+                        link=record.link,
+                        bullets=bullets,
+                        legal_posture="" if posture == "unknown" else posture,
+                    )
                 )
             seen = {(o.description.lower(), o.channel) for o in section.observables}
             for obs in observables:

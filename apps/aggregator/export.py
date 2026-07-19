@@ -14,7 +14,9 @@ from shared.schemas import ProcessedArticle
 
 logger = logging.getLogger(__name__)
 
-EXPORT_SCHEMA_VERSION = "insider-intel.export.v3"
+# v4: forensics gains evidence-rigor fields — method claim_status/evidence_quote,
+# observable basis, and per-case source_type/legal_posture.
+EXPORT_SCHEMA_VERSION = "insider-intel.export.v4"
 DEFAULT_EXPORT_DIR = "dist/export"
 
 
