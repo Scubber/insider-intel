@@ -60,9 +60,9 @@ jobs:
         #  - SUMMARIZER_LLM_PROVIDER: ordered enrichment fallback chain; each is
         #    tried until one succeeds, and any provider without a key is skipped,
         #    so unfunded entries are harmless. Order: anthropic > openai > sol >
-        #    gemini > xai. Each needs its key mapped to the job (Secret Manager);
-        #    `sol` also needs an LLM_CUSTOM_PROVIDERS entry (base_url/model/
-        #    api_key_env) — until then it is skipped. Reorder by editing this line.
+        #    gemini > xai. Each needs its key mapped to the job (Secret Manager).
+        #    `sol` is defined in LLM_CUSTOM_PROVIDERS below as a custom
+        #    OpenAI-compatible endpoint reusing OPENAI_API_KEY (no new secret).
         #  - Cap 100/run + 30m timeout: ~100 calls add ~8-13 min over the ~8-10 min
         #    base run, so the default 10-min timeout would sever the sweep.
         # Discovery stays opt-in (doubles spend): set DISCOVERER_LLM_PROVIDER here
@@ -73,7 +73,7 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --task-timeout=30m \
-            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MAX_ARTICLES_PER_RUN=100'
+            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
       - name: Smoke test
         run: |
           URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')
