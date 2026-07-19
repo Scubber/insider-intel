@@ -58,6 +58,7 @@ jobs:
               note = (r.get("ai_summary") or "").replace("\n", " ").strip()
               enriched += bool(note)
               status = note[:200] if note else "ai_summary: NULL (not yet enriched)"
-              print(f"- {r[\"title\"][:70]}\n    {status}")
+              title = (r.get("title") or "")[:70]
+              print(f"- {title}\n    {status}")
           print(f"\n{enriched}/{len(rows)} recent filings enriched")
           '
