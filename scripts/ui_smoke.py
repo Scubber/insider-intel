@@ -239,7 +239,7 @@ def run(base_url: str, headed: bool) -> int:
             "() => { const r = document.getElementById('refine-panel'); if (r) r.open = true; }"
         )
         theme_ok = True
-        for theme in ("cnn-lite", "midnight", "phosphor"):
+        for theme in ("cnn-lite", "midnight", "phosphor", "diablo"):
             page.select_option("#theme-select", theme)
             if page.evaluate("document.documentElement.getAttribute('data-theme')") != theme:
                 theme_ok = False

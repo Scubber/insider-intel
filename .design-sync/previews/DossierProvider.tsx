@@ -17,3 +17,5 @@ export const Midnight = () => <DossierProvider theme="midnight">{sample}</Dossie
 export const Phosphor = () => <DossierProvider theme="phosphor">{sample}</DossierProvider>;
 
 export const CnnLite = () => <DossierProvider theme="cnn-lite">{sample}</DossierProvider>;
+
+export const Diablo = () => <DossierProvider theme="diablo">{sample}</DossierProvider>;
