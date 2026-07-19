@@ -79,6 +79,31 @@ def test_xai_grok_builtin_provider() -> None:
     assert get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="grok")) == []
 
 
+def test_sol_reuses_openai_key_and_endpoint(monkeypatch) -> None:
+    # Mirrors the prod config: SOL is a custom OpenAI-compatible provider on the
+    # OpenAI endpoint, reusing OPENAI_API_KEY — no new secret.
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-real")
+    chain = get_summarizer_chain(
+        _settings(
+            SUMMARIZER_LLM_PROVIDER="openai,sol",
+            OPENAI_API_KEY="sk-real",
+            LLM_CUSTOM_PROVIDERS=json.dumps(
+                {
+                    "sol": {
+                        "base_url": "https://api.openai.com/v1",
+                        "model": "gpt-5.6-sol",
+                        "api_key_env": "OPENAI_API_KEY",
+                    }
+                }
+            ),
+        )
+    )
+    assert [p.model_name for p in chain] == ["gpt-4o-mini", "gpt-5.6-sol"]
+    sol = chain[1]
+    assert sol._base_url == "https://api.openai.com/v1"
+    assert sol._api_key == "sk-real"  # pulled from api_key_env
+
+
 def test_single_provider_string_still_works() -> None:
     chain = get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="openai", OPENAI_API_KEY="sk-x"))
     assert len(chain) == 1
