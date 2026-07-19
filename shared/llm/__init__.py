@@ -48,6 +48,7 @@ _OPENAI_COMPAT_DEFAULT_MODEL = "llama3.1:8b"
 OPENAI_DEFAULT_BASE = "https://api.openai.com/v1"
 OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+XAI_OPENAI_BASE = "https://api.x.ai/v1"
 
 
 def resolve_openai_compat(settings: Settings) -> tuple[str, str, str | None]:
@@ -71,6 +72,11 @@ def resolve_openai_compat(settings: Settings) -> tuple[str, str, str | None]:
 def resolve_gemini_compat(settings: Settings) -> tuple[str, str, str | None]:
     """(base_url, model, api_key) for Gemini via its OpenAI-compatible API."""
     return GEMINI_OPENAI_BASE, settings.gemini_model, settings.gemini_api_key
+
+
+def resolve_xai_compat(settings: Settings) -> tuple[str, str, str | None]:
+    """(base_url, model, api_key) for xAI Grok via its OpenAI-compatible API."""
+    return XAI_OPENAI_BASE, settings.xai_model, settings.xai_api_key
 
 
 def _resolve_provider(
@@ -100,6 +106,11 @@ def _resolve_provider(
         if not settings.gemini_api_key:
             return None
         base_url, model, api_key = resolve_gemini_compat(settings)
+        return ("openai_compat", base_url, model_override or model, api_key)
+    if name in ("xai", "grok"):
+        if not settings.xai_api_key:
+            return None
+        base_url, model, api_key = resolve_xai_compat(settings)
         return ("openai_compat", base_url, model_override or model, api_key)
     custom = settings.custom_llm_provider_map().get(name)
     if custom:
@@ -230,6 +241,14 @@ def get_classifier_provider(settings: Settings) -> ClassifierProvider | None:
             from shared.llm.openai_provider import OpenAICompatClassifier
 
             base_url, model, api_key = resolve_gemini_compat(settings)
+            instance = OpenAICompatClassifier(base_url=base_url, model=model, api_key=api_key)
+    elif provider in ("xai", "grok"):
+        if not settings.xai_api_key:
+            logger.warning("CLASSIFIER_LLM_PROVIDER=xai but XAI_API_KEY unset")
+        else:
+            from shared.llm.openai_provider import OpenAICompatClassifier
+
+            base_url, model, api_key = resolve_xai_compat(settings)
             instance = OpenAICompatClassifier(base_url=base_url, model=model, api_key=api_key)
     else:
         logger.warning(

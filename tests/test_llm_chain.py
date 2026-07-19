@@ -70,6 +70,15 @@ def test_custom_openai_compatible_provider(monkeypatch) -> None:
     assert [p.model_name for p in chain] == ["sol-5.6", "gpt-4o-mini"]
 
 
+def test_xai_grok_builtin_provider() -> None:
+    chain = get_summarizer_chain(
+        _settings(SUMMARIZER_LLM_PROVIDER="xai,openai", XAI_API_KEY="xai-x", OPENAI_API_KEY="sk-x")
+    )
+    assert [p.model_name for p in chain] == ["grok-4", "gpt-4o-mini"]
+    # The "grok" alias resolves to the same provider; no key → skipped.
+    assert get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="grok")) == []
+
+
 def test_single_provider_string_still_works() -> None:
     chain = get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="openai", OPENAI_API_KEY="sk-x"))
     assert len(chain) == 1

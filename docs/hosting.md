@@ -114,8 +114,9 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   report reads. `SUMMARIZER_LLM_PROVIDER` is an **ordered fallback chain**
   (comma-separated) — each provider is tried until one succeeds, and any provider
   without a key is skipped, so one being down / out of credits / rate-limited no
-  longer drops the whole pass to floor. Names: `anthropic | openai | gemini | any
-  key in LLM_CUSTOM_PROVIDERS`. **Fund once, fallback automatically:** attach
+  longer drops the whole pass to floor. Names: `anthropic | openai | gemini |
+  xai` (Grok — set `XAI_API_KEY`, exact model via `XAI_MODEL`) `| any key in
+  LLM_CUSTOM_PROVIDERS`. **Fund once, fallback automatically:** attach
   whichever provider keys you want *available* to the job (Secret Manager), and
   the chain uses whichever are present, in order. The chain itself lives in
   `deploy-api.yml` (**edit + merge, not gcloud** — the prod job is set to

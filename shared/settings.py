@@ -278,7 +278,7 @@ class Settings(BaseSettings):
     classifier_llm_provider: str = Field(
         default="none",
         alias="CLASSIFIER_LLM_PROVIDER",
-        description="none | anthropic | openai | gemini (openai = any compatible endpoint)",
+        description="none | anthropic | openai | gemini | xai (openai = any compatible endpoint)",
     )
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-haiku-4-5", alias="ANTHROPIC_MODEL")
@@ -296,6 +296,10 @@ class Settings(BaseSettings):
     # endpoint, so it shares the openai-compat client code.
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    # xAI Grok — served through xAI's OpenAI-compatible API, so it shares the
+    # openai-compat client. Set XAI_MODEL to the exact Grok model you want.
+    xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
+    xai_model: str = Field(default="grok-4", alias="XAI_MODEL")
     # Extra OpenAI-compatible providers usable by name in any *_LLM_PROVIDER chain
     # (e.g. a third-party model like SOL). JSON map, one entry per provider:
     #   {"sol": {"base_url": "https://…/v1", "model": "sol-5.6", "api_key_env": "SOL_API_KEY"}}
@@ -320,7 +324,7 @@ class Settings(BaseSettings):
         description=(
             "Ordered fallback chain, comma-separated — each is tried until one "
             "succeeds (e.g. 'openai,gemini,anthropic'). Names: anthropic | openai "
-            "| gemini | any key in LLM_CUSTOM_PROVIDERS. none/empty disables. A "
+            "| gemini | xai | any key in LLM_CUSTOM_PROVIDERS. none/empty disables. A "
             "provider with no key is skipped, so an unfunded entry is harmless."
         ),
     )
