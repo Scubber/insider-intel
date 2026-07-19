@@ -51,7 +51,8 @@ states, technique bars, primary buttons). Corners are near-square
 Read `styles.css` (tokens for all four themes + every `ds-*` component
 class) before inventing styling; per-component APIs and examples are in
 each component's doc card. Components: DossierProvider, Panel, CaseCard,
-FactList, Chip, ItmChip, Pill, ActionButton, CopyButton, TechniqueSection.
+FactList, Chip, ItmChip, Pill, ActionButton, CopyButton, TechniqueSection,
+ThemeSelect.
 
 ## Composition patterns
 
@@ -63,3 +64,6 @@ FactList, Chip, ItmChip, Pill, ActionButton, CopyButton, TechniqueSection.
   (ITM ids like IF016, ME007 — id chip + description + per-case bullets).
 - Filters = `Pill` rows (one active); card footers = `Chip`/`ItmChip` left,
   `ActionButton`s right; workbench actions = `CopyButton` (one primary).
+- Theme switching = `ThemeSelect`, controlled: hold the theme in state and
+  pass it to both `DossierProvider` and `ThemeSelect` so the screen restyles
+  live.

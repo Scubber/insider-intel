@@ -353,6 +353,38 @@
   line-height: 1.45;
 }
 
+/* Theme selector — mono-labeled select, the site's theme switcher */
+.ds-theme-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ds-theme-select-label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ds-theme-select select {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.ds-theme-select select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
 /* Technique section — per-ITM-ID hunt-report block */
 .ds-technique {
   border-left: 3px solid var(--accent);

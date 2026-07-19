@@ -19,3 +19,4 @@ export {
   type CopyButtonProps,
 } from "./Buttons";
 export { TechniqueSection, type TechniqueSectionProps, type TechniqueCase } from "./TechniqueSection";
+export { ThemeSelect, type ThemeSelectProps, DOSSIER_THEMES } from "./ThemeSelect";
