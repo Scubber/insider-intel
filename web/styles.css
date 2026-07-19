@@ -3240,3 +3240,54 @@ button.chip.itm-chip {
   background: #efe9d9;
   color: #a8352a;
 }
+
+/* View tweaks (design-handoff pack): density / layout / redaction, keyed off
+   data-* attributes the inline head script and app.js stamp on <html>.
+   The whole site sizes in rem, so density is one root font-size change. */
+html[data-density="compact"] {
+  font-size: 13.5px;
+}
+
+html[data-density="comfy"] {
+  font-size: 18px;
+}
+
+html[data-layout="stacked"] .pane-grid {
+  grid-template-columns: 1fr !important;
+}
+
+html[data-layout="stacked"] .pane-matrix,
+html[data-layout="stacked"] .pane-workbench {
+  position: static !important;
+  max-height: none !important;
+}
+
+html[data-layout="stacked"] .pane {
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Redaction bars over fact values and analyst notes. */
+html[data-redacted="true"] .case-record-list dd,
+html[data-redacted="true"] .analyst-note {
+  background: var(--ink);
+  color: transparent;
+  user-select: none;
+}
+
+html[data-redacted="true"] .case-record-list dd *,
+html[data-redacted="true"] .analyst-note * {
+  color: transparent !important;
+}
+
+.view-tweaks .redact-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+
+.view-tweaks input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
