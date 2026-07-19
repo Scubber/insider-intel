@@ -76,7 +76,12 @@ def run_processing(
     prior_by_link: dict[str, ProcessedArticle] = {a.link: a for a in processed_store.load_all()}
 
     settings = get_settings()
-    budget = SummaryBudget(settings.summarizer_max_articles_per_run)
+    # The fresh-ingest batch may not spend the whole budget: a reserved slice
+    # is guaranteed to the backfill sweep (filings-first), or a heavy news day
+    # starves the stored court-case backlog forever.
+    cap = settings.summarizer_max_articles_per_run
+    reserve = min(settings.summarizer_backfill_reserve, cap)
+    budget = SummaryBudget(cap - reserve)
     discover_budget = SummaryBudget(settings.discoverer_max_articles_per_run)
 
     batch: list = []
@@ -113,9 +118,11 @@ def run_processing(
         result.articles_saved = processed_store.save(batch)
 
     batch_links = {a.link for a in batch}
+    # Backfill allowance = the reserved slice plus whatever the batch left over.
+    backfill_budget = SummaryBudget(reserve + budget.remaining)
     _backfill_summaries(
         processed_store,
-        budget=budget,
+        budget=backfill_budget,
         settings=settings,
         exclude_links=batch_links,
     )

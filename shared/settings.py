@@ -340,6 +340,18 @@ class Settings(BaseSettings):
         le=500,
         description="LLM-call budget per processing run (0 disables)",
     )
+    summarizer_backfill_reserve: int = Field(
+        default=6,
+        alias="SUMMARIZER_BACKFILL_RESERVE",
+        ge=0,
+        le=500,
+        description=(
+            "Slice of the per-run budget the fresh-ingest batch may NOT spend, "
+            "guaranteed to the corpus backfill sweep (which converts court "
+            "filings first). Without it a heavy news day starves the backlog "
+            "forever. Clamped to the per-run budget."
+        ),
+    )
     summarizer_max_input_chars: int = Field(
         default=8000,
         alias="SUMMARIZER_MAX_INPUT_CHARS",

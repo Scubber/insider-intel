@@ -72,6 +72,9 @@ jobs:
         #    sol comes from LLM_CUSTOM_PROVIDERS, gemini/xai use their defaults.
         #  - Cap 100/run + 30m timeout: ~100 calls add ~8-13 min over the ~8-10 min
         #    base run, so the default 10-min timeout would sever the sweep.
+        #  - BACKFILL_RESERVE=60: the fresh-news batch may spend at most 40 of
+        #    the 100; 60+ is guaranteed to the filings-first backlog sweep.
+        #    Drop toward the library default (6) once the backlog is converted.
         # Discovery (second call per case, doubles spend) inherits the enrichment
         # chain by default — asserted explicitly below with its own cap
         # (DISCOVERER_MAX_ARTICLES_PER_RUN=0 turns it off).
@@ -81,7 +84,7 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --task-timeout=30m \
-            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MODEL=##OPENAI_COMPAT_MODEL=gpt-4o##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##DISCOVERER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##DISCOVERER_MAX_ARTICLES_PER_RUN=15##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
+            --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MODEL=##OPENAI_COMPAT_MODEL=gpt-4o##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##SUMMARIZER_BACKFILL_RESERVE=60##DISCOVERER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##DISCOVERER_MAX_ARTICLES_PER_RUN=15##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}'
       - name: Smoke test
         run: |
           URL=$(gcloud run services describe insider-intel-api --region "${REGION}" --format='value(status.url)')
