@@ -10,9 +10,10 @@ red accent. Dense, printed, evidentiary — never glossy SaaS.
 Wrap every screen in exactly one `DossierProvider` — it stamps the theme's
 CSS tokens (`data-theme`), the paper/atmosphere background, and the body
 typeface. Without it, components sit on an unthemed background (token
-fallbacks still apply, but the page loses its paper). Themes: `dossier`
-(default), `midnight`, `phosphor`, `cnn-lite`, `diablo`, plus the Dark
-Diablo Dossier pack: `Dossier Sage`, `Dossier Soft`, `Dossier Fog`,
+fallbacks still apply, but the page loses its paper). Themes: `Dossier Sage`
+(the default), classics `dossier`, `midnight`, `phosphor`, `cnn-lite`,
+`diablo`, plus the rest of the Dark
+Diablo Dossier pack: `Dossier Soft`, `Dossier Fog`,
 `Air Archive`, `Cinder Archive`, `Ice Archive`, `Earth Archive`,
 `Ultramarines`, `Perplexity`, `Linear`, `Vercel`, `ChatGPT`, `Doom 3`,
 `Diablo II`, `StarCraft`, `Brood War`, `GoldenEye 64`, `Warcraft III`,

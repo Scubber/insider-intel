@@ -37,7 +37,7 @@ export type DossierTheme =
   | "Raven Guard";
 
 export interface DossierProviderProps {
-  /** Visual theme; "dossier" (kraft-paper classified file) is the brand default. */
+  /** Visual theme; "Dossier Sage" (light sage paper) is the brand default. */
   theme?: DossierTheme;
   children?: ReactNode;
 }
@@ -48,7 +48,7 @@ export interface DossierProviderProps {
  * typeface. Components render unstyled surfaces without it — always wrap the
  * app (or the screen) in exactly one DossierProvider.
  */
-export function DossierProvider({ theme = "dossier", children }: DossierProviderProps) {
+export function DossierProvider({ theme = "Dossier Sage", children }: DossierProviderProps) {
   return (
     <div className="ds-root" data-theme={theme}>
       {children}

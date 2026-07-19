@@ -4,9 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>insider-intel</title>
-    <!-- Dossier-theme typefaces (Newsreader + Courier Prime). Only the default
-         "dossier" theme references these families in themes.css; backup themes
-         use system stacks. -->
+    <!-- Dossier-theme typefaces (Newsreader + Courier Prime, plus the theme
+         pack's IBM Plex Mono / Space Grotesk / Space Mono / Cormorant Garamond /
+         Xanh Mono). The default "Dossier Sage" theme uses Newsreader + Courier
+         Prime; backup classic themes use system stacks. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -28,7 +29,7 @@
     <script>
       (function () {
         var allowed = ["dossier", "cnn-lite", "midnight", "phosphor"];
-        var t = localStorage.getItem("insider-intel-theme") || "dossier";
+        var t = localStorage.getItem("insider-intel-theme") || "Dossier Sage";
         if (allowed.indexOf(t) === -1) t = "dossier";
         document.documentElement.setAttribute("data-theme", t);
       })();
@@ -227,6 +228,9 @@
                 <option value="Ice Archive">Ice Archive</option>
                 <option value="Earth Archive">Earth Archive</option>
                 <option value="Ultramarines">Ultramarines</option>
+                <option value="Blood Ravens">Blood Ravens</option>
+                <option value="Black Templars">Black Templars</option>
+                <option value="Raven Guard">Raven Guard</option>
                 <option value="Perplexity">Perplexity</option>
                 <option value="Linear">Linear</option>
                 <option value="Vercel">Vercel</option>
@@ -245,9 +249,6 @@
                 <option value="EVA-03">EVA-03</option>
                 <option value="Cryostat">Cryostat</option>
                 <option value="Vermillion Court">Vermillion Court</option>
-                <option value="Blood Ravens">Blood Ravens</option>
-                <option value="Black Templars">Black Templars</option>
-                <option value="Raven Guard">Raven Guard</option>
               </select>
             </div>
           </div>

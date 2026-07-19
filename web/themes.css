@@ -4,10 +4,10 @@
  * index.html and the name to the THEMES set in app.js.
  * Switcher stores choice in localStorage (key: insider-intel-theme).
  *
- * DEFAULT THEME = "dossier" (classified-file / kraft-paper look). The inline
- * <head> script and app.js both default data-theme to "dossier", so the
- * [data-theme="dossier"] block below is what a first-time visitor sees. Its
- * Newsreader + Courier Prime webfonts are loaded (only) in index.html.
+ * DEFAULT THEME = "Dossier Sage" (theme-pack light sage paper). The inline
+ * <head> script and app.js both default data-theme to "Dossier Sage", so its
+ * block (in the theme-pack section below) is what a first-time visitor sees.
+ * Its Newsreader + Courier Prime webfonts are loaded in index.html.
  * cnn-lite / midnight / phosphor are backup themes (untouched, system fonts).
  * :root holds the shared/neutral defaults every theme — including the masthead
  * --top-* vars — builds on; keep it adaptive so backup themes inherit sanely.

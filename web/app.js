@@ -401,7 +401,7 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const DEFAULT_THEME = "dossier";
+  const DEFAULT_THEME = "Dossier Sage";
   const THEMES = new Set([
     "dossier",
     "cnn-lite",
@@ -416,6 +416,9 @@
     "Ice Archive",
     "Earth Archive",
     "Ultramarines",
+    "Blood Ravens",
+    "Black Templars",
+    "Raven Guard",
     "Perplexity",
     "Linear",
     "Vercel",
@@ -434,9 +437,6 @@
     "EVA-03",
     "Cryostat",
     "Vermillion Court",
-    "Blood Ravens",
-    "Black Templars",
-    "Raven Guard",
   ]);
   const themeSelect = document.getElementById("theme-select");
 

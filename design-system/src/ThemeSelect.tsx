@@ -14,6 +14,9 @@ export const DOSSIER_THEMES: DossierTheme[] = [
   "Ice Archive",
   "Earth Archive",
   "Ultramarines",
+  "Blood Ravens",
+  "Black Templars",
+  "Raven Guard",
   "Perplexity",
   "Linear",
   "Vercel",
@@ -32,9 +35,6 @@ export const DOSSIER_THEMES: DossierTheme[] = [
   "EVA-03",
   "Cryostat",
   "Vermillion Court",
-  "Blood Ravens",
-  "Black Templars",
-  "Raven Guard",
 ];
 
 const THEME_LABELS: Record<DossierTheme, string> = {
