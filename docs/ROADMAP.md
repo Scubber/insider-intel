@@ -99,6 +99,28 @@ candidates alongside the ITM. Tier 1+2 (the evidence foundation) shipped first
 precisely so this pass consumes trustworthy input instead of laundered
 allegations and hallucinated telemetry.
 
+### Follow-up: retroactive re-enrichment of the stuck band (sequenced last)
+
+The evidence-rigor fields are **not retroactive**. New ingests get them, and
+the backfill sweep re-bills legacy `case_record`-only rows with the new prompt
+— but articles already enriched to full `forensics` under the old prompt
+cache-hit and are never re-billed (`_node_summarize` reuses `prior_forensics`;
+the upgrade sweep only runs when `prior_forensics is None`). That band (cases
+enriched between the #36 pivot and the Tier 1+2 ship) keeps the weak defaults
+— `claim_status="unclear"`, observable `basis="analyst_inference"`,
+`source_type`/`legal_posture="unknown"` — so the discovery pass would *skip*
+them at the promotion gates rather than mint anything wrong.
+
+Fix (mirrors the existing legacy-upgrade pattern): stamp a prompt/schema
+version on `forensics` and have the refresh sweep re-bill records below the
+current version, bounded by the same per-run cap — one re-bill per stale
+record, gradual and cheap.
+
+**Sequencing: do this LAST — only after the flagging quality (Tier 1+2) and
+the discovery logic are validated in production.** Re-billing the corpus before
+the prompt and gates are proven would just pay to bake in a standard we're
+still tuning.
+
 ## Syndication design (proposed)
 
 Tiered by consumer type; each tier builds on the last:
