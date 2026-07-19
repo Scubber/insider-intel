@@ -1,0 +1,47 @@
+name: cancel-refresh
+
+# Emergency brake: cancel the currently running corpus-refresh execution —
+# e.g. one pinned to a pre-checkpoint image stuck in a timeout/retry loop
+# re-billing the enrichment sweep. Executions snapshot the job spec at
+# creation, so a bad in-flight execution can only be stopped, not fixed;
+# cancel it here, then dispatch refresh-corpus to start one on the current
+# spec. Dispatch-only; no-ops when nothing is running.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Cancel latest execution if still running
+        run: |
+          LATEST=$(gcloud run jobs executions list --job corpus-refresh \
+            --region "${REGION}" --project "${PROJECT_ID}" --limit 1 \
+            --format 'value(name)')
+          if [ -z "${LATEST}" ]; then
+            echo "no executions found"; exit 0
+          fi
+          DONE=$(gcloud run jobs executions describe "${LATEST}" \
+            --region "${REGION}" --project "${PROJECT_ID}" \
+            --format 'value(status.completionTime)')
+          if [ -n "${DONE}" ]; then
+            echo "latest execution ${LATEST} already completed at ${DONE} — nothing to cancel"
+            exit 0
+          fi
+          echo "cancelling ${LATEST}"
+          gcloud run jobs executions cancel "${LATEST}" \
+            --region "${REGION}" --project "${PROJECT_ID}" --quiet
