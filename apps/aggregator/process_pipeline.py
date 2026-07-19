@@ -20,6 +20,7 @@ from shared.agents.summarize import (
 )
 from shared.llm import get_discoverer_provider, get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
+from shared.schemas.articles import resolve_channel
 from shared.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -158,8 +159,9 @@ def _backfill_summaries(
 
     Already-processed rows are skipped forever by the main loop, so without
     this sweep the existing corpus would never gain forensic records. Two
-    tiers, each newest-published first: never-enriched rows before legacy
-    upgrades (a fixed per-run budget always spends on new coverage first).
+    tiers, each filings-first then newest-published: never-enriched rows
+    before legacy upgrades (a fixed per-run budget always spends on new
+    coverage first, and court filings outrank the daily news churn).
     Bounded by the shared budget, so the corpus converts over successive 6h
     refreshes at a fixed cost ceiling.
     """
@@ -183,7 +185,13 @@ def _backfill_summaries(
             legacy.append(row)
     if not fresh and not legacy:
         return 0
-    order = lambda a: _as_utc(a.published or a.processed_at)  # noqa: E731
+    # Court filings first, then newest: a filing's `published` is its filing
+    # date (often historical), so pure recency starves the court cases — the
+    # richest forensic sources — behind every fresh news day.
+    def order(a: ProcessedArticle):
+        is_filing = resolve_channel(a.source_id, getattr(a, "channel", None)) == "filings"
+        return (is_filing, _as_utc(a.published or a.processed_at))
+
     fresh.sort(key=order, reverse=True)
     legacy.sort(key=order, reverse=True)
     candidates = fresh + legacy

@@ -420,3 +420,37 @@ def test_enrich_prompt_carries_relevance_and_tactical_guidance() -> None:
     # The source-vs-inference discipline must survive the edits.
     assert "do NOT name a specific vendor, product, or log source" in p
     assert "PORTABLE pseudo-logic" in p
+
+
+def test_backfill_prioritizes_filings_over_newer_news(monkeypatch, tmp_path: Path) -> None:
+    """A filing's `published` is its (often historical) filing date, so pure
+    recency would starve court cases behind every fresh news day."""
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    body = "The defendant exfiltrated trade secret schematics to a personal drive. " * 40
+    filing = _raw(
+        title="United States v. Example",
+        link="https://www.courtlistener.com/docket/9/us-v-example/",
+        summary="Court: SDNY",
+        content=f"CourtListener query: q\n{body}",
+        source_id="courtlistener-recap",
+        source_name="CourtListener RECAP",
+        channel="filings",
+        published="2024-01-01T00:00:00Z",
+    )
+    news = _raw(link="https://example.com/newer-news", published="2026-07-01T00:00:00Z")
+    JsonlArticleStore(raw_path).save([filing, news])
+
+    # Pre-feature corpus: rows exist, nothing enriched.
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert all(r.forensics is None for r in JsonlProcessedStore(processed_path).load_all())
+
+    # One-call budget: the older filing must win over the newer news row.
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "1")
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert fake.calls == 1
+    rows = {r.link: r for r in JsonlProcessedStore(processed_path).load_all()}
+    assert rows["https://www.courtlistener.com/docket/9/us-v-example/"].forensics is not None
+    assert rows["https://example.com/newer-news"].forensics is None
