@@ -131,6 +131,19 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `SUMMARIZER_FILING_MIN_TEXT_CHARS` (default 1500; set 0 to enrich every
   filing) — so their stream cards get an analyst summary instead of the raw
   docket description.
+- **Novel-technique discovery (opt-in — a SECOND LLM call per case):** after
+  enrichment, a discovery pass reads the forensic record (never the raw filing)
+  and, per method, maps it to an ITM technique or flags it novel; the refresh
+  job clusters novel behaviors across the corpus into a candidate view
+  (`data/state/technique_seeds.json`, served at `GET /techniques/candidates`)
+  with a seed → corroborated → eligible lifecycle (eligible = flagged for
+  review, never auto-minted). Config mirrors the enricher and **inherits the
+  summarizer's provider/key when unset** — set only the cap to turn it on:
+  `gcloud run jobs update corpus-refresh --region us-east1
+  --update-env-vars DISCOVERER_MAX_ARTICLES_PER_RUN=15` (0 disables it;
+  `DISCOVERER_LLM_PROVIDER`/`DISCOVERER_MODEL` override the inherited defaults).
+  This roughly **doubles** ingest LLM spend, so it is capped and backfills over
+  refreshes exactly like enrichment.
 - **Scale/cost:** `min-instances=0`, `max-instances=1`, 512Mi — rides the
   Cloud Run free tier; the instance cap doubles as a cost/abuse ceiling.
 - **Endpoint guards:** `POST /extract/ttps` is rate-limited

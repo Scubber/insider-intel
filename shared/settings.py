@@ -266,6 +266,11 @@ class Settings(BaseSettings):
         default="data/config/social_subscriptions.json",
         alias="SOCIAL_SUBSCRIPTIONS_PATH",
     )
+    technique_seeds_path: str = Field(
+        default="data/state/technique_seeds.json",
+        alias="TECHNIQUE_SEEDS_PATH",
+        description="Novel-candidate view (job-written under state/, API reads it)",
+    )
 
     # Use-case / insider-type classifier LLM refiner (heuristics always run)
     classifier_llm_provider: str = Field(
@@ -349,6 +354,29 @@ class Settings(BaseSettings):
         ),
         ge=0,
         le=200_000,
+    )
+    # --- Novel-technique discovery (second LLM pass over the forensic record) ---
+    discoverer_llm_provider: str = Field(
+        default="",
+        alias="DISCOVERER_LLM_PROVIDER",
+        description=(
+            "Provider for the novel-technique discovery pass (anthropic|openai|gemini). "
+            "Empty inherits SUMMARIZER_LLM_PROVIDER so ops sets one key. This is a "
+            "SECOND LLM call per qualifying case on top of enrichment — it roughly "
+            "doubles ingest LLM spend; bound it with DISCOVERER_MAX_ARTICLES_PER_RUN."
+        ),
+    )
+    discoverer_model: str | None = Field(
+        default=None,
+        alias="DISCOVERER_MODEL",
+        description="Discovery-pass model; falls back to SUMMARIZER_MODEL / provider default",
+    )
+    discoverer_max_articles_per_run: int = Field(
+        default=15,
+        alias="DISCOVERER_MAX_ARTICLES_PER_RUN",
+        description="Per-run cap on discovery LLM calls (0 disables the pass entirely)",
+        ge=0,
+        le=500,
     )
 
     def cors_origin_list(self) -> list[str]:

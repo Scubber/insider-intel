@@ -1092,6 +1092,99 @@ body {
   padding: 0.35rem;
 }
 
+/* Novel-technique candidates (matrix "Novel candidates" tab) */
+.matrix-empty {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 1rem;
+}
+
+.candidate-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  margin: 0.4rem 0;
+  background: var(--surface, transparent);
+}
+
+.candidate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.3rem;
+}
+
+.candidate-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.candidate-strength {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.candidate-strength-strong {
+  border-color: #2f8f5b;
+  color: #2f8f5b;
+}
+
+.candidate-strength-weak {
+  opacity: 0.7;
+}
+
+.candidate-flag {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #c2842a;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.candidate-behavior {
+  font-size: 0.82rem;
+  margin: 0.2rem 0;
+}
+
+.candidate-meta {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin: 0.2rem 0;
+}
+
+.candidate-cases {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+}
+
+.candidate-cases li {
+  margin: 0.15rem 0;
+}
+
+.candidate-claim-chip {
+  display: inline-block;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
 .matrix-article-btn {
   width: 100%;
   text-align: left;

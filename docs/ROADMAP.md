@@ -43,7 +43,16 @@ mapped to the Insider Threat Matrix™.
   allegations into findings and forbids inventing defender telemetry (vendor
   names, log sources, index/sourcetype/event-id/field names). UI shows a
   posture badge and marks inferred observables. These are the inputs the
-  discovery pass (below) gates promotion on.
+  discovery pass gates promotion on.
+- **Novel-technique discovery pass** (the north star) — a second LLM call per
+  case reads the forensic record (never raw text) and, per method, maps it to an
+  ITM technique or flags it **novel**. The refresh job clusters novel behaviors
+  across the corpus into candidates with an auto-computed seed → corroborated →
+  eligible lifecycle (corroboration by distinct incident; the evidence gate caps
+  allegation-only/inference-only behavior at seed). Eligible candidates are
+  flagged for human review, never auto-minted into a permanent id. Served at
+  `GET /techniques/candidates`, a "Novel candidates" matrix tab, and the export
+  (v5). Opt-in via `DISCOVERER_*` (inherits the summarizer key).
 
 ## In flight
 
@@ -57,7 +66,6 @@ mapped to the Insider Threat Matrix™.
 Tracked as GitHub issues (the working kanban):
 <https://github.com/Scubber/insider-intel/issues>
 
-- **Novel-technique discovery pass** — the north star; see below
 - **Syndication — let other sites/tools consume insider-intel** (see below)
 - Reddit OAuth creds → un-block the social tips lane from GCP
 - Behavior→telemetry hunt terms with provenance (workbench track 2)
@@ -67,7 +75,13 @@ Tracked as GitHub issues (the working kanban):
   deploy; still to move into the repo — the provider/model/secret mappings
   (currently set on the job by hand)
 
-## Novel-technique discovery pass (proposed — the product's north star)
+## Novel-technique discovery pass (shipped — the product's north star)
+
+Implemented as described below. What remains (future): a human review/approval
+workflow to promote an eligible candidate into a permanent technique id, and the
+retroactive re-enrichment sweep (above) so the whole corpus is discovered under
+the current prompt. Design of record:
+
 
 The goal of the product is to identify, tag, and **discover** insider &
 forensic techniques — including novel ones not yet in any catalog. ITM mapping

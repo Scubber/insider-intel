@@ -9,14 +9,16 @@ from pathlib import Path
 from apps.aggregator.pipeline import DEFAULT_STORE_PATH
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.aggregator.storage import JsonlArticleStore
+from apps.aggregator.technique_seeds import TechniqueSeedStore, rebuild_technique_seeds
 from shared.agents import process_article
+from shared.agents.discover import discover_case
 from shared.agents.summarize import (
     SummaryBudget,
     article_qualifies,
     enrich_fields,
     merge_llm_hits,
 )
-from shared.llm import get_summarizer_provider
+from shared.llm import get_discoverer_provider, get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
 from shared.settings import get_settings
 
@@ -74,6 +76,7 @@ def run_processing(
 
     settings = get_settings()
     budget = SummaryBudget(settings.summarizer_max_articles_per_run)
+    discover_budget = SummaryBudget(settings.discoverer_max_articles_per_run)
 
     batch: list = []
     reprocessed_existing = False
@@ -88,7 +91,9 @@ def run_processing(
             continue
 
         try:
-            processed = process_article(raw, prior=prior, budget=budget)
+            processed = process_article(
+                raw, prior=prior, budget=budget, discover_budget=discover_budget
+            )
             result.articles_processed += 1
             if processed.relevance_score < min_score:
                 result.articles_skipped += 1
@@ -106,12 +111,30 @@ def run_processing(
     else:
         result.articles_saved = processed_store.save(batch)
 
+    batch_links = {a.link for a in batch}
     _backfill_summaries(
         processed_store,
         budget=budget,
         settings=settings,
-        exclude_links={a.link for a in batch},
+        exclude_links=batch_links,
     )
+    _backfill_discovery(
+        processed_store,
+        budget=discover_budget,
+        settings=settings,
+        exclude_links=batch_links,
+    )
+    # Recompute the novel-candidate view from the whole corpus (cheap, no LLM).
+    # Best-effort: it's a derived cache, so a non-writable state dir degrades to
+    # a stale view rather than sinking the whole ingest run.
+    try:
+        rebuild_technique_seeds(
+            processed_store,
+            store=TechniqueSeedStore(settings.technique_seeds_path),
+            generated_at=datetime.now(UTC),
+        )
+    except OSError as exc:
+        logger.warning("Could not write technique-seeds view: %s", exc)
     result.finished_at = datetime.now(UTC)
     logger.info(
         "Processing complete: read=%d processed=%d saved=%d skipped=%d errors=%d",
@@ -212,6 +235,50 @@ def _backfill_summaries(
     if updated:
         processed_store.upsert(updated)
         logger.info("Backfilled forensic records for %d article(s)", len(updated))
+    return len(updated)
+
+
+def _backfill_discovery(
+    processed_store: JsonlProcessedStore,
+    *,
+    budget: SummaryBudget,
+    settings,
+    exclude_links: set[str],
+) -> int:
+    """Run the discovery pass on enriched rows that lack a discovery record.
+
+    Mirrors ``_backfill_summaries``: budget-bounded, newest-published-first, so
+    the corpus converts over successive refreshes. Only rows that already have a
+    forensic record (an insider case with methods) but no discovery are
+    candidates — discovery consumes the vetted extraction, never raw text.
+    """
+    if get_discoverer_provider(settings) is None or budget.remaining <= 0:
+        return 0
+
+    candidates: list[ProcessedArticle] = []
+    for row in processed_store.load_all():
+        if row.link in exclude_links or row.discovery is not None:
+            continue
+        forensics = row.forensics
+        if forensics is None or not forensics.is_insider_case or not forensics.methods:
+            continue
+        candidates.append(row)
+    if not candidates:
+        return 0
+    candidates.sort(key=lambda a: _as_utc(a.published or a.processed_at), reverse=True)
+
+    updated: list[ProcessedArticle] = []
+    for row in candidates:
+        if budget.remaining <= 0:
+            break
+        discovery = discover_case(forensics=row.forensics, settings=settings, budget=budget)
+        if discovery is None:
+            continue
+        updated.append(row.model_copy(update={"discovery": discovery}))
+
+    if updated:
+        processed_store.upsert(updated)
+        logger.info("Backfilled discovery for %d article(s)", len(updated))
     return len(updated)
 
 

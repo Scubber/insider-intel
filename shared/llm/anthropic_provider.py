@@ -6,12 +6,19 @@ import logging
 
 from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
+    DISCOVER_SYSTEM_PROMPT,
     ENRICH_SYSTEM_PROMPT,
     ClassificationResult,
+    build_discover_prompt,
     build_enrich_prompt,
     build_user_prompt,
 )
-from shared.llm.openai_provider import ENRICH_MAX_TOKENS, _parse_json_object, _parse_result
+from shared.llm.openai_provider import (
+    DISCOVER_MAX_TOKENS,
+    ENRICH_MAX_TOKENS,
+    _parse_json_object,
+    _parse_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +84,27 @@ class AnthropicSummarizer:
             return None
         parts = [block.text for block in message.content if getattr(block, "text", None)]
         return _parse_json_object("".join(parts), label="Enricher")
+
+
+class AnthropicDiscoverer:
+    def __init__(self, *, api_key: str, model: str, timeout: float = 90.0) -> None:
+        import anthropic
+
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+        self._model = model
+        self.model_name = model
+
+    def discover_techniques(self, *, forensics_json: str, itm_shortlist: str) -> dict | None:
+        prompt = build_discover_prompt(forensics_json=forensics_json, itm_shortlist=itm_shortlist)
+        try:
+            message = self._client.messages.create(
+                model=self._model,
+                max_tokens=DISCOVER_MAX_TOKENS,
+                system=DISCOVER_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as exc:
+            logger.warning("Anthropic discover call failed: %s", exc)
+            return None
+        parts = [block.text for block in message.content if getattr(block, "text", None)]
+        return _parse_json_object("".join(parts), label="Discoverer")

@@ -14,9 +14,9 @@ from shared.schemas import ProcessedArticle
 
 logger = logging.getLogger(__name__)
 
-# v4: forensics gains evidence-rigor fields — method claim_status/evidence_quote,
-# observable basis, and per-case source_type/legal_posture.
-EXPORT_SCHEMA_VERSION = "insider-intel.export.v4"
+# v5: adds per-article `discovery` (novel-technique assessments) + a
+# corpus-level `candidates.ndjson` (clustered NovelCandidate view).
+EXPORT_SCHEMA_VERSION = "insider-intel.export.v5"
 DEFAULT_EXPORT_DIR = "dist/export"
 
 
@@ -58,6 +58,11 @@ def article_to_export_row(article: ProcessedArticle) -> dict[str, Any]:
         "forensics": (
             article.forensics.model_dump(mode="json")
             if getattr(article, "forensics", None)
+            else None
+        ),
+        "discovery": (
+            article.discovery.model_dump(mode="json")
+            if getattr(article, "discovery", None)
             else None
         ),
     }
@@ -113,17 +118,29 @@ def write_export_package(
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+    # Corpus-level novel-technique candidate view (job-written state; read-only).
+    from apps.aggregator.technique_seeds import TechniqueSeedStore
+    from shared.settings import get_settings
+
+    candidates = TechniqueSeedStore(get_settings().technique_seeds_path).read().candidates
+    candidates_path = dest / "candidates.ndjson"
+    with candidates_path.open("w", encoding="utf-8") as handle:
+        for candidate in candidates:
+            handle.write(candidate.model_dump_json() + "\n")
+
     generated_at = datetime.now(UTC)
     manifest = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "generated_at": generated_at.isoformat(),
         "article_count": len(rows),
+        "candidate_count": len(candidates),
         "min_score": min_score,
         "itm_alignment": itm_alignment,
         "since": since.isoformat() if since else None,
         "processed_path": str(processed_path),
         "files": {
             "articles": ndjson_path.name,
+            "candidates": candidates_path.name,
         },
         "note": (
             "One-way ITM-aligned OSINT export for corporate tools. "

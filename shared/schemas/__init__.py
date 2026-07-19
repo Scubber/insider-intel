@@ -15,6 +15,14 @@ from shared.schemas.articles import (
     SourceIngestionResult,
     resolve_channel,
 )
+from shared.schemas.discovery import (
+    CandidateCatalogResponse,
+    CaseDiscovery,
+    MethodAssessment,
+    NovelBehavior,
+    NovelCandidate,
+    SupportingCase,
+)
 from shared.schemas.search import (
     ArticleListResponse,
     ItmCatalogResponse,
@@ -31,9 +39,15 @@ from shared.schemas.search import (
 
 __all__ = [
     "ArticleListResponse",
+    "CandidateCatalogResponse",
+    "CaseDiscovery",
     "CaseRecord",
     "Channel",
     "ControlRef",
+    "MethodAssessment",
+    "NovelBehavior",
+    "NovelCandidate",
+    "SupportingCase",
     "ExtractedEntities",
     "FeedSource",
     "IngestionRunResult",
