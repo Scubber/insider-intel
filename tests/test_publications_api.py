@@ -119,3 +119,16 @@ def test_publications_ingest_url_fetch_failure_maps_502(tmp_path, monkeypatch) -
         )
         resp = client.post("/publications/ingest_url", json={"url": "https://blocked.example/doc"})
         assert resp.status_code == 502
+
+
+def test_stream_min_score_floor_exempts_publications(tmp_path, monkeypatch) -> None:
+    """The UI's High-signal floor must never hide curated reference docs."""
+    with _client(tmp_path, monkeypatch) as client:
+        resp = client.get("/articles", params={"min_score": 0.99, "itm_alignment": "all"})
+        assert resp.status_code == 200
+        links = {r["link"] for r in resp.json()["results"]}
+        assert PUB_LINK in links  # publication passes despite low score
+        assert "https://example.com/insider" not in links  # news gated
+
+        sources = client.get("/sources", params={"min_score": 0.99, "itm_alignment": "all"})
+        assert {s["id"] for s in sources.json()} == {"pub-sei-common-sense-guide-7e"}

@@ -5,6 +5,11 @@
   );
 
   const UI_MIN_SCORE = 0.15;
+  const UI_MIN_SCORE_HIGH = 0.35;
+
+  function streamMinScore() {
+    return state.signal === "high" ? UI_MIN_SCORE_HIGH : UI_MIN_SCORE;
+  }
 
   /** High-signal OSINT phrasing; keep aligned with shared/itm/aliases.py seeds. */
   const CLIENT_ALIAS_EXTRAS = {
@@ -185,6 +190,7 @@
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
     alignFilters: document.getElementById("align-filters"),
     channelFilters: document.getElementById("channel-filters"),
+    signalFilters: document.getElementById("signal-filters"),
     insiderTypeFilters: document.getElementById("insider-type-filters"),
     socialManager: document.getElementById("social-manager"),
     socialSubscribed: document.getElementById("social-subscribed"),
@@ -228,6 +234,7 @@
     theme: "",
     itmAlignment: "insider",
     channel: "all",
+    signal: "standard",
     useCase: "",
     insiderType: "all",
     articles: [],
@@ -3739,6 +3746,12 @@
     });
   }
 
+  function setActiveSignalPill(signal) {
+    document.querySelectorAll("#signal-filters .pill").forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.signal || "") === signal);
+    });
+  }
+
   function setActiveChannelPill(channel) {
     document.querySelectorAll("#channel-filters .pill").forEach((btn) => {
       btn.classList.toggle("active", (btn.dataset.channel || "") === channel);
@@ -3882,6 +3895,7 @@
       sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim();
     }
     const parts = [alignLabel, channelLabel];
+    if (state.signal === "high") parts.push("High signal");
     if (state.useCase) parts.push(USE_CASE_LABELS[state.useCase] || state.useCase);
     if (state.insiderType && state.insiderType !== "all") {
       parts.push(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType);
@@ -3919,7 +3933,7 @@
 
   async function loadSources() {
     const sources = await api("/sources", {
-      min_score: UI_MIN_SCORE,
+      min_score: streamMinScore(),
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
       use_case: useCaseParam(),
@@ -3960,7 +3974,7 @@
     setStatus(`Loading stream from ${apiBase}…`);
     const data = await api("/articles", {
       limit: 75,
-      min_score: UI_MIN_SCORE,
+      min_score: streamMinScore(),
       itm_alignment: state.itmAlignment,
       channel: channelParam(),
       use_case: useCaseParam(),
@@ -4111,6 +4125,17 @@
       if (!btn) return;
       state.itmAlignment = btn.dataset.alignment || "insider";
       setActiveScopePill(state.itmAlignment);
+      updateRefineSummary();
+      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+  }
+
+  if (els.signalFilters) {
+    els.signalFilters.addEventListener("click", (event) => {
+      const btn = event.target.closest(".pill[data-signal]");
+      if (!btn) return;
+      state.signal = btn.dataset.signal || "standard";
+      setActiveSignalPill(state.signal);
       updateRefineSummary();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });

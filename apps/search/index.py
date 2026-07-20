@@ -49,6 +49,16 @@ def _article_matches_channel(
     return _article_channel(article) == mode
 
 
+def _passes_min_score(article: ProcessedArticle, min_score: float) -> bool:
+    """Relevance floor, except curated publications: long reference docs dilute
+    keyword density and score low by nature, and they already bypass the
+    process-time gate — hiding them behind a stream floor would contradict that.
+    """
+    if article.relevance_score >= min_score:
+        return True
+    return _article_channel(article) == "publications"
+
+
 def _alias_matches(alias: str, lowered: str) -> bool:
     """Substring for multi-word / long phrases; word-boundary for short tokens."""
     if " " in alias or len(alias) >= 8:
@@ -289,7 +299,7 @@ class ArticleSearchIndex:
         """Return (source_id, source_name, article_count) matching optional filters."""
         counts: dict[str, tuple[str, int]] = {}
         for article in self._articles:
-            if article.relevance_score < min_score:
+            if not _passes_min_score(article, min_score):
                 continue
             if not _article_matches_itm(article, theme=theme, itm_id=itm_id):
                 continue
@@ -328,7 +338,7 @@ class ArticleSearchIndex:
         known = set(tech_ids)
 
         for article in self._articles:
-            if article.relevance_score < min_score:
+            if not _passes_min_score(article, min_score):
                 continue
             if source_id and article.source_id != source_id:
                 continue
@@ -386,7 +396,7 @@ class ArticleSearchIndex:
         filtered = [
             a
             for a in self._articles
-            if a.relevance_score >= min_score
+            if _passes_min_score(a, min_score)
             and (not source_id or a.source_id == source_id)
             and _article_matches_itm(
                 a,
