@@ -385,7 +385,9 @@ DEFAULT_FEEDS: list[FeedSource] = [
     FeedSource(
         id="sei-insider-threat",
         name="CMU SEI Blog",
-        url="https://insights.sei.cmu.edu/blog/feeds/latest.rss",
+        # insights.sei.cmu.edu feed 404s since the domain move; the topic feed
+        # is scoped to insider threat only (better signal than all SEI posts).
+        url="https://www.sei.cmu.edu/blog/feeds/topic/insider-threat/atom/",
         category="insider-osint",
     ),
     FeedSource(

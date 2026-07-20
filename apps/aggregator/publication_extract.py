@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -43,6 +43,37 @@ class PublicationDoc:
 
 
 class _PdfLinkParser(HTMLParser):
+    """Collect PDF candidates: citation meta first, then typed/suffixed links."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.meta_hrefs: list[str] = []  # citation_pdf_url — most reliable
+        self.typed_hrefs: list[str] = []  # type="application/pdf"
+        self.suffix_hrefs: list[str] = []  # path ends with / contains .pdf
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        ad = {k.lower(): (v or "") for k, v in attrs}
+        t = tag.lower()
+        if t == "meta":
+            name = (ad.get("name") or ad.get("property") or "").lower()
+            if name == "citation_pdf_url" and ad.get("content"):
+                self.meta_hrefs.append(ad["content"])
+            return
+        if t not in ("a", "link"):
+            return
+        href = ad.get("href")
+        if not href:
+            return
+        if "pdf" in (ad.get("type") or "").lower():
+            self.typed_hrefs.append(href)
+            return
+        # .pdf anywhere before the fragment (path or query — viewer URLs put
+        # the filename in the query); content sniffing rejects false positives.
+        if ".pdf" in href.split("#")[0].lower():
+            self.suffix_hrefs.append(href)
+
+
+class _CollectionLinkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.hrefs: list[str] = []
@@ -51,7 +82,7 @@ class _PdfLinkParser(HTMLParser):
         if tag.lower() != "a":
             return
         href = next((v for k, v in attrs if k.lower() == "href" and v), None)
-        if href and href.split("?")[0].split("#")[0].lower().endswith(".pdf"):
+        if href:
             self.hrefs.append(href)
 
 
@@ -75,7 +106,12 @@ class _BodyTextParser(HTMLParser):
 
 
 def find_pdf_links(body: str, base_url: str) -> list[str]:
-    """Return absolute PDF URLs linked from an HTML document, in page order."""
+    """Return absolute PDF candidate URLs, most-reliable signal first.
+
+    Order: citation_pdf_url meta, then type="application/pdf" links, then
+    hrefs whose path ends with (or contains) ``.pdf`` — non-.pdf-suffixed
+    candidates are verified by content sniffing at fetch time.
+    """
     parser = _PdfLinkParser()
     try:
         parser.feed(body)
@@ -84,12 +120,44 @@ def find_pdf_links(body: str, base_url: str) -> list[str]:
         logger.debug("PDF link parse recovered: %s", exc)
     seen: set[str] = set()
     links: list[str] = []
-    for href in parser.hrefs:
+    for href in parser.meta_hrefs + parser.typed_hrefs + parser.suffix_hrefs:
         absolute = urljoin(base_url, href)
         if absolute not in seen:
             seen.add(absolute)
             links.append(absolute)
     return links
+
+
+def find_collection_items(body: str, base_url: str) -> list[str]:
+    """Item landing pages linked from a library/collection index page.
+
+    Same-host links sharing the collection's parent path prefix (e.g. every
+    ``/library/<slug>/`` page linked from ``/library/<collection-slug>/``),
+    excluding the page itself, deduped in page order.
+    """
+    base = urlparse(base_url)
+    base_path = base.path.rstrip("/")
+    parent_prefix = base_path.rsplit("/", 1)[0] + "/" if "/" in base_path.lstrip("/") else "/"
+    parser = _CollectionLinkParser()
+    try:
+        parser.feed(body)
+        parser.close()
+    except Exception as exc:  # noqa: BLE001 — tolerate broken HTML
+        logger.debug("Collection link parse recovered: %s", exc)
+    seen: set[str] = set()
+    items: list[str] = []
+    for href in parser.hrefs:
+        absolute = urljoin(base_url, href).split("#")[0]
+        parsed = urlparse(absolute)
+        if parsed.netloc != base.netloc:
+            continue
+        path = parsed.path.rstrip("/")
+        if not path.startswith(parent_prefix) or path == base_path:
+            continue
+        if absolute not in seen:
+            seen.add(absolute)
+            items.append(absolute)
+    return items
 
 
 def extract_page_text(body: str) -> str:
@@ -143,12 +211,36 @@ def _fetch_pdf_text(
     resp = _get(client, url, user_agent=user_agent, accept="application/pdf,*/*;q=0.8")
     if len(resp.content) > max_bytes:
         raise PublicationFetchError(url, f"PDF exceeds {max_bytes} bytes")
+    if not _looks_like_pdf(resp):
+        raise PublicationFetchError(url, "not a PDF (content sniff)")
     return extract_pdf_text(resp.content, max_chars=max_chars)
 
 
 def _looks_like_pdf(resp: httpx.Response) -> bool:
     ctype = (resp.headers.get("content-type") or "").lower()
     return "application/pdf" in ctype or resp.content[:5] == b"%PDF-"
+
+
+def fetch_collection_items(
+    url: str,
+    *,
+    client: httpx.Client | None = None,
+    user_agent: str,
+) -> list[str]:
+    """Fetch a collection index page and return its item landing-page URLs."""
+    owns_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        resp = _get(
+            http,
+            url,
+            user_agent=user_agent,
+            accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        )
+        return find_collection_items(resp.text, str(resp.url))
+    finally:
+        if owns_client:
+            http.close()
 
 
 def fetch_publication(
@@ -185,6 +277,8 @@ def fetch_publication(
         body = resp.text
         meta = extract_article_html(body)
         candidates = [pdf_url] if pdf_url else find_pdf_links(body, str(resp.url))
+        if not candidates:
+            logger.info("publication %s: no PDF candidates found on page", url)
         content: str | None = None
         used_pdf: str | None = None
         for candidate in candidates[:3]:
@@ -204,6 +298,12 @@ def fetch_publication(
                 used_pdf = candidate
                 break
         if content is None:
+            if candidates:
+                logger.info(
+                    "publication %s: all %d PDF candidate(s) failed; using page text",
+                    url,
+                    min(len(candidates), 3),
+                )
             content = extract_page_text(body)[:content_max_chars] or None
         return PublicationDoc(
             title=meta.title,
