@@ -16,6 +16,7 @@ from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
 from apps.aggregator.feedly_pipeline import run_feedly_ingestion
 from apps.aggregator.pipeline import DEFAULT_STORE_PATH, run_ingestion
 from apps.aggregator.process_pipeline import DEFAULT_PROCESSED_PATH, run_processing
+from apps.aggregator.publications_pipeline import run_publications_ingestion
 from apps.aggregator.reddit_pipeline import run_reddit_ingestion
 from apps.aggregator.web_keywords import run_web_keyword_ingestion
 from apps.aggregator.x_pipeline import run_x_ingestion
@@ -33,6 +34,7 @@ class FullRunResult:
     web_keywords: IngestionRunResult | None
     datatheftnews: IngestionRunResult | None
     social: IngestionRunResult | None
+    publications: IngestionRunResult | None
     processing: ProcessingRunResult
     raw_path: str
     processed_path: str
@@ -69,6 +71,7 @@ def run_full_pipeline(
     skip_web_keywords: bool = False,
     skip_datatheftnews: bool = False,
     skip_social: bool = False,
+    skip_publications: bool = False,
 ) -> FullRunResult:
     """Ingest feeds and optional sources, then process new raw articles."""
     settings = get_settings()
@@ -142,6 +145,12 @@ def run_full_pipeline(
                 state=JsonIngestState(DEFAULT_STATE_PATH),
             ),
         )
+    publications_result: IngestionRunResult | None = None
+    if not skip_publications:
+        publications_result = run_publications_ingestion(
+            store_path=raw_path,
+            include_raw=include_raw,
+        )
     processing = run_processing(
         raw_path=raw_path,
         processed_path=processed_path,
@@ -149,7 +158,13 @@ def run_full_pipeline(
         min_score=score,
     )
     combined = _merge_ingestion(
-        ingestion, feedly_result, court_result, web_result, dtn_result, social_result
+        ingestion,
+        feedly_result,
+        court_result,
+        web_result,
+        dtn_result,
+        social_result,
+        publications_result,
     )
     logger.info(
         "Full pipeline done: ingested_saved=%d processed_saved=%d",
@@ -163,6 +178,7 @@ def run_full_pipeline(
         web_keywords=web_result,
         datatheftnews=dtn_result,
         social=social_result,
+        publications=publications_result,
         processing=processing,
         raw_path=raw_path,
         processed_path=processed_path,

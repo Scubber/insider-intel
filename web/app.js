@@ -3212,6 +3212,7 @@
     const src = String(article.source_id || article.source_name || "").toLowerCase();
     if (channel === "filings" || LEGAL_SOURCE_RE.test(src)) return "CASE";
     if (channel === "social" || src.startsWith("social-")) return "SOCIAL";
+    if (channel === "publications" || src.startsWith("pub-")) return "PUB";
     return "NEWS"; // news + legacy reddit-* tips
   }
 
@@ -3873,6 +3874,7 @@
     else if (state.channel === "filings") channelLabel = "Cases";
     else if (state.channel === "tips") channelLabel = "Tips";
     else if (state.channel === "social") channelLabel = "Social";
+    else if (state.channel === "publications") channelLabel = "Publications";
     let sourceLabel = "";
     if (state.sourceId && els.sourceSelect) {
       const opt = els.sourceSelect.selectedOptions[0];

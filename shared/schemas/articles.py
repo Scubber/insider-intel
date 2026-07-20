@@ -12,7 +12,7 @@ from shared.schemas.discovery import CaseDiscovery
 from shared.schemas.forensics import PerCaseForensics
 
 # Provenance lane for stream filters (orthogonal to Insider Focus).
-Channel = Literal["news", "filings", "tips", "social"]
+Channel = Literal["news", "filings", "tips", "social", "publications"]
 
 # Insider disposition inferred per article (None = unclassified).
 InsiderType = Literal["negligent", "malicious", "unintentional"]
@@ -34,6 +34,8 @@ def resolve_channel(
     # social- must win over the legacy reddit- -> tips rule below
     if sid.startswith("social-") or cat.startswith("social") or channel == "social":
         return "social"
+    if sid.startswith("pub-") or channel == "publications" or cat == "publications":
+        return "publications"
     if sid.startswith(("reddit-", "tip-")) or "tips-" in cat or cat == "tips":
         return "tips"
     if "courtlistener" in sid or cat in {"filings", "court", "recap"}:

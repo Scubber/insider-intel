@@ -52,8 +52,12 @@ gradually (newest-first, then legacy `case_record`-only rows when
 `SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`. The
 hunt report reads these stored records — no LLM at read time.
 
-Provenance channels: `news | filings | tips | social` — legacy `reddit-*` RSS
-feeds stay `tips`; API-based social sources use `social-*` ids. Facets thread
+Provenance channels: `news | filings | tips | social | publications` — legacy
+`reddit-*` RSS feeds stay `tips`; API-based social sources use `social-*` ids;
+long-form reference docs (curated catalog in `publication_sources.py`, PDF
+text via `publication_extract.py`) use `pub-*` ids and bypass the process
+min-score gate. One-off flagging: `ingest_publication_url` CLI /
+`POST /publications/ingest_url`. Facets thread
 end to end: `use_case` / `insider_type` / `channel` params on `/articles`,
 `/search`, `/sources`; registry at `GET /usecases`; subscriptions at
 `/social/catalog` + `/social/subscriptions`; one-off flagging via
