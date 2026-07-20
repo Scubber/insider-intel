@@ -204,6 +204,7 @@
     introHelp: document.getElementById("intro-help"),
     introUsecases: document.getElementById("intro-usecases"),
     panelToggles: document.getElementById("panel-toggles"),
+    trendingList: document.getElementById("trending-list"),
     statusLine: document.getElementById("status-line"),
     boardMenuBtn: document.getElementById("board-menu-btn"),
     boardMenu: document.getElementById("board-menu"),
@@ -4252,6 +4253,81 @@
     updateRefineSummary();
   }
 
+  /* ▲ TRENDING — most-active topics across subscribed feeds (server counts
+     recent vs prior window over the indexed corpus; no LLM). Failures are
+     non-fatal: the panel just shows its empty state. */
+  function trendingDeltaText(item) {
+    if (item.direction === "new") return "NEW";
+    const pct = Math.abs(Math.round(item.delta_pct || 0));
+    if (item.direction === "down") return `↓ ${pct}% WK`;
+    if (item.direction === "flat") return "±0% WK";
+    return `↑ ${pct}% WK`;
+  }
+
+  function renderTrending(data) {
+    if (!els.trendingList) return;
+    els.trendingList.innerHTML = "";
+    const items = (data && data.items) || [];
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.className = "trending-empty";
+      empty.textContent = "Not enough recent activity across subscribed feeds yet.";
+      els.trendingList.appendChild(empty);
+      return;
+    }
+    items.forEach((item) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "trend-row";
+      const kindTip =
+        item.kind === "use_case"
+          ? "Filter the stream to this topic"
+          : item.kind === "technique"
+            ? "Open this technique's dossier"
+            : "Search the corpus for this term";
+      row.dataset.tip = `${item.count} recent · ${item.prev_count} prior — ${kindTip}`;
+      const head = document.createElement("span");
+      head.className = "trend-head";
+      const src = document.createElement("span");
+      src.className = "trend-src";
+      src.textContent = `[${String(item.channel || "news").toUpperCase()}]`;
+      const delta = document.createElement("span");
+      delta.className = `trend-delta trend-${item.direction}`;
+      delta.textContent = trendingDeltaText(item);
+      head.append(src, delta);
+      const label = document.createElement("span");
+      label.className = "trend-label";
+      label.textContent = item.label;
+      row.append(head, label);
+      row.addEventListener("click", () => {
+        const fail = (err) => setStatus(`Load failed: ${err.message}`);
+        if (item.kind === "use_case") {
+          state.useCase = state.useCase === item.key ? "" : item.key;
+          syncHuntUsecases();
+          updateRefineSummary();
+          reapplyActiveFilters().catch(fail);
+          if (isMobileLayout()) setActivePane("articles");
+        } else if (item.kind === "technique") {
+          selectTechnique(item.key).catch(fail);
+        } else {
+          if (els.q) els.q.value = item.label;
+          runSearch(item.label).catch((err) => setStatus(`Search failed: ${err.message}`));
+        }
+      });
+      els.trendingList.appendChild(row);
+    });
+  }
+
+  async function loadTrending() {
+    if (!els.trendingList) return;
+    try {
+      renderTrending(await api("/trending", { limit: 8 }, { timeoutMs: 10000 }));
+    } catch (err) {
+      console.warn("Trending unavailable", err);
+      renderTrending(null);
+    }
+  }
+
   async function loadArticles() {
     setStatus(`Loading stream from ${apiBase}…`);
     const data = await api("/articles", {
@@ -4299,6 +4375,7 @@
       state.itmCatalogKey = "";
       await ensureItmCatalog(true);
       renderMatrixBrowse();
+      loadTrending();
       await reapplyActiveFilters();
       if (state.dataState) {
         state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
@@ -5003,6 +5080,7 @@
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
+      loadTrending();
       loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {

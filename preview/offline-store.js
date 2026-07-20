@@ -407,6 +407,102 @@
     };
   }
 
+  // Mirrors ArticleSearchIndex.trending: recent vs prior window over the
+  // snapshot, anchored to the newest published stamp (static data). The
+  // snapshot carries no use_cases field, so topics here are ITM parent
+  // techniques + matched terms.
+  function trending(params) {
+    const windowDays = Math.min(30, Math.max(1, Number(params.window_days || 7)));
+    const limit = Math.min(20, Math.max(1, Number(params.limit || 8)));
+    const stamps = articles
+      .map((a) => new Date(a.published || 0).getTime())
+      .filter((t) => Number.isFinite(t) && t > 0);
+    if (!stamps.length) return { window_days: windowDays, items: [] };
+    const anchor = Math.max(...stamps);
+    // Terms that merely restate a technique title add no signal (API parity).
+    const redundantTerms = new Set(
+      ((itm && itm.techniques) || []).map((t) => String(t.title || "").toLowerCase()),
+    );
+    const windowMs = windowDays * 86400000;
+    const recentStart = anchor - windowMs;
+    const priorStart = anchor - 2 * windowMs;
+
+    const topics = new Map();
+    const touch = (kind, key, label, bucket, story, channel) => {
+      const id = `${kind}|${key}`;
+      let topic = topics.get(id);
+      if (!topic) {
+        topic = { kind, key, label, recent: new Set(), prior: new Set(), channels: {} };
+        topics.set(id, topic);
+      }
+      topic[bucket].add(story);
+      if (bucket === "recent") {
+        topic.channels[channel] = (topic.channels[channel] || 0) + 1;
+      }
+    };
+
+    articles.forEach((a) => {
+      const t = new Date(a.published || 0).getTime();
+      if (!Number.isFinite(t) || t < priorStart) return;
+      const bucket = t >= recentStart ? "recent" : "prior";
+      const story = a.story_key || a.link;
+      const channel = articleChannel(a);
+      const seen = new Set();
+      const terms = new Set();
+      (a.itm_hits || []).forEach((hit) => {
+        const pid = String(hit.id || "").toUpperCase().split(".")[0];
+        if (pid && !seen.has(pid)) {
+          seen.add(pid);
+          touch("technique", pid, hit.title || pid, bucket, story, channel);
+        }
+        (hit.matched_aliases || []).forEach((al) => terms.add(String(al).toLowerCase()));
+      });
+      (a.keywords_hit || []).forEach((kw) => terms.add(String(kw).toLowerCase()));
+      terms.forEach((term) => {
+        // Bare taxonomy ids ("me024") read as noise in trending terms.
+        if (
+          term.length >= 3 &&
+          !redundantTerms.has(term) &&
+          !/^[a-z]{2}\d{3}(\.\d+)?$/.test(term)
+        ) {
+          touch("term", term, term, bucket, story, channel);
+        }
+      });
+    });
+
+    const items = [];
+    topics.forEach((topic) => {
+      const count = topic.recent.size;
+      const prev = topic.prior.size;
+      const floor = topic.kind === "term" ? 3 : 2;
+      if (count < floor) return;
+      let deltaPct = null;
+      let direction = "new";
+      if (prev > 0) {
+        deltaPct = Math.round(((count - prev) / prev) * 1000) / 10;
+        direction = deltaPct > 0 ? "up" : deltaPct < 0 ? "down" : "flat";
+      }
+      const channel =
+        Object.entries(topic.channels).sort((x, y) => y[1] - x[1]).map((e) => e[0])[0] ||
+        "news";
+      items.push({
+        kind: topic.kind,
+        key: topic.key,
+        label: topic.label,
+        channel,
+        count,
+        prev_count: prev,
+        delta_pct: deltaPct,
+        direction,
+      });
+    });
+    items.sort((x, y) => {
+      const rank = (i) => (i.direction === "new" ? Infinity : i.delta_pct || 0);
+      return rank(y) - rank(x) || y.count - x.count || x.label.localeCompare(y.label);
+    });
+    return { window_days: windowDays, items: items.slice(0, limit) };
+  }
+
   const ready = (async () => {
     const arts = embeddedJson("offline-articles") || {};
     articles = arts.articles || arts.results || [];
@@ -429,6 +525,7 @@
       }
       if (path === "/itm") return enrichItmCatalog(params);
       if (path === "/sources") return listSources(params);
+      if (path === "/trending") return trending(params);
       if (path === "/articles") return filterArticles(params);
       if (path === "/search") return search(params);
       if (path === "/reload" && method === "POST") {
