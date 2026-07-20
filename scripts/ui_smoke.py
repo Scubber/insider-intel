@@ -136,6 +136,24 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("? reopens the intro", page.is_visible("#intro-body"))
         page.click("#intro-gotit")
 
+        # TRENDING panel: real rows (or the honest empty state) — never the
+        # old TODO placeholder.
+        trend_rows = page.locator(".pane-trending .trend-row").count()
+        trend_empty = page.locator(".pane-trending .trending-empty").count()
+        pane_text = page.text_content(".pane-trending") or ""
+        checks.check(
+            "trending panel renders rows or empty state",
+            (trend_rows > 0 or trend_empty > 0) and "TODO" not in pane_text,
+            f"rows={trend_rows} empty={trend_empty}",
+        )
+        if trend_rows:
+            first = page.text_content(".pane-trending .trend-row .trend-delta") or ""
+            checks.check(
+                "trending rows carry a delta chip",
+                any(tok in first for tok in ("↑", "↓", "NEW", "±")),
+                f"delta={first!r}",
+            )
+
         # Snippet is clean prose (no literal HTML entities) — Fix 4 guard
         snips = page.locator("#article-list .snip").all_text_contents()
         joined = " ".join(snips)

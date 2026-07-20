@@ -66,6 +66,9 @@ mapped to the Insider Threat Matrix™.
 Tracked as GitHub issues (the working kanban):
 <https://github.com/Scubber/insider-intel/issues>
 
+- UI-redesign TODOs (filed as issues): notifications backend (digest/alerts),
+  data-source onboarding + pause/remove from Settings, publication onboarding
+  from the web UI, remappable keybindings
 - **Collaborative analyst notes — a per-card journal + comment auth** (see below)
 - **Syndication — let other sites/tools consume insider-intel** (see below)
 - Reddit OAuth creds → un-block the social tips lane from GCP
