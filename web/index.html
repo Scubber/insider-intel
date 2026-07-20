@@ -135,6 +135,17 @@
               </div>
             </div>
             <div class="filter-group">
+              <span
+                class="filter-label"
+                data-tip="Relevance-score floor for the stream. High hides weaker matches; publications are never hidden."
+                tabindex="0"
+              >Signal</span>
+              <div class="pill-group" id="signal-filters" role="group" aria-label="Signal threshold">
+                <button type="button" class="pill active" data-signal="standard">Standard</button>
+                <button type="button" class="pill" data-signal="high">High</button>
+              </div>
+            </div>
+            <div class="filter-group">
               <span class="filter-label">Channel</span>
               <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
                 <button type="button" class="pill active" data-channel="all">All channels</button>
