@@ -4,11 +4,13 @@
     "",
   );
 
-  const UI_MIN_SCORE = 0.15;
-  const UI_MIN_SCORE_HIGH = 0.35;
+  // SIG floor (0–100, matches the SIG number stamped on each card). The API's
+  // min_score is the same value on a 0–1 scale. 15 ≈ the old "Standard" floor,
+  // 35 ≈ the old "High" toggle. Publications are exempt server-side.
+  const SIG_DEFAULT = 15;
 
   function streamMinScore() {
-    return state.signal === "high" ? UI_MIN_SCORE_HIGH : UI_MIN_SCORE;
+    return (Number(state.signal) || 0) / 100;
   }
 
   /** High-signal OSINT phrasing; keep aligned with shared/itm/aliases.py seeds. */
@@ -53,32 +55,35 @@
    * (keep ids aligned with shared/taxonomy/use_cases.py); query-only chips
    * fall back to a text hunt. */
   // Descriptions mirror shared/taxonomy/use_cases.py — keep in sync.
+  // Tooltips carry each description + its ITM technique ids (ids never inline).
   const HUNT_USE_CASES = [
+    {
+      label: "Data Theft",
+      useCase: "data-exfiltration",
+      query: "data exfiltration trade secret",
+      description:
+        "Taking or leaking company data, files, or trade secrets — ITM IF002, IF001",
+    },
     {
       label: "Overemployment",
       useCase: "overemployment",
       query: "overemployment moonlighting",
       description:
-        "Undisclosed concurrent employment — secretly working multiple jobs (incl. moonlighting)",
+        "Undisclosed concurrent employment — secretly working multiple jobs — ITM IF038",
     },
     {
-      label: "Data exfiltration",
-      useCase: "data-exfiltration",
-      query: "data exfiltration trade secret",
-      description: "Taking or leaking company data, files, or trade secrets",
-    },
-    {
-      label: "Credential misuse",
+      label: "Credential Misuse",
       useCase: "credential-misuse",
       query: "shared credentials",
       description:
-        "Sharing, borrowing, or abusing logins, badges, and privileged access",
+        "Sharing, borrowing, or abusing logins, badges, and privileged access — ITM ME021, ME024, ME027, IF039",
     },
     {
       label: "Shadow IT",
       useCase: "shadow-it",
       query: "shadow it",
-      description: "Unsanctioned apps, devices, or AI tools used for work",
+      description:
+        "Unsanctioned apps, devices, or AI tools used for work — ITM ME030, ME003",
     },
   ];
 
@@ -190,8 +195,29 @@
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
     alignFilters: document.getElementById("align-filters"),
     channelFilters: document.getElementById("channel-filters"),
-    signalFilters: document.getElementById("signal-filters"),
     insiderTypeFilters: document.getElementById("insider-type-filters"),
+    signalSlider: document.getElementById("signal-slider"),
+    signalValue: document.getElementById("signal-value"),
+    introPanel: document.getElementById("intro-panel"),
+    introToggle: document.getElementById("intro-toggle"),
+    introGotit: document.getElementById("intro-gotit"),
+    introHelp: document.getElementById("intro-help"),
+    introUsecases: document.getElementById("intro-usecases"),
+    panelToggles: document.getElementById("panel-toggles"),
+    statusLine: document.getElementById("status-line"),
+    boardMenuBtn: document.getElementById("board-menu-btn"),
+    boardMenu: document.getElementById("board-menu"),
+    exportCases: document.getElementById("export-cases"),
+    kbdHintsToggle: document.getElementById("kbd-hints-toggle"),
+    defaultSignal: document.getElementById("default-signal"),
+    defaultSignalValue: document.getElementById("default-signal-value"),
+    applyDefaults: document.getElementById("apply-defaults"),
+    resetPrefs: document.getElementById("reset-prefs"),
+    notifyDigest: document.getElementById("notify-digest"),
+    notifyAlerts: document.getElementById("notify-alerts"),
+    alertSignal: document.getElementById("alert-signal"),
+    alertSignalValue: document.getElementById("alert-signal-value"),
+    notifyEmail: document.getElementById("notify-email"),
     socialManager: document.getElementById("social-manager"),
     socialSubscribed: document.getElementById("social-subscribed"),
     socialSubscribedEmpty: document.getElementById("social-subscribed-empty"),
@@ -234,7 +260,8 @@
     theme: "",
     itmAlignment: "insider",
     channel: "all",
-    signal: "standard",
+    signal: SIG_DEFAULT,
+    shownCount: 0,
     useCase: "",
     insiderType: "all",
     articles: [],
@@ -268,7 +295,10 @@
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
   const WIDE_MQ = window.matchMedia("(min-width: 1200px)");
-  const PANES = new Set(["articles", "matrix", "workbench"]);
+  const PANES = new Set(["articles", "matrix", "workbench", "settings"]);
+  // Panes that take over the grid full-width on EVERY layout (design handoff:
+  // the Workbench nav tab and Settings open full width).
+  const TAKEOVER_PANES = new Set(["workbench", "settings"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -283,6 +313,9 @@
     if (els.appWorkbench) {
       els.appWorkbench.dataset.pane = next;
     }
+    // Mirror on <body> so the header (outside the app shell) can hide its
+    // stream-only chrome (refine bar, PANELS row) on takeover panes.
+    document.body.dataset.pane = next;
     if (els.mobileTabs) {
       els.mobileTabs.querySelectorAll(".mobile-tab").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.pane === next);
@@ -295,14 +328,202 @@
 
   function syncPaneForViewport() {
     const current = els.appWorkbench?.dataset.pane;
-    // Wide layout shows every pane; park the tab state on "articles" so
-    // narrowing the window later never lands on a matrix-takeover view.
+    // Wide layout shows every stream pane; a lingering matrix-takeover state
+    // parks back on "articles". Workbench/Settings takeovers persist.
     if (isWideLayout()) {
-      if (current !== "articles") setActivePane("articles");
+      if (current !== "articles" && !TAKEOVER_PANES.has(current)) {
+        setActivePane("articles");
+      }
       return;
     }
     if (!isMobileLayout()) return;
     if (!PANES.has(current)) setActivePane("articles");
+  }
+
+  /* ── Persisted UI state (design handoff): intro, panel collapse/hide,
+     signal floor, defaults, notification prefs. One JSON blob alongside the
+     existing insider-intel-* keys. ─────────────────────────────────────── */
+  const UI_STATE_KEY = "insider-intel-ui-v2";
+  const KBD_HINTS_KEY = "insider-intel-kbd-hints";
+
+  const uiState = {
+    introMinimized: false,
+    collapsed: {},
+    hidden: {},
+    signal: SIG_DEFAULT,
+    defScope: "insider",
+    defSignal: SIG_DEFAULT,
+    notify: { digest: false, alerts: false, alertSig: 80, email: "" },
+  };
+
+  (function loadUiState() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(UI_STATE_KEY) || "{}");
+      if (raw && typeof raw === "object") {
+        if (typeof raw.introMinimized === "boolean") uiState.introMinimized = raw.introMinimized;
+        if (raw.collapsed && typeof raw.collapsed === "object") uiState.collapsed = raw.collapsed;
+        if (raw.hidden && typeof raw.hidden === "object") uiState.hidden = raw.hidden;
+        if (Number.isFinite(Number(raw.signal))) uiState.signal = Number(raw.signal);
+        if (raw.defScope === "all" || raw.defScope === "insider") uiState.defScope = raw.defScope;
+        if (Number.isFinite(Number(raw.defSignal))) uiState.defSignal = Number(raw.defSignal);
+        if (raw.notify && typeof raw.notify === "object") {
+          uiState.notify = { ...uiState.notify, ...raw.notify };
+        }
+      }
+    } catch {
+      /* first visit or corrupt state — defaults stand */
+    }
+  })();
+
+  function saveUiState() {
+    try {
+      localStorage.setItem(UI_STATE_KEY, JSON.stringify(uiState));
+    } catch {
+      /* private mode — session-only state */
+    }
+  }
+
+  // Session filters seed from the persisted floor + default scope.
+  state.signal = uiState.signal;
+  state.itmAlignment = uiState.defScope;
+
+  /* Panel chrome: every keyed panel/section collapses to its header; the four
+     stream panes can also be hidden and restored from the PANELS row. */
+  const PANEL_TOGGLES = [
+    ["core", "TRENDING"],
+    ["itm", "ITM INDEX"],
+    ["stream", "CASE STREAM"],
+    ["wb", "WORKBENCH"],
+  ];
+
+  function panelEl(key) {
+    return document.querySelector(`[data-panel-key="${key}"]`);
+  }
+
+  function applyPanelChrome() {
+    document.querySelectorAll("[data-panel-key]").forEach((panel) => {
+      const key = panel.dataset.panelKey;
+      const collapsed = Boolean(uiState.collapsed[key]);
+      panel.classList.toggle("collapsed", collapsed);
+      panel.querySelectorAll(`.panel-collapse[data-panel="${key}"]`).forEach((btn) => {
+        btn.textContent = collapsed ? "+" : "−";
+        btn.dataset.tip = collapsed ? "Expand this panel" : "Collapse to header bar";
+      });
+    });
+    const shell = els.appWorkbench;
+    if (shell) {
+      PANEL_TOGGLES.forEach(([key]) => {
+        shell.classList.toggle(`hide-${key}`, Boolean(uiState.hidden[key]));
+      });
+    }
+    renderPanelToggles();
+  }
+
+  function renderPanelToggles() {
+    if (!els.panelToggles) return;
+    els.panelToggles.innerHTML = "";
+    PANEL_TOGGLES.forEach(([key, label]) => {
+      const hidden = Boolean(uiState.hidden[key]);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "panel-toggle";
+      btn.classList.toggle("panel-toggle-hidden", hidden);
+      btn.dataset.panelToggle = key;
+      btn.setAttribute("aria-pressed", hidden ? "false" : "true");
+      btn.dataset.tip = hidden ? `Restore the ${label} panel` : `Hide the ${label} panel`;
+      const box = document.createElement("span");
+      box.className = "panel-toggle-box";
+      box.textContent = hidden ? "" : "✓";
+      btn.append(box, document.createTextNode(` ${label}${hidden ? " — HIDDEN" : ""}`));
+      btn.addEventListener("click", () => {
+        uiState.hidden[key] = !uiState.hidden[key];
+        saveUiState();
+        applyPanelChrome();
+      });
+      els.panelToggles.appendChild(btn);
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const collapseBtn = event.target.closest(".panel-collapse[data-panel]");
+    if (collapseBtn) {
+      const key = collapseBtn.dataset.panel;
+      if (key === "intro") {
+        setIntroMinimized(!uiState.introMinimized);
+        return;
+      }
+      uiState.collapsed[key] = !uiState.collapsed[key];
+      saveUiState();
+      applyPanelChrome();
+      return;
+    }
+    const hideBtn = event.target.closest(".panel-hide[data-panel]");
+    if (hideBtn) {
+      uiState.hidden[hideBtn.dataset.panel] = true;
+      saveUiState();
+      applyPanelChrome();
+    }
+  });
+
+  /* Intro panel: minimize-only (never dismissible); ? re-expands it. */
+  function setIntroMinimized(minimized) {
+    uiState.introMinimized = minimized;
+    saveUiState();
+    applyIntroState();
+  }
+
+  function applyIntroState() {
+    if (!els.introPanel) return;
+    els.introPanel.classList.toggle("minimized", uiState.introMinimized);
+    if (els.introToggle) {
+      els.introToggle.textContent = uiState.introMinimized ? "+" : "−";
+      els.introToggle.dataset.tip = uiState.introMinimized
+        ? "Expand the intro"
+        : "Minimize to the header bar";
+    }
+  }
+
+  if (els.introToggle) {
+    els.introToggle.addEventListener("click", () =>
+      setIntroMinimized(!uiState.introMinimized),
+    );
+  }
+  if (els.introGotit) {
+    els.introGotit.addEventListener("click", () => setIntroMinimized(true));
+  }
+  if (els.introHelp) {
+    els.introHelp.addEventListener("click", () => {
+      setIntroMinimized(false);
+      setActivePane("articles");
+      setView("stream");
+      try {
+        els.introPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+  applyIntroState();
+
+  /* PANELS-row status line: LIVE · indexed · shown · updated. */
+  function updateStatusLine() {
+    if (!els.statusLine) return;
+    const parts = [];
+    parts.push(state.dataState ? "LIVE" : "CONNECTING…");
+    if (state.lastTotalIndexed) parts.push(`${state.lastTotalIndexed} INDEXED`);
+    parts.push(`${state.shownCount} SHOWN`);
+    const ts = state.dataState && state.dataState.updatedAt;
+    if (ts) {
+      try {
+        const d = new Date(ts);
+        const hh = String(d.getUTCHours()).padStart(2, "0");
+        const mm = String(d.getUTCMinutes()).padStart(2, "0");
+        parts.push(`UPDATED ${hh}:${mm}Z`);
+      } catch {
+        /* ignore */
+      }
+    }
+    els.statusLine.textContent = parts.join(" · ");
   }
 
   /* Hash router — #/ (stream), #/technique/<ID> (dossier). GH Pages friendly. */
@@ -385,10 +606,10 @@
   }
 
   function openMatrixView() {
-    // The matrix panel lives inside pane-articles: on narrow/mid layouts a
-    // lingering data-pane="matrix" takeover would hide it, so land on the
-    // articles pane first (this also resets the nav classes — re-assert after).
-    if (!isWideLayout()) setActivePane("articles");
+    // The matrix panel lives inside pane-articles: a lingering takeover pane
+    // (matrix tab, workbench, settings) would hide it, so land on the articles
+    // pane first (this also resets the nav classes — re-assert after).
+    setActivePane("articles");
     setView("matrix");
     syncMastheadNav("matrix");
     ensureItmCatalog()
@@ -408,7 +629,7 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const DEFAULT_THEME = "Dossier Sage";
+  const DEFAULT_THEME = "cnn-lite";
   const THEMES = new Set([
     "dossier",
     "cnn-lite",
@@ -459,36 +680,43 @@
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
-  // View tweaks (design-handoff pack): density / layout / redaction, stored
-  // per-user and applied as data-* attributes on <html> (see the pre-paint
-  // stamp in index.html; styles.css carries the matching rules).
+  // View tweaks: density / layout as Settings pill groups, stored per-user and
+  // applied as data-* attributes on <html> (see the pre-paint stamp in
+  // index.html; styles.css carries the matching rules).
   const TWEAKS = [
     {
       key: "insider-intel-density",
       attr: "data-density",
-      el: document.getElementById("density-select"),
+      group: document.getElementById("density-pills"),
+      dataAttr: "density",
       values: new Set(["compact", "standard", "comfy"]),
       fallback: "standard",
     },
     {
       key: "insider-intel-layout",
       attr: "data-layout",
-      el: document.getElementById("layout-select"),
+      group: document.getElementById("layout-pills"),
+      dataAttr: "layout",
       values: new Set(["split", "stacked"]),
       fallback: "split",
     },
   ];
-  TWEAKS.forEach(({ key, attr, el, values, fallback }) => {
-    if (!el) return;
+  TWEAKS.forEach(({ key, attr, group, dataAttr, values, fallback }) => {
+    if (!group) return;
     const apply = (raw) => {
       const value = values.has(raw) ? raw : fallback;
       if (value === fallback) document.documentElement.removeAttribute(attr);
       else document.documentElement.setAttribute(attr, value);
       localStorage.setItem(key, value);
-      el.value = value;
+      group.querySelectorAll(".pill").forEach((pill) => {
+        pill.classList.toggle("active", pill.dataset[dataAttr] === value);
+      });
     };
     apply(localStorage.getItem(key) || fallback);
-    el.addEventListener("change", () => apply(el.value));
+    group.addEventListener("click", (event) => {
+      const pill = event.target.closest(`.pill[data-${dataAttr}]`);
+      if (pill) apply(pill.dataset[dataAttr]);
+    });
   });
   const redactToggle = document.getElementById("redact-toggle");
   if (redactToggle) {
@@ -500,6 +728,18 @@
     };
     applyRedacted(localStorage.getItem("insider-intel-redacted") === "true");
     redactToggle.addEventListener("change", () => applyRedacted(redactToggle.checked));
+  }
+  if (els.kbdHintsToggle) {
+    const applyKbdHints = (on) => {
+      if (on) document.documentElement.removeAttribute("data-kbd-hints");
+      else document.documentElement.setAttribute("data-kbd-hints", "off");
+      localStorage.setItem(KBD_HINTS_KEY, String(on));
+      els.kbdHintsToggle.checked = on;
+    };
+    applyKbdHints(localStorage.getItem(KBD_HINTS_KEY) !== "false");
+    els.kbdHintsToggle.addEventListener("change", () =>
+      applyKbdHints(els.kbdHintsToggle.checked),
+    );
   }
 
   function setStatus(text) {
@@ -520,47 +760,56 @@
       ? `Live API — corpus last indexed ${new Date(ds.updatedAt).toLocaleString()}`
       : "Connected to the live API";
     els.dataState.hidden = false;
+    updateStatusLine();
+  }
+
+  // The topic pills render twice: in the REFINE bar and in the intro's TRY IT
+  // strip. Same behavior, shared active-state sync.
+  function huntUsecaseContainers() {
+    return [els.huntUsecases, els.introUsecases].filter(Boolean);
   }
 
   function syncHuntUsecases() {
-    if (!els.huntUsecases) return;
     const active = (state.lastHuntQuery || "").trim().toLowerCase();
-    els.huntUsecases.querySelectorAll(".hunt-usecase").forEach((btn) => {
-      const q = (btn.dataset.query || "").toLowerCase();
-      const uc = btn.dataset.useCase || "";
-      const isFacet = Boolean(uc) && uc === state.useCase;
-      const isHunt = Boolean(active) && q === active;
-      btn.classList.toggle("active", isFacet || isHunt);
+    huntUsecaseContainers().forEach((container) => {
+      container.querySelectorAll(".hunt-usecase").forEach((btn) => {
+        const q = (btn.dataset.query || "").toLowerCase();
+        const uc = btn.dataset.useCase || "";
+        const isFacet = Boolean(uc) && uc === state.useCase;
+        const isHunt = Boolean(active) && q === active;
+        btn.classList.toggle("active", isFacet || isHunt);
+      });
     });
   }
 
   function renderHuntUsecases() {
-    if (!els.huntUsecases) return;
-    els.huntUsecases.innerHTML = "";
-    HUNT_USE_CASES.forEach((item) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "hunt-usecase";
-      btn.dataset.query = item.query;
-      if (item.useCase) btn.dataset.useCase = item.useCase;
-      btn.textContent = item.label;
-      btn.dataset.tip =
-        item.description ||
-        (item.useCase ? `Filter stream: ${item.label}` : `Hunt: ${item.query}`);
-      btn.addEventListener("click", () => {
-        if (item.useCase) {
-          // Toggle the classified use-case facet on the stream.
-          state.useCase = state.useCase === item.useCase ? "" : item.useCase;
-          syncHuntUsecases();
-          updateRefineSummary();
-          reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
-        } else {
-          if (els.q) els.q.value = item.query;
-          runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
-        }
-        if (isMobileLayout()) setActivePane("articles");
+    huntUsecaseContainers().forEach((container) => {
+      container.innerHTML = "";
+      HUNT_USE_CASES.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "hunt-usecase";
+        btn.dataset.query = item.query;
+        if (item.useCase) btn.dataset.useCase = item.useCase;
+        btn.textContent = item.label;
+        btn.dataset.tip =
+          item.description ||
+          (item.useCase ? `Filter stream: ${item.label}` : `Hunt: ${item.query}`);
+        btn.addEventListener("click", () => {
+          if (item.useCase) {
+            // Toggle the classified use-case facet on the stream.
+            state.useCase = state.useCase === item.useCase ? "" : item.useCase;
+            syncHuntUsecases();
+            updateRefineSummary();
+            reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+          } else {
+            if (els.q) els.q.value = item.query;
+            runSearch(item.query).catch((err) => setStatus(`Search failed: ${err.message}`));
+          }
+          if (isMobileLayout()) setActivePane("articles");
+        });
+        container.appendChild(btn);
       });
-      els.huntUsecases.appendChild(btn);
     });
     syncHuntUsecases();
   }
@@ -749,6 +998,9 @@
     }
     if (state.searchMode && els.q && els.q.value.trim()) {
       return `No ITM map for “${els.q.value.trim()}”. Add an alias in shared/itm/aliases.py if this is a real insider-risk phrase.`;
+    }
+    if (state.signal > SIG_DEFAULT) {
+      return `No cases clear SIG ≥ ${state.signal} for this filter — lower the confidence floor or widen scope.`;
     }
     if (state.itmAlignment === "all") {
       if (state.sourceId || state.lastTotalIndexed > 0) {
@@ -1562,7 +1814,9 @@
     fillCopyableChips(els.ttpHumanList, report.human, true);
     fillCopyableChips(els.ttpSeedList, report.seeds, true);
     renderQueryBlocks(els.ttpQueries, huntQueriesForReport(report));
-    if (isMobileLayout()) setActivePane("articles");
+    // The report renders in the articles pane's center canvas — leave any
+    // workbench takeover so it is actually on screen.
+    setActivePane("articles");
     try {
       els.ttpReport.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch {
@@ -1783,8 +2037,9 @@
       setStatus("Nothing to build a report from");
       return;
     }
-    // Mobile: show Workbench immediately so Building… / report are visible.
-    setActivePane("workbench");
+    // Mobile: show Workbench immediately so the Building… state is visible;
+    // the rendered report swaps every layout back to the articles pane.
+    if (isMobileLayout()) setActivePane("workbench");
     const prevLabel = button ? button.textContent : "";
     if (button) {
       button.disabled = true;
@@ -1842,9 +2097,9 @@
     }
     await extractAndRenderReport(entries, {
       button: els.boardExtract,
-      busyLabel: "Extracting…",
-      idleLabel: "Extract TTPs",
-      noun: "article(s)",
+      busyLabel: "Assembling…",
+      idleLabel: "MODUS OPERANDI →",
+      noun: "case(s)",
     });
     if (els.boardExtract) els.boardExtract.disabled = boardEntries().length === 0;
   }
@@ -1860,7 +2115,7 @@
     await extractAndRenderReport([article], {
       button: els.showCaseReport,
       busyLabel: "Building…",
-      idleLabel: "Show hunt report",
+      idleLabel: "Modus operandi",
       noun: "case",
     });
   }
@@ -3661,6 +3916,8 @@
     els.streamCount.textContent = state.searchMode
       ? `${clusters.length} CASES`
       : `${clusters.length} CASES · NEWEST FIRST`;
+    state.shownCount = clusters.length;
+    updateStatusLine();
     els.articleList.innerHTML = "";
 
     state.cursorIndex = -1;
@@ -3746,10 +4003,11 @@
     });
   }
 
-  function setActiveSignalPill(signal) {
-    document.querySelectorAll("#signal-filters .pill").forEach((btn) => {
-      btn.classList.toggle("active", (btn.dataset.signal || "") === signal);
-    });
+  function syncSignalControls() {
+    if (els.signalValue) els.signalValue.textContent = `SIG ≥ ${state.signal}`;
+    if (els.signalSlider && Number(els.signalSlider.value) !== state.signal) {
+      els.signalSlider.value = String(state.signal);
+    }
   }
 
   function setActiveChannelPill(channel) {
@@ -3805,8 +4063,30 @@
       );
     }
 
+    if (state.signal > 0) {
+      items.push(
+        buildCrumb(
+          `SIG ≥ ${state.signal}`,
+          () => {
+            state.signal = 0;
+            uiState.signal = 0;
+            saveUiState();
+            updateRefineSummary();
+            reapplyActiveFilters().catch(fail);
+          },
+          "Drop the confidence floor to 0 (show everything)",
+        ),
+      );
+    }
+
     if (state.channel && state.channel !== "all") {
-      const labels = { news: "News", filings: "Cases", tips: "Tips", social: "Social" };
+      const labels = {
+        news: "News",
+        filings: "Cases",
+        tips: "Tips",
+        social: "Social",
+        publications: "Publications",
+      };
       items.push(
         buildCrumb(labels[state.channel] || state.channel, () => {
           state.channel = "all";
@@ -3880,28 +4160,30 @@
 
   function updateRefineSummary() {
     if (!els.refineState) return;
-    const alignLabel =
-      state.itmAlignment === "all" ? "All indexed" : "Insider";
-    let channelLabel = "All channels";
-    if (state.channel === "news") channelLabel = "News";
-    else if (state.channel === "filings") channelLabel = "Cases";
-    else if (state.channel === "tips") channelLabel = "Tips";
-    else if (state.channel === "social") channelLabel = "Social";
-    else if (state.channel === "publications") channelLabel = "Publications";
+    const alignLabel = state.itmAlignment === "all" ? "ALL INDEXED" : "INSIDER FOCUS";
+    let channelLabel = "ALL CHANNELS";
+    if (state.channel === "news") channelLabel = "NEWS";
+    else if (state.channel === "filings") channelLabel = "CASES";
+    else if (state.channel === "tips") channelLabel = "TIPS";
+    else if (state.channel === "social") channelLabel = "SOCIAL";
+    else if (state.channel === "publications") channelLabel = "PUBLICATIONS";
+    const typeLabel =
+      state.insiderType && state.insiderType !== "all"
+        ? (INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType).toUpperCase()
+        : "ANY TYPE";
     let sourceLabel = "";
     if (state.sourceId && els.sourceSelect) {
       const opt = els.sourceSelect.selectedOptions[0];
       const raw = (opt && opt.textContent) || state.sourceId;
-      sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim();
+      sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase();
     }
-    const parts = [alignLabel, channelLabel];
-    if (state.signal === "high") parts.push("High signal");
-    if (state.useCase) parts.push(USE_CASE_LABELS[state.useCase] || state.useCase);
-    if (state.insiderType && state.insiderType !== "all") {
-      parts.push(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType);
+    const parts = [alignLabel, channelLabel, typeLabel, `SIG ≥ ${state.signal}`];
+    if (state.useCase) {
+      parts.push((USE_CASE_LABELS[state.useCase] || state.useCase).toUpperCase());
     }
     if (sourceLabel) parts.push(sourceLabel);
     els.refineState.textContent = parts.join(" · ");
+    syncSignalControls();
     renderFilterCrumbs();
   }
 
@@ -4033,6 +4315,7 @@
   async function runSearch(query) {
     navigate("/");
     setView("stream");
+    setActivePane("articles"); // results render in the stream pane
     state.selectedTechniqueId = null;
     state.selectedDetectionId = null;
     state.selectedPreventionId = null;
@@ -4130,12 +4413,16 @@
     });
   }
 
-  if (els.signalFilters) {
-    els.signalFilters.addEventListener("click", (event) => {
-      const btn = event.target.closest(".pill[data-signal]");
-      if (!btn) return;
-      state.signal = btn.dataset.signal || "standard";
-      setActiveSignalPill(state.signal);
+  if (els.signalSlider) {
+    // Live label while dragging; the (cheap, local-index) refetch on release.
+    els.signalSlider.addEventListener("input", () => {
+      state.signal = Number(els.signalSlider.value) || 0;
+      if (els.signalValue) els.signalValue.textContent = `SIG ≥ ${state.signal}`;
+    });
+    els.signalSlider.addEventListener("change", () => {
+      state.signal = Number(els.signalSlider.value) || 0;
+      uiState.signal = state.signal;
+      saveUiState();
       updateRefineSummary();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });
@@ -4238,9 +4525,9 @@
     els.matrixBrowseAll.addEventListener("click", () => openMatrixView());
   }
 
-  // Masthead nav: on narrow layouts it drives the pane switch (same as the
-  // mobile tabs); on the wide 3-column layout every pane is visible, so it
-  // scrolls the section into view (and leaves the report/dossier for STREAM).
+  // Masthead nav: STREAM restores the 3-pane stream view; WORKBENCH and
+  // SETTINGS take over the grid full-width on every layout (design handoff);
+  // MATRIX opens the center full-matrix browser.
   document.querySelectorAll(".masthead-nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const pane = btn.dataset.pane || "articles";
@@ -4248,22 +4535,12 @@
         openMatrixView();
         return;
       }
-      if (!isWideLayout()) {
-        setActivePane(pane);
-        return;
-      }
-      syncMastheadNav(pane);
       if (pane === "articles" && state.view !== "stream") setView("stream");
-      const target =
-        pane === "workbench"
-          ? document.getElementById("workbench")
-          : document.querySelector(".pane-articles");
-      if (target) {
-        try {
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-        } catch {
-          /* ignore */
-        }
+      setActivePane(pane);
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        /* ignore */
       }
     });
   });
@@ -4503,10 +4780,202 @@
     });
   }
 
+  /* Evidence-board ⋯ overflow menu: toggles on click, closes on item click or
+     any outside click. */
+  function setBoardMenuOpen(open) {
+    if (!els.boardMenu || !els.boardMenuBtn) return;
+    els.boardMenu.hidden = !open;
+    els.boardMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  if (els.boardMenuBtn && els.boardMenu) {
+    els.boardMenuBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setBoardMenuOpen(els.boardMenu.hidden);
+    });
+    els.boardMenu.addEventListener("click", (event) => {
+      if (event.target.closest(".board-menu-item")) setBoardMenuOpen(false);
+    });
+    document.addEventListener("click", (event) => {
+      if (!els.boardMenu.hidden && !event.target.closest(".board-menu-wrap")) {
+        setBoardMenuOpen(false);
+      }
+    });
+  }
+
+  /* MODUS OPERANDI "Export cases": download the report + its flagged cases —
+     full facts, techniques, and evidence bullets — as a JSON file. */
+  function exportCasesFile() {
+    const report = state.lastTtpReport;
+    if (!report) {
+      setStatus("Open MODUS OPERANDI first");
+      return;
+    }
+    const payload = {
+      v: 1,
+      kind: "insider-intel-modus-operandi",
+      generated_for: report.titles || [],
+      summary: report.summary || "",
+      techniques: report.techniques || [],
+      behaviors: report.behaviors || [],
+      cues: {
+        email: report.email || [],
+        chat: report.chat || [],
+        network: report.network || [],
+        human: report.human || [],
+        seeds: report.seeds || [],
+      },
+      cases: boardEntries(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "insider-intel-modus-operandi.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(`Exported report + ${payload.cases.length} case(s)`);
+  }
+
+  if (els.exportCases) {
+    els.exportCases.addEventListener("click", () => exportCasesFile());
+  }
+
+  /* Settings ▸ Stream defaults + notifications (notification prefs are UI-only
+     — no delivery backend; the section says so). */
+  function syncDefaultScopePills() {
+    document.querySelectorAll("#default-scope-pills .pill").forEach((pill) => {
+      pill.classList.toggle("active", pill.dataset.defScope === uiState.defScope);
+    });
+  }
+
+  const defaultScopePills = document.getElementById("default-scope-pills");
+  if (defaultScopePills) {
+    syncDefaultScopePills();
+    defaultScopePills.addEventListener("click", (event) => {
+      const pill = event.target.closest(".pill[data-def-scope]");
+      if (!pill) return;
+      uiState.defScope = pill.dataset.defScope === "all" ? "all" : "insider";
+      saveUiState();
+      syncDefaultScopePills();
+    });
+  }
+
+  if (els.defaultSignal) {
+    els.defaultSignal.value = String(uiState.defSignal);
+    if (els.defaultSignalValue) {
+      els.defaultSignalValue.textContent = `SIG ≥ ${uiState.defSignal}`;
+    }
+    els.defaultSignal.addEventListener("input", () => {
+      uiState.defSignal = Number(els.defaultSignal.value) || 0;
+      if (els.defaultSignalValue) {
+        els.defaultSignalValue.textContent = `SIG ≥ ${uiState.defSignal}`;
+      }
+    });
+    els.defaultSignal.addEventListener("change", () => saveUiState());
+  }
+
+  if (els.applyDefaults) {
+    els.applyDefaults.addEventListener("click", () => {
+      state.itmAlignment = uiState.defScope;
+      state.signal = uiState.defSignal;
+      uiState.signal = uiState.defSignal;
+      saveUiState();
+      setActiveScopePill(state.itmAlignment);
+      syncSignalControls();
+      updateRefineSummary();
+      setActivePane("articles");
+      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+      setStatus("Defaults applied to the current session");
+    });
+  }
+
+  if (els.resetPrefs) {
+    els.resetPrefs.addEventListener("click", () => {
+      // Clear UI preferences and reload as a first-time visitor. The evidence
+      // board and dismissed-case list are analyst work product — kept.
+      [
+        UI_STATE_KEY,
+        THEME_KEY,
+        KBD_HINTS_KEY,
+        "insider-intel-density",
+        "insider-intel-layout",
+        "insider-intel-redacted",
+      ].forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          /* ignore */
+        }
+      });
+      try {
+        sessionStorage.removeItem(REFINE_OPEN_KEY);
+      } catch {
+        /* ignore */
+      }
+      location.reload();
+    });
+  }
+
+  function initNotifyPrefs() {
+    const n = uiState.notify;
+    if (els.notifyDigest) {
+      els.notifyDigest.checked = Boolean(n.digest);
+      els.notifyDigest.addEventListener("change", () => {
+        uiState.notify.digest = els.notifyDigest.checked;
+        saveUiState();
+      });
+    }
+    if (els.notifyAlerts) {
+      els.notifyAlerts.checked = Boolean(n.alerts);
+      els.notifyAlerts.addEventListener("change", () => {
+        uiState.notify.alerts = els.notifyAlerts.checked;
+        saveUiState();
+      });
+    }
+    if (els.alertSignal) {
+      els.alertSignal.value = String(n.alertSig || 80);
+      if (els.alertSignalValue) {
+        els.alertSignalValue.textContent = `SIG ≥ ${n.alertSig || 80}`;
+      }
+      els.alertSignal.addEventListener("input", () => {
+        uiState.notify.alertSig = Number(els.alertSignal.value) || 80;
+        if (els.alertSignalValue) {
+          els.alertSignalValue.textContent = `SIG ≥ ${uiState.notify.alertSig}`;
+        }
+      });
+      els.alertSignal.addEventListener("change", () => saveUiState());
+    }
+    if (els.notifyEmail) {
+      els.notifyEmail.value = n.email || "";
+      els.notifyEmail.addEventListener("change", () => {
+        uiState.notify.email = els.notifyEmail.value.trim();
+        saveUiState();
+      });
+    }
+  }
+  initNotifyPrefs();
+
+  // The CLEAR search button shows as soon as there is text (mock behavior),
+  // not only after a search has run.
+  if (els.q && els.clearSearch) {
+    els.q.addEventListener("input", () => {
+      els.clearSearch.hidden = !els.q.value.trim() && !state.searchMode;
+    });
+  }
+
   async function boot() {
     try {
       initRefinePanel();
       syncPaneForViewport();
+      applyPanelChrome();
+      setActiveScopePill(state.itmAlignment);
+      syncSignalControls();
+      updateStatusLine();
       loadDismissed();
       loadExtractionBoard();
       renderExtractionBoard();

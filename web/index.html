@@ -33,8 +33,10 @@
         var root = document.documentElement;
         root.setAttribute(
           "data-theme",
-          localStorage.getItem("insider-intel-theme") || "Dossier Sage"
+          localStorage.getItem("insider-intel-theme") || "cnn-lite"
         );
+        if (localStorage.getItem("insider-intel-kbd-hints") === "false")
+          root.setAttribute("data-kbd-hints", "off");
         var density = localStorage.getItem("insider-intel-density");
         if (density === "compact" || density === "comfy") root.setAttribute("data-density", density);
         if (localStorage.getItem("insider-intel-layout") === "stacked")
@@ -51,17 +53,98 @@
       <div class="masthead-row masthead-row-top">
         <div class="brand-block">
           <h1 class="product">insider-intel</h1>
-          <p class="tagline">// INSIDER INTELLIGENCE, MADE SIMPLE</p>
+          <p class="tagline">// REAL INSIDER CASES — THE LATEST TACTICS, TO PROTECT YOUR ORG</p>
         </div>
         <nav class="masthead-nav" aria-label="Sections">
-          <button type="button" class="masthead-nav-item active" data-pane="articles">STREAM</button>
-          <button type="button" class="masthead-nav-item" data-pane="matrix">MATRIX</button>
-          <button type="button" class="masthead-nav-item" data-pane="workbench">
+          <button type="button" class="masthead-nav-item active" data-pane="articles" data-tip="Live case stream with filters" data-tip-pos="bottom">STREAM</button>
+          <button type="button" class="masthead-nav-item" data-pane="matrix" data-tip="Browse the Insider Threat Matrix" data-tip-pos="bottom">MATRIX</button>
+          <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
+          <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources, notifications" data-tip-pos="bottom-end">SETTINGS ⚙</button>
         </nav>
         <span class="live-status" id="live-status">LIVE</span>
+        <button
+          type="button"
+          class="masthead-help"
+          id="intro-help"
+          aria-label="What is this? Reopen the intro"
+          data-tip="What is this? Reopen the intro"
+          data-tip-pos="bottom-end"
+        >
+          ?
+        </button>
       </div>
+
+      <section class="intro-panel" id="intro-panel" aria-label="About insider-intel">
+        <div class="intro-head">
+          <span class="intro-title">WHAT IS THIS?</span>
+          <span class="intro-flow">SCAN → FLAG → HUNT</span>
+          <span class="head-spacer"></span>
+          <button
+            type="button"
+            class="panel-collapse"
+            id="intro-toggle"
+            aria-label="Minimize intro"
+            data-tip="Minimize to the header bar"
+            data-tip-pos="bottom-end"
+          >−</button>
+        </div>
+        <div class="intro-body" id="intro-body">
+          <div class="intro-lede">
+            <div class="intro-lede-text">
+              <h2 class="intro-headline">
+                Learn how insiders actually steal, leak, and sabotage — then hunt for it in
+                your org.
+              </h2>
+              <p class="intro-copy">
+                This is a live feed of real insider-threat incidents — court cases, security
+                news, and community chatter. Every item is scored for confidence
+                (<strong>SIG, 0–100</strong>) and mapped to
+                <strong>Insider Threat Matrix™</strong> techniques, so a story becomes
+                something you can act on.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="intro-gotit"
+              id="intro-gotit"
+              data-tip="Minimize this intro — reopen any time with the ? button"
+              data-tip-pos="bottom-end"
+            >
+              GOT IT
+            </button>
+          </div>
+          <div class="intro-steps">
+            <div class="intro-step">
+              <p class="intro-step-title">01 — SCAN</p>
+              <p>
+                Filter the stream to incidents that look like your org — by topic, channel,
+                insider type, or confidence.
+              </p>
+            </div>
+            <div class="intro-step">
+              <p class="intro-step-title">02 — FLAG</p>
+              <p>
+                Hit <strong>+ FLAG</strong> on relevant cases to pin them to your evidence
+                board in the Workbench.
+              </p>
+            </div>
+            <div class="intro-step">
+              <p class="intro-step-title">03 — HUNT</p>
+              <p>
+                <strong>MODUS OPERANDI</strong> shows exactly how those insiders did it — as
+                techniques and search terms you can run against your own logs.
+              </p>
+            </div>
+          </div>
+          <div class="intro-try">
+            <span class="intro-try-label">TRY IT — THE TOP INSIDER RISKS:</span>
+            <div class="hunt-usecases" id="intro-usecases" role="group" aria-label="Top insider risks"></div>
+            <span class="intro-try-hint">← PICK ONE AND WATCH THE STREAM FOCUS</span>
+          </div>
+        </div>
+      </section>
       <div class="masthead-row masthead-row-search">
         <form class="search-bar" id="search-form" autocomplete="off">
         <label class="sr-only" for="q">Search</label>
@@ -71,48 +154,31 @@
           type="search"
           placeholder="SEARCH SCENARIOS — data theft, moonlighting, shared logins, sabotage…"
         />
-        <button type="submit" class="hunt-submit" aria-label="Hunt" title="Hunt">
-          <svg class="hunt-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <circle
-              cx="10.5"
-              cy="10.5"
-              r="6.25"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-            />
-            <path
-              d="M15.2 15.2L20 20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.25"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-        <button type="button" id="clear-search" class="ghost" hidden>Clear</button>
+        <button type="button" id="clear-search" class="ghost" hidden data-tip="Clear the search and show the latest stream" data-tip-pos="bottom">CLEAR</button>
+        <button type="submit" class="hunt-submit" data-tip="Map the query to ITM techniques and search the corpus" data-tip-pos="bottom-end">SEARCH</button>
       </form>
-      <div class="hunt-usecases-block">
-        <span
-          class="filter-label"
-          data-tip="Explore the Core Four — pick a hunt topic, then refine by insider type below."
-          tabindex="0"
-        >Core Four Hunt Topics</span>
-        <div
-          class="hunt-usecases"
-          id="hunt-usecases"
-          role="group"
-          aria-label="Core Four hunt topics"
-        ></div>
-      </div>
       </div>
       <details class="refine-panel" id="refine-panel">
         <summary class="refine-summary" id="refine-summary">
           <span class="refine-label">Refine</span>
-          <span class="refine-state" id="refine-state">Insider · All channels</span>
+          <span class="refine-state" id="refine-state">INSIDER FOCUS · ALL CHANNELS</span>
+          <span class="refine-note">THEME &amp; DISPLAY MOVED TO SETTINGS →</span>
         </summary>
         <div class="refine-body">
           <div class="stream-filters stream-filters-secondary" id="stream-filters">
+            <div class="filter-group">
+              <span
+                class="filter-label"
+                data-tip="The top insider risks — pick a topic and the stream focuses on it. Click again to clear."
+                tabindex="0"
+              >Top Insider Risks</span>
+              <div
+                class="hunt-usecases"
+                id="hunt-usecases"
+                role="group"
+                aria-label="Top insider risks"
+              ></div>
+            </div>
             <div class="filter-group">
               <span class="filter-label">Scope</span>
               <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
@@ -134,15 +200,23 @@
                 </button>
               </div>
             </div>
-            <div class="filter-group">
+            <div class="filter-group filter-group-signal">
               <span
                 class="filter-label"
-                data-tip="Relevance-score floor for the stream. High hides weaker matches; publications are never hidden."
+                data-tip="Relevance-score floor for the stream. Raise it to hide weaker matches; publications are never hidden."
                 tabindex="0"
-              >Signal</span>
-              <div class="pill-group" id="signal-filters" role="group" aria-label="Signal threshold">
-                <button type="button" class="pill active" data-signal="standard">Standard</button>
-                <button type="button" class="pill" data-signal="high">High</button>
+              >Min. Insider Confidence — <span class="signal-value" id="signal-value">SIG ≥ 15</span></span>
+              <input
+                type="range"
+                id="signal-slider"
+                min="0"
+                max="100"
+                step="5"
+                value="15"
+                aria-label="Minimum insider confidence (SIG floor)"
+              />
+              <div class="signal-ticks" aria-hidden="true">
+                <span>0 ALL</span><span>15 STD</span><span>35 HIGH</span><span>100</span>
               </div>
             </div>
             <div class="filter-group">
@@ -208,87 +282,6 @@
                 <option value="">All feeds</option>
               </select>
             </div>
-            <details class="social-manager" id="social-manager">
-              <summary class="filter-label">Social sources</summary>
-              <div class="social-manager-group">
-                <h4 class="filter-label">Subscribed</h4>
-                <ul id="social-subscribed" class="social-source-list"></ul>
-                <p class="kw-hint" id="social-subscribed-empty">Nothing subscribed yet.</p>
-              </div>
-              <div class="social-manager-group">
-                <h4 class="filter-label">Suggested</h4>
-                <ul id="social-suggested" class="social-source-list"></ul>
-              </div>
-              <form class="social-add-row" id="social-add-form" autocomplete="off">
-                <select id="social-add-platform" aria-label="Platform">
-                  <option value="reddit">reddit</option>
-                  <option value="x">x</option>
-                </select>
-                <input
-                  id="social-add-handle"
-                  type="text"
-                  placeholder="r/subreddit or @handle"
-                  aria-label="Subreddit or handle"
-                />
-                <button type="submit" class="ghost">Add</button>
-              </form>
-            </details>
-            <div class="theme-picker" id="theme-picker">
-              <label class="filter-label" for="theme-select">Theme</label>
-              <select id="theme-select" aria-label="Color theme">
-                <option value="dossier">Dossier</option>
-                <option value="cnn-lite">Light</option>
-                <option value="midnight">Dark</option>
-                <option value="phosphor">Terminal</option>
-                <option value="diablo">Diablo</option>
-                <option value="Dossier Sage">Dossier Sage</option>
-                <option value="Dossier Soft">Dossier Soft</option>
-                <option value="Dossier Fog">Dossier Fog</option>
-                <option value="Air Archive">Air Archive</option>
-                <option value="Cinder Archive">Cinder Archive</option>
-                <option value="Ice Archive">Ice Archive</option>
-                <option value="Earth Archive">Earth Archive</option>
-                <option value="Ultramarines">Ultramarines</option>
-                <option value="Blood Ravens">Blood Ravens</option>
-                <option value="Black Templars">Black Templars</option>
-                <option value="Raven Guard">Raven Guard</option>
-                <option value="Perplexity">Perplexity</option>
-                <option value="Linear">Linear</option>
-                <option value="Vercel">Vercel</option>
-                <option value="ChatGPT">ChatGPT</option>
-                <option value="Doom 3">Doom 3</option>
-                <option value="Diablo II">Diablo II</option>
-                <option value="StarCraft">StarCraft</option>
-                <option value="Brood War">Brood War</option>
-                <option value="GoldenEye 64">GoldenEye 64</option>
-                <option value="Warcraft III">Warcraft III</option>
-                <option value="Bleach">Bleach</option>
-                <option value="Ultima Online">Ultima Online</option>
-                <option value="Evangelion">Evangelion</option>
-                <option value="EVA-01">EVA-01</option>
-                <option value="EVA-02">EVA-02</option>
-                <option value="EVA-03">EVA-03</option>
-                <option value="Cryostat">Cryostat</option>
-                <option value="Vermillion Court">Vermillion Court</option>
-              </select>
-            </div>
-            <div class="theme-picker view-tweaks" id="view-tweaks">
-              <label class="filter-label" for="density-select">Density</label>
-              <select id="density-select" aria-label="Text density">
-                <option value="compact">Compact</option>
-                <option value="standard">Standard</option>
-                <option value="comfy">Comfy</option>
-              </select>
-              <label class="filter-label" for="layout-select">Layout</label>
-              <select id="layout-select" aria-label="Pane layout">
-                <option value="split">Split</option>
-                <option value="stacked">Stacked</option>
-              </select>
-              <label class="filter-label redact-toggle" for="redact-toggle">
-                <input type="checkbox" id="redact-toggle" aria-label="Redact case details" />
-                Redact
-              </label>
-            </div>
           </div>
         </div>
       </details>
@@ -305,14 +298,77 @@
         <button type="button" class="mobile-tab" data-pane="workbench">
           Workbench<span class="board-badge" id="board-badge" hidden></span>
         </button>
+        <button type="button" class="mobile-tab" data-pane="settings">Settings</button>
       </nav>
 
+      <div class="panels-row" id="panels-row">
+        <span
+          class="panels-label"
+          data-tip="Show or hide each panel. Hidden panels stay listed here so you can bring them back."
+          tabindex="0"
+        >PANELS</span>
+        <div class="panel-toggles" id="panel-toggles"></div>
+        <span class="status-line" id="status-line"></span>
+      </div>
+
       <div class="pane-grid">
-        <aside class="pane pane-matrix" data-pane-panel="matrix" aria-label="Observed ITM techniques">
+        <div class="left-rail" data-pane-panel="matrix">
+        <aside class="pane pane-trending" data-panel-key="core" aria-label="Trending topics">
           <div class="pane-head">
-            <h2>ITM INDEX</h2>
+            <h2>▲ TRENDING</h2>
+            <span class="pane-head-actions">
+              <button
+                type="button"
+                class="panel-collapse"
+                data-panel="core"
+                aria-label="Collapse Trending"
+                data-tip="Collapse to header bar"
+                data-tip-pos="bottom-end"
+              >−</button>
+              <button
+                type="button"
+                class="panel-hide"
+                data-panel="core"
+                aria-label="Hide Trending"
+                data-tip="Hide this panel — restore it from the PANELS row"
+                data-tip-pos="bottom-end"
+              >✕</button>
+            </span>
           </div>
           <div class="pane-body">
+            <p class="trending-explainer">MOST-ACTIVE TOPICS ACROSS SUBSCRIBED FEEDS.</p>
+            <p class="trending-todo">
+              TODO: trending API — deltas computed from the aggregator's social and
+              keyword lanes are not wired yet. This panel shows nothing until they are.
+            </p>
+          </div>
+        </aside>
+        <aside class="pane pane-matrix" data-panel-key="itm" aria-label="Observed ITM techniques">
+          <div class="pane-head">
+            <h2>ITM INDEX</h2>
+            <span class="pane-head-actions">
+              <button
+                type="button"
+                class="panel-collapse"
+                data-panel="itm"
+                aria-label="Collapse ITM Index"
+                data-tip="Collapse to header bar"
+                data-tip-pos="bottom-end"
+              >−</button>
+              <button
+                type="button"
+                class="panel-hide"
+                data-panel="itm"
+                aria-label="Hide ITM Index"
+                data-tip="Hide this panel — restore it from the PANELS row"
+                data-tip-pos="bottom-end"
+              >✕</button>
+            </span>
+          </div>
+          <div class="pane-body">
+            <p class="itm-rail-explainer">
+              Techniques observed in the current stream, from the Insider Threat Matrix™.
+            </p>
             <div class="itm-rail" id="itm-rail" aria-live="polite"></div>
             <button type="button" class="itm-rail-browse" id="matrix-browse-all">
               Browse full matrix →
@@ -323,19 +379,44 @@
             </p>
           </div>
         </aside>
+        </div>
 
-        <section class="pane pane-articles" data-pane-panel="articles" aria-label="Articles">
+        <section class="pane pane-articles" data-panel-key="stream" data-pane-panel="articles" aria-label="Articles">
           <div class="pane-head">
             <div class="pane-head-main">
               <h2 id="stream-title">Latest</h2>
               <span id="stream-count" class="meta"></span>
             </div>
             <span class="kbd-hint" aria-hidden="true"
-              >j/k · x flag · d dismiss · ⏎ open · / hunt</span
+              >j/k · x flag · d dismiss · ⏎ open · / search</span
             >
-            <button type="button" id="refresh-stream" class="ghost stream-refresh">
+            <button
+              type="button"
+              id="refresh-stream"
+              class="ghost stream-refresh"
+              data-tip="Reload the index and re-run the current filters"
+              data-tip-pos="bottom-end"
+            >
               Refresh ↻
             </button>
+            <span class="pane-head-actions">
+              <button
+                type="button"
+                class="panel-collapse"
+                data-panel="stream"
+                aria-label="Collapse Case Stream"
+                data-tip="Collapse to header bar"
+                data-tip-pos="bottom-end"
+              >−</button>
+              <button
+                type="button"
+                class="panel-hide"
+                data-panel="stream"
+                aria-label="Hide Case Stream"
+                data-tip="Hide this panel — restore it from the PANELS row"
+                data-tip-pos="bottom-end"
+              >✕</button>
+            </span>
           </div>
           <div class="pane-body" id="article-panel">
             <ul id="filter-crumbs" class="filter-crumbs" hidden></ul>
@@ -396,13 +477,34 @@
             </div>
             <section class="ttp-report" id="ttp-report" aria-label="TTP hunt report">
               <div class="workbench-header">
-                <h3>Hunt report</h3>
+                <h3>MODUS OPERANDI</h3>
                 <p class="kw-hint" id="ttp-report-meta"></p>
                 <p class="panel-actions">
-                  <button type="button" id="copy-ttp-report" class="copy-btn copy-btn-primary">
-                    Copy hunt report
+                  <button
+                    type="button"
+                    id="copy-ttp-report"
+                    class="copy-btn copy-btn-primary"
+                    data-tip="Copy the full report as plain text"
+                    data-tip-pos="bottom-start"
+                  >
+                    Copy report
                   </button>
-                  <button type="button" id="copy-ttp-llm" class="copy-btn">
+                  <button
+                    type="button"
+                    id="export-cases"
+                    class="copy-btn"
+                    data-tip="Export all content — flagged cases with full facts, techniques, and evidence bullets"
+                    data-tip-pos="bottom-start"
+                  >
+                    Export cases
+                  </button>
+                  <button
+                    type="button"
+                    id="copy-ttp-llm"
+                    class="copy-btn"
+                    data-tip="Copy an LLM-ready prompt built from this report"
+                    data-tip-pos="bottom-start"
+                  >
                     Copy LLM query
                   </button>
                 </p>
@@ -490,6 +592,7 @@
 
         <section
           class="pane pane-workbench"
+          data-panel-key="wb"
           data-pane-panel="workbench"
           id="workbench"
           aria-label="Keyword workbench"
@@ -501,44 +604,87 @@
               class="info-tip"
               aria-label="About the Workbench"
               aria-describedby="workbench-tip-text"
-              data-tip="The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate."
+              data-tip="The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Use ⋯ to share, export, or import a board."
               data-tip-pos="bottom-end"
             >
               ?
             </button>
-            <span id="workbench-tip-text" class="sr-only">The Workbench collects articles you flag with + from the stream. Extract TTPs turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Share, export, or import a board to hand a hunt to a teammate.</span>
+            <span id="workbench-tip-text" class="sr-only">The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Use ⋯ to share, export, or import a board.</span>
+            <span class="pane-head-actions">
+              <button
+                type="button"
+                class="panel-collapse"
+                data-panel="wb"
+                aria-label="Collapse Workbench"
+                data-tip="Collapse to header bar"
+                data-tip-pos="bottom-end"
+              >−</button>
+              <button
+                type="button"
+                class="panel-hide"
+                data-panel="wb"
+                aria-label="Hide Workbench"
+                data-tip="Hide this panel — restore it from the PANELS row"
+                data-tip-pos="bottom-end"
+              >✕</button>
+            </span>
           </div>
           <div class="pane-body panel">
+            <div class="wb-intro" id="wb-intro">
+              <h3 class="wb-intro-title">The Workbench</h3>
+              <p class="wb-intro-copy">
+                Flag cases from the stream with <strong>+ FLAG</strong> and they land on the
+                evidence board here. <strong>MODUS OPERANDI</strong> then shows the ITM
+                techniques those insiders used — with per-case evidence — ready to turn into
+                hunts in your own environment. Use ⋯ to share or export a board to a
+                teammate.
+              </p>
+            </div>
             <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
               <div class="extraction-board-head">
                 <h3>
                   EVIDENCE BOARD
                   <span class="board-count" id="board-count">(0)</span>
                 </h3>
+                <span class="board-menu-wrap">
+                  <button
+                    type="button"
+                    id="board-menu-btn"
+                    class="board-menu-btn"
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    data-tip="Share, export, or import this board"
+                    data-tip-pos="bottom-end"
+                  >⋯</button>
+                  <div class="board-menu" id="board-menu" hidden>
+                    <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL" data-tip-pos="bottom-start" class="board-menu-item" disabled>
+                      SHARE LINK
+                    </button>
+                    <button type="button" id="board-export" data-tip="Download this board as a JSON file" data-tip-pos="bottom-start" class="board-menu-item" disabled>
+                      EXPORT JSON
+                    </button>
+                    <button type="button" id="board-import" data-tip="Load a board from an exported JSON file" data-tip-pos="bottom-start" class="board-menu-item">
+                      IMPORT JSON
+                    </button>
+                    <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard" data-tip-pos="bottom-start" class="board-menu-item" disabled>
+                      COPY LLM BRIEF
+                    </button>
+                    <button type="button" id="board-clear" data-tip="Remove all cases from the board" data-tip-pos="bottom-start" class="board-menu-item" disabled>
+                      CLEAR BOARD
+                    </button>
+                  </div>
+                </span>
               </div>
               <p class="kw-hint" id="board-empty">
                 Nothing flagged yet. Use <strong>+ FLAG</strong> on a case to build a hunt.
               </p>
               <ul id="board-list" class="board-list" hidden></ul>
               <p class="board-extract-row">
-                <button type="button" id="board-extract" data-tip="Analyze the flagged articles into a TTP hunt report." data-tip-pos="bottom-start" class="board-extract-btn" disabled>
-                  EXTRACT TTPs →
+                <button type="button" id="board-extract" data-tip="Open the report — TTPs were already extracted at ingest, no processing runs now." data-tip-pos="bottom-start" class="board-extract-btn" disabled>
+                  MODUS OPERANDI →
                 </button>
               </p>
-              <p class="panel-actions extraction-board-actions board-secondary-actions">
-                <button type="button" id="board-share" data-tip="Copy a link that encodes this board in the URL." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                  Share
-                </button>
-                <button type="button" id="board-export" data-tip="Download this board as a JSON file." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                  Export
-                </button>
-                <button type="button" id="board-import" data-tip="Load a board from an exported JSON file." data-tip-pos="bottom-start" class="copy-btn">Import</button>
-                <button type="button" id="board-copy-brief" data-tip="Copy an agent-ready brief of this board to the clipboard." data-tip-pos="bottom-start" class="copy-btn" disabled>
-                  Copy LLM
-                </button>
-                <button type="button" id="board-clear" data-tip="Remove all articles from the board." data-tip-pos="bottom-end" class="copy-btn" disabled>Clear</button>
-                <input type="file" id="board-import-file" accept="application/json,.json" hidden />
-              </p>
+              <input type="file" id="board-import-file" accept="application/json,.json" hidden />
             </section>
 
             <p class="panel-empty" id="panel-empty">
@@ -562,8 +708,8 @@
                     </svg>
                     <span>Copy terms</span>
                   </button>
-                  <button type="button" id="show-case-report" data-tip="Build this case's hunt report from its stored forensics." data-tip-pos="bottom-start" class="copy-btn">
-                    Show hunt report
+                  <button type="button" id="show-case-report" data-tip="Open this case's modus operandi — assembled from stored forensics, no processing." data-tip-pos="bottom-start" class="copy-btn">
+                    Modus operandi
                   </button>
                 </p>
               </div>
@@ -587,6 +733,249 @@
                 <ul id="detection-list" class="chip-list"></ul>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">
+          <div class="pane-head">
+            <h2>Settings</h2>
+          </div>
+          <div class="pane-body settings-grid">
+            <section class="settings-section" data-panel-key="look" aria-label="Appearance">
+              <div class="settings-head">
+                <h3>APPEARANCE</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="look" aria-label="Collapse Appearance" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <div class="settings-field theme-picker" id="theme-picker">
+                  <label class="filter-label" for="theme-select">Theme</label>
+                  <select id="theme-select" aria-label="Color theme" data-tip="Color theme — applies immediately and persists" data-tip-pos="bottom-start">
+                    <option value="cnn-lite">Light</option>
+                    <option value="midnight">Dark</option>
+                    <option value="dossier">Dossier</option>
+                    <option value="phosphor">Terminal</option>
+                    <option value="diablo">Diablo</option>
+                    <option value="Dossier Sage">Dossier Sage</option>
+                    <option value="Dossier Soft">Dossier Soft</option>
+                    <option value="Dossier Fog">Dossier Fog</option>
+                    <option value="Air Archive">Air Archive</option>
+                    <option value="Cinder Archive">Cinder Archive</option>
+                    <option value="Ice Archive">Ice Archive</option>
+                    <option value="Earth Archive">Earth Archive</option>
+                    <option value="Ultramarines">Ultramarines</option>
+                    <option value="Blood Ravens">Blood Ravens</option>
+                    <option value="Black Templars">Black Templars</option>
+                    <option value="Raven Guard">Raven Guard</option>
+                    <option value="Perplexity">Perplexity</option>
+                    <option value="Linear">Linear</option>
+                    <option value="Vercel">Vercel</option>
+                    <option value="ChatGPT">ChatGPT</option>
+                    <option value="Doom 3">Doom 3</option>
+                    <option value="Diablo II">Diablo II</option>
+                    <option value="StarCraft">StarCraft</option>
+                    <option value="Brood War">Brood War</option>
+                    <option value="GoldenEye 64">GoldenEye 64</option>
+                    <option value="Warcraft III">Warcraft III</option>
+                    <option value="Bleach">Bleach</option>
+                    <option value="Ultima Online">Ultima Online</option>
+                    <option value="Evangelion">Evangelion</option>
+                    <option value="EVA-01">EVA-01</option>
+                    <option value="EVA-02">EVA-02</option>
+                    <option value="EVA-03">EVA-03</option>
+                    <option value="Cryostat">Cryostat</option>
+                    <option value="Vermillion Court">Vermillion Court</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <span class="filter-label">Density</span>
+                  <div class="pill-group" id="density-pills" role="group" aria-label="Text density">
+                    <button type="button" class="pill" data-density="compact" data-tip="Smaller text — more cases on screen">Compact</button>
+                    <button type="button" class="pill" data-density="standard" data-tip="Default sizing">Standard</button>
+                    <button type="button" class="pill" data-density="comfy" data-tip="Larger text — easier reading">Comfy</button>
+                  </div>
+                </div>
+                <div class="settings-field">
+                  <span class="filter-label">Pane layout</span>
+                  <div class="pill-group" id="layout-pills" role="group" aria-label="Pane layout">
+                    <button type="button" class="pill" data-layout="split" data-tip="Panels side by side">Split</button>
+                    <button type="button" class="pill" data-layout="stacked" data-tip="Panels stacked vertically">Stacked</button>
+                  </div>
+                </div>
+                <label class="settings-check filter-label" for="redact-toggle" data-tip="Black out case titles, facts, and notes — for screenshots and demos" data-tip-pos="bottom-start">
+                  <input type="checkbox" id="redact-toggle" aria-label="Redact case details" />
+                  REDACT CASE DETAILS
+                </label>
+                <label class="settings-check filter-label" for="kbd-hints-toggle" data-tip="Show the j/k · x · ⏎ · / shortcut hint in the stream header" data-tip-pos="bottom-start">
+                  <input type="checkbox" id="kbd-hints-toggle" aria-label="Show keyboard hints" checked />
+                  SHOW KEYBOARD HINTS IN STREAM
+                </label>
+                <div class="settings-field">
+                  <span class="filter-label">Keyboard reference</span>
+                  <dl class="kbd-ref">
+                    <dt>j / k</dt><dd>Next / previous case</dd>
+                    <dt>x</dt><dd>Flag case to evidence board</dd>
+                    <dt>d</dt><dd>Dismiss case</dd>
+                    <dt>⏎</dt><dd>Open source</dd>
+                    <dt>/</dt><dd>Focus search</dd>
+                  </dl>
+                  <p class="settings-todo">TODO: remappable bindings.</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-section" data-panel-key="defaults" aria-label="Stream defaults">
+              <div class="settings-head">
+                <h3>STREAM DEFAULTS</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="defaults" aria-label="Collapse Stream defaults" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <p class="kw-hint">
+                  Live filters stay on the stream page — these set what a fresh session
+                  starts with.
+                </p>
+                <div class="settings-field">
+                  <span class="filter-label">Default scope</span>
+                  <div class="pill-group" id="default-scope-pills" role="group" aria-label="Default scope">
+                    <button type="button" class="pill" data-def-scope="insider" data-tip="Start sessions showing only ITM-matched articles">Insider Focus</button>
+                    <button type="button" class="pill" data-def-scope="all" data-tip="Start sessions showing everything indexed">All indexed</button>
+                  </div>
+                </div>
+                <div class="settings-field filter-group-signal">
+                  <span class="filter-label">Default min. insider confidence — <span class="signal-value" id="default-signal-value">SIG ≥ 15</span></span>
+                  <input type="range" id="default-signal" min="0" max="100" step="5" value="15" aria-label="Default minimum insider confidence" />
+                </div>
+                <p class="panel-actions">
+                  <button type="button" id="apply-defaults" class="copy-btn" data-tip="Set the current stream filters to these defaults now" data-tip-pos="bottom-start">
+                    APPLY TO CURRENT SESSION
+                  </button>
+                  <button type="button" id="reset-prefs" class="copy-btn" data-tip="Clear saved UI preferences (theme, layout, panels, intro) and reload as a first-time visitor. Your evidence board is kept." data-tip-pos="bottom-start">
+                    RESET PREFERENCES ↺
+                  </button>
+                </p>
+              </div>
+            </section>
+
+            <section class="settings-section" data-panel-key="sources" aria-label="Data sources">
+              <div class="settings-head">
+                <h3>DATA SOURCES</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="sources" aria-label="Collapse Data sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <p class="kw-hint">
+                  Read-only inventory. Credentials live server-side — never in this static
+                  UI.
+                </p>
+                <ul class="source-inventory">
+                  <li><span class="source-inv-main"><span class="source-inv-name">COURTLISTENER</span><span class="source-inv-desc">RECAP dockets + filings (trade secret, sabotage, insider fraud)</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">PACER PURCHASE</span><span class="source-inv-desc">Targeted docket purchases for high-signal cases (budget-capped)</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">FEEDLY</span><span class="source-inv-desc">Security news feeds (multi-domain boards)</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">REDDIT</span><span class="source-inv-desc">Subreddit streams via social subscriptions</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">X</span><span class="source-inv-desc">Handle timelines via social subscriptions (free-tier cadence)</span></span><span class="source-chip">PAUSED</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">DATATHEFTNEWS</span><span class="source-inv-desc">Curated insider data-theft incident tracker</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                  <li><span class="source-inv-main"><span class="source-inv-name">TIPS (REDDIT RSS)</span><span class="source-inv-desc">Tip-lane RSS: r/netsec, r/cybersecurity, r/blueteamsec, r/DFIR, r/Malware</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
+                </ul>
+                <button type="button" class="settings-add-btn" id="add-source-btn" data-tip="TODO: source onboarding flow — feed URL / connector pick, auth handled server-side" data-tip-pos="bottom-start">
+                  + ADD SOURCE
+                </button>
+                <p class="settings-todo">
+                  TODO: pause/remove and onboarding are not wired — sources are managed
+                  server-side today.
+                </p>
+              </div>
+            </section>
+
+            <section class="settings-section" data-panel-key="notify" aria-label="Notifications">
+              <div class="settings-head">
+                <h3>NOTIFICATIONS <span class="todo-badge">TODO</span></h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="notify" aria-label="Collapse Notifications" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <label class="settings-check filter-label" for="notify-digest" data-tip="TODO: no delivery backend — preference is stored locally only" data-tip-pos="bottom-start">
+                  <input type="checkbox" id="notify-digest" aria-label="Daily digest email" />
+                  DAILY DIGEST EMAIL
+                </label>
+                <label class="settings-check filter-label" for="notify-alerts" data-tip="TODO: no delivery backend — preference is stored locally only" data-tip-pos="bottom-start">
+                  <input type="checkbox" id="notify-alerts" aria-label="High-signal alerts" />
+                  HIGH-SIGNAL ALERTS
+                </label>
+                <div class="settings-field filter-group-signal">
+                  <span class="filter-label">Alert when — <span class="signal-value" id="alert-signal-value">SIG ≥ 80</span></span>
+                  <input type="range" id="alert-signal" min="50" max="100" step="5" value="80" aria-label="Alert signal threshold" />
+                </div>
+                <div class="settings-field">
+                  <label class="filter-label" for="notify-email">Deliver to</label>
+                  <input type="email" id="notify-email" class="settings-input" placeholder="you@example.com" aria-label="Notification email" />
+                </div>
+                <p class="settings-todo">
+                  TODO: no delivery backend yet — digest scheduler, alert evaluation on
+                  ingest, and email send are all unimplemented. Preferences here are
+                  UI-only.
+                </p>
+              </div>
+            </section>
+
+            <section class="settings-section" data-panel-key="social" aria-label="Social sources">
+              <div class="settings-head">
+                <h3>SOCIAL SOURCES</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="social" aria-label="Collapse Social sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body social-manager" id="social-manager">
+                <div class="social-manager-group">
+                  <h4 class="filter-label">Subscribed</h4>
+                  <ul id="social-subscribed" class="social-source-list"></ul>
+                  <p class="kw-hint" id="social-subscribed-empty">Nothing subscribed yet.</p>
+                </div>
+                <div class="social-manager-group">
+                  <h4 class="filter-label">Suggested</h4>
+                  <ul id="social-suggested" class="social-source-list"></ul>
+                </div>
+                <form class="social-add-row" id="social-add-form" autocomplete="off">
+                  <select id="social-add-platform" aria-label="Platform">
+                    <option value="reddit">reddit</option>
+                    <option value="x">x</option>
+                  </select>
+                  <input
+                    id="social-add-handle"
+                    type="text"
+                    placeholder="r/subreddit or @handle"
+                    aria-label="Subreddit or handle"
+                  />
+                  <button type="submit" class="ghost" data-tip="Subscribe — synced to the aggregator via the social subscriptions API" data-tip-pos="bottom-start">Add</button>
+                </form>
+              </div>
+            </section>
+
+            <section class="settings-section" data-panel-key="pubs" aria-label="Publication sources">
+              <div class="settings-head">
+                <h3>PUBLICATION SOURCES</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="pubs" aria-label="Collapse Publication sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <p class="kw-hint">
+                  Long-form reference docs swept by the 6-hour refresh (curated catalog,
+                  server-side).
+                </p>
+                <div class="pub-source-chips">
+                  <span class="pub-chip">SEI COMMON SENSE GUIDE 7E</span>
+                  <span class="pub-chip">SEI POSITIVE DETERRENCE COLLECTION</span>
+                  <span class="pub-chip">CISA INSIDER THREAT MITIGATION GUIDE</span>
+                  <span class="pub-chip">NITTF INSIDER THREAT GUIDE 2017</span>
+                </div>
+                <button type="button" class="settings-add-btn" id="add-pub-btn" data-tip="TODO: publication onboarding — landing-page extract, crawl cadence, dedupe against the corpus. One-off ingest exists via the API today." data-tip-pos="bottom-start">
+                  + ADD PUBLICATION
+                </button>
+                <p class="settings-todo">
+                  TODO: add/remove from the web UI is not wired — the catalog lives
+                  server-side; one-off URLs can be flagged via POST /publications/ingest_url.
+                </p>
+              </div>
+            </section>
           </div>
         </section>
       </div>
