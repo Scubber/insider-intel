@@ -114,6 +114,28 @@ def run(base_url: str, headed: bool) -> int:
             "articles" in (page.text_content("#data-state") or ""),
         )
 
+        # Intro banner: expanded on a fresh profile (no localStorage), GOT IT
+        # minimizes to the header bar, the state persists across reloads
+        # (returning profile), and the masthead ? re-expands it.
+        checks.check(
+            "intro banner shows on first visit",
+            page.is_visible("#intro-body") and page.is_visible("#intro-gotit"),
+        )
+        page.click("#intro-gotit")
+        checks.check(
+            "GOT IT minimizes the intro (header bar stays)",
+            not page.is_visible("#intro-body") and page.is_visible(".intro-head"),
+        )
+        page.reload()
+        page.wait_for_selector(".article-item", timeout=20000)
+        checks.check(
+            "intro stays minimized for returning visitors",
+            not page.is_visible("#intro-body"),
+        )
+        page.click("#intro-help")
+        checks.check("? reopens the intro", page.is_visible("#intro-body"))
+        page.click("#intro-gotit")
+
         # Snippet is clean prose (no literal HTML entities) — Fix 4 guard
         snips = page.locator("#article-list .snip").all_text_contents()
         joined = " ".join(snips)
@@ -233,17 +255,139 @@ def run(base_url: str, headed: bool) -> int:
             == "Cases",
         )
 
-        # Themes apply. The picker lives behind the collapsed Refine
-        # disclosure — open it first, as a user would.
-        page.evaluate(
-            "() => { const r = document.getElementById('refine-panel'); if (r) r.open = true; }"
-        )
+        # Themes apply. The picker now lives on the Settings pane — open it
+        # first, as a user would (also proves the Settings nav works).
+        page.click(".masthead-nav-item[data-pane='settings']")
+        page.wait_for_selector(".pane-settings", state="visible", timeout=10000)
         theme_ok = True
         for theme in ("cnn-lite", "midnight", "phosphor", "diablo"):
             page.select_option("#theme-select", theme)
             if page.evaluate("document.documentElement.getAttribute('data-theme')") != theme:
                 theme_ok = False
-        checks.check("all three themes apply", theme_ok)
+        checks.check("themes apply from Settings (incl. midnight + cnn-lite)", theme_ok)
+        page.select_option("#theme-select", "cnn-lite")
+
+        # Settings pane renders every section from the design handoff.
+        section_keys = page.evaluate(
+            """() => [...document.querySelectorAll('.pane-settings .settings-section')]
+                 .map((s) => s.dataset.panelKey)"""
+        )
+        expected = ["look", "defaults", "sources", "notify", "social", "pubs"]
+        checks.check(
+            "settings pane renders all sections",
+            all(k in section_keys for k in expected),
+            f"got {section_keys}",
+        )
+        # Settings sections collapse to their headers and persist.
+        page.click(".settings-section[data-panel-key='look'] .panel-collapse")
+        look_collapsed = page.evaluate(
+            """() => document.querySelector(".settings-section[data-panel-key='look']")
+                 .classList.contains('collapsed')"""
+        )
+        checks.check("settings section collapses", bool(look_collapsed))
+        page.click(".settings-section[data-panel-key='look'] .panel-collapse")
+
+        # Back to the stream for the panel-chrome checks.
+        page.click(".masthead-nav-item[data-pane='articles']")
+        page.wait_for_selector(".article-item", state="visible", timeout=10000)
+
+        # Every stream panel collapses via its − button and hides/restores via
+        # the PANELS checkbox row.
+        panel_sel = {
+            "core": ".pane-trending",
+            "itm": ".pane-matrix",
+            "stream": ".pane-articles",
+            "wb": ".pane-workbench",
+        }
+        for key, sel in panel_sel.items():
+            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
+            collapsed = page.evaluate(
+                f"() => document.querySelector(\"{sel}\").classList.contains('collapsed')"
+            )
+            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
+            restored = page.evaluate(
+                f"() => !document.querySelector(\"{sel}\").classList.contains('collapsed')"
+            )
+            checks.check(f"panel {key} collapses and re-expands", collapsed and restored)
+
+            page.click(f".panel-toggle[data-panel-toggle='{key}']")
+            hidden = page.evaluate(
+                f"() => document.querySelector('.app-shell').classList.contains('hide-{key}')"
+            ) and not page.is_visible(sel)
+            page.click(f".panel-toggle[data-panel-toggle='{key}']")
+            shown = page.is_visible(sel)
+            checks.check(f"PANELS row hides and restores {key}", hidden and shown)
+
+        # Collapse + hide state persists across reloads (returning profile).
+        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
+        page.click(".panel-toggle[data-panel-toggle='core']")
+        page.reload()
+        page.wait_for_selector(".article-item", timeout=20000)
+        persisted = page.evaluate(
+            """() => document.querySelector('.pane-matrix').classList.contains('collapsed')
+                 && document.querySelector('.app-shell').classList.contains('hide-core')"""
+        )
+        checks.check("panel collapse/hide state persists across reload", bool(persisted))
+        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
+        page.click(".panel-toggle[data-panel-toggle='core']")
+
+        # Signal slider filters the stream: SIG ≥ 100 should clear (or shrink)
+        # it and update the refine summary; sliding back restores it. Start
+        # from a clean latest stream (the earlier hunt left search mode on).
+        page.goto(demo)
+        page.wait_for_selector(".article-item", timeout=20000)
+        base_rows = page.locator("#article-list .article-row").count()
+        page.evaluate(
+            """() => {
+              const s = document.getElementById('signal-slider');
+              s.value = '100';
+              s.dispatchEvent(new Event('input', { bubbles: true }));
+              s.dispatchEvent(new Event('change', { bubbles: true }));
+            }"""
+        )
+        page.wait_for_timeout(600)
+        high_rows = page.locator("#article-list .article-row").count()
+        summary = page.text_content("#refine-state") or ""
+        checks.check(
+            "signal slider filters the stream",
+            high_rows < base_rows and "SIG ≥ 100" in summary,
+            f"base={base_rows} high={high_rows} summary={summary!r}",
+        )
+        page.evaluate(
+            """() => {
+              const s = document.getElementById('signal-slider');
+              s.value = '15';
+              s.dispatchEvent(new Event('change', { bubbles: true }));
+            }"""
+        )
+        page.wait_for_timeout(600)
+
+        # Workbench nav tab takes over full-width (stream + rail hidden) and
+        # shows the explainer; MODUS OPERANDI opens the report from there.
+        page.click(".masthead-nav-item[data-pane='workbench']")
+        wb_takeover = (
+            page.evaluate("() => document.querySelector('.app-shell').dataset.pane") == "workbench"
+            and not page.is_visible(".pane-articles")
+            and page.is_visible("#wb-intro")
+        )
+        checks.check("workbench tab opens full-width with explainer", wb_takeover)
+        page.click("#board-extract")
+        page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
+        checks.check(
+            "MODUS OPERANDI opens the report",
+            page.is_visible("#ttp-report")
+            and "MODUS OPERANDI" in (page.text_content("#ttp-report h3") or ""),
+        )
+        page.click("#report-back")
+
+        # Board ⋯ menu toggles and carries the share/export/import items.
+        page.click(".masthead-nav-item[data-pane='workbench']")
+        page.click("#board-menu-btn")
+        menu_items = page.locator("#board-menu .board-menu-item").all_text_contents()
+        menu_ok = page.is_visible("#board-menu") and any("SHARE LINK" in t for t in menu_items)
+        page.click("#board-menu-btn")
+        checks.check("board overflow menu opens with share/export items", menu_ok)
+        page.click(".masthead-nav-item[data-pane='articles']")
 
         # Mobile journeys: full-matrix CTA from the rail tab, and tap-to-read.
         mp = browser.new_page(viewport={"width": 390, "height": 844})
@@ -290,6 +434,30 @@ def run(base_url: str, headed: bool) -> int:
             )
             checks.check(f"landscape {tag}: footer hidden", not geo["footerShown"])
             lp.close()
+
+        # Mid-width (~900–1000px): the masthead must not force horizontal
+        # scroll (nav wrapping was a known issue) and the nav stays reachable
+        # where it renders (>960px; below that the mobile tabs take over).
+        for w in (1000, 900):
+            wp = browser.new_page(viewport={"width": w, "height": 800})
+            wp.goto(demo)
+            wp.wait_for_selector(".article-item", timeout=20000)
+            overflow = wp.evaluate(
+                "() => document.documentElement.scrollWidth - document.documentElement.clientWidth"
+            )
+            checks.check(f"{w}px: no horizontal overflow", overflow <= 1, f"overflow={overflow}px")
+            if w > 960:
+                nav_ok = wp.evaluate(
+                    """() => {
+                      const items = [...document.querySelectorAll('.masthead-nav-item')];
+                      return items.length >= 4 && items.every((el) => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.right <= window.innerWidth + 1;
+                      });
+                    }"""
+                )
+                checks.check(f"{w}px: masthead nav items all on-screen", bool(nav_ok))
+            wp.close()
 
         checks.check("no uncaught page errors", not errors, "; ".join(errors[:3]))
         browser.close()

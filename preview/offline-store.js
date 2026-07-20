@@ -298,7 +298,10 @@
       params.group === 1;
 
     let rows = articles.filter((a) => {
-      if ((a.relevance_score ?? 0) < minScore) return false;
+      // Publications are exempt from the relevance floor (API parity).
+      if ((a.relevance_score ?? 0) < minScore && articleChannel(a) !== "publications") {
+        return false;
+      }
       if (sourceId && a.source_id !== sourceId) return false;
       if (!articleMatchesAlignment(a, alignment)) return false;
       if (!articleMatchesChannel(a, channel)) return false;
