@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from apps.aggregator.processed_storage import JsonlProcessedStore
@@ -25,10 +26,17 @@ from shared.utils.story_key import compute_story_key
 logger = logging.getLogger(__name__)
 
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9+._-]{1,}", re.IGNORECASE)
+# Bare taxonomy ids ("me024", "if002.3") read as noise in trending terms.
+_ITM_ID_TERM_RE = re.compile(r"[a-z]{2}\d{3}(\.\d+)?")
 
 
 def _tokenize(text: str) -> set[str]:
     return {t.lower() for t in _WORD_RE.findall(text or "")}
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Naive timestamps in the corpus are UTC by convention."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _article_channel(article: ProcessedArticle) -> str:
@@ -370,6 +378,131 @@ class ArticleSearchIndex:
                 if _article_matches_itm(article, itm_id=tech_id, topic_match=True):
                     counts[tech_id] += 1
         return counts
+
+    def trending(
+        self,
+        *,
+        window_days: int = 7,
+        limit: int = 8,
+        min_term_count: int = 3,
+    ) -> list[dict]:
+        """Most-active topics across the indexed feeds, week-over-week style.
+
+        Pure counting over the in-memory corpus — no LLM, no extra I/O. Topics
+        are classified use cases, ITM parent techniques, and hot matched
+        terms; activity is unique stories (story_key) whose published (or
+        processed) time falls in the recent window vs the prior window. The
+        windows anchor on the corpus's newest processed_at, not wall clock, so
+        a static corpus yields stable, testable results.
+        """
+        anchor = self.last_processed_at
+        if anchor is None:
+            return []
+        anchor = _as_utc(anchor)
+        window = timedelta(days=max(1, window_days))
+        recent_start = anchor - window
+        prior_start = anchor - (2 * window)
+
+        tech_titles = {t.id.upper(): t.title for t in load_itm_index().techniques}
+        from shared.taxonomy.use_cases import USE_CASES
+
+        uc_labels = {uc.id: uc.label for uc in USE_CASES}
+        # Terms that merely restate a use-case/technique label add no signal.
+        redundant_terms = {label.lower() for label in uc_labels.values()} | {
+            title.lower() for title in tech_titles.values()
+        }
+
+        topics: dict[tuple[str, str], dict] = {}
+
+        def bucket_for(article: ProcessedArticle) -> str | None:
+            stamp = article.published or article.processed_at
+            if stamp is None:
+                return None
+            stamp = _as_utc(stamp)
+            if stamp >= recent_start:
+                return "recent"
+            if stamp >= prior_start:
+                return "prior"
+            return None
+
+        def touch(kind: str, key: str, label: str, bucket: str, story: str, channel: str):
+            topic = topics.setdefault(
+                (kind, key),
+                {
+                    "kind": kind,
+                    "key": key,
+                    "label": label,
+                    "recent": set(),
+                    "prior": set(),
+                    "channels": Counter(),
+                },
+            )
+            topic[bucket].add(story)
+            if bucket == "recent":
+                topic["channels"][channel] += 1
+
+        for article in self._articles:
+            bucket = bucket_for(article)
+            if bucket is None:
+                continue
+            story = getattr(article, "story_key", None) or article.link
+            channel = _article_channel(article)
+
+            for uc_id in getattr(article, "use_cases", None) or []:
+                touch("use_case", uc_id, uc_labels.get(uc_id, uc_id), bucket, story, channel)
+
+            seen_parents: set[str] = set()
+            terms: set[str] = set()
+            for hit in article.entities.itm_hits:
+                pid = (hit.id or "").strip().upper().split(".", 1)[0]
+                if pid and pid not in seen_parents:
+                    seen_parents.add(pid)
+                    label = tech_titles.get(pid) or hit.title or pid
+                    touch("technique", pid, label, bucket, story, channel)
+                for alias in hit.matched_aliases:
+                    terms.add(str(alias).strip().lower())
+            for kw in article.entities.keywords_hit:
+                terms.add(str(kw).strip().lower())
+            for term in terms:
+                if len(term) < 3 or term in redundant_terms or _ITM_ID_TERM_RE.fullmatch(term):
+                    continue
+                touch("term", term, term, bucket, story, channel)
+
+        items: list[dict] = []
+        for topic in topics.values():
+            count = len(topic["recent"])
+            prev = len(topic["prior"])
+            floor = min_term_count if topic["kind"] == "term" else 2
+            if count < floor:
+                continue
+            if prev > 0:
+                delta_pct = round((count - prev) / prev * 100, 1)
+                direction = "up" if delta_pct > 0 else "down" if delta_pct < 0 else "flat"
+            else:
+                delta_pct = None
+                direction = "new"
+            channel = topic["channels"].most_common(1)[0][0] if topic["channels"] else "news"
+            items.append(
+                {
+                    "kind": topic["kind"],
+                    "key": topic["key"],
+                    "label": topic["label"],
+                    "channel": channel,
+                    "count": count,
+                    "prev_count": prev,
+                    "delta_pct": delta_pct,
+                    "direction": direction,
+                }
+            )
+
+        # Rising topics first (new spikes count as rising), then by volume.
+        def sort_key(item: dict):
+            pct = item["delta_pct"]
+            rank = float("inf") if item["direction"] == "new" else pct or 0.0
+            return (-rank, -item["count"], item["label"])
+
+        items.sort(key=sort_key)
+        return items[: max(1, limit)]
 
     def list_articles(
         self,

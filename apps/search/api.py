@@ -457,6 +457,36 @@ def list_usecases() -> list[UseCaseInfo]:
     return service.list_use_cases()
 
 
+class TrendingItem(BaseModel):
+    kind: str = Field(..., description="use_case | technique | term")
+    key: str
+    label: str
+    channel: str
+    count: int
+    prev_count: int
+    delta_pct: float | None = None
+    direction: str = Field(..., description="up | down | flat | new")
+
+
+class TrendingResponse(BaseModel):
+    window_days: int
+    items: list[TrendingItem]
+
+
+@app.get("/trending", response_model=TrendingResponse)
+def trending(
+    window_days: int = Query(7, ge=1, le=30),
+    limit: int = Query(8, ge=1, le=20),
+) -> TrendingResponse:
+    """Most-active topics across subscribed feeds — recent window vs prior.
+
+    Pure counting over the in-memory index (no LLM, no extra I/O); windows
+    anchor on the corpus's newest processed_at for stable results.
+    """
+    items = service.trending(window_days=window_days, limit=limit)
+    return TrendingResponse(window_days=window_days, items=[TrendingItem(**i) for i in items])
+
+
 @app.get("/social/catalog", response_model=SocialCatalogResponse)
 def social_catalog() -> SocialCatalogResponse:
     """Curated social discovery suggestions plus current subscriptions."""
