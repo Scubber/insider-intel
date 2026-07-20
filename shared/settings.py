@@ -219,6 +219,28 @@ class Settings(BaseSettings):
         default=None,
         alias="REDDIT_CLIENT_SECRET",
     )
+    # --- Publications (long-form reference docs: landing page + PDF) ---
+    publications_content_max_chars: int = Field(
+        default=150_000,
+        alias="PUBLICATIONS_CONTENT_MAX_CHARS",
+        ge=500,
+        le=500_000,
+    )
+    publications_pdf_max_bytes: int = Field(
+        default=25_000_000,
+        alias="PUBLICATIONS_PDF_MAX_BYTES",
+        ge=100_000,
+        le=100_000_000,
+    )
+    # Publisher sites (e.g. sei.cmu.edu) 403 non-browser agents from cloud IPs.
+    publications_user_agent: str = Field(
+        default=(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+        ),
+        alias="PUBLICATIONS_USER_AGENT",
+    )
+
     reddit_subreddits: str = Field(
         default="",
         alias="REDDIT_SUBREDDITS",

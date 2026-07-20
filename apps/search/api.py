@@ -105,7 +105,7 @@ def list_sources(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | social | all (default)",
+        description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
     use_case: str | None = Query(
         default=None,
@@ -182,7 +182,7 @@ def list_articles(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | social | all (default)",
+        description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
     use_case: str | None = Query(
         default=None,
@@ -254,7 +254,7 @@ def search_get(
     ),
     channel: str = Query(
         default="all",
-        description="Provenance filter: news | filings | tips | social | all (default)",
+        description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
     use_case: str | None = Query(
         default=None,
@@ -525,6 +525,47 @@ def social_ingest_url(body: SocialIngestUrlRequest) -> dict[str, object]:
         "title": article.title,
         "link": article.link,
         "channel": article.channel,
+        "processed": processing.articles_processed,
+        "use_cases": hit.use_cases if hit else [],
+        "insider_type": hit.insider_type if hit else None,
+    }
+
+
+class PublicationIngestUrlRequest(BaseModel):
+    url: str = Field(..., min_length=10, description="Publication landing page or PDF URL")
+
+
+@app.post("/publications/ingest_url")
+def publications_ingest_url(body: PublicationIngestUrlRequest) -> dict[str, object]:
+    """Flag one publication by URL: fetch (PDF-aware), store, process, index."""
+    from apps.aggregator.process_pipeline import run_processing
+    from apps.aggregator.publications_pipeline import ingest_publication_url
+
+    settings = get_settings()
+    try:
+        article = ingest_publication_url(body.url, store_path=settings.raw_articles_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (PermissionError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"storage not writable: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — remote fetch failure
+        raise HTTPException(status_code=502, detail=f"fetch failed: {exc}") from exc
+    if article is None:
+        raise HTTPException(status_code=404, detail="no publication found at that URL")
+
+    processing = run_processing(
+        raw_path=settings.raw_articles_path,
+        processed_path=settings.processed_articles_path,
+        min_score=0.0,
+    )
+    index = service.get_index(settings.processed_articles_path, reload=True)
+    hit = index.hit_by_link(article.link)
+    return {
+        "status": "ingested",
+        "title": article.title,
+        "link": article.link,
+        "channel": article.channel,
+        "content_chars": len(article.content or ""),
         "processed": processing.articles_processed,
         "use_cases": hit.use_cases if hit else [],
         "insider_type": hit.insider_type if hit else None,

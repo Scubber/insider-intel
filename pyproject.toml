@@ -16,6 +16,9 @@ dependencies = [
     # Core, not an extra: the Cloud Run image installs only [project.dependencies],
     # and both the ingest summarizer and /extract/ttps can use Anthropic.
     "anthropic>=0.40",
+    # Core, not an extra: POST /publications/ingest_url parses PDFs on the API
+    # service, which installs only [project.dependencies].
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]

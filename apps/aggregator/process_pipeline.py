@@ -126,7 +126,10 @@ def run_processing(
             if processed.forensics is not None and (processed.story_key or "").strip():
                 enriched_story_keys.add(processed.story_key)
             result.articles_processed += 1
-            if processed.relevance_score < min_score:
+            # Curated publications bypass the score gate: long reference docs
+            # dilute keyword density and would otherwise silently drop out.
+            is_publication = resolve_channel(raw.source_id, raw.channel) == "publications"
+            if not is_publication and processed.relevance_score < min_score:
                 result.articles_skipped += 1
                 continue
             if raw.link in prior_by_link:

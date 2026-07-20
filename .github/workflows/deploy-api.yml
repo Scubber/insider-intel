@@ -108,3 +108,14 @@ jobs:
           echo "${EXTRACT}" | grep -q '"mode":"seeds"'
           echo "${EXTRACT}" | grep -q '"article_count":0'
           echo "extract smoke OK"
+          curl -sf "${URL}/articles?channel=publications&itm_alignment=all&limit=1" >/dev/null \
+            && echo "publications facet OK"
+          # ingest_url negative path: unresolvable host must map to a clean
+          # 4xx/5xx error, never hang or 200 (no real ingestion per deploy).
+          PUB_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${URL}/publications/ingest_url" \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.invalid/deploy-smoke-probe"}')
+          case "${PUB_CODE}" in
+            400|404|502|503) echo "publications ingest_url smoke OK (${PUB_CODE})" ;;
+            *) echo "unexpected publications ingest_url status ${PUB_CODE}" >&2; exit 1 ;;
+          esac

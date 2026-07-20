@@ -278,6 +278,28 @@ def _build_parser() -> argparse.ArgumentParser:
     social_url_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
     _add_verbose(social_url_p)
 
+    pubs_p = sub.add_parser(
+        "ingest_publications",
+        help="Sweep the curated publications catalog (guides/whitepapers + PDFs).",
+    )
+    pubs_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    pubs_p.add_argument("--include-raw", action="store_true")
+    pubs_p.add_argument(
+        "--source-ids",
+        type=str,
+        default=None,
+        help="Comma-separated publication source ids (default: all enabled).",
+    )
+    _add_verbose(pubs_p)
+
+    pub_url_p = sub.add_parser(
+        "ingest_publication_url",
+        help="Flag one publication by URL (landing page or direct PDF) for ingest.",
+    )
+    pub_url_p.add_argument("url", type=str, help="Publication landing page or PDF URL")
+    pub_url_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    _add_verbose(pub_url_p)
+
     social_mgmt_p = sub.add_parser(
         "social",
         help="Manage social subscriptions (list | suggest | add | remove).",
@@ -369,6 +391,7 @@ def _build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--skip-web-keywords", action="store_true")
     all_p.add_argument("--skip-datatheftnews", action="store_true")
     all_p.add_argument("--skip-social", action="store_true")
+    all_p.add_argument("--skip-publications", action="store_true")
     _add_verbose(all_p)
 
     itm_p = sub.add_parser(
@@ -598,6 +621,40 @@ def _cmd_ingest_social(args: argparse.Namespace) -> int:
     return 1 if result.failure_count and not result.success_count else 0
 
 
+def _cmd_ingest_publications(args: argparse.Namespace) -> int:
+    from apps.aggregator.publications_pipeline import run_publications_ingestion
+
+    source_ids = (
+        [s for s in args.source_ids.split(",") if s.strip()] if args.source_ids else None
+    )
+    result = run_publications_ingestion(
+        source_ids=source_ids,
+        store_path=args.store_path,
+        include_raw=args.include_raw,
+    )
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_ingest_publication_url(args: argparse.Namespace) -> int:
+    from apps.aggregator.publication_extract import PublicationFetchError
+    from apps.aggregator.publications_pipeline import ingest_publication_url
+
+    try:
+        article = ingest_publication_url(args.url, store_path=args.store_path)
+    except PublicationFetchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if article is None:
+        print(f"error: no publication found at {args.url}", file=sys.stderr)
+        return 1
+    chars = len(article.content or "")
+    print(f"Ingested: {article.title} ({article.link}) -> channel={article.channel}")
+    print(f"Extracted {chars} chars of text")
+    print("Run: python -m apps.aggregator process   # to classify + index it")
+    return 0
+
+
 def _cmd_ingest_social_url(args: argparse.Namespace) -> int:
     from apps.aggregator.reddit_pipeline import ingest_reddit_post_url
 
@@ -720,6 +777,7 @@ def _cmd_all(args: argparse.Namespace) -> int:
         skip_web_keywords=args.skip_web_keywords,
         skip_datatheftnews=args.skip_datatheftnews,
         skip_social=args.skip_social,
+        skip_publications=args.skip_publications,
     )
     _print_ingest(result.ingestion)
     _print_process(result.processing)
@@ -769,6 +827,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_social(args)
     if args.command == "ingest_social_url":
         return _cmd_ingest_social_url(args)
+    if args.command == "ingest_publications":
+        return _cmd_ingest_publications(args)
+    if args.command == "ingest_publication_url":
+        return _cmd_ingest_publication_url(args)
     if args.command == "social":
         return _cmd_social(args)
     if args.command == "ingest_web_keywords":
