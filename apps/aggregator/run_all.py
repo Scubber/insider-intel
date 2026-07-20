@@ -149,6 +149,7 @@ def run_full_pipeline(
     if not skip_publications:
         publications_result = run_publications_ingestion(
             store_path=raw_path,
+            processed_path=processed_path,
             include_raw=include_raw,
         )
     processing = run_processing(

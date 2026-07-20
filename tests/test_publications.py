@@ -12,6 +12,7 @@ from apps.aggregator.publication_extract import (
     PublicationFetchError,
     extract_page_text,
     fetch_publication,
+    find_collection_items,
     find_pdf_links,
 )
 from apps.aggregator.publication_sources import (
@@ -232,3 +233,179 @@ def test_min_score_gate_exempts_publications(tmp_path) -> None:
     links = {a.link for a in JsonlProcessedStore(processed_path).load_all()}
     assert "https://pubs.example.org/guide" in links
     assert "https://news.example.org/gardening" not in links
+
+
+META_LANDING_HTML = """<!DOCTYPE html>
+<html><head>
+  <title>Positive Deterrence Report</title>
+  <meta name="citation_pdf_url" content="/assets/positive-deterrence" />
+</head><body>
+  <a href="/library/uploads/wrong-guide.pdf">Other doc</a>
+  <a href="/assets/view?doc=1234.pdf&fmt=inline">Inline viewer</a>
+  <a type="application/pdf" href="/download/8842">Download</a>
+</body></html>
+"""
+
+COLLECTION_HTML = """<!DOCTYPE html>
+<html><head><title>Insider Threat Collection</title></head>
+<body>
+  <a href="/library/first-report/">First report</a>
+  <a href="https://pubs.example.org/library/second-report/">Second report</a>
+  <a href="/library/collection-page/">Self link</a>
+  <a href="/blog/unrelated/">Blog post</a>
+  <a href="https://other.example.net/library/external/">External</a>
+  <a href="/library/first-report/#section">Dup via fragment</a>
+</body></html>
+"""
+
+
+def test_find_pdf_links_meta_and_typed_priority() -> None:
+    links = find_pdf_links(META_LANDING_HTML, "https://pubs.example.org/library/report/")
+    assert links[0] == "https://pubs.example.org/assets/positive-deterrence"
+    assert links[1] == "https://pubs.example.org/download/8842"
+    assert "https://pubs.example.org/library/uploads/wrong-guide.pdf" in links
+    # .pdf anywhere in the path now matches too
+    assert any("doc=1234.pdf" in link or "/assets/view" in link for link in links)
+
+
+def test_non_pdf_candidate_rejected_by_sniff() -> None:
+    landing = "https://pubs.example.org/library/report/"
+    url_map = {
+        landing: (200, META_LANDING_HTML.encode(), "text/html"),
+        # citation_pdf_url target really is a PDF despite no .pdf suffix
+        "https://pubs.example.org/assets/positive-deterrence": (
+            200,
+            SAMPLE_PDF,
+            "application/pdf",
+        ),
+    }
+    with _mock_client(_serve(url_map)) as client:
+        doc = _fetch(landing, client)
+    assert doc.content == PDF_TEXT
+    assert doc.pdf_url == "https://pubs.example.org/assets/positive-deterrence"
+
+
+def test_sniff_rejects_html_masquerading_as_pdf() -> None:
+    landing = "https://pubs.example.org/library/report/"
+    url_map = {
+        landing: (200, LANDING_HTML.encode(), "text/html"),
+        # .pdf-suffixed link that actually serves an HTML error page
+        PDF_URL: (200, b"<html>login required</html>", "text/html"),
+    }
+    with _mock_client(_serve(url_map)) as client:
+        doc = _fetch(landing, client)
+    assert doc.pdf_url is None
+    assert doc.content and "insider threat mitigation programs" in doc.content
+
+
+def test_find_collection_items() -> None:
+    items = find_collection_items(
+        COLLECTION_HTML, "https://pubs.example.org/library/collection-page/"
+    )
+    assert items == [
+        "https://pubs.example.org/library/first-report/",
+        "https://pubs.example.org/library/second-report/",
+    ]
+
+
+def test_collection_source_ingests_items(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("apps.aggregator.publications_pipeline._COLLECTION_ITEM_DELAY_SECONDS", 0)
+    collection_url = "https://pubs.example.org/library/collection-page/"
+    catalog = [
+        PublicationSource(
+            id="pub-collection",
+            name="Test Collection",
+            url=collection_url,
+            kind="collection",
+            max_items=5,
+        ),
+    ]
+    monkeypatch.setattr(
+        "apps.aggregator.publications_pipeline.get_publication_sources",
+        lambda source_ids=None: catalog,
+    )
+    url_map = {
+        collection_url: (200, COLLECTION_HTML.encode(), "text/html"),
+        "https://pubs.example.org/library/first-report/": (
+            200,
+            LANDING_HTML.encode(),
+            "text/html",
+        ),
+        "https://pubs.example.org/library/second-report/": (403, b"", "text/html"),
+        PDF_URL: (200, SAMPLE_PDF, "application/pdf"),
+        "https://pubs.example.org/library/uploads/common-sense-guide-7e.pdf": (
+            200,
+            SAMPLE_PDF,
+            "application/pdf",
+        ),
+    }
+    transport = httpx.MockTransport(_serve(url_map))
+    real_client = httpx.Client
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr("apps.aggregator.publications_pipeline.httpx.Client", patched_client)
+
+    store_path = tmp_path / "raw.jsonl"
+    result = run_publications_ingestion(
+        store_path=str(store_path), processed_path=str(tmp_path / "proc.jsonl")
+    )
+    assert result.success_count == 1
+    [src] = result.sources
+    assert src.articles_fetched == 1  # second item 403'd, skipped
+    [article] = JsonlArticleStore(store_path).load_all()
+    assert article.link == "https://pubs.example.org/library/first-report/"
+    assert article.source_id == "pub-collection"
+    assert article.content == PDF_TEXT
+
+
+def test_sweep_upgrades_row_when_pdf_text_arrives(tmp_path, monkeypatch) -> None:
+    from apps.aggregator.processed_storage import JsonlProcessedStore
+    from shared.agents import process_article
+
+    store_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    short = RawArticle(
+        title="Guide",
+        link=LANDING_URL,
+        summary="Abstract.",
+        content="short page text only",
+        source_id="pub-guide",
+        source_name="Guide",
+        channel="publications",
+    )
+    JsonlArticleStore(store_path).save([short])
+    processed = process_article(short).model_copy(update={"ai_summary": "stale summary"})
+    JsonlProcessedStore(processed_path).save([processed])
+
+    long_text = "Insider threat mitigation guidance. " * 500  # ~18k chars
+    catalog = [PublicationSource(id="pub-guide", name="Guide", url=LANDING_URL)]
+    monkeypatch.setattr(
+        "apps.aggregator.publications_pipeline.get_publication_sources",
+        lambda source_ids=None: catalog,
+    )
+
+    from apps.aggregator.publication_extract import PublicationDoc
+
+    monkeypatch.setattr(
+        "apps.aggregator.publications_pipeline.fetch_publication",
+        lambda url, **kw: PublicationDoc(
+            title="Guide", summary="Abstract.", published=None, content=long_text, pdf_url=PDF_URL
+        ),
+    )
+    result = run_publications_ingestion(
+        store_path=str(store_path), processed_path=str(processed_path)
+    )
+    assert result.total_articles_saved == 1
+    [row] = JsonlArticleStore(store_path).load_all()
+    assert row.content == long_text
+    [proc] = JsonlProcessedStore(processed_path).load_all()
+    assert proc.ai_summary is None  # stale LLM fields cleared for re-enrichment
+
+    # Second sweep with identical text: no rewrite, no clearing churn.
+    rerun = run_publications_ingestion(
+        store_path=str(store_path), processed_path=str(processed_path)
+    )
+    assert rerun.total_articles_saved == 0

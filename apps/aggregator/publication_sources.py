@@ -19,6 +19,10 @@ class PublicationSource:
     url: str  # landing page (or direct PDF) URL
     pdf_url: str | None = None  # explicit PDF override; else discovered on page
     enabled: bool = True
+    # "document" ingests url itself; "collection" walks the index page and
+    # ingests each linked item landing page (bounded by max_items).
+    kind: str = "document"
+    max_items: int = 10
 
 
 DEFAULT_PUBLICATION_SOURCES: list[PublicationSource] = [
@@ -29,6 +33,15 @@ DEFAULT_PUBLICATION_SOURCES: list[PublicationSource] = [
             "https://www.sei.cmu.edu/library/"
             "common-sense-guide-to-mitigating-insider-threats-seventh-edition/"
         ),
+    ),
+    PublicationSource(
+        id="pub-sei-positive-deterrence-collection",
+        name="SEI Positive Deterrence for Reducing Insider Threat (collection)",
+        url=(
+            "https://www.sei.cmu.edu/library/"
+            "positive-deterrence-for-reducing-insider-threat-collection/"
+        ),
+        kind="collection",
     ),
     PublicationSource(
         id="pub-cisa-insider-threat-mitigation-guide",
