@@ -53,8 +53,20 @@ jobs:
             --freshness="${{ github.event.inputs.log_freshness }}" \
             --project "${PROJECT_ID}" \
             --format='value(textPayload)' 2>/dev/null \
-            | grep -E 'reenrich_cleared|reenrich|enrich|backfill|reloaded|\[OK\]|\[FAIL\]|schema_version|floor' \
+            | grep -E 'reenrich_cleared|reenrich_restored|reenrich|enrich|backfill|reloaded|\[OK\]|\[FAIL\]|schema_version|floor' \
             | tail -60 || echo "(no matching log lines / no logging access)"
+
+      - name: PACER purchase activity (credential + budget state)
+        run: |
+          echo "== PACER purchase log markers (last ${{ github.event.inputs.log_freshness }}) =="
+          echo "'skipping purchases' => no PACER_USERNAME/PASSWORD set (nothing bought)."
+          gcloud logging read \
+            'resource.labels.job_name=corpus-refresh' \
+            --freshness="${{ github.event.inputs.log_freshness }}" \
+            --project "${PROJECT_ID}" \
+            --format='value(textPayload)' 2>/dev/null \
+            | grep -iE 'pacer|recap.fetch|purchase|quarterly budget|skipping purchase' \
+            | tail -30 || echo "(no PACER log lines found)"
 
       - name: Sony/Udio enrichment state (grep logs for the docket)
         run: |
