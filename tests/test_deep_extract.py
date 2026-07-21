@@ -235,6 +235,22 @@ def test_case_record_from_forensics_derives_and_sanitizes() -> None:
     assert len(record.methods[0]) == 120  # sanitize() clamps list items to 120
 
 
+def test_narrative_fields_survive_past_200_chars() -> None:
+    """DETECTED VIA / OUTCOME are full sentences — must not clip at 200 chars."""
+    long_detection = "Forensic analysis of the corpus " + ("x" * 400)
+    f = PerCaseForensics(
+        link="l",
+        title="t",
+        is_insider_case=True,
+        detection=long_detection,
+        outcome="y" * 900,
+    )
+    record = case_record_from_forensics(f)
+    # Survives well past the 200-char label clamp, capped at the 800 narrative limit.
+    assert len(record.detection_trigger) > 200
+    assert len(record.outcome) == 800
+
+
 def test_pack_case_text_filing_head_and_tail() -> None:
     body = "The defendant exfiltrated schematics. " * 1200  # ~46k chars
     packed = pack_case_text(body, max_chars=36_000, is_filing=True)
