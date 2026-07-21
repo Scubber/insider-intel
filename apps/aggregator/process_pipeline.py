@@ -158,6 +158,26 @@ def run_processing(
         result.articles_saved = processed_store.save(batch)
 
     batch_links = {a.link for a in batch}
+
+    # One-off recovery: clear the paid-for LLM fields on "missed" filings (a
+    # forensic record from a model other than the target) so the sweep below
+    # re-enriches them on the current model. Env-gated (0 = off); idempotent —
+    # converges to a no-op once every filing is on the target model.
+    if settings.summarizer_reenrich_missed_limit > 0:
+        from apps.aggregator.reenrich import clear_missed_filings
+
+        target_model = (
+            settings.summarizer_reenrich_model
+            or settings.summarizer_model
+            or settings.anthropic_model
+        )
+        cleared = clear_missed_filings(
+            processed_path,
+            target_model=target_model,
+            limit=settings.summarizer_reenrich_missed_limit,
+        )
+        result.reenrich_cleared = cleared
+
     # Backfill allowance = the reserved slice plus whatever the batch left over.
     backfill_budget = SummaryBudget(reserve + budget.remaining)
     _backfill_summaries(

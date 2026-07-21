@@ -359,8 +359,29 @@ class Settings(BaseSettings):
         default=15,
         alias="SUMMARIZER_MAX_ARTICLES_PER_RUN",
         ge=0,
-        le=500,
+        le=5000,
         description="LLM-call budget per processing run (0 disables)",
+    )
+    summarizer_reenrich_missed_limit: int = Field(
+        default=0,
+        alias="SUMMARIZER_REENRICH_MISSED_LIMIT",
+        ge=0,
+        le=50_000,
+        description=(
+            "One-off recovery: before the backfill sweep, clear the paid-for LLM "
+            "fields on up to N 'missed' filings (forensic record produced by a "
+            "model other than the target) so they re-enrich on the current model. "
+            "0 disables. Set for a big-batch re-enrich run, then revert. Idempotent "
+            "— rows already on the target model are never touched."
+        ),
+    )
+    summarizer_reenrich_model: str = Field(
+        default="",
+        alias="SUMMARIZER_REENRICH_MODEL",
+        description=(
+            "Target model for the missed-filings check; empty uses the resolved "
+            "summarizer model (SUMMARIZER_MODEL or ANTHROPIC_MODEL)."
+        ),
     )
     summarizer_backfill_reserve: int = Field(
         default=6,
