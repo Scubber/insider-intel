@@ -77,7 +77,7 @@ jobs:
           # re-gutting). Cancel every running execution, then wait until none run.
           mapfile -t RUNNING < <(gcloud run jobs executions list \
             --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
-            --filter="NOT status.completionTime:*" --format="value(name)" || true)
+            --filter="status.runningCount>=1" --format="value(name)" || true)
           if [ "${#RUNNING[@]}" -eq 0 ]; then
             echo "No running corpus-refresh execution."; exit 0
           fi
@@ -90,7 +90,7 @@ jobs:
           for _ in $(seq 1 30); do
             LEFT=$(gcloud run jobs executions list \
               --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
-              --filter="NOT status.completionTime:*" --format="value(name)" | wc -l)
+              --filter="status.runningCount>=1" --format="value(name)" | wc -l)
             if [ "${LEFT}" -eq 0 ]; then echo "All executions stopped."; break; fi
             echo "  ${LEFT} still running; waiting 10s..."; sleep 10
           done
@@ -108,10 +108,23 @@ jobs:
           fi
           echo "Donor generation: ${DONOR}"
 
-          # A soft-deleted generation copies with the same #generation syntax.
-          gcloud storage cp "${DONOR}" donor.jsonl
+          # Current live object: a plain cp works.
           gcloud storage cp "${OBJ}" current.jsonl
+
+          # Donor is a SOFT-DELETED generation (versioning off), which gcloud
+          # storage cp won't fetch by #generation. Pull it via the Storage JSON
+          # API with softDeleted=true — the reliable way to read retained bytes.
+          GEN="${DONOR##*#}"
+          echo "Fetching soft-deleted donor generation ${GEN} via JSON API"
+          TOKEN="$(gcloud auth print-access-token)"
+          curl -fsS -H "Authorization: Bearer ${TOKEN}" \
+            "https://storage.googleapis.com/storage/v1/b/insider-intel-502413-corpus/o/processed%2Farticles.jsonl?generation=${GEN}&alt=media&softDeleted=true" \
+            -o donor.jsonl
           wc -l donor.jsonl current.jsonl
+          # Sanity: donor must be non-trivial JSONL, else abort before any write.
+          if [ "$(wc -l < donor.jsonl)" -lt 100 ]; then
+            echo "Donor looks wrong (<100 lines) — aborting."; head -c 400 donor.jsonl; exit 1
+          fi
 
           echo "== Dry-run first (report what would be restored) =="
           python3 scripts/recover_gutted_rows.py \
