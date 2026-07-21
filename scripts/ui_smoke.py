@@ -109,6 +109,17 @@ def run(base_url: str, headed: bool) -> int:
         page.goto(demo)
         page.wait_for_selector(".article-item", timeout=20000)
         checks.check("stream loads", page.locator(".article-item").count() > 0)
+
+        # Card meta shows an absolute filed date (YYYY-MM-DD) plus relative age,
+        # so analysts see the exact date, not just "1w ago".
+        import re as _re
+
+        first_meta = page.locator("#article-list .case-meta").first.text_content() or ""
+        checks.check(
+            "card meta carries an absolute filed date",
+            bool(_re.search(r"FILED \d{4}-\d{2}-\d{2} · ", first_meta)),
+            f"meta={first_meta!r}",
+        )
         checks.check(
             "data-state chip renders",
             "articles" in (page.text_content("#data-state") or ""),
@@ -164,6 +175,17 @@ def run(base_url: str, headed: bool) -> int:
 
         # Long analyst notes are sentence-chunked into short paragraphs, not
         # one wall of text (chunks are built at render time, even clamped).
+        # Drop the SIG floor to 0 first so the full corpus is in view — the
+        # default floor filters most cards and the long-note sample may score
+        # below it. Chunking is floor-independent.
+        page.evaluate(
+            """() => {
+              const s = document.getElementById('signal-slider');
+              s.value = '0';
+              s.dispatchEvent(new Event('change', { bubbles: true }));
+            }"""
+        )
+        page.wait_for_timeout(600)
         chunked = page.evaluate(
             """() => {
               const rows = [...document.querySelectorAll('#article-list .article-row')];
@@ -374,7 +396,7 @@ def run(base_url: str, headed: bool) -> int:
         page.evaluate(
             """() => {
               const s = document.getElementById('signal-slider');
-              s.value = '15';
+              s.value = '30';
               s.dispatchEvent(new Event('change', { bubbles: true }));
             }"""
         )
