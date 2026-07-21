@@ -107,21 +107,26 @@ jobs:
             echo "Refusing to write: donor_generation is required for restore."; exit 1
           fi
           echo "Donor generation: ${DONOR}"
-
-          # Current live object: a plain cp works.
-          gcloud storage cp "${OBJ}" current.jsonl
-
-          # Donor is a SOFT-DELETED generation (versioning off), which gcloud
-          # storage cp won't fetch by #generation. Pull it via the Storage JSON
-          # API with softDeleted=true — the reliable way to read retained bytes.
           GEN="${DONOR##*#}"
-          echo "Fetching soft-deleted donor generation ${GEN} via JSON API"
-          TOKEN="$(gcloud auth print-access-token)"
-          curl -fsS -H "Authorization: Bearer ${TOKEN}" \
-            "https://storage.googleapis.com/storage/v1/b/insider-intel-502413-corpus/o/processed%2Farticles.jsonl?generation=${GEN}&alt=media&softDeleted=true" \
-            -o donor.jsonl
+
+          # 1. Save current live corpus + a stable backup BEFORE touching anything.
+          gcloud storage cp "${OBJ}" current.jsonl
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          echo "Backing up current corpus to processed/backups/articles.${TS}.pre-recover.jsonl"
+          gcloud storage cp current.jsonl "${BUCKET}/processed/backups/articles.${TS}.pre-recover.jsonl"
+
+          # 2. Read the soft-deleted donor generation. Versioning is off, so it
+          #    isn't cp-able by #generation and the media API rejects
+          #    softDeleted+alt=media. Restore it to live, copy it out, then
+          #    immediately put current back — the live=donor window is seconds
+          #    with nothing reloading, and current is backed up above.
+          echo "Restoring soft-deleted donor ${GEN} to read its bytes"
+          gcloud storage restore "${DONOR}" --project "${PROJECT_ID}"
+          gcloud storage cp "${OBJ}" donor.jsonl
+          echo "Reverting live corpus to the current (pre-recover) version"
+          gcloud storage cp current.jsonl "${OBJ}"
+
           wc -l donor.jsonl current.jsonl
-          # Sanity: donor must be non-trivial JSONL, else abort before any write.
           if [ "$(wc -l < donor.jsonl)" -lt 100 ]; then
             echo "Donor looks wrong (<100 lines) — aborting."; head -c 400 donor.jsonl; exit 1
           fi
@@ -136,10 +141,6 @@ jobs:
           if [ ! -s merged.jsonl ]; then
             echo "No rows restored — nothing to upload. Done."; exit 0
           fi
-
-          TS="$(date -u +%Y%m%dT%H%M%SZ)"
-          echo "Backing up current corpus to processed/backups/articles.${TS}.jsonl"
-          gcloud storage cp current.jsonl "${BUCKET}/processed/backups/articles.${TS}.jsonl"
 
           echo "Uploading merged corpus over the live object"
           gcloud storage cp merged.jsonl "${OBJ}"
