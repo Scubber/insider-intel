@@ -1,0 +1,110 @@
+name: corpus-recover
+
+# Recover filing records that a destructive re-enrich gutted, by donating the
+# richer record from a PRE-DRAIN generation of processed/articles.jsonl. Object
+# versioning is off, but soft-delete (7-day) retains OVERWRITTEN generations
+# too — so the pre-drain bytes are recoverable for the retention window.
+#
+#   mode=inspect  : read-only. List live + soft-deleted generations (with
+#                   timestamps + generation numbers) so a pre-drain generation
+#                   can be identified. Writes nothing.
+#   mode=restore  : download the chosen donor generation + the current live
+#                   file, keep-best merge (scripts/recover_gutted_rows.py —
+#                   restores only rows that regressed, keeps every current row),
+#                   back up the current file, upload the merge, reload the API.
+#                   Requires confirm=RESTORE and a donor_generation.
+#
+# Do NOT run mode=restore while a corpus-refresh execution is running — its
+# final reload would overwrite the restore. Check corpus-status first.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) | restore (writes corpus)"
+        required: true
+        default: "inspect"
+      donor_generation:
+        description: "restore only: full donor URL, e.g. gs://.../articles.jsonl#1737...  (a pre-drain generation)"
+        required: false
+        default: ""
+      confirm:
+        description: "restore only: must be the literal word RESTORE to write"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+  BUCKET: gs://insider-intel-502413-corpus
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+
+concurrency:
+  group: corpus-refresh-mutation
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Inspect generations (live + soft-deleted)
+        run: |
+          echo "== Live generations of articles.jsonl =="
+          gcloud storage ls -l --all-versions "${OBJ}" 2>&1 | tail -30 || echo "(list failed)"
+          echo
+          echo "== Soft-deleted generations (overwritten bytes retained by soft-delete) =="
+          echo "Pick a generation created BEFORE the first drain (~14:20Z 2026-07-21,"
+          echo "before the 14:27 canary) as the donor — it holds Sony's rich record."
+          gcloud storage ls -l --soft-deleted "${OBJ}" 2>&1 | tail -40 \
+            || echo "(soft-deleted list failed — may need a newer gcloud or extra perm)"
+
+      - name: Restore (keep-best merge + upload + reload)
+        if: ${{ github.event.inputs.mode == 'restore' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.confirm }}" != "RESTORE" ]; then
+            echo "Refusing to write: confirm must be the literal word RESTORE."; exit 1
+          fi
+          DONOR="${{ github.event.inputs.donor_generation }}"
+          if [ -z "${DONOR}" ]; then
+            echo "Refusing to write: donor_generation is required for restore."; exit 1
+          fi
+          echo "Donor generation: ${DONOR}"
+
+          # A soft-deleted generation copies with the same #generation syntax.
+          gcloud storage cp "${DONOR}" donor.jsonl
+          gcloud storage cp "${OBJ}" current.jsonl
+          wc -l donor.jsonl current.jsonl
+
+          echo "== Dry-run first (report what would be restored) =="
+          python3 scripts/recover_gutted_rows.py \
+            --current current.jsonl --donor donor.jsonl --out merged.jsonl --dry-run
+
+          echo "== Real merge =="
+          python3 scripts/recover_gutted_rows.py \
+            --current current.jsonl --donor donor.jsonl --out merged.jsonl
+          if [ ! -s merged.jsonl ]; then
+            echo "No rows restored — nothing to upload. Done."; exit 0
+          fi
+
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          echo "Backing up current corpus to processed/backups/articles.${TS}.jsonl"
+          gcloud storage cp current.jsonl "${BUCKET}/processed/backups/articles.${TS}.jsonl"
+
+          echo "Uploading merged corpus over the live object"
+          gcloud storage cp merged.jsonl "${OBJ}"
+
+          echo "Reloading the API so the restore is served"
+          curl -fsS -X POST https://api.intel.thederpweb.com/reload || \
+            echo "(reload POST failed — the next scheduled refresh will pick it up)"
