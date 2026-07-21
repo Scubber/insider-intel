@@ -394,6 +394,33 @@ def _build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--skip-publications", action="store_true")
     _add_verbose(all_p)
 
+    reenrich_p = sub.add_parser(
+        "reenrich_missed",
+        help=(
+            "Clear LLM fields on filings whose forensics came from a non-target "
+            "model, so the next processing sweep re-enriches them. --dry-run counts."
+        ),
+    )
+    reenrich_p.add_argument("--processed-path", type=str, default=DEFAULT_PROCESSED_PATH)
+    reenrich_p.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Target model; default = resolved summarizer model (SUMMARIZER/ANTHROPIC_MODEL).",
+    )
+    reenrich_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Clear at most this many missed filings (newest-filed first).",
+    )
+    reenrich_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Count and list missed filings without clearing anything.",
+    )
+    _add_verbose(reenrich_p)
+
     itm_p = sub.add_parser(
         "refresh_itm",
         help="Download Insider Threat Matrix™ JSON and write slim itm_index.json.",
@@ -438,9 +465,10 @@ def _print_ingest(result) -> None:
 
 
 def _print_process(result) -> None:
+    reenrich = f" reenrich_cleared={result.reenrich_cleared}" if result.reenrich_cleared else ""
     print(
         f"Process done. {result.articles_processed}/{result.articles_read} processed; "
-        f"saved={result.articles_saved} skipped={result.articles_skipped} "
+        f"saved={result.articles_saved} skipped={result.articles_skipped}{reenrich} "
         f"errors={len(result.errors)}"
     )
     for err in result.errors[:10]:
@@ -743,6 +771,28 @@ def _cmd_process(args: argparse.Namespace) -> int:
     return 1 if result.errors and result.articles_saved == 0 else 0
 
 
+def _cmd_reenrich_missed(args: argparse.Namespace) -> int:
+    from apps.aggregator.reenrich import clear_missed_filings, select_missed_filings
+    from shared.settings import get_settings
+
+    settings = get_settings()
+    target = args.model or settings.summarizer_model or settings.anthropic_model
+    if args.dry_run:
+        links = select_missed_filings(
+            args.processed_path, target_model=target, limit=args.limit
+        )
+        print(f"Missed filings not on {target!r}: {len(links)}")
+        for link in links[:20]:
+            print(f"  {link}")
+        if len(links) > 20:
+            print(f"  … and {len(links) - 20} more")
+        return 0
+    cleared = clear_missed_filings(args.processed_path, target_model=target, limit=args.limit)
+    print(f"Cleared {cleared} missed filing(s) not on {target!r} — next sweep re-enriches them.")
+    _try_reload_api()
+    return 0
+
+
 def _cmd_export(args: argparse.Namespace) -> int:
     since = None
     if args.since:
@@ -839,6 +889,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_archive(args)
     if args.command == "export":
         return _cmd_export(args)
+    if args.command == "reenrich_missed":
+        return _cmd_reenrich_missed(args)
     return _cmd_ingest(args)
 
 
