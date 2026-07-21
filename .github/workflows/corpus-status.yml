@@ -1,0 +1,83 @@
+name: corpus-status
+
+# Read-only visibility into the corpus-refresh job: is an execution running
+# (e.g. a re-enrich drain still churning), how did recent executions end, and
+# what do the recent logs say about enrichment / re-enrich progress. Runs
+# gcloud in CI via the same keyless OIDC identity as deploys. Writes NOTHING —
+# no job update, no execution create — safe to run anytime, including while a
+# drain is in flight.
+on:
+  workflow_dispatch:
+    inputs:
+      log_freshness:
+        description: "How far back to read logs (e.g. 2h, 30m)"
+        required: false
+        default: "3h"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Executions (running first, then recent)
+        run: |
+          echo "== Currently running corpus-refresh executions =="
+          gcloud run jobs executions list \
+            --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+            --filter="status.completionTime:*" --limit=1 >/dev/null 2>&1 || true
+          # Running = no completionTime yet.
+          gcloud run jobs executions list \
+            --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+            --format="table(name, status.runningCount, status.succeededCount, status.failedCount, creationTimestamp, completionTime)" \
+            --limit=8 || echo "(could not list executions)"
+
+      - name: Recent enrichment / re-enrich log markers
+        run: |
+          echo "== Log markers (last ${{ github.event.inputs.log_freshness }}) =="
+          gcloud logging read \
+            'resource.labels.job_name=corpus-refresh' \
+            --freshness="${{ github.event.inputs.log_freshness }}" \
+            --project "${PROJECT_ID}" \
+            --format='value(textPayload)' 2>/dev/null \
+            | grep -E 'reenrich_cleared|reenrich|enrich|backfill|reloaded|\[OK\]|\[FAIL\]|schema_version|floor' \
+            | tail -60 || echo "(no matching log lines / no logging access)"
+
+      - name: Sony/Udio enrichment state (grep logs for the docket)
+        run: |
+          echo "== Any recent log lines mentioning the Udio docket =="
+          gcloud logging read \
+            'resource.labels.job_name=corpus-refresh' \
+            --freshness="${{ github.event.inputs.log_freshness }}" \
+            --project "${PROJECT_ID}" \
+            --format='value(textPayload)' 2>/dev/null \
+            | grep -iE 'udio|uncharted|73641108|sony' \
+            | tail -20 || echo "(no Sony/Udio log lines found)"
+
+      - name: Corpus object versioning (recovery path check)
+        run: |
+          echo "== Is object versioning enabled on the corpus bucket? =="
+          gcloud storage buckets describe gs://insider-intel-502413-corpus \
+            --project "${PROJECT_ID}" --format="value(versioning.enabled)" \
+            || echo "(could not describe bucket)"
+          echo
+          echo "== Versions of processed/articles.jsonl (newest first) =="
+          echo "If versioning is on, a generation from BEFORE the drain (~14:55Z"
+          echo "2026-07-21) holds Sony's pre-drain record — a clean recovery source."
+          gcloud storage ls -a -l \
+            gs://insider-intel-502413-corpus/processed/articles.jsonl \
+            --project "${PROJECT_ID}" 2>/dev/null \
+            | tail -20 || echo "(no versions listed / no access)"
