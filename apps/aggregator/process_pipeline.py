@@ -97,9 +97,21 @@ def run_processing(
         if a.forensics is not None and (a.story_key or "").strip()
     }
 
+    # Enrich the fresh-ingest batch newest-first (filings first, then newest
+    # published) so the limited per-run LLM budget goes to genuinely-new cases
+    # before force-refreshed historical filings. The CourtListener text backfill
+    # re-stamps old dockets with a fresh ingested_at, which pulls them back into
+    # this batch; without an ordering key they'd compete in raw-file order and a
+    # decade-seeding wave could starve the day's new case. `published` (the
+    # filing date) sorts a 2016 docket behind a 2026 one. Mirrors the backfill
+    # sweep's own ordering.
+    def _fresh_order(raw: RawArticle):
+        is_filing = resolve_channel(raw.source_id, raw.channel) == "filings"
+        return (is_filing, _as_utc(raw.published or raw.ingested_at))
+
     batch: list = []
     reprocessed_existing = False
-    for raw in by_link.values():
+    for raw in sorted(by_link.values(), key=_fresh_order, reverse=True):
         prior = prior_by_link.get(raw.link)
         if (
             not force

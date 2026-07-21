@@ -268,6 +268,51 @@ def test_carry_forward_never_rebills(monkeypatch, tmp_path: Path) -> None:
     assert any(h.id == "IF038" and h.source == "llm" for h in row.entities.itm_hits)
 
 
+def test_fresh_batch_enriches_newest_filing_first(monkeypatch, tmp_path: Path) -> None:
+    """The per-run enrichment budget goes to genuinely-new cases before
+    force-refreshed historical filings, regardless of raw-file order."""
+    from datetime import UTC, datetime
+
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    body = "Insider data exfiltration via removable media, trade secret theft. " * 40
+    # The old filing is written FIRST (as a decade-seeding text backfill would,
+    # re-stamped with a fresh ingested_at) and the new case second.
+    old = _raw(
+        link="https://ex.com/old-2016",
+        title="Historical filing: data exfiltration case",
+        channel="filings",
+        content=body,
+        published=datetime(2016, 1, 1, tzinfo=UTC),
+        ingested_at=datetime(2026, 7, 21, tzinfo=UTC),
+    )
+    new = _raw(
+        link="https://ex.com/new-2026",
+        title="Recent filing: data exfiltration case",
+        channel="filings",
+        content=body,
+        published=datetime(2026, 7, 20, tzinfo=UTC),
+        ingested_at=datetime(2026, 7, 21, tzinfo=UTC),
+    )
+    JsonlArticleStore(raw_path).save([old, new])
+
+    # One fresh-batch call, no reserve/discovery — only the first sorted case
+    # gets enriched.
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "1")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "0")
+    monkeypatch.setenv("DISCOVERER_MAX_ARTICLES_PER_RUN", "0")
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+
+    assert fake.calls == 1
+    rows = {r.link: r for r in JsonlProcessedStore(processed_path).load_all()}
+    # Newest-filed case wins the single call despite appearing last in the file.
+    assert rows["https://ex.com/new-2026"].forensics is not None
+    assert rows["https://ex.com/old-2016"].forensics is None
+
+
 def test_backfill_converts_existing_corpus_bounded_by_cap(monkeypatch, tmp_path: Path) -> None:
     raw_path = tmp_path / "raw.jsonl"
     processed_path = tmp_path / "processed.jsonl"
