@@ -5,9 +5,11 @@
   );
 
   // SIG floor (0–100, matches the SIG number stamped on each card). The API's
-  // min_score is the same value on a 0–1 scale. 15 ≈ the old "Standard" floor,
-  // 35 ≈ the old "High" toggle. Publications are exempt server-side.
-  const SIG_DEFAULT = 15;
+  // min_score is the same value on a 0–1 scale. SIG here is keyword relevance,
+  // whose distribution is compressed low (corpus median ≈17, p90 ≈38), so the
+  // default sits around the top quartile — the Insider Focus scope does the
+  // real "strong insider case" filtering. Publications are exempt server-side.
+  const SIG_DEFAULT = 30;
 
   function streamMinScore() {
     return (Number(state.signal) || 0) / 100;
@@ -3497,6 +3499,17 @@
     return `${stamp}-${suffix}`;
   }
 
+  /** Absolute filed date (YYYY-MM-DD), same date basis as caseNumber's stamp
+   * so the card tab id and the shown date always agree. Null if undated. */
+  function isoFiledDate(value) {
+    const d = new Date(value);
+    if (!Number.isFinite(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   /** Compact "filed" age for the meta row. */
   function caseFiledAge(value) {
     try {
@@ -3593,10 +3606,11 @@
     const metaText = document.createElement("span");
     metaText.className = "case-meta";
     const srcExtra = cluster.member_count > 1 ? ` +${cluster.member_count - 1}` : "";
-    const metaParts = [
-      `SOURCE: ${article.source_name || "UNATTRIBUTED"}${srcExtra}`,
-      `FILED: ${caseFiledAge(article.published)}`,
-    ];
+    // Exact date first (analysts need it unambiguously), relative age second.
+    const filedIso = isoFiledDate(article.published);
+    const filedAge = caseFiledAge(article.published);
+    const filedText = filedIso ? `FILED ${filedIso} · ${filedAge}` : `FILED: ${filedAge}`;
+    const metaParts = [`SOURCE: ${article.source_name || "UNATTRIBUTED"}${srcExtra}`, filedText];
     const sig = sigScore(article);
     if (sig != null) metaParts.push(`SIG ${sig}`);
     metaText.textContent = metaParts.join(" · ");

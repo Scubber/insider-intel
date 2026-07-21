@@ -205,18 +205,18 @@
                 class="filter-label"
                 data-tip="Relevance-score floor for the stream. Raise it to hide weaker matches; publications are never hidden."
                 tabindex="0"
-              >Min. Insider Confidence — <span class="signal-value" id="signal-value">SIG ≥ 15</span></span>
+              >Min. Insider Confidence — <span class="signal-value" id="signal-value">SIG ≥ 30</span></span>
               <input
                 type="range"
                 id="signal-slider"
                 min="0"
                 max="100"
                 step="5"
-                value="15"
+                value="30"
                 aria-label="Minimum insider confidence (SIG floor)"
               />
               <div class="signal-ticks" aria-hidden="true">
-                <span>0 ALL</span><span>15 STD</span><span>35 HIGH</span><span>100</span>
+                <span>0 ALL</span><span>30 STD</span><span>45 HIGH</span><span>100</span>
               </div>
             </div>
             <div class="filter-group">
@@ -840,8 +840,8 @@
                   </div>
                 </div>
                 <div class="settings-field filter-group-signal">
-                  <span class="filter-label">Default min. insider confidence — <span class="signal-value" id="default-signal-value">SIG ≥ 15</span></span>
-                  <input type="range" id="default-signal" min="0" max="100" step="5" value="15" aria-label="Default minimum insider confidence" />
+                  <span class="filter-label">Default min. insider confidence — <span class="signal-value" id="default-signal-value">SIG ≥ 30</span></span>
+                  <input type="range" id="default-signal" min="0" max="100" step="5" value="30" aria-label="Default minimum insider confidence" />
                 </div>
                 <p class="panel-actions">
                   <button type="button" id="apply-defaults" class="copy-btn" data-tip="Set the current stream filters to these defaults now" data-tip-pos="bottom-start">
