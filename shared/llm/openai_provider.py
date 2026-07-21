@@ -19,8 +19,12 @@ from shared.llm.base import (
 )
 
 # Unified enrichment produces a large JSON (analyst note + full forensic
-# record + hunt queries); the summary path needs the headroom.
-ENRICH_MAX_TOKENS = 4000
+# record + case_record + ITM adjudication). Rich court filings (many methods,
+# long detected-via/outcome, multi-paragraph note) exceeded the old 4000-token
+# cap, clipping the JSON and cutting whatever serialized last (case-record
+# fields). 12000 gives the fullest filings room; every provider in the chain
+# (Haiku/Sonnet/Opus 4.5+) supports far more.
+ENRICH_MAX_TOKENS = 12000
 # Discovery output is just per-method assessments — far smaller than enrich.
 DISCOVER_MAX_TOKENS = 2000
 
