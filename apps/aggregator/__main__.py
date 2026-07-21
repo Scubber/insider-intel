@@ -466,6 +466,8 @@ def _print_ingest(result) -> None:
 
 def _print_process(result) -> None:
     reenrich = f" reenrich_cleared={result.reenrich_cleared}" if result.reenrich_cleared else ""
+    if result.reenrich_restored:
+        reenrich += f" reenrich_restored={result.reenrich_restored}"
     print(
         f"Process done. {result.articles_processed}/{result.articles_read} processed; "
         f"saved={result.articles_saved} skipped={result.articles_skipped}{reenrich} "

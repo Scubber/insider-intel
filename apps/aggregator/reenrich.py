@@ -81,6 +81,92 @@ def select_missed_filings(
     return links
 
 
+def _richness(row: ProcessedArticle | None) -> float:
+    """Enrichment richness — higher means more analyst value.
+
+    Mirrors the recovery merge's scoring: an analyst note dominates, then the
+    method count, then forensic confidence. A gutted re-enrichment (no note,
+    methods=0) scores ~0; a full record scores well above it.
+    """
+    if row is None:
+        return 0.0
+    ai = 100.0 if (getattr(row, "ai_summary", None) or "").strip() else 0.0
+    forensics = getattr(row, "forensics", None)
+    methods = len(forensics.methods) if forensics is not None and forensics.methods else 0
+    try:
+        conf = float(getattr(forensics, "confidence", 0.0) or 0.0) if forensics else 0.0
+    except (TypeError, ValueError):
+        conf = 0.0
+    return ai + methods * 10.0 + conf
+
+
+def snapshot_and_clear_missed_filings(
+    processed_path: str | Path,
+    *,
+    target_model: str,
+    limit: int | None = None,
+) -> tuple[dict[str, ProcessedArticle], int]:
+    """Snapshot missed filings' current records, then clear them for the sweep.
+
+    Returns ``(snapshot, count)`` where ``snapshot`` maps link -> the pre-clear
+    ``ProcessedArticle``. Pair with :func:`reconcile_reenriched` after the
+    backfill sweep so a re-enrichment that comes back empty (a filing whose
+    source text isn't rich enough — e.g. a docket with no archived document)
+    restores its prior record instead of leaving the card gutted. No LLM spend
+    here; the re-enrichment happens in the subsequent budget-bounded sweep.
+    """
+    from apps.aggregator.courtlistener_pipeline import _clear_llm_fields
+
+    links = select_missed_filings(processed_path, target_model=target_model, limit=limit)
+    if not links:
+        return {}, 0
+    link_set = set(links)
+    store = JsonlProcessedStore(processed_path)
+    snapshot = {row.link: row for row in store.load_all() if row.link in link_set}
+    _clear_llm_fields(str(processed_path), link_set)
+    logger.info(
+        "Re-enrich missed: snapshotted + cleared %d filing(s) not on target model %r",
+        len(links),
+        target_model,
+    )
+    return snapshot, len(links)
+
+
+def reconcile_reenriched(
+    processed_path: str | Path,
+    snapshot: dict[str, ProcessedArticle],
+) -> int:
+    """Keep-best after re-enrichment: restore any record the sweep regressed.
+
+    For each snapshotted filing, compare the post-sweep record against the
+    pre-clear one. Keep the new record whenever it is at least as rich (so the
+    widened clamps / current model apply), but restore the prior record when the
+    re-enrichment came back strictly poorer — i.e. it re-enriched to an empty or
+    floor result over source text too thin to ground a record. This makes the
+    whole re-enrich non-destructive: rich is never overwritten by empty.
+
+    Returns the number of rows restored.
+    """
+    if not snapshot:
+        return 0
+    store = JsonlProcessedStore(processed_path)
+    current = {row.link: row for row in store.load_all() if row.link in snapshot}
+    restore: list[ProcessedArticle] = []
+    for link, old in snapshot.items():
+        new = current.get(link)
+        if new is None:
+            continue
+        if _richness(old) > _richness(new):
+            restore.append(old)
+    if restore:
+        store.upsert(restore)
+        logger.info(
+            "Re-enrich reconcile: restored %d filing(s) whose re-enrichment regressed",
+            len(restore),
+        )
+    return len(restore)
+
+
 def clear_missed_filings(
     processed_path: str | Path,
     *,
@@ -89,8 +175,10 @@ def clear_missed_filings(
 ) -> int:
     """Clear paid-for LLM fields on missed filings so the sweep re-enriches them.
 
-    Returns the number of rows cleared. No LLM spend here — the re-enrichment
-    happens in the subsequent budget-bounded backfill sweep.
+    Destructive on its own (a re-enrichment that comes back empty leaves the row
+    gutted); prefer :func:`snapshot_and_clear_missed_filings` +
+    :func:`reconcile_reenriched`. Retained for the CLI dry-run/count path and
+    back-compat. Returns the number of rows cleared.
     """
     from apps.aggregator.courtlistener_pipeline import _clear_llm_fields
 

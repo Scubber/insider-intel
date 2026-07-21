@@ -340,4 +340,5 @@ class ProcessingRunResult(BaseModel):
     articles_saved: int = 0
     articles_skipped: int = 0
     reenrich_cleared: int = 0
+    reenrich_restored: int = 0
     errors: list[str] = Field(default_factory=list)
