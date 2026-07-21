@@ -1,0 +1,79 @@
+name: reenrich-drain
+
+# One-off "big batch": re-enrich the court filings whose stored forensics came
+# from an older model (e.g. the pre-Sonnet-5 / pre-12k-cap Haiku enricher, whose
+# rich filings truncated). Runs gcloud in CI via keyless OIDC (same identity as
+# deploys) so the spend is visible/auditable in the Actions tab.
+#
+# Mechanism (see apps/aggregator/reenrich.py): SUMMARIZER_REENRICH_MISSED_LIMIT>0
+# makes run_processing clear the LLM fields on up to N "missed" filings before
+# the budget-bounded sweep re-enriches them on the current model.
+#
+# Fire-and-forget so the scheduler can't inherit the drain budget: a Cloud Run
+# job execution captures the job template at creation, so we (1) stamp the drain
+# knobs, (2) create the execution WITHOUT --wait — it now owns that config — then
+# (3) immediately revert the job env to steady-state. The revert creates a new
+# job revision that does NOT affect the in-flight drain execution, and leaves the
+# scheduled 6h refresh on normal settings. Monitor progress in Cloud Logging or
+# re-run `reenrich_missed --dry-run` until the count is 0. Re-run this workflow
+# to drain more if one execution's task timeout wasn't enough.
+on:
+  workflow_dispatch:
+    inputs:
+      missed_limit:
+        description: "Max missed filings to clear+re-enrich this run"
+        required: false
+        default: "5000"
+      max_per_run:
+        description: "Per-run LLM enrichment budget (<= 5000)"
+        required: false
+        default: "5000"
+      task_timeout:
+        description: "Cloud Run task timeout for the drain execution (<= 24h)"
+        required: false
+        default: "24h"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  REGION: us-east1
+
+concurrency:
+  group: corpus-refresh-mutation
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Stamp drain knobs on the job
+        run: |
+          gcloud run jobs update corpus-refresh \
+            --region "${REGION}" --project "${PROJECT_ID}" \
+            --task-timeout="${{ github.event.inputs.task_timeout }}" \
+            --update-env-vars "^##^SUMMARIZER_REENRICH_MISSED_LIMIT=${{ github.event.inputs.missed_limit }}##SUMMARIZER_MAX_ARTICLES_PER_RUN=${{ github.event.inputs.max_per_run }}##SUMMARIZER_BACKFILL_RESERVE=0"
+
+      - name: Kick off the drain execution (fire-and-forget)
+        run: |
+          gcloud run jobs execute corpus-refresh \
+            --region "${REGION}" --project "${PROJECT_ID}"
+          echo "Drain execution created; it owns the drain config for its lifetime."
+
+      - name: Revert job env to steady-state
+        if: always()
+        run: |
+          gcloud run jobs update corpus-refresh \
+            --region "${REGION}" --project "${PROJECT_ID}" \
+            --task-timeout=45m \
+            --update-env-vars "^##^SUMMARIZER_REENRICH_MISSED_LIMIT=0##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##SUMMARIZER_BACKFILL_RESERVE=60"
+          echo "Job env reverted; scheduled refreshes run on steady-state settings."
