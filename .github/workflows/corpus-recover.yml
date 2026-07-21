@@ -69,6 +69,32 @@ jobs:
           gcloud storage ls -l --soft-deleted "${OBJ}" 2>&1 | tail -40 \
             || echo "(soft-deleted list failed — may need a newer gcloud or extra perm)"
 
+      - name: Cancel any running corpus-refresh execution
+        if: ${{ github.event.inputs.mode == 'restore' }}
+        run: |
+          set -euo pipefail
+          # A live drain/refresh execution would overwrite the restore (and keep
+          # re-gutting). Cancel every running execution, then wait until none run.
+          mapfile -t RUNNING < <(gcloud run jobs executions list \
+            --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+            --filter="NOT status.completionTime:*" --format="value(name)" || true)
+          if [ "${#RUNNING[@]}" -eq 0 ]; then
+            echo "No running corpus-refresh execution."; exit 0
+          fi
+          for e in "${RUNNING[@]}"; do
+            echo "Cancelling execution ${e}"
+            gcloud run jobs executions cancel "${e}" \
+              --region "${REGION}" --project "${PROJECT_ID}" --quiet || true
+          done
+          echo "Waiting for executions to stop..."
+          for _ in $(seq 1 30); do
+            LEFT=$(gcloud run jobs executions list \
+              --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+              --filter="NOT status.completionTime:*" --format="value(name)" | wc -l)
+            if [ "${LEFT}" -eq 0 ]; then echo "All executions stopped."; break; fi
+            echo "  ${LEFT} still running; waiting 10s..."; sleep 10
+          done
+
       - name: Restore (keep-best merge + upload + reload)
         if: ${{ github.event.inputs.mode == 'restore' }}
         run: |
