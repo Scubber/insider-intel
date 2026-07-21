@@ -20,6 +20,7 @@ from pathlib import Path
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from shared.schemas import ProcessedArticle
 from shared.schemas.articles import resolve_channel
+from shared.schemas.forensics import ENRICH_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +36,27 @@ def _forensics_model(row: ProcessedArticle) -> str:
     return (getattr(forensics, "model", None) or "").strip()
 
 
+def _schema_version(row: ProcessedArticle) -> int:
+    forensics = getattr(row, "forensics", None)
+    if forensics is None:
+        return 0
+    return int(getattr(forensics, "schema_version", 1) or 1)
+
+
 def select_missed_filings(
     processed_path: str | Path,
     *,
     target_model: str,
     limit: int | None = None,
 ) -> list[str]:
-    """Links of enriched filings whose forensics came from a non-target model.
+    """Links of enriched filings that are stale — wrong model or an old schema.
 
-    Never-enriched rows (no forensics) are excluded — the normal backfill sweep
-    already picks those up. Ordered newest-filed first so a capped run recovers
-    the freshest cases first (mirrors the sweep's ordering).
+    A filing is "missed" when its stored forensics came from a non-target model
+    *or* was written under an older clamp generation (schema_version <
+    ENRICH_SCHEMA_VERSION, e.g. the tight pre-safety-bound clamps that truncated
+    method/narrative text). Never-enriched rows (no forensics) are excluded — the
+    normal backfill sweep already picks those up. Ordered newest-filed first so a
+    capped run recovers the freshest cases first (mirrors the sweep's ordering).
     """
     from apps.aggregator.process_pipeline import _as_utc
 
@@ -57,8 +68,10 @@ def select_missed_filings(
             continue
         if getattr(row, "forensics", None) is None:
             continue  # never enriched → the normal sweep handles it
-        if _forensics_model(row) == target and target:
-            continue  # already on the target model
+        on_target_model = bool(target) and _forensics_model(row) == target
+        on_current_schema = _schema_version(row) >= ENRICH_SCHEMA_VERSION
+        if on_target_model and on_current_schema:
+            continue  # already on the target model AND the current clamp schema
         missed.append(row)
 
     missed.sort(key=lambda r: _as_utc(r.published or r.processed_at), reverse=True)
