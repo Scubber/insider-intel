@@ -245,6 +245,11 @@ def list_use_cases() -> list[UseCaseInfo]:
     return [UseCaseInfo(id=uc.id, label=uc.label, description=uc.description) for uc in USE_CASES]
 
 
+def trending(*, window_days: int = 7, limit: int = 8) -> list[dict]:
+    """Most-active topics across the indexed feeds (week-over-week deltas)."""
+    return get_index().trending(window_days=window_days, limit=limit)
+
+
 def candidate_catalog() -> CandidateCatalogResponse:
     """The novel-technique candidate view (job-written state; read-only here)."""
     from apps.aggregator.technique_seeds import TechniqueSeedStore

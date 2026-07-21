@@ -4093,3 +4093,70 @@ body[data-pane="settings"] .panels-row {
 .signal-ticks {
   gap: 0.4rem;
 }
+
+/* ▲ TRENDING rows — [CHANNEL] tag, signal-colored delta, one-line topic. */
+.trending-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.trend-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0;
+  border: 0;
+  border-bottom: 1px dashed var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+.trend-row:last-child {
+  border-bottom: 0;
+}
+
+.trend-row:hover .trend-label {
+  color: var(--accent);
+}
+
+.trend-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.trend-src {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.trend-delta {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--signal, var(--accent));
+}
+
+.trend-delta.trend-down,
+.trend-delta.trend-flat {
+  color: var(--muted);
+}
+
+.trend-label {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.trending-empty {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
