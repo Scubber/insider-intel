@@ -275,8 +275,11 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         actor_profile=_s(data.get("actor_profile"), 300),
         timeline=_slist(data.get("timeline"), 10, 300),
         methods=_coerce_methods(data.get("methods")),
-        detection=_s(data.get("detection"), 300) or None,
-        outcome=_s(data.get("outcome"), 300) or None,
+        # Full-sentence narrative fields — keep generous so the UI's DETECTED
+        # VIA / OUTCOME don't get clipped mid-sentence (matches the CaseRecord
+        # narrative clamp, _CASE_TEXT_MAX_CHARS).
+        detection=_s(data.get("detection"), 800) or None,
+        outcome=_s(data.get("outcome"), 800) or None,
         hunt_terms=_slist(data.get("hunt_terms"), 12, 120),
         hunt_queries=parse_hunt_queries(data.get("hunt_queries")),
         is_insider_case=bool(data.get("is_insider_case")),

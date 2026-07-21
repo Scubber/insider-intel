@@ -170,6 +170,10 @@ class ExtractedEntities(BaseModel):
 _CTRL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 _CASE_FIELD_MAX_CHARS = 200
+# DETECTED VIA / OUTCOME are full-sentence narrative fields (esp. on court
+# filings), not short labels like actor_role — a 200-char clamp guillotined
+# them mid-sentence in the UI. Give them their own generous limit.
+_CASE_TEXT_MAX_CHARS = 800
 _CASE_LIST_MAX_ITEMS = 8
 _CASE_LIST_ITEM_MAX_CHARS = 120
 
@@ -239,8 +243,8 @@ class CaseRecord(BaseModel):
                 "methods": _clean_case_list(self.methods),
                 "exfil_channels": _clean_case_list(self.exfil_channels),
                 "timeframe": _clean_case_str(self.timeframe),
-                "detection_trigger": _clean_case_str(self.detection_trigger),
-                "outcome": _clean_case_str(self.outcome),
+                "detection_trigger": _clean_case_str(self.detection_trigger, _CASE_TEXT_MAX_CHARS),
+                "outcome": _clean_case_str(self.outcome, _CASE_TEXT_MAX_CHARS),
                 "model": _clean_case_str(self.model, 80),
             }
         )
