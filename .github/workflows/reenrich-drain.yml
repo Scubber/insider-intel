@@ -56,6 +56,27 @@ jobs:
           service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
+      - name: Cancel any running corpus-refresh execution first
+        run: |
+          set -euo pipefail
+          # Don't race a stale/in-flight execution (two would clobber the corpus
+          # JSONL). Cancel every running execution, then wait until none remain.
+          mapfile -t RUNNING < <(gcloud run jobs executions list \
+            --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+            --filter="status.runningCount>=1" --format="value(name)" || true)
+          for e in "${RUNNING[@]}"; do
+            echo "Cancelling execution ${e}"
+            gcloud run jobs executions cancel "${e}" \
+              --region "${REGION}" --project "${PROJECT_ID}" --quiet || true
+          done
+          for _ in $(seq 1 30); do
+            LEFT=$(gcloud run jobs executions list \
+              --job corpus-refresh --region "${REGION}" --project "${PROJECT_ID}" \
+              --filter="status.runningCount>=1" --format="value(name)" | wc -l)
+            if [ "${LEFT}" -eq 0 ]; then echo "No running executions."; break; fi
+            echo "  ${LEFT} still running; waiting 10s..."; sleep 10
+          done
+
       - name: Stamp drain knobs on the job
         run: |
           gcloud run jobs update corpus-refresh \
