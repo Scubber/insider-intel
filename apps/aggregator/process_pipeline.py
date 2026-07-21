@@ -159,19 +159,23 @@ def run_processing(
 
     batch_links = {a.link for a in batch}
 
-    # One-off recovery: clear the paid-for LLM fields on "missed" filings (a
-    # forensic record from a model other than the target) so the sweep below
-    # re-enriches them on the current model. Env-gated (0 = off); idempotent —
-    # converges to a no-op once every filing is on the target model.
+    # One-off recovery: re-enrich "missed" filings (a forensic record from a
+    # model other than the target, or an older clamp schema) on the current
+    # model. Snapshot each record before clearing it, so the sweep re-enriches
+    # it, then reconcile keep-best — a re-enrichment that comes back empty (a
+    # docket whose source text is too thin to ground a record) restores its
+    # prior record instead of leaving the card gutted. Env-gated (0 = off);
+    # idempotent — converges to a no-op once every filing is on the target.
+    reenrich_snapshot: dict[str, ProcessedArticle] = {}
     if settings.summarizer_reenrich_missed_limit > 0:
-        from apps.aggregator.reenrich import clear_missed_filings
+        from apps.aggregator.reenrich import snapshot_and_clear_missed_filings
 
         target_model = (
             settings.summarizer_reenrich_model
             or settings.summarizer_model
             or settings.anthropic_model
         )
-        cleared = clear_missed_filings(
+        reenrich_snapshot, cleared = snapshot_and_clear_missed_filings(
             processed_path,
             target_model=target_model,
             limit=settings.summarizer_reenrich_missed_limit,
@@ -186,6 +190,10 @@ def run_processing(
         settings=settings,
         exclude_links=batch_links,
     )
+    if reenrich_snapshot:
+        from apps.aggregator.reenrich import reconcile_reenriched
+
+        result.reenrich_restored = reconcile_reenriched(processed_path, reenrich_snapshot)
     _backfill_discovery(
         processed_store,
         budget=discover_budget,

@@ -101,6 +101,37 @@ def test_clear_makes_missed_filing_reenrich(tmp_path, monkeypatch) -> None:
     assert select_missed_filings(processed, target_model=TARGET) == []
 
 
+def test_reconcile_restores_when_reenrichment_regresses(tmp_path, monkeypatch) -> None:
+    """Non-destructive: a floored re-enrichment must keep the prior rich record."""
+    from tests.test_summarize import _reply
+
+    # Seed a RICH record on a non-target model.
+    raw_path, processed = _seed(tmp_path, monkeypatch, "claude-haiku-4-5")
+    before = JsonlProcessedStore(processed).load_all()[0]
+    assert before.ai_summary and before.forensics and before.forensics.methods
+
+    # Re-enrich under the target, but the enricher now floors (empty reply) — as
+    # if the docket's source text were too thin to ground a record.
+    floor = FakeEnricher(
+        reply=_reply(ai_summary="", is_insider_case=False, confidence=0.0, methods=[], outcome=None)
+    )
+    floor.model_name = TARGET
+    _install(monkeypatch, floor)
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "5")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "0")
+    monkeypatch.setenv("SUMMARIZER_REENRICH_MISSED_LIMIT", "10")
+    monkeypatch.setenv("SUMMARIZER_REENRICH_MODEL", TARGET)
+
+    result = run_processing(raw_path=raw_path, processed_path=processed)
+    assert result.reenrich_cleared == 1
+    assert result.reenrich_restored == 1
+    after = JsonlProcessedStore(processed).load_all()[0]
+    # The rich prior record survived the floored re-enrichment — not gutted.
+    assert after.ai_summary == before.ai_summary
+    assert after.forensics is not None and after.forensics.methods
+    assert after.forensics.model == "claude-haiku-4-5"
+
+
 def test_env_gated_hook_clears_then_reenriches_in_one_run(tmp_path, monkeypatch) -> None:
     raw_path, processed = _seed(tmp_path, monkeypatch, "claude-haiku-4-5")
 
