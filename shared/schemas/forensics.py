@@ -43,6 +43,13 @@ OBSERVABLE_BASES = ("mechanically_implied", "analyst_inference")
 # finding. Unlabeled methods default to "unclear".
 CLAIM_STATUSES = ("alleged", "admitted", "adjudicated", "reported", "unclear")
 
+# Bumped whenever the stored-field clamps widen (or the record shape changes) so
+# a re-enrich sweep can re-select rows enriched under a narrower schema. v1 =
+# the original tight clamps (detection/outcome 300, method action 400); v2 =
+# storage safety bounds only (detection/outcome 2000, method action 600), full
+# narrative persisted. Rows with schema_version < this are re-enrich candidates.
+ENRICH_SCHEMA_VERSION = 2
+
 # Document provenance / legal stage, validated against these sets; anything
 # else falls back to "unknown".
 SOURCE_TYPES = ("court_filing", "news", "blog", "social", "press_release", "unknown")
@@ -127,6 +134,10 @@ class PerCaseForensics(BaseModel):
     hunt_terms: list[str] = Field(default_factory=list)
     hunt_queries: list[HuntQuerySeed] = Field(default_factory=list)
     extraction_status: Literal["llm", "floor"] = "llm"
+    schema_version: int = Field(
+        default=1,
+        description="Stored-field clamp generation; < ENRICH_SCHEMA_VERSION ⇒ re-enrich candidate",
+    )
     # Case facts (feed the analyst note / legacy CaseRecord) — all default-safe.
     is_insider_case: bool = False
     actor_role: str | None = None
@@ -235,7 +246,7 @@ def _coerce_methods(value: object) -> list[CaseMethod]:
     for raw in value[:12]:
         if not isinstance(raw, dict):
             continue
-        action = _s(raw.get("action"), 400)
+        action = _s(raw.get("action"), 600)
         if not action:
             continue
         claim = str(raw.get("claim_status") or "").strip().lower()
@@ -243,10 +254,10 @@ def _coerce_methods(value: object) -> list[CaseMethod]:
             CaseMethod(
                 action=action,
                 tools=_slist(raw.get("tools"), 6, 80),
-                target_data=_s(raw.get("target_data"), 200) or None,
+                target_data=_s(raw.get("target_data"), 300) or None,
                 quantity=_s(raw.get("quantity"), 100) or None,
                 claim_status=claim if claim in CLAIM_STATUSES else "unclear",
-                evidence_quote=_s(raw.get("evidence_quote"), 400),
+                evidence_quote=_s(raw.get("evidence_quote"), 600),
                 observables=parse_observables(raw.get("observables")),
             )
         )
@@ -272,22 +283,23 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         title=title,
         source_type=source_type if source_type in SOURCE_TYPES else "unknown",
         legal_posture=legal_posture if legal_posture in LEGAL_POSTURES else "unknown",
-        actor_profile=_s(data.get("actor_profile"), 300),
-        timeline=_slist(data.get("timeline"), 10, 300),
+        actor_profile=_s(data.get("actor_profile"), 500),
+        timeline=_slist(data.get("timeline"), 10, 400),
         methods=_coerce_methods(data.get("methods")),
-        # Full-sentence narrative fields — keep generous so the UI's DETECTED
-        # VIA / OUTCOME don't get clipped mid-sentence (matches the CaseRecord
-        # narrative clamp, _CASE_TEXT_MAX_CHARS).
-        detection=_s(data.get("detection"), 800) or None,
-        outcome=_s(data.get("outcome"), 800) or None,
+        # Full-sentence narrative fields — storage safety bound only, so the UI's
+        # DETECTED VIA / OUTCOME persist whole and expand rather than clip
+        # mid-sentence (matches the CaseRecord narrative clamp, _CASE_TEXT_MAX_CHARS).
+        detection=_s(data.get("detection"), 2000) or None,
+        outcome=_s(data.get("outcome"), 2000) or None,
         hunt_terms=_slist(data.get("hunt_terms"), 12, 120),
         hunt_queries=parse_hunt_queries(data.get("hunt_queries")),
         is_insider_case=bool(data.get("is_insider_case")),
         actor_role=_s(data.get("actor_role"), 200) or None,
         access_vector=_s(data.get("access_vector"), 200) or None,
-        motive_signals=_slist(data.get("motive_signals"), 8, 120),
-        exfil_channels=_slist(data.get("exfil_channels"), 8, 120),
+        motive_signals=_slist(data.get("motive_signals"), 8, 200),
+        exfil_channels=_slist(data.get("exfil_channels"), 8, 200),
         timeframe=_s(data.get("timeframe"), 200) or None,
         confidence=max(0.0, min(1.0, confidence)),
         extraction_status="llm",
+        schema_version=ENRICH_SCHEMA_VERSION,
     )

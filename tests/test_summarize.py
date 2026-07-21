@@ -88,9 +88,7 @@ class ExplodingEnricher(FakeEnricher):
 def _install(monkeypatch, provider) -> None:
     # enrich_fields iterates the provider chain; the backfill gate still checks
     # get_summarizer_provider, so patch both to the fake.
-    monkeypatch.setattr(
-        "shared.agents.summarize.get_summarizer_chain", lambda settings: [provider]
-    )
+    monkeypatch.setattr("shared.agents.summarize.get_summarizer_chain", lambda settings: [provider])
     monkeypatch.setattr(
         "apps.aggregator.process_pipeline.get_summarizer_provider",
         lambda settings: provider,
@@ -433,8 +431,8 @@ def test_case_record_sanitization_clamps() -> None:
         motive_signals=["dup", "DUP", "  dup  "],
     )
     clean = record.sanitized()
-    assert len(clean.actor_role) == 200
-    assert len(clean.methods) == 8
+    assert len(clean.actor_role) == 200  # short label field stays tight
+    assert len(clean.methods) == 12  # methods can be many on rich filings
     assert all("\x00" not in m for m in clean.methods)
     assert clean.motive_signals == ["dup"]
 

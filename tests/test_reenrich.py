@@ -62,6 +62,17 @@ def test_skips_rows_already_on_target(tmp_path, monkeypatch) -> None:
     assert select_missed_filings(processed, target_model=TARGET) == []
 
 
+def test_selects_stale_schema_even_on_target_model(tmp_path, monkeypatch) -> None:
+    """A row on the target model but an older clamp generation is still missed."""
+    _, processed = _seed(tmp_path, monkeypatch, TARGET)
+    # Simulate a row enriched under an older (narrower-clamp) schema generation.
+    store = JsonlProcessedStore(processed)
+    rows = store.load_all()
+    rows[0].forensics.schema_version = 1
+    store.replace_all(rows)
+    assert select_missed_filings(processed, target_model=TARGET) == ["https://ex.com/case"]
+
+
 def test_ignores_non_filings(tmp_path, monkeypatch) -> None:
     _, processed = _seed(
         tmp_path, monkeypatch, "claude-haiku-4-5", source_id="example", channel="news"

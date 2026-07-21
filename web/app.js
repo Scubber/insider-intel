@@ -1147,7 +1147,7 @@
     const itmIds = (article.itm_hits || [])
       .map((h) => String(h.id || "").toUpperCase())
       .filter(Boolean);
-    const record = article.case_record || null;
+    const record = caseFacts(article);
     return {
       link: article.link,
       title: article.title || article.link,
@@ -3454,7 +3454,7 @@
     els.panelMeta.textContent = `${article.source_name} · ${formatDate(article.published)}`;
     els.panelLink.href = article.link;
     fillCopyableChips(els.operatorList, composeOperatorTerms(article), true);
-    renderCaseRecord(article.case_record);
+    renderCaseRecord(caseFacts(article));
     fillItmChips(els.itmList, article.itm_hits);
     fillControlChips(els.detectionList, article.related_detections, "detection");
     syncBoardToggle();
@@ -3537,6 +3537,38 @@
     const n = Number(raw);
     if (!Number.isFinite(n)) return null;
     return Math.round(n <= 1 ? n * 100 : n);
+  }
+
+  /** Case facts for display, preferring the richer stored `forensics` layer
+   * over the lossy `case_record` compression. forensics keeps full-sentence
+   * method actions and un-truncated DETECTED VIA / OUTCOME; case_record is a
+   * capped summary of the same fields. Falls back to case_record when forensics
+   * is absent (older rows, floor records, or the offline snapshot). Returns a
+   * case_record-shaped object so the existing renderers consume it unchanged. */
+  function caseFacts(article) {
+    const cr = (article && article.case_record) || null;
+    const f = (article && article.forensics) || null;
+    if (!f) return cr;
+    const pick = (a, b) => (a && a.length ? a : (b && b.length ? b : (a || b)));
+    const methods = (f.methods || [])
+      .map((m) => (m && m.action ? String(m.action) : ""))
+      .filter(Boolean);
+    const actorRole =
+      f.actor_role ||
+      (f.actor_profile ? String(f.actor_profile).split("—")[0].trim() : "") ||
+      (cr && cr.actor_role) ||
+      "";
+    return {
+      is_insider_case: Boolean(f.is_insider_case || (cr && cr.is_insider_case)),
+      actor_role: actorRole,
+      access_vector: f.access_vector || (cr && cr.access_vector) || "",
+      motive_signals: pick(f.motive_signals, cr && cr.motive_signals) || [],
+      methods: methods.length ? methods : (cr && cr.methods) || [],
+      exfil_channels: pick(f.exfil_channels, cr && cr.exfil_channels) || [],
+      timeframe: f.timeframe || (cr && cr.timeframe) || "",
+      detection_trigger: f.detection || (cr && cr.detection_trigger) || "",
+      outcome: f.outcome || (cr && cr.outcome) || "",
+    };
   }
 
   /** Case-record facts as [label, text] rows — shared by the note strip and
@@ -3659,7 +3691,7 @@
       label.textContent = "ANALYST NOTE";
       note.appendChild(label);
       appendPostureBadge(label, article.forensics && article.forensics.legal_posture);
-      const facts = buildNoteFacts(article.case_record);
+      const facts = buildNoteFacts(caseFacts(article));
       if (facts) note.appendChild(facts);
       const snip = document.createElement("div");
       snip.className = "snip";
@@ -3844,7 +3876,7 @@
         `${caseKindLabel(article)} ${caseNumber(article)} · ${article.title}`,
         metaText.textContent,
       ];
-      noteFactRows(article.case_record).forEach(([label, text]) => {
+      noteFactRows(caseFacts(article)).forEach(([label, text]) => {
         lines.push(`${label}: ${text}`);
       });
       if (analystText) lines.push("", "ANALYST NOTE", ...noteParas);

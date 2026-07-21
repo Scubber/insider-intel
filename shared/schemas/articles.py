@@ -169,13 +169,18 @@ class ExtractedEntities(BaseModel):
 
 _CTRL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
-_CASE_FIELD_MAX_CHARS = 200
-# DETECTED VIA / OUTCOME are full-sentence narrative fields (esp. on court
-# filings), not short labels like actor_role — a 200-char clamp guillotined
-# them mid-sentence in the UI. Give them their own generous limit.
-_CASE_TEXT_MAX_CHARS = 800
+# These clamps are STORAGE SAFETY BOUNDS, not display limits. The full LLM
+# narrative must survive into the corpus (the DB) so the UI can reveal it on
+# expand — capping the *card* is a CSS/display concern, done at render time, and
+# must never discard persisted text. So keep short label fields tight, but give
+# the narrative and method fields room for complete sentences; the bound only
+# guards against a runaway LLM dumping an unbounded blob.
+_CASE_FIELD_MAX_CHARS = 200  # short labels: actor_role, access_vector, timeframe
+_CASE_TEXT_MAX_CHARS = 2000  # narrative: detection_trigger, outcome
 _CASE_LIST_MAX_ITEMS = 8
-_CASE_LIST_ITEM_MAX_CHARS = 120
+_CASE_LIST_ITEM_MAX_CHARS = 200  # short list items: motive_signals, exfil_channels
+_CASE_METHOD_MAX_ITEMS = 12  # methods can be many on rich filings (mirrors forensics)
+_CASE_METHOD_ITEM_MAX_CHARS = 600  # method actions are full sentences, not labels
 
 
 def _clean_case_str(value: str | None, limit: int = _CASE_FIELD_MAX_CHARS) -> str | None:
@@ -186,16 +191,20 @@ def _clean_case_str(value: str | None, limit: int = _CASE_FIELD_MAX_CHARS) -> st
     return cleaned[:limit] or None
 
 
-def _clean_case_list(values: list[str]) -> list[str]:
+def _clean_case_list(
+    values: list[str],
+    item_limit: int = _CASE_LIST_ITEM_MAX_CHARS,
+    max_items: int = _CASE_LIST_MAX_ITEMS,
+) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for value in values:
-        cleaned = _clean_case_str(value, _CASE_LIST_ITEM_MAX_CHARS)
+        cleaned = _clean_case_str(value, item_limit)
         if not cleaned or cleaned.lower() in seen:
             continue
         seen.add(cleaned.lower())
         out.append(cleaned)
-        if len(out) >= _CASE_LIST_MAX_ITEMS:
+        if len(out) >= max_items:
             break
     return out
 
@@ -240,7 +249,9 @@ class CaseRecord(BaseModel):
                 "actor_role": _clean_case_str(self.actor_role),
                 "access_vector": _clean_case_str(self.access_vector),
                 "motive_signals": _clean_case_list(self.motive_signals),
-                "methods": _clean_case_list(self.methods),
+                "methods": _clean_case_list(
+                    self.methods, _CASE_METHOD_ITEM_MAX_CHARS, _CASE_METHOD_MAX_ITEMS
+                ),
                 "exfil_channels": _clean_case_list(self.exfil_channels),
                 "timeframe": _clean_case_str(self.timeframe),
                 "detection_trigger": _clean_case_str(self.detection_trigger, _CASE_TEXT_MAX_CHARS),

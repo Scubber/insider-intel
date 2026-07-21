@@ -232,7 +232,8 @@ def test_case_record_from_forensics_derives_and_sanitizes() -> None:
     assert record.actor_role == "departing engineer"  # from actor_profile head
     assert record.detection_trigger == "laptop review"
     assert record.exfil_channels == ["personal Dropbox"]
-    assert len(record.methods[0]) == 120  # sanitize() clamps list items to 120
+    # Method actions are full sentences, not labels — kept at the 600-char bound.
+    assert len(record.methods[0]) == 500  # the 500-char action survives intact
 
 
 def test_narrative_fields_survive_past_200_chars() -> None:
@@ -243,12 +244,12 @@ def test_narrative_fields_survive_past_200_chars() -> None:
         title="t",
         is_insider_case=True,
         detection=long_detection,
-        outcome="y" * 900,
+        outcome="y" * 2500,
     )
     record = case_record_from_forensics(f)
-    # Survives well past the 200-char label clamp, capped at the 800 narrative limit.
-    assert len(record.detection_trigger) > 200
-    assert len(record.outcome) == 800
+    # Survives well past the 200-char label clamp; capped only at the 2000 bound.
+    assert len(record.detection_trigger) == len(long_detection)
+    assert len(record.outcome) == 2000
 
 
 def test_pack_case_text_filing_head_and_tail() -> None:
