@@ -31,4 +31,4 @@ jobs:
           set -euo pipefail
           gcloud storage cp "${OBJ}" corpus.jsonl
           wc -l corpus.jsonl
-          python3 scripts/count_stale_filings.py corpus.jsonl --target claude-sonnet-5 --schema 2
+          python3 scripts/count_stale_filings.py corpus.jsonl --target claude-haiku-4-5-20251001 --schema 2
