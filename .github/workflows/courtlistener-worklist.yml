@@ -1,0 +1,67 @@
+name: courtlistener-worklist
+
+# Read-only: for a topic regex, find the flagged CourtListener filings and
+# report — per docket — whether we already hold the full document body
+# (clean_text >= 1500) or only a metadata stub, and whether it's enriched.
+# Turns "are we collecting X" into a concrete fetch worklist. The regex is
+# matched against the whole JSON line, so it catches the ingest query-tag on
+# metadata-only stubs (which is how a stub gets flagged in the first place).
+# No mutation, no LLM spend.
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Regex to match (case-insensitive) against each filing row"
+        required: false
+        default: "scattered spider|sim.?swap|help desk|social engineering|device identifier|digital fingerprint"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+
+jobs:
+  worklist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build fetch worklist for topic
+        env:
+          TOPIC: ${{ github.event.inputs.topic }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${OBJ}" corpus.jsonl
+          echo "topic: /${TOPIC}/i"
+          jq -c --arg re "${TOPIC}" '
+            select(.channel=="filings")
+            | select((tojson) | test($re; "i"))
+            | (.clean_text // "" | length) as $len
+            | { link: .link,
+                title: (.title // "")[0:64],
+                body: ($len >= 1500),
+                enriched: (.forensics != null),
+                len: $len }
+          ' corpus.jsonl > rows.ndjson || true
+
+          total=$(wc -l < rows.ndjson | tr -d ' ')
+          withbody=$(jq -c 'select(.body)' rows.ndjson | wc -l | tr -d ' ')
+          enriched=$(jq -c 'select(.enriched)' rows.ndjson | wc -l | tr -d ' ')
+          echo "==== SUMMARY ===="
+          echo "matching filings      : ${total}"
+          echo "  have full body      : ${withbody}"
+          echo "  metadata stub only  : $((total - withbody))"
+          echo "  enriched            : ${enriched}"
+          echo "==== STUBS (need a fetch: free RECAP or PACER) ===="
+          jq -r 'select(.body | not) | "  stub  \(.link)  ::  \(.title)"' rows.ndjson | head -60
+          echo "==== ALREADY HAVE BODY ===="
+          jq -r 'select(.body) | "  BODY  len=\(.len)  \(.link)  ::  \(.title)"' rows.ndjson | head -40
