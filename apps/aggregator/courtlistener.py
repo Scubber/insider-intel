@@ -714,6 +714,41 @@ def search_opinions(
     )
 
 
+# Insider-relevant terms AND-ed with a watchlisted company name for its scoped
+# query, so the corpus gets the on-topic Voya-etc. cases without every unrelated
+# ERISA/employment/contract suit the bare company name would drag in.
+_WATCHLIST_SCOPE_TERMS = (
+    'employee OR "former employee" OR contractor OR insider OR "trade secret" '
+    'OR misappropriation OR "economic espionage" OR fraud OR embezzlement '
+    'OR "data breach" OR confidential OR proprietary'
+)
+
+
+def company_watchlist_queries(raw: str | None) -> list[str]:
+    """Expand a comma-separated company watchlist into CourtListener queries.
+
+    Each company yields two queries: a **scoped** one (company AND insider
+    terms — low noise, the on-topic cases) and a **catch-all** (the bare
+    company name — every filing that names it). Both are emitted so a scoped
+    hit and its broader context can be compared; the pipeline de-dupes by link,
+    so a case matching both is stored once. Empty/blank input yields no queries.
+    """
+    if not raw or not raw.strip():
+        return []
+    queries: list[str] = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        name = part.strip()
+        if not name:
+            continue
+        quoted = f'"{name}"'
+        for query in (f"{quoted} ({_WATCHLIST_SCOPE_TERMS})", quoted):
+            if query not in seen:
+                seen.add(query)
+                queries.append(query)
+    return queries
+
+
 def parse_queries(raw: str | None, *, defaults: list[str] | None = None) -> list[str]:
     """Split comma-separated env queries; fall back to defaults."""
     fallback = defaults if defaults is not None else list(DEFAULT_QUERIES)

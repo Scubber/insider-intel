@@ -14,6 +14,7 @@ from apps.aggregator.courtlistener import (
     SOURCE_ID,
     CourtListenerError,
     _search,
+    company_watchlist_queries,
     fetch_cluster_opinion_text,
     fetch_recap_document_text,
     parse_docket_id,
@@ -99,14 +100,21 @@ def run_courtlistener_ingestion(
     lookback_days = settings.courtlistener_lookback_days
     ingest_state = state or JsonIngestState(state_path)
 
+    watchlist = company_watchlist_queries(settings.courtlistener_company_watchlist)
+
     def queries_for(search_type: str) -> list[str]:
         if queries is not None:
             return queries
         if search_type == "opinions":
-            return parse_queries(
+            base = parse_queries(
                 settings.courtlistener_opinion_queries or settings.courtlistener_queries
             )
-        return parse_queries(settings.courtlistener_queries)
+        else:
+            base = parse_queries(settings.courtlistener_queries)
+        # Watchlist company queries run alongside the topic queries for every
+        # type; de-dupe defensively in case a company string also appears in the
+        # configured list.
+        return base + [q for q in watchlist if q not in base]
 
     started_at = datetime.now(UTC)
     run_day = started_at.date().isoformat()
