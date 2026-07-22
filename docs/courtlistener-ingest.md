@@ -63,11 +63,18 @@ docket and opinion lanes:
 
 Add companies by editing the setting (one comma-separated list); empty disables.
 
-### 3. History queries — `HISTORY_QUERIES` (`courtlistener_pipeline.py`)
+### 3. History rotation — `history_rotation_queries()` (`courtlistener_pipeline.py`)
 
-A deliberately **smaller** set (just the four core insider-crime queries above,
-none of the noisier policy/social-engineering ones) used only by the retroactive
-sweep, so each historical window stays cheap (~8 paced requests).
+The retroactive sweep now covers the **full** `DEFAULT_QUERIES` set — not a
+hand-picked subset — so historically-old cases in *every* topic (including
+social-engineering / sim-swap / device-identifier, the Scattered-Spider class)
+actually get swept. To stay under CourtListener's shared 10/min throttle, each
+run fires only a **rotation slice** of `COURTLISTENER_HISTORY_QUERIES_PER_WINDOW`
+queries (default 4; 0 = all); the previously-skipped queries lead the rotation
+so the gap they left fills first. The date cursor does not advance until every
+slice of the current window has run, so each window is still fully covered — just
+over several runs. Raise the per-window count once `COURTLISTENER_API_TOKEN`
+lifts the rate limit.
 
 ## The three ways cases enter the corpus
 
@@ -92,8 +99,9 @@ steps.
 - A cursor starts at today and moves back in `COURTLISTENER_HISTORY_WINDOW_DAYS`
   steps until it reaches `COURTLISTENER_HISTORY_FLOOR` (the oldest date to seed).
   Disabled when the floor is unset.
-- Uses the smaller `HISTORY_QUERIES` set, `filed_after`/`filed_before` bounding
-  each window.
+- Uses the full rotated query set (see §3), `filed_after`/`filed_before`
+  bounding each window; the cursor advances only once the window's whole
+  rotation has run.
 - **Metadata only** — it does not fetch document bodies here; those come later
   via the text backfill (C).
 - A throttled window does **not** advance the cursor, so nothing is skipped —
@@ -188,6 +196,8 @@ any purchases.
 | `COURTLISTENER_LOOKBACK_DAYS` | Overlap window re-pulled on each incremental run |
 | `COURTLISTENER_HISTORY_FLOOR` | Oldest date the retroactive sweep seeds back to (unset = sweep off) |
 | `COURTLISTENER_HISTORY_WINDOW_DAYS` | Size of each backward window |
+| `COURTLISTENER_HISTORY_QUERIES_PER_WINDOW` | Rotation queries per run (default 4; 0 = all). Raise once a token lifts the throttle |
+| `COURTLISTENER_API_TOKEN` | Free Law Project token — raises the rate limit above anonymous; set it even without PACER |
 | `COURTLISTENER_REQUEST_DELAY_SECONDS` | Pacing between requests (429 protection) |
 | `COURTLISTENER_API_TOKEN` | Free Law Project token (higher anonymous rate limits) |
 
