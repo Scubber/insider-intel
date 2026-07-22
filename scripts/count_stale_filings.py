@@ -32,9 +32,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("corpus")
     ap.add_argument("--target", default="claude-sonnet-5")
     ap.add_argument("--schema", type=int, default=2)
+    ap.add_argument(
+        "--body-min",
+        type=int,
+        default=1500,
+        help="clean_text chars at/above which a filing counts as having a real body",
+    )
     args = ap.parse_args(argv)
 
     total = filings = enriched_on_target = stale_model = stale_schema = never_enriched = 0
+    # Body coverage: a filing only carries the real document text when the free
+    # RECAP archive had it (backfilled into clean_text). The rest are metadata
+    # stubs (docket name/court/parties) whose body lives behind PACER.
+    filings_with_body = filings_metadata_only = 0
+    body_threshold = args.body_min
     with open(args.corpus, encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -48,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
             if not _is_filing(row):
                 continue
             filings += 1
+            body_len = len((row.get("clean_text") or "").strip())
+            if body_len >= body_threshold:
+                filings_with_body += 1
+            else:
+                filings_metadata_only += 1
             f = row.get("forensics")
             if not f:
                 never_enriched += 1
@@ -69,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
     stale_total = stale_model + stale_schema
     print(f"corpus rows           : {total}")
     print(f"filings               : {filings}")
+    print(f"  with full body text  : {filings_with_body}  (clean_text >= {body_threshold} chars)")
+    print(f"  metadata-only stub   : {filings_metadata_only}  (no free RECAP body; PACER-only)")
     print(f"  already current      : {enriched_on_target}")
     print(f"  STALE (wrong model)  : {stale_model}")
     print(f"  STALE (old clamp)    : {stale_schema}")
@@ -76,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  never enriched (backfill picks up): {never_enriched}")
     print(f"DRAIN_STALE_TOTAL={stale_total}")
     print(f"BACKFILL_NEVER_ENRICHED={never_enriched}")
+    print(f"FILINGS_WITH_BODY={filings_with_body}")
+    print(f"FILINGS_METADATA_ONLY={filings_metadata_only}")
     return 0
 
 
