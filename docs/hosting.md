@@ -120,26 +120,21 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   whichever provider keys you want *available* to the job (Secret Manager), and
   the chain uses whichever are present, in order. The chain itself lives in
   `deploy-api.yml` (**edit + merge, not gcloud** — the prod job leads with
-  `moonshot,anthropic,openai,sol,gemini,xai`), so model/provider changes are
-  versioned. A third-party OpenAI-compatible model plugs in via
-  `LLM_CUSTOM_PROVIDERS` — a JSON map keyed by chain name, each entry
-  `{"base_url": "…/v1", "model": "…", "api_key_env": "…"}` — then just name the
-  key in the chain. Two are wired today: **`moonshot`** (Moonshot AI's **Kimi
-  K2**, `kimi-k2-0711-preview`, `https://api.moonshot.ai/v1`, key
-  `MOONSHOT_API_KEY`) is the **primary enricher** — its 128K context fits full
-  court filings and it runs well under Haiku's price, so it fills the
-  enrichment backlog cheaply — and `sol` (an OpenAI-compatible endpoint reusing
-  `OPENAI_API_KEY`) as a further fallback. `anthropic` sits second as the
-  funded cloud fallback. Note the asymmetry: a **named** provider with a missing
-  key is pre-skipped (never called), but a **custom** provider like `moonshot`
-  is always built — with no `MOONSHOT_API_KEY` it still POSTs to
-  `api.moonshot.ai`, gets a 401, and only then falls back to `anthropic` (one
-  wasted round-trip per article, no extra spend). So set the key. **The role-level
-  `SUMMARIZER_MODEL` override only hits the chain's *first named* provider**, so
-  it must match that provider's vendor: with `moonshot` leading, `deploy-api.yml`
-  sets `SUMMARIZER_MODEL=kimi-k2-0711-preview` (a Kimi id) — a mismatched value
-  there would poison the primary link. Fallbacks use their per-provider model
-  vars (`ANTHROPIC_MODEL`, `OPENAI_COMPAT_MODEL=gpt-4o`, `GEMINI_MODEL`,
+  `anthropic,openai,sol,gemini,xai`), so model/provider changes are versioned.
+  A third-party OpenAI-compatible model plugs in via `LLM_CUSTOM_PROVIDERS` — a
+  JSON map keyed by chain name, each entry `{"base_url": "…/v1", "model": "…",
+  "api_key_env": "…"}` — then just name the key in the chain (`sol`, an
+  OpenAI-compatible endpoint reusing `OPENAI_API_KEY`, is wired today as a
+  fallback). Note the asymmetry: a **named** provider with a missing key is
+  pre-skipped (never called), but a **custom** provider is always built — with
+  no key it still POSTs to its endpoint, gets a 401, and only then falls back
+  (one wasted round-trip per article, no extra spend), so only name a custom
+  provider in the chain once its key is set. **The role-level `SUMMARIZER_MODEL`
+  override only hits the chain's *first named* provider**, so it must match that
+  provider's vendor: with `anthropic` leading, `deploy-api.yml` sets
+  `SUMMARIZER_MODEL=claude-haiku-4-5-20251001` (Haiku 4.5, ~1/3 the Sonnet cost)
+  — a non-Anthropic id there would poison the primary link. Fallbacks use their
+  per-provider model vars (`OPENAI_COMPAT_MODEL=gpt-4o`, `GEMINI_MODEL`,
   `XAI_MODEL`) and the custom entries' own `model` fields. Spend is capped by
   `SUMMARIZER_MAX_ARTICLES_PER_RUN` (library default 15/run; the **prod job is
   set to 100/run** by `deploy-api.yml`, which also sets `--task-timeout=30m` so

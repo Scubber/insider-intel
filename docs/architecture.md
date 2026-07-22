@@ -190,10 +190,10 @@ and merges on top.
 **Ingest summarizer (opt-in).** Setting `SUMMARIZER_LLM_PROVIDER` — an ordered,
 comma-separated provider chain (each tried until one succeeds; unfunded entries
 skipped) — adds a `summarize` node to the processing graph (after `classify`).
-The prod chain leads with `moonshot` (Moonshot AI's Kimi K2, an
-OpenAI-compatible custom provider defined in `LLM_CUSTOM_PROVIDERS`) and falls
-back to `anthropic`; see [hosting.md](hosting.md) for the full chain and the
-`SUMMARIZER_MODEL` first-provider caveat. One LLM
+The prod chain leads with `anthropic` (pinned to Haiku 4.5 via
+`SUMMARIZER_MODEL`) and falls back through `openai`/`sol`/`gemini`/`xai`; see
+[hosting.md](hosting.md) for the full chain and the `SUMMARIZER_MODEL`
+first-provider caveat. One LLM
 call per qualifying article (has ITM hits or a classified use case) writes a
 2-4 sentence `ai_summary`, a structured `case_record` (actor role, access
 vector, motive signals, methods, exfil channels, timeframe, detection trigger,
