@@ -159,6 +159,21 @@ class Settings(BaseSettings):
         ge=1,
         le=5,
     )
+    courtlistener_history_queries_per_window: int = Field(
+        default=4,
+        alias="COURTLISTENER_HISTORY_QUERIES_PER_WINDOW",
+        ge=0,
+        le=100,
+        description=(
+            "Rotation queries the historical sweep fires per run (0 = all). The "
+            "sweep now cycles the FULL forward query set, not a hand-picked "
+            "subset, and fully covers each date window (all rotation slices) "
+            "before advancing the cursor — so social-engineering / sim-swap / "
+            "device-identifier cases get swept historically too. Keep this small "
+            "under the anonymous 10/min throttle; raise it once "
+            "COURTLISTENER_API_TOKEN lifts the limit (0 = all queries per window)."
+        ),
+    )
     courtlistener_lookback_days: int = Field(
         default=3,
         alias="COURTLISTENER_LOOKBACK_DAYS",

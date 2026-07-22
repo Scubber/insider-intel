@@ -852,12 +852,15 @@ def test_history_sweep_walks_windows_back_to_floor(tmp_path, monkeypatch) -> Non
     calls: list[tuple] = []
     monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
     monkeypatch.setenv("COURTLISTENER_HISTORY_WINDOW_DAYS", "90")
+    # per-window = 0 → all rotation queries in one run, so the cursor walks back
+    # each run (the pre-rotation behaviour, now covering the full query set).
+    monkeypatch.setenv("COURTLISTENER_HISTORY_QUERIES_PER_WINDOW", "0")
     state = clp.JsonIngestState(tmp_path / "state.json")
+    nq = len(clp.history_rotation_queries())
 
     r1 = clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
-    assert r1.total_articles_saved == 8  # 4 queries x 2 types, unique links
-    # 8 spaced queries, each with a bounded window
-    assert len(calls) == 8
+    assert r1.total_articles_saved == nq * 2  # nq queries x 2 types, unique links
+    assert len(calls) == nq * 2
     _, _, since1, before1 = calls[0]
     assert since1 < before1
     cursor_after_1 = state.get("courtlistener_history:cursor")
@@ -865,9 +868,41 @@ def test_history_sweep_walks_windows_back_to_floor(tmp_path, monkeypatch) -> Non
 
     # Second run continues from the stored cursor — windows never overlap.
     clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
-    _, _, since2, before2 = calls[8]
+    _, _, since2, before2 = calls[nq * 2]
     assert before2 == since1
     assert since2 < before2
+
+
+def test_history_sweep_rotates_queries_within_window(tmp_path, monkeypatch) -> None:
+    """A small per-window slice holds the cursor until the window is fully covered."""
+    import math
+
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
+    monkeypatch.setenv("COURTLISTENER_HISTORY_WINDOW_DAYS", "90")
+    monkeypatch.setenv("COURTLISTENER_HISTORY_QUERIES_PER_WINDOW", "4")
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    rotation = clp.history_rotation_queries()
+    runs_per_window = math.ceil(len(rotation) / 4)
+
+    # First run: only a 4-query slice runs; cursor is held, offset advances.
+    clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert len(calls) == 4 * 2  # 4 queries x 2 types
+    assert state.get("courtlistener_history:cursor") is None  # window not finished
+    assert state.get("courtlistener_history:qoffset") == "4"
+    # Gap-first: the previously-skipped queries lead — no legacy-core query yet.
+    assert {c[1] for c in calls}.isdisjoint(clp._HISTORY_LEGACY_CORE)
+
+    # Finish the window's rotation → cursor steps back, offset resets.
+    for _ in range(runs_per_window - 1):
+        clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert state.get("courtlistener_history:cursor") is not None
+    assert state.get("courtlistener_history:qoffset") == "0"
+    # Every rotation query ran within the single window (both types).
+    assert {c[1] for c in calls} == set(rotation)
+    assert '"scattered spider"' in {c[1] for c in calls}
 
 
 def test_history_sweep_stops_at_floor_and_respects_disable(tmp_path, monkeypatch) -> None:

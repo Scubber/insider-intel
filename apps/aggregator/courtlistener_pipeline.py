@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 import httpx
 
 from apps.aggregator.courtlistener import (
+    DEFAULT_QUERIES,
     SEARCH_TYPES,
     SOURCE_ID,
     CourtListenerError,
@@ -473,16 +474,37 @@ def run_courtlistener_text_backfill(
     return result
 
 
-# Rolling historical sweep — one window per refresh, newest to oldest.
-# The core insider-crime queries (not the noisier policy/social-engineering
-# ones) keep each window to ~8 paced requests.
-HISTORY_QUERIES: list[str] = [
-    '"insider trading"',
-    '"trade secret" (employee OR contractor OR "former employee")',
-    '"economic espionage"',
-    '"computer fraud" (employee OR contractor OR insider)',
-]
+# Rolling historical sweep — walks a date cursor backward, newest to oldest.
+#
+# The sweep now covers the FULL forward query set (DEFAULT_QUERIES), not a
+# hand-picked subset, so historically-old cases in every topic — including
+# social-engineering / sim-swap / device-identifier (the Scattered-Spider
+# class) that the old 4-query list silently skipped — actually get ingested.
+# To stay under CourtListener's shared 10/min throttle, each run fires only a
+# rotation *slice* (COURTLISTENER_HISTORY_QUERIES_PER_WINDOW queries); the date
+# cursor does not advance until every slice of the current window has run, so
+# each window is still fully covered — just over several runs.
 _HISTORY_CURSOR_KEY = "courtlistener_history:cursor"
+_HISTORY_QOFFSET_KEY = "courtlistener_history:qoffset"
+
+# The four queries the pre-rotation sweep already covered; the rotation puts the
+# previously-skipped queries FIRST so the historical gap they left fills first.
+_HISTORY_LEGACY_CORE: frozenset[str] = frozenset(
+    {
+        '"insider trading"',
+        '"trade secret" (employee OR contractor OR "former employee")',
+        '"economic espionage"',
+        '"computer fraud" (employee OR contractor OR insider)',
+    }
+)
+
+
+def history_rotation_queries() -> list[str]:
+    """Full historical query set, previously-skipped queries first (gap-first)."""
+    base = list(DEFAULT_QUERIES)
+    skipped = [q for q in base if q not in _HISTORY_LEGACY_CORE]
+    core = [q for q in base if q in _HISTORY_LEGACY_CORE]
+    return skipped + core
 
 
 def run_courtlistener_history_sweep(
@@ -538,6 +560,19 @@ def run_courtlistener_history_sweep(
     )
     article_store: ArticleStore = store or JsonlArticleStore(store_path)
 
+    # Rotation slice for this run. The cursor stays put until every slice of the
+    # window has run, so the window is fully covered before we step back in time.
+    rotation = history_rotation_queries()
+    try:
+        qoffset = int(ingest_state.get(_HISTORY_QOFFSET_KEY) or 0)
+    except ValueError:
+        qoffset = 0
+    if qoffset < 0 or qoffset >= len(rotation):
+        qoffset = 0
+    per = settings.courtlistener_history_queries_per_window
+    slice_size = len(rotation) if per <= 0 else per
+    query_slice = rotation[qoffset : qoffset + slice_size]
+
     collected: dict[str, RawArticle] = {}
     errors: list[str] = []
     throttled = False
@@ -548,7 +583,7 @@ def run_courtlistener_history_sweep(
         for search_type in ("dockets", "opinions"):
             if throttled:
                 break
-            for query in HISTORY_QUERIES:
+            for query in query_slice:
                 if request_no > 0 and delay > 0:
                     time.sleep(delay)
                 request_no += 1
@@ -589,15 +624,35 @@ def run_courtlistener_history_sweep(
         saved = article_store.save(batch)
 
     if not throttled:
-        ingest_state.set(_HISTORY_CURSOR_KEY, since.isoformat())
-        logger.info(
-            "CourtListener history window %s..%s: fetched=%d saved=%d (next: back to %s)",
-            since,
-            cursor,
-            len(batch),
-            saved,
-            max(floor, since - window),
-        )
+        next_offset = qoffset + slice_size
+        if next_offset >= len(rotation):
+            # Every rotation slice for this window has run → step the date cursor
+            # back and restart the rotation for the next (older) window.
+            ingest_state.set(_HISTORY_CURSOR_KEY, since.isoformat())
+            ingest_state.set(_HISTORY_QOFFSET_KEY, "0")
+            logger.info(
+                "CourtListener history window %s..%s complete "
+                "(%d queries): fetched=%d saved=%d (next: back to %s)",
+                since,
+                cursor,
+                len(rotation),
+                len(batch),
+                saved,
+                max(floor, since - window),
+            )
+        else:
+            # More rotation slices remain for THIS window → hold the cursor.
+            ingest_state.set(_HISTORY_QOFFSET_KEY, str(next_offset))
+            logger.info(
+                "CourtListener history window %s..%s slice %d-%d/%d: fetched=%d saved=%d",
+                since,
+                cursor,
+                qoffset,
+                next_offset,
+                len(rotation),
+                len(batch),
+                saved,
+            )
 
     result.sources.append(
         SourceIngestionResult(

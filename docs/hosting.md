@@ -86,6 +86,14 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   `COURTLISTENER_HISTORY_FLOOR`) before processing. Runtime is ~8-10 min at
   the 7s CourtListener pacing; if you raise the per-run caps, also raise the
   job timeout (`gcloud run jobs update corpus-refresh --task-timeout=20m`).
+- **CourtListener API token (free, recommended):** without it the ingest runs
+  against CourtListener's anonymous **10 req/min** throttle — which is why the
+  pacing is 7s, the history sweep fires only a small query rotation per run, and
+  full-text backfill is capped. Get a free token at courtlistener.com and map it
+  to the job (no PACER needed): `gcloud run jobs update corpus-refresh
+  --region us-east1 --set-secrets COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest`.
+  The mapping persists across deploys. Once set, raise throughput by bumping
+  `COURTLISTENER_HISTORY_QUERIES_PER_WINDOW` (default 4; 0 = all queries/window).
 - **PACER purchasing (opt-in):** to let the refresh job buy missing lead
   documents for qualifying cases via RECAP Fetch, store the PACER account
   credentials + a CourtListener token in Secret Manager and attach them to
