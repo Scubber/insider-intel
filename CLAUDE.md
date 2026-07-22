@@ -52,6 +52,20 @@ gradually (newest-first, then legacy `case_record`-only rows when
 `SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`. The
 hunt report reads these stored records — no LLM at read time.
 
+`SUMMARIZER_LLM_PROVIDER` is an ordered fallback chain (comma-separated; each
+tried until one succeeds, unfunded entries skipped). Prod leads with `moonshot`
+— Moonshot AI's **Kimi K2** (`kimi-k2-0711-preview`), an OpenAI-compatible
+custom provider in `LLM_CUSTOM_PROVIDERS`, primary because its 128K context
+fits full court filings at well under Haiku's price — then `anthropic` as the
+funded cloud fallback. The chain, `SUMMARIZER_MODEL`, and `LLM_CUSTOM_PROVIDERS`
+live in `deploy-api.yml` (edit + merge, not gcloud); `SUMMARIZER_MODEL` overrides
+only the **first** provider, so it tracks that provider's vendor (a Kimi id
+today). Kimi needs `MOONSHOT_API_KEY` on the corpus-refresh job: unlike a named
+provider (pre-skipped when its key is absent), a custom provider is always built,
+so without the key it POSTs to Moonshot, 401s, and only then falls back to
+Anthropic — a wasted round-trip per article, so set the key. Same chain
+mechanics apply to `DISCOVERER_LLM_PROVIDER` (the filings-only second call).
+
 Provenance channels: `news | filings | tips | social | publications` — legacy
 `reddit-*` RSS feeds stay `tips`; API-based social sources use `social-*` ids;
 long-form reference docs (curated catalog in `publication_sources.py`, PDF
