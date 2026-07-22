@@ -52,6 +52,16 @@ gradually (newest-first, then legacy `case_record`-only rows when
 `SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`. The
 hunt report reads these stored records — no LLM at read time.
 
+`SUMMARIZER_LLM_PROVIDER` is an ordered fallback chain (comma-separated; each
+tried until one succeeds, unfunded named entries skipped). Prod leads with
+`anthropic` and pins `SUMMARIZER_MODEL=claude-haiku-4-5-20251001` — enrichment
+runs on **Haiku 4.5** to fill the backlog at ~1/3 the Sonnet cost — then
+`openai`/`sol`/`gemini`/`xai` as fallbacks. The chain, `SUMMARIZER_MODEL`, and
+`LLM_CUSTOM_PROVIDERS` live in `deploy-api.yml` (edit + merge, not gcloud);
+`SUMMARIZER_MODEL` overrides only the **first** provider, so it must be a valid
+id for that vendor (an Anthropic id today). Same chain mechanics apply to
+`DISCOVERER_LLM_PROVIDER` (the filings-only second call).
+
 Provenance channels: `news | filings | tips | social | publications` — legacy
 `reddit-*` RSS feeds stay `tips`; API-based social sources use `social-*` ids;
 long-form reference docs (curated catalog in `publication_sources.py`, PDF

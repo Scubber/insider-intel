@@ -119,16 +119,23 @@ Cloud Scheduler (every 6h) → Cloud Run Job corpus-refresh
   LLM_CUSTOM_PROVIDERS`. **Fund once, fallback automatically:** attach
   whichever provider keys you want *available* to the job (Secret Manager), and
   the chain uses whichever are present, in order. The chain itself lives in
-  `deploy-api.yml` (**edit + merge, not gcloud** — the prod job is set to
-  `openai,gemini,anthropic`), so model/provider changes are versioned. A
-  third-party OpenAI-compatible model (e.g. SOL) plugs in via `LLM_CUSTOM_PROVIDERS`
-  — a JSON map `{"sol": {"base_url": "…/v1", "model": "sol-5.6", "api_key_env":
-  "SOL_API_KEY"}}` — then just name `sol` in the chain. **Prefer per-provider
-  model vars in a mixed chain** (`ANTHROPIC_MODEL`, `OPENAI_COMPAT_MODEL`,
-  `GEMINI_MODEL`, `XAI_MODEL`): the role-level `SUMMARIZER_MODEL` override only
-  hits the chain's *first named* provider, so a stale value there can hand the
-  wrong vendor's model id to the primary — which is why `deploy-api.yml` asserts
-  it empty and pins `OPENAI_COMPAT_MODEL=gpt-4o` instead. Spend is capped by
+  `deploy-api.yml` (**edit + merge, not gcloud** — the prod job leads with
+  `anthropic,openai,sol,gemini,xai`), so model/provider changes are versioned.
+  A third-party OpenAI-compatible model plugs in via `LLM_CUSTOM_PROVIDERS` — a
+  JSON map keyed by chain name, each entry `{"base_url": "…/v1", "model": "…",
+  "api_key_env": "…"}` — then just name the key in the chain (`sol`, an
+  OpenAI-compatible endpoint reusing `OPENAI_API_KEY`, is wired today as a
+  fallback). Note the asymmetry: a **named** provider with a missing key is
+  pre-skipped (never called), but a **custom** provider is always built — with
+  no key it still POSTs to its endpoint, gets a 401, and only then falls back
+  (one wasted round-trip per article, no extra spend), so only name a custom
+  provider in the chain once its key is set. **The role-level `SUMMARIZER_MODEL`
+  override only hits the chain's *first named* provider**, so it must match that
+  provider's vendor: with `anthropic` leading, `deploy-api.yml` sets
+  `SUMMARIZER_MODEL=claude-haiku-4-5-20251001` (Haiku 4.5, ~1/3 the Sonnet cost)
+  — a non-Anthropic id there would poison the primary link. Fallbacks use their
+  per-provider model vars (`OPENAI_COMPAT_MODEL=gpt-4o`, `GEMINI_MODEL`,
+  `XAI_MODEL`) and the custom entries' own `model` fields. Spend is capped by
   `SUMMARIZER_MAX_ARTICLES_PER_RUN` (library default 15/run; the **prod job is
   set to 100/run** by `deploy-api.yml`, which also sets `--task-timeout=30m` so
   the extra LLM calls don't sever the run — re-asserted on every deploy, so tune
