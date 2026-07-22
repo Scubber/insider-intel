@@ -11,12 +11,41 @@ from apps.aggregator.config import DEFAULT_FEEDS, get_enabled_feeds
 from apps.aggregator.courtlistener import (
     _first_opinion_id,
     _search,
+    company_watchlist_queries,
     fetch_opinion_text,
     hit_to_raw_article,
     opinion_hit_to_raw_article,
     parse_queries,
     parse_types,
 )
+
+
+def test_company_watchlist_expands_to_scoped_and_catchall() -> None:
+    queries = company_watchlist_queries("Voya, Voya India")
+    # Two companies × (scoped, catch-all), scoped first, order preserved.
+    assert queries == [
+        '"Voya" (employee OR "former employee" OR contractor OR insider '
+        'OR "trade secret" OR misappropriation OR "economic espionage" '
+        'OR fraud OR embezzlement OR "data breach" OR confidential OR proprietary)',
+        '"Voya"',
+        '"Voya India" (employee OR "former employee" OR contractor OR insider '
+        'OR "trade secret" OR misappropriation OR "economic espionage" '
+        'OR fraud OR embezzlement OR "data breach" OR confidential OR proprietary)',
+        '"Voya India"',
+    ]
+
+
+def test_company_watchlist_empty_and_blank_yield_nothing() -> None:
+    assert company_watchlist_queries("") == []
+    assert company_watchlist_queries("   ") == []
+    assert company_watchlist_queries(None) == []
+    # Blank segments between commas are skipped.
+    assert company_watchlist_queries("Voya, ,") == [
+        '"Voya" (employee OR "former employee" OR contractor OR insider '
+        'OR "trade secret" OR misappropriation OR "economic espionage" '
+        'OR fraud OR embezzlement OR "data breach" OR confidential OR proprietary)',
+        '"Voya"',
+    ]
 
 
 def test_hit_to_raw_article_maps_recap_docket() -> None:

@@ -31,6 +31,15 @@ subscriptions (`data/config/social_subscriptions.json` — the `config/` GCS
 prefix is exactly why the API may write there) seeded from a curated catalog
 derived from `shared/taxonomy/use_cases.py`.
 
+CourtListener flagging is query-driven, not a local scan: the hand-authored
+insider lexicon in `courtlistener.py::DEFAULT_QUERIES` (projected from ITM
+techniques, e.g. the IF038 moonlighting cluster) runs server-side against US
+RECAP dockets + opinions. `COURTLISTENER_COMPANY_WATCHLIST` (default `Voya,
+Voya India`) adds per-company coverage — `company_watchlist_queries` expands
+each name into a scoped insider query **and** a bare catch-all, appended to
+both lanes. CourtListener indexes US courts only, so a non-US entity is matched
+by US filings that name it, not by foreign court records.
+
 Processing (`shared/agents/article_processor.py`, LangGraph):
 normalize → extract_entities (ITM alias match) → score → **classify** →
 **enrich** → embed → assemble. The classify node stamps `use_cases`

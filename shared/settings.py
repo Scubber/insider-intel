@@ -76,6 +76,16 @@ class Settings(BaseSettings):
             "(empty = COURTLISTENER_QUERIES / built-in defaults)"
         ),
     )
+    courtlistener_company_watchlist: str = Field(
+        default="Voya, Voya India",
+        alias="COURTLISTENER_COMPANY_WATCHLIST",
+        description=(
+            "Comma-separated company names to watch. Each expands into a scoped "
+            "insider query and a catch-all name query, appended to the RECAP and "
+            "opinion query lists. Empty disables. Note: CourtListener indexes US "
+            "courts only, so a non-US entity is matched by US filings that name it."
+        ),
+    )
     courtlistener_fetch_opinion_text: bool = Field(
         default=True,
         alias="COURTLISTENER_FETCH_OPINION_TEXT",
