@@ -11,6 +11,10 @@ on:
         description: "How many example filings to print"
         required: false
         default: "5"
+      match:
+        description: "Optional regex; only sample filings whose stored body (clean_text) matches it"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -35,17 +39,34 @@ jobs:
       - name: Sample enriched filings with observables
         env:
           MAX_CASES: ${{ github.event.inputs.max_cases }}
+          MATCH: ${{ github.event.inputs.match }}
         run: |
           set -euo pipefail
           gcloud storage cp "${OBJ}" corpus.jsonl
-          echo "filings with >=1 observable:"
+          if [ -n "${MATCH}" ]; then
+            # Filings whose real document BODY (clean_text >= 1500 chars, so not
+            # just the query-tag stub) contains the pattern — proves whether the
+            # granular artifact is actually stored, not merely queried for.
+            echo "filings with a real body (clean_text >= 1500):"
+            jq -c 'select((.channel=="filings") and ((.clean_text // "" | length) >= 1500))' \
+              corpus.jsonl | wc -l
+            echo "  ...of those, body matches /${MATCH}/i:"
+            jq -c --arg re "${MATCH}" \
+              'select((.channel=="filings") and ((.clean_text // "" | length) >= 1500)
+                      and ((.clean_text // "") | test($re; "i")))' \
+              corpus.jsonl | tee matched.jsonl | wc -l
+            SRC=matched.jsonl
+          else
+            SRC=corpus.jsonl
+          fi
+          echo "filings with >=1 observable (in the selected set):"
           jq -c 'select((.channel=="filings") and ((.forensics.methods // [] | map(.observables // [] | length) | add) // 0) > 0)' \
-            corpus.jsonl | wc -l
+            "$SRC" | wc -l
           echo "----- examples -----"
           jq -r --argjson n "${MAX_CASES:-5}" '
             select((.channel=="filings")
               and ((.forensics.methods // [] | map(.observables // [] | length) | add) // 0) > 0)
-          ' corpus.jsonl \
+          ' "$SRC" \
           | jq -sr --argjson n "${MAX_CASES:-5}" '
             .[:$n][]
             | "CASE: \(.title)\n  model: \(.forensics.model // "-")\n"
