@@ -6,6 +6,40 @@ step; this map adds phrasing commonly seen in public reporting.
 
 from __future__ import annotations
 
+# Aliases that are too generic to independently signal insider behaviour — they
+# flood false positives when matched against long court documents (e.g. a
+# gambling-regulation suit says "gambling"; a data-breach class action says
+# "browsers"/"firmware"; an employment case says "authorized leave"). The ITM
+# matcher skips these as standalone triggers (both single tokens and phrases);
+# richer, context-bearing aliases still match. Deliberately EXCLUDES terms that
+# carry real insider signal even alone (e.g. "outside employment" → IF038,
+# "remote desktop protocol" → PR026).
+GENERIC_ALIAS_STOPLIST: frozenset[str] = frozenset(
+    {
+        # ultra-generic single tokens (original inline stoplist)
+        "access",
+        "theft",
+        "printing",
+        "placement",
+        "stalling",
+        "virtualization",
+        "tripwires",
+        "espionage",
+        "sabotage",
+        "bribe",
+        "snooping",
+        # over-broad ITM technique titles that match incidental mentions
+        "gambling",
+        "gaming",
+        "browsers",
+        "firmware",
+        "conflicts of interest",
+        "authorized leave",
+        "unauthorized leave",
+        "unauthorized third party",
+    }
+)
+
 # Extra match phrases for high-signal OSINT wording (lowercase).
 CURATED_ALIASES: dict[str, tuple[str, ...]] = {
     # Motive

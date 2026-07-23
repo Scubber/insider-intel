@@ -55,6 +55,14 @@ DEFAULT_QUERIES: list[str] = [
     # Device/telemetry attribution forensics (GDID-class affidavits)
     '("device identifier" OR "digital fingerprint" OR telemetry) '
     "(VPN OR anonymized OR geolocation)",
+    # North Korean / fraudulent remote-IT-worker infiltration — sanctioned
+    # workers using stolen US identities, "laptop farms", and US facilitators to
+    # gain insider access to company networks (DOJ/OFAC coordinated actions).
+    '("IT worker" OR "information technology worker" OR "remote worker") '
+    '(fraud OR "identity theft" OR conspiracy OR sanctions OR "North Korea" OR DPRK)',
+    '("North Korea" OR "North Korean" OR DPRK) '
+    '("IT worker" OR sanctions OR conspiracy OR laptop OR "wire fraud")',
+    '"laptop farm"',
 ]
 
 SOURCE_ID = "courtlistener-recap"

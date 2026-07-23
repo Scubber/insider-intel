@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from shared.itm.aliases import INSIDER_FRAMING_KEYWORDS
+from shared.itm.aliases import GENERIC_ALIAS_STOPLIST, INSIDER_FRAMING_KEYWORDS
 from shared.itm.controls import resolve_controls
 from shared.itm.index import ItmTechnique, load_itm_index
 from shared.schemas.articles import ExtractedEntities, ItmHit
@@ -105,20 +105,9 @@ def match_itm_techniques(text: str) -> list[ItmHit]:
             alias_l = alias.strip().lower()
             if len(alias_l) < 3:
                 continue
-            # Skip ultra-generic single tokens that flood false positives
-            if " " not in alias_l and alias_l in {
-                "access",
-                "theft",
-                "printing",
-                "placement",
-                "stalling",
-                "virtualization",
-                "tripwires",
-                "espionage",
-                "sabotage",
-                "bribe",
-                "snooping",
-            }:
+            # Skip over-generic aliases (single tokens AND phrases) that flood
+            # false positives on long documents — see GENERIC_ALIAS_STOPLIST.
+            if alias_l in GENERIC_ALIAS_STOPLIST:
                 continue
             candidates.append((alias_l, tech))
     candidates.sort(key=lambda item: len(item[0]), reverse=True)

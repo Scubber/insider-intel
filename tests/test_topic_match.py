@@ -106,6 +106,31 @@ def test_list_articles_topic_match_api(tmp_path, monkeypatch) -> None:
     assert "Company announces quarterly earnings" not in titles
 
 
+def test_generic_titles_are_denylisted() -> None:
+    clear_itm_cache()
+    # Words that appear incidentally in gambling-regulation / data-breach /
+    # employment complaints — none should independently produce an ITM hit.
+    noise = (
+        "The complaint concerns online gambling and gaming platforms, alleged "
+        "conflicts of interest, the browsers and firmware used by consumers, and "
+        "authorized leave policies for state employees."
+    )
+    hits = {h.id for h in match_itm_techniques(noise)}
+    for tid in ("IF008.005", "IF008.007", "MT021", "ME003.003", "ME016", "AF028.001"):
+        assert tid not in hits, f"{tid} should be denylisted, got {hits}"
+
+
+def test_retained_alias_still_matches_outside_employment() -> None:
+    clear_itm_cache()
+    hits = {
+        h.id
+        for h in match_itm_techniques(
+            "Employee held undisclosed outside employment with a competitor while employed."
+        )
+    }
+    assert "IF038" in hits  # kept out of the denylist on purpose
+
+
 def test_extract_entities_tags_pr041_from_alias() -> None:
     clear_itm_cache()
     entities = extract_entities(
