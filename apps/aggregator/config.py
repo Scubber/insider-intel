@@ -174,6 +174,26 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="threat-research",
         enabled=False,  # VERIFY feed URL (403 from build env) before enabling
     ),
+    # Insider Risk — dedicated insider-threat/insider-risk news & research
+    # (operator-provided feed; build env is 403-blocked so unvalidated here,
+    # but prod egress reaches it and a bad URL just 404s harmlessly).
+    FeedSource(
+        id="insiderisk-io",
+        name="Insider Risk (insiderisk.io)",
+        url="https://www.insiderisk.io/rss.xml",
+        category="threat-research",
+    ),
+    # U.S. Treasury press releases — major OFAC/sanctions announcements (e.g.
+    # DPRK IT workers). OFAC retired its own RSS (Jan 2025) for GovDelivery
+    # email, so a Treasury press-release RSS is UNCONFIRMED — disabled pending a
+    # verified feed URL (treasury.gov 403s the build env; may be email-only).
+    FeedSource(
+        id="treasury-press",
+        name="U.S. Treasury Press Releases",
+        url="https://home.treasury.gov/news/press-releases/feed",
+        category="insider-legal",
+        enabled=False,  # VERIFY: Treasury RSS unconfirmed (possibly email-only)
+    ),
     # Crypto / fintech (insider / rogue employee / KYC leak stories)
     FeedSource(
         id="coincentral",
