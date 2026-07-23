@@ -476,24 +476,21 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://securityonline.info/feed/",
         category="threat-research",
     ),
-    # DPRK remote-IT-worker specialist vendors. Disabled pending URL
-    # confirmation (sandbox can't reach these hosts to verify the feed path);
-    # flip enabled=True once the RSS path is confirmed. The mainstream DPRK
-    # reporting (Mandiant/Google, Unit 42, DTEX i3, Google Threat Intel, DFIR
-    # Report) already lands via the enabled threat-research feeds above.
+    # DPRK remote-IT-worker specialist vendors. The mainstream DPRK reporting
+    # (Mandiant/Google, Unit 42, DTEX i3, Google Threat Intel, DFIR Report)
+    # already lands via the enabled threat-research feeds above; these add the
+    # DPRK-focused vendor coverage.
     FeedSource(
         id="nisos-research",
         name="Nisos Research",
         url="https://nisos.com/feed/",
         category="threat-research",
-        enabled=False,
     ),
     FeedSource(
         id="flare-research",
         name="Flare Research",
         url="https://flare.io/feed/",
         category="threat-research",
-        enabled=False,
     ),
 ]
 
