@@ -4331,16 +4331,19 @@
           : item.kind === "technique"
             ? "Open this technique's dossier"
             : "Search the corpus for this term";
-      row.dataset.tip = `${item.count} recent · ${item.prev_count} prior — ${kindTip}`;
+      row.dataset.tip = `${item.count} stories total · ${trendingDeltaText(item)} vs prior — ${kindTip}`;
       const head = document.createElement("span");
       head.className = "trend-head";
       const src = document.createElement("span");
       src.className = "trend-src";
       src.textContent = `[${String(item.channel || "news").toUpperCase()}]`;
+      const count = document.createElement("span");
+      count.className = "trend-count";
+      count.textContent = `×${item.count}`;
       const delta = document.createElement("span");
       delta.className = `trend-delta trend-${item.direction}`;
       delta.textContent = trendingDeltaText(item);
-      head.append(src, delta);
+      head.append(src, count, delta);
       const label = document.createElement("span");
       label.className = "trend-label";
       label.textContent = item.label;
