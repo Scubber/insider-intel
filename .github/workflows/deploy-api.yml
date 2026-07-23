@@ -115,6 +115,7 @@ jobs:
           curl -sf "${URL}/articles?limit=1" >/dev/null && echo "articles OK"
           curl -sf "${URL}/social/catalog" >/dev/null && echo "social catalog OK"
           curl -sf "${URL}/trending?limit=3" >/dev/null && echo "trending OK"
+          curl -sf "${URL}/feed.xml?limit=1" | grep -q '<feed' && echo "feed.xml OK"
           # subscription write path round-trip (catches read-only mount regressions)
           curl -sf -X POST "${URL}/social/subscriptions" \
             -H 'Content-Type: application/json' \
