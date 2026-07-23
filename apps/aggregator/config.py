@@ -162,6 +162,18 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.upguard.com/blog/rss.xml",
         category="threat-research",
     ),
+    # Forscie knowledge base — the org behind the Insider Threat Matrix. Adds
+    # ITM guidance/research beyond the raw technique definitions we already carry
+    # in itm_index.json. The feed URL is a best guess: forscie.com 403s
+    # automated fetches from the build env, so confirm the real RSS/Atom path
+    # (e.g. /rss, /feed, /feed.xml) before flipping enabled=True.
+    FeedSource(
+        id="forscie-knowledge",
+        name="Forscie ITM Knowledge Base",
+        url="https://knowledge.forscie.com/rss",
+        category="threat-research",
+        enabled=False,  # VERIFY feed URL (403 from build env) before enabling
+    ),
     # Crypto / fintech (insider / rogue employee / KYC leak stories)
     FeedSource(
         id="coincentral",

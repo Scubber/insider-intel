@@ -386,14 +386,16 @@ class ArticleSearchIndex:
         limit: int = 8,
         min_term_count: int = 3,
     ) -> list[dict]:
-        """Most-active topics across the indexed feeds, week-over-week style.
+        """Most-common topics across the indexed feeds, ranked by volume.
 
         Pure counting over the in-memory corpus — no LLM, no extra I/O. Topics
-        are classified use cases, ITM parent techniques, and hot matched
-        terms; activity is unique stories (story_key) whose published (or
-        processed) time falls in the recent window vs the prior window. The
-        windows anchor on the corpus's newest processed_at, not wall clock, so
-        a static corpus yields stable, testable results.
+        are classified use cases, ITM parent techniques, and hot matched terms;
+        `count` is the number of unique stories (story_key) mapped to each topic
+        across the WHOLE corpus, and items are ranked by that volume (most-common
+        first). Each item also carries a secondary trend arrow (delta_pct /
+        direction) comparing the recent window vs the prior window, anchored on
+        the corpus's newest processed_at (not wall clock) for stable, testable
+        results. `window_days` sizes only the trend arrow, not the ranking.
         """
         anchor = self.last_processed_at
         if anchor is None:
@@ -425,26 +427,26 @@ class ArticleSearchIndex:
                 return "prior"
             return None
 
-        def touch(kind: str, key: str, label: str, bucket: str, story: str, channel: str):
+        def touch(kind: str, key: str, label: str, bucket: str | None, story: str, channel: str):
             topic = topics.setdefault(
                 (kind, key),
                 {
                     "kind": kind,
                     "key": key,
                     "label": label,
+                    "total": set(),
                     "recent": set(),
                     "prior": set(),
                     "channels": Counter(),
                 },
             )
-            topic[bucket].add(story)
-            if bucket == "recent":
-                topic["channels"][channel] += 1
+            topic["total"].add(story)
+            topic["channels"][channel] += 1
+            if bucket in ("recent", "prior"):
+                topic[bucket].add(story)
 
         for article in self._articles:
             bucket = bucket_for(article)
-            if bucket is None:
-                continue
             story = getattr(article, "story_key", None) or article.link
             channel = _article_channel(article)
 
@@ -470,17 +472,22 @@ class ArticleSearchIndex:
 
         items: list[dict] = []
         for topic in topics.values():
-            count = len(topic["recent"])
+            count = len(topic["total"])
+            recent = len(topic["recent"])
             prev = len(topic["prior"])
             floor = min_term_count if topic["kind"] == "term" else 2
             if count < floor:
                 continue
+            # Secondary trend arrow: recent window vs prior window.
             if prev > 0:
-                delta_pct = round((count - prev) / prev * 100, 1)
+                delta_pct = round((recent - prev) / prev * 100, 1)
                 direction = "up" if delta_pct > 0 else "down" if delta_pct < 0 else "flat"
-            else:
+            elif recent > 0:
                 delta_pct = None
                 direction = "new"
+            else:
+                delta_pct = None
+                direction = "flat"
             channel = topic["channels"].most_common(1)[0][0] if topic["channels"] else "news"
             items.append(
                 {
@@ -495,13 +502,9 @@ class ArticleSearchIndex:
                 }
             )
 
-        # Rising topics first (new spikes count as rising), then by volume.
-        def sort_key(item: dict):
-            pct = item["delta_pct"]
-            rank = float("inf") if item["direction"] == "new" else pct or 0.0
-            return (-rank, -item["count"], item["label"])
-
-        items.sort(key=sort_key)
+        # Most-common first: rank by total volume across the corpus, then label.
+        # The recent-vs-prior delta stays on each item as a secondary trend arrow.
+        items.sort(key=lambda item: (-item["count"], item["label"]))
         return items[: max(1, limit)]
 
     def list_articles(

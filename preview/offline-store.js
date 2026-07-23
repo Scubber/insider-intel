@@ -432,19 +432,26 @@
       const id = `${kind}|${key}`;
       let topic = topics.get(id);
       if (!topic) {
-        topic = { kind, key, label, recent: new Set(), prior: new Set(), channels: {} };
+        topic = {
+          kind,
+          key,
+          label,
+          total: new Set(),
+          recent: new Set(),
+          prior: new Set(),
+          channels: {},
+        };
         topics.set(id, topic);
       }
-      topic[bucket].add(story);
-      if (bucket === "recent") {
-        topic.channels[channel] = (topic.channels[channel] || 0) + 1;
-      }
+      topic.total.add(story);
+      topic.channels[channel] = (topic.channels[channel] || 0) + 1;
+      if (bucket === "recent" || bucket === "prior") topic[bucket].add(story);
     };
 
     articles.forEach((a) => {
       const t = new Date(a.published || 0).getTime();
-      if (!Number.isFinite(t) || t < priorStart) return;
-      const bucket = t >= recentStart ? "recent" : "prior";
+      if (!Number.isFinite(t)) return;
+      const bucket = t >= recentStart ? "recent" : t >= priorStart ? "prior" : null;
       const story = a.story_key || a.link;
       const channel = articleChannel(a);
       const seen = new Set();
@@ -472,15 +479,18 @@
 
     const items = [];
     topics.forEach((topic) => {
-      const count = topic.recent.size;
+      const count = topic.total.size;
+      const recent = topic.recent.size;
       const prev = topic.prior.size;
       const floor = topic.kind === "term" ? 3 : 2;
       if (count < floor) return;
       let deltaPct = null;
-      let direction = "new";
+      let direction = "flat";
       if (prev > 0) {
-        deltaPct = Math.round(((count - prev) / prev) * 1000) / 10;
+        deltaPct = Math.round(((recent - prev) / prev) * 1000) / 10;
         direction = deltaPct > 0 ? "up" : deltaPct < 0 ? "down" : "flat";
+      } else if (recent > 0) {
+        direction = "new";
       }
       const channel =
         Object.entries(topic.channels).sort((x, y) => y[1] - x[1]).map((e) => e[0])[0] ||
@@ -496,10 +506,8 @@
         direction,
       });
     });
-    items.sort((x, y) => {
-      const rank = (i) => (i.direction === "new" ? Infinity : i.delta_pct || 0);
-      return rank(y) - rank(x) || y.count - x.count || x.label.localeCompare(y.label);
-    });
+    // Most-common first: rank by total volume, then label.
+    items.sort((x, y) => y.count - x.count || x.label.localeCompare(y.label));
     return { window_days: windowDays, items: items.slice(0, limit) };
   }
 

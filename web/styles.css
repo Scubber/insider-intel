@@ -4135,6 +4135,13 @@ body[data-pane="settings"] .panels-row {
   color: var(--accent);
 }
 
+.trend-count {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text, var(--fg));
+  margin-left: auto;
+}
+
 .trend-delta {
   font-size: 0.6rem;
   font-weight: 700;
