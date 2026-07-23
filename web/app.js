@@ -4928,12 +4928,50 @@
 
   /* MODUS OPERANDI "Export cases": download the report + its flagged cases —
      full facts, techniques, and evidence bullets — as a JSON file. */
-  function exportCasesFile() {
+  // Pull the full document body for each boarded case so the export carries the
+  // entire filing, not just metadata. Uses the same /articles/text endpoint as
+  // READ FILING; bounded concurrency keeps large boards from hammering the API,
+  // per-link failures degrade to empty text (stubs have no archived body yet),
+  // and results are written by index so case order is preserved.
+  async function boardCasesWithText(entries, onProgress) {
+    const CONCURRENCY = 4;
+    const cases = new Array(entries.length);
+    let withText = 0;
+    let next = 0;
+    async function worker() {
+      while (true) {
+        const i = next;
+        next += 1;
+        if (i >= entries.length) return;
+        if (typeof onProgress === "function") {
+          onProgress(Math.min(next, entries.length), entries.length);
+        }
+        let text = "";
+        try {
+          const data = await api("/articles/text", { link: entries[i].link });
+          text = (data && data.text) || "";
+        } catch (err) {
+          text = "";
+        }
+        if (text) withText += 1;
+        cases[i] = { ...entries[i], filing_text: text };
+      }
+    }
+    const pool = Math.min(CONCURRENCY, entries.length);
+    await Promise.all(Array.from({ length: pool }, () => worker()));
+    return { cases, withText };
+  }
+
+  async function exportCasesFile() {
     const report = state.lastTtpReport;
     if (!report) {
       setStatus("Open MODUS OPERANDI first");
       return;
     }
+    const entries = boardEntries();
+    const { cases, withText } = await boardCasesWithText(entries, (n, total) =>
+      setStatus(`Fetching filing text… ${n}/${total}`),
+    );
     const payload = {
       v: 1,
       kind: "insider-intel-modus-operandi",
@@ -4948,7 +4986,7 @@
         human: report.human || [],
         seeds: report.seeds || [],
       },
-      cases: boardEntries(),
+      cases,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json",
@@ -4961,11 +4999,17 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(`Exported report + ${payload.cases.length} case(s)`);
+    setStatus(
+      `Exported report + ${cases.length} case(s) · ${withText} with full text`,
+    );
   }
 
   if (els.exportCases) {
-    els.exportCases.addEventListener("click", () => exportCasesFile());
+    els.exportCases.addEventListener("click", () => {
+      exportCasesFile().catch((err) =>
+        setStatus(`Export failed: ${err && err.message ? err.message : err}`),
+      );
+    });
   }
 
   /* Settings ▸ Stream defaults + notifications (notification prefs are UI-only
