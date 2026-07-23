@@ -1,5 +1,9 @@
-> **Note (2026-07-14):** parts of this handoff predate the containerized dev
-> environment and production hosting. Current source of truth:
+> **Note (2026-07-22):** this file is the evergreen "what the project is"
+> orientation, but its **Current state** / **Suggested next work** / API tables
+> below are historical (≈2026-07-15) and no longer track production. For the
+> **live state** (Tier-2 CourtListener, history-query rotation, PACER parked,
+> the diagnostic/export workflows, open threads) read
+> **[`HANDOFF.md`](HANDOFF.md)** first. Source of truth for architecture:
 > [`../CLAUDE.md`](../CLAUDE.md), [`DEVELOPMENT.md`](DEVELOPMENT.md),
 > [`hosting.md`](hosting.md).
 

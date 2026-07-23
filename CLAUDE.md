@@ -6,6 +6,10 @@ to `main`. Read this before changing anything; deeper docs in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (dev env) and
 [docs/hosting.md](docs/hosting.md) (production).
 
+**Picking up a session?** [docs/HANDOFF.md](docs/HANDOFF.md) is the current live
+state — what's deployed now, what's parked (e.g. PACER purchasing), open threads,
+and next actions — with links to recent PRs.
+
 ## Map
 
 ```
