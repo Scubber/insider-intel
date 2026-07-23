@@ -96,6 +96,13 @@ is parked pending account review.
    generator to replace hand-authored `DEFAULT_QUERIES` (systematic coverage).
 5. **Off-site LLM enrichment is the operator's end goal.** `export-llm` is the
    delivery mechanism; it grows as the backfill pulls more bodies.
+6. **UI feed auto-discovery** — the public Atom feed ships at
+   `GET /feed.xml` (facet-aware: `?use_case=`/`?channel=`/`?insider_type=`), but
+   the UI does NOT yet advertise it. Add a
+   `<link rel="alternate" type="application/atom+xml" href="…/feed.xml">` to
+   `web/index.html`'s `<head>` so browsers/readers auto-detect it. One-line
+   `web/**` change (separate `pages.yml` deploy). Deferred by the operator —
+   roadmap, not urgent.
 
 ---
 
