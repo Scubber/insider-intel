@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from apps.aggregator.export import EXPORT_SCHEMA_VERSION, article_to_export_row, filter_articles
@@ -219,6 +219,83 @@ def list_articles(
         insider_type=insider_type,
         topic_match=topic_match,
         group=group,
+    )
+
+
+def _atom_ts(dt: datetime | None) -> str:
+    """RFC 3339 stamp for Atom; fall back to now when a row lacks a date."""
+    if dt is None:
+        dt = datetime.now(UTC)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@app.get("/feed.xml")
+def feed_atom(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    min_score: float = Query(default=0.0, ge=0.0, le=1.0),
+    itm_alignment: str = Query(default="insider"),
+    channel: str = Query(default="all"),
+    use_case: str | None = Query(default=None),
+    insider_type: str = Query(default="all"),
+) -> Response:
+    """Public Atom feed of the flagged insider-threat stream.
+
+    Read-only, no LLM spend — renders the same `list_articles` query path other
+    aggregators can subscribe to. Honors the `/articles` facet params
+    (`?use_case=overemployment`, `?channel=filings`, `?insider_type=malicious`).
+    """
+    from xml.sax.saxutils import escape
+
+    listing = service.list_articles(
+        limit=limit,
+        min_score=min_score,
+        itm_alignment=itm_alignment,
+        channel=channel,
+        use_case=use_case,
+        insider_type=insider_type,
+        group=True,
+    )
+    hits = listing.results
+    self_url = str(request.url)
+    home_url = str(request.base_url).rstrip("/")
+    feed_updated = _atom_ts(max((h.published for h in hits if h.published), default=None))
+
+    parts = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<feed xmlns="http://www.w3.org/2005/Atom">',
+        "<title>insider-intel — flagged insider-threat stream</title>",
+        "<subtitle>Insider-risk OSINT aggregator aligned to the Insider Threat Matrix™</subtitle>",
+        f'<link rel="self" href="{escape(self_url)}"/>',
+        f'<link rel="alternate" href="{escape(home_url)}"/>',
+        f"<id>{escape(home_url)}/feed.xml</id>",
+        f"<updated>{feed_updated}</updated>",
+    ]
+    for h in hits:
+        cats = [*(h.use_cases or []), h.channel]
+        cat_tags = "".join(
+            f'<category term="{escape(c)}"/>' for c in cats if c
+        )
+        note = h.ai_summary or h.summary or ""
+        parts.extend(
+            [
+                "<entry>",
+                f"<title>{escape(h.title or h.link)}</title>",
+                f'<link href="{escape(h.link)}"/>',
+                f"<id>{escape(h.link)}</id>",
+                f"<updated>{_atom_ts(h.published)}</updated>",
+                f"<source><title>{escape(h.source_name or h.source_id)}</title></source>",
+                cat_tags,
+                f'<summary type="text">{escape(note)}</summary>',
+                "</entry>",
+            ]
+        )
+    parts.append("</feed>")
+    return Response(
+        content="\n".join(parts),
+        media_type="application/atom+xml; charset=utf-8",
     )
 
 
