@@ -10,6 +10,14 @@ enabled: once every filing is on the target model, it converges to a no-op.
 
 Scoped to filings because that is where the truncation and the model-quality
 gap matter; broadening to other channels would be a separate, larger re-bill.
+
+Non-destructiveness is now guaranteed structurally by
+``ProcessedArticle.enrichment_history``: every generation is archived and the
+enrich node select-bests over it, so a thin re-enrichment can never gut a
+richer prior record. Clearing a filing (below) drops only the *selected*
+pointer, never the history. The snapshot/reconcile pair here is retained as
+secondary belt-and-suspenders and, given select-best, converges to restoring
+nothing.
 """
 
 from __future__ import annotations
@@ -173,12 +181,13 @@ def clear_missed_filings(
     target_model: str,
     limit: int | None = None,
 ) -> int:
-    """Clear paid-for LLM fields on missed filings so the sweep re-enriches them.
+    """Clear the selected LLM fields on missed filings so the sweep re-enriches.
 
-    Destructive on its own (a re-enrichment that comes back empty leaves the row
-    gutted); prefer :func:`snapshot_and_clear_missed_filings` +
-    :func:`reconcile_reenriched`. Retained for the CLI dry-run/count path and
-    back-compat. Returns the number of rows cleared.
+    Clears only the *selected* pointer (ai_summary/case_record/forensics);
+    ``enrichment_history`` is preserved, so the subsequent re-enrich re-selects
+    the richest generation and an empty re-run cannot gut the row. The
+    snapshot/reconcile pair adds nothing beyond that now, but remains available.
+    Used by the CLI dry-run/count path. Returns the number of rows cleared.
     """
     from apps.aggregator.courtlistener_pipeline import _clear_llm_fields
 

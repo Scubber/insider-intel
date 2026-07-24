@@ -18,6 +18,13 @@ from shared.agents.summarize import SummaryBudget, enrich_fields, merge_llm_hits
 from shared.llm import get_classifier_provider
 from shared.schemas import ProcessedArticle, RawArticle
 from shared.schemas.articles import ExtractedEntities, ItmHit, resolve_channel
+from shared.schemas.forensics import (
+    EnrichmentRecord,
+    PerCaseForensics,
+    append_enrichment,
+    case_record_from_forensics,
+    select_best_enrichment,
+)
 from shared.settings import get_settings
 from shared.utils.classify import classify_insider_type, classify_use_cases
 from shared.utils.embeddings import get_default_embedder
@@ -46,11 +53,13 @@ class ArticleProcessState(TypedDict, total=False):
     ai_summary: str | None
     case_record: dict[str, Any] | None
     forensics: dict[str, Any] | None
+    enrichment_history: list[dict[str, Any]]
     discovery: dict[str, Any] | None
     # Carry-forward inputs so reprocessing never re-bills the LLM
     prior_ai_summary: str | None
     prior_case_record: dict[str, Any] | None
     prior_forensics: dict[str, Any] | None
+    prior_enrichment_history: list[dict[str, Any]]
     prior_discovery: dict[str, Any] | None
     prior_llm_itm_hits: list[dict[str, Any]]
     budget: Any
@@ -126,33 +135,97 @@ def _llm_gate_passes(
     return not use_cases or insider_type is None
 
 
+def _prior_enrichment_history(state: ArticleProcessState) -> list[EnrichmentRecord]:
+    """Reconstruct the carried-forward enrichment history (with legacy seed).
+
+    Rows written before enrichment versioning have no ``enrichment_history`` but
+    do carry a single ``forensics`` record; seed history from it so the first
+    reprocess preserves that generation instead of starting empty. Malformed
+    entries are skipped, never raised — history must not sink an article.
+    """
+    history: list[EnrichmentRecord] = []
+    for item in state.get("prior_enrichment_history") or []:
+        try:
+            history.append(EnrichmentRecord.model_validate(item))
+        except Exception:  # noqa: BLE001 — a bad archived generation must not raise
+            logger.warning("Skipping unparseable prior enrichment generation")
+    if not history:
+        pf = state.get("prior_forensics")
+        if pf:
+            try:
+                history.append(
+                    EnrichmentRecord(
+                        ai_summary=state.get("prior_ai_summary"),
+                        forensics=PerCaseForensics.model_validate(pf),
+                    )
+                )
+            except Exception:  # noqa: BLE001 — legacy seed is best-effort
+                logger.warning("Could not seed enrichment history from legacy forensics")
+    return history
+
+
+def _emit_selected(
+    history: list[EnrichmentRecord], merged: ExtractedEntities
+) -> ArticleProcessState:
+    """Project the append-only history to the selected-best view the row stores.
+
+    ``forensics`` / ``ai_summary`` / ``case_record`` are the richest generation
+    (:func:`select_best_enrichment`); the full history rides alongside so no
+    generation is ever lost. case_record is re-derived from the selected
+    forensics exactly as the enricher derived it — keeping one source of truth.
+    """
+    best = select_best_enrichment(history)
+    record = case_record_from_forensics(best.forensics) if best is not None else None
+    return {
+        "ai_summary": best.ai_summary if best is not None else None,
+        "case_record": record.model_dump(mode="json") if record is not None else None,
+        "forensics": best.forensics.model_dump(mode="json") if best is not None else None,
+        "enrichment_history": [rec.model_dump(mode="json") for rec in history],
+        "entities": merged.model_dump(),
+    }
+
+
 def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
-    """One LLM call → ai_summary + forensic record + LLM ITM hits; never raises."""
+    """One LLM call → append a generation to history, then emit the best.
+
+    Enrichment is append-only: a new generation is added to the carried-forward
+    history and the richest is selected, so a thin re-run never overwrites a
+    richer prior record. Never re-bills a reused generation; never raises.
+    """
     entities = ExtractedEntities.model_validate(state.get("entities") or {})
     prior_summary = state.get("prior_ai_summary")
     prior_record = state.get("prior_case_record")
     prior_forensics = state.get("prior_forensics")
     prior_llm_hits = [ItmHit.model_validate(h) for h in state.get("prior_llm_itm_hits") or []]
+    # Reuse (no LLM) only when a previously *selected* generation is carried.
+    # History presence alone must NOT suppress re-enrichment — a cleared filing
+    # (drain / full-text backfill) carries its history for protection but still
+    # needs the fresh call. So the cache-hit test excludes prior history.
     if (
         prior_summary is not None
         or prior_record is not None
         or prior_forensics is not None
         or prior_llm_hits
     ):
-        # Cache hit: the article was enriched in a previous run — reuse it,
-        # never re-billing the LLM.
         merged = merge_llm_hits(entities, prior_llm_hits)
+        history = _prior_enrichment_history(state)
+        if history:
+            return _emit_selected(history, merged)
+        # Legacy passthrough: a pre-forensics row carries a case_record/ai_summary
+        # but nothing to version (no forensics to seed history from). Preserve it
+        # exactly — never let the select-best projection wipe it to None.
         return {
             "ai_summary": prior_summary,
             "case_record": prior_record,
             "forensics": prior_forensics,
+            "enrichment_history": [],
             "entities": merged.model_dump(),
         }
 
     raw = RawArticle.model_validate(state["raw"])
     settings = get_settings()
     budget = state.get("budget") or SummaryBudget(settings.summarizer_max_articles_per_run)
-    summary, forensics, record, llm_hits = enrich_fields(
+    summary, forensics, _record, llm_hits = enrich_fields(
         title=raw.title,
         source=raw.source_id,
         text=state.get("clean_text") or "",
@@ -162,23 +235,21 @@ def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
         budget=budget,
     )
     merged = merge_llm_hits(entities, llm_hits)
-    forensics_dump: dict[str, Any] | None = None
+    history = _prior_enrichment_history(state)
     if forensics is not None:
         # Stamp the article link/title and the final catalog-validated technique
         # ids (lexical ∪ LLM-adjudicated) so the report assembles from one source.
-        forensics_dump = forensics.model_copy(
+        stamped = forensics.model_copy(
             update={
                 "link": raw.link,
                 "title": raw.title,
                 "candidate_technique_ids": [h.id.upper() for h in merged.itm_hits],
             }
-        ).model_dump(mode="json")
-    return {
-        "ai_summary": summary,
-        "case_record": record.model_dump(mode="json") if record else None,
-        "forensics": forensics_dump,
-        "entities": merged.model_dump(),
-    }
+        )
+        history = append_enrichment(
+            history, EnrichmentRecord(ai_summary=summary, forensics=stamped)
+        )
+    return _emit_selected(history, merged)
 
 
 def _node_discover(state: ArticleProcessState) -> ArticleProcessState:
@@ -258,6 +329,7 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         ai_summary=state.get("ai_summary"),
         case_record=state.get("case_record"),
         forensics=state.get("forensics"),
+        enrichment_history=state.get("enrichment_history") or [],
         discovery=state.get("discovery"),
         embedding=state.get("embedding"),
     )
@@ -322,7 +394,15 @@ def process_article(
     if discover_budget is not None:
         initial["discover_budget"] = discover_budget
     prior_forensics = getattr(prior, "forensics", None) if prior is not None else None
+    prior_history = getattr(prior, "enrichment_history", None) if prior is not None else None
     upgrade_legacy = get_settings().summarizer_upgrade_legacy and prior_forensics is None
+    if prior is not None and prior_history:
+        # The enrichment history is the durable archive: carry it forward on
+        # EVERY reprocess — even a legacy-upgrade or a cleared-then-re-enrich
+        # run — so select-best can restore a richer prior generation and a thin
+        # re-run can never gut the card. This is independent of the re-bill
+        # (cache-hit) decision below.
+        initial["prior_enrichment_history"] = [r.model_dump(mode="json") for r in prior_history]
     if prior is not None and not upgrade_legacy:
         if prior.ai_summary is not None:
             initial["prior_ai_summary"] = prior.ai_summary

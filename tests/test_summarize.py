@@ -444,6 +444,117 @@ def test_backfill_upgrades_legacy_rows_when_enabled(monkeypatch, tmp_path: Path)
     assert upgraded.forensics is not None and upgraded.forensics.extraction_status == "llm"
 
 
+def _clear_selected(row):
+    """Simulate courtlistener_pipeline._clear_llm_fields: drop the selected
+    pointer + llm hits, PRESERVE enrichment_history (the archive)."""
+    hits = [h for h in row.entities.itm_hits if getattr(h, "source", "lexical") != "llm"]
+    return row.model_copy(
+        update={
+            "ai_summary": None,
+            "case_record": None,
+            "forensics": None,
+            "entities": row.entities.model_copy(update={"itm_hits": hits}),
+        }
+    )
+
+
+def test_enrichment_history_records_first_generation(monkeypatch) -> None:
+    """The first enrichment is archived as generation #1, mirrored by the view."""
+    _install(monkeypatch, FakeEnricher())
+    processed = process_article(_raw())
+    assert len(processed.enrichment_history) == 1
+    gen = processed.enrichment_history[0]
+    # The selected view equals the sole stored generation.
+    assert gen.ai_summary == processed.ai_summary
+    assert gen.forensics.methods[0].action == processed.forensics.methods[0].action
+    assert gen.forensics.model == "fake-model"
+
+
+def test_thin_reenrich_appends_but_never_guts(monkeypatch) -> None:
+    """A thinner re-enrichment is stored but the richer prior stays selected."""
+    _install(monkeypatch, FakeEnricher())
+    rich = process_article(_raw())
+    assert rich.forensics is not None and rich.forensics.methods
+
+    # Clear the selected pointer (history preserved) and re-enrich thinly.
+    cleared = _clear_selected(rich)
+    thin = FakeEnricher(
+        _reply(ai_summary="second, thinner pass", methods=[], confidence=0.2, hunt_queries=[])
+    )
+    _install(monkeypatch, thin)
+    reprocessed = process_article(_raw(), prior=cleared)
+
+    assert thin.calls == 1  # it DID re-bill (cleared → not a cache hit)
+    # Both generations are archived …
+    assert len(reprocessed.enrichment_history) == 2
+    # … but the richer first generation stays selected — the card is not gutted.
+    assert reprocessed.ai_summary == rich.ai_summary
+    assert reprocessed.forensics is not None and reprocessed.forensics.methods
+    # The thin generation is present in history but not selected.
+    notes = {g.ai_summary for g in reprocessed.enrichment_history}
+    assert "second, thinner pass" in notes
+
+
+def test_reenrich_dedup_skips_identical_generation(monkeypatch) -> None:
+    """Re-running the same model over the same text does not bloat history."""
+    _install(monkeypatch, FakeEnricher())
+    rich = process_article(_raw())
+    cleared = _clear_selected(rich)
+
+    same = FakeEnricher()  # identical default reply → identical signature
+    _install(monkeypatch, same)
+    reprocessed = process_article(_raw(), prior=cleared)
+
+    assert same.calls == 1  # the LLM was called …
+    assert len(reprocessed.enrichment_history) == 1  # … but the dup was not stored
+    assert reprocessed.forensics is not None and reprocessed.forensics.methods
+
+
+def test_legacy_row_seeds_history_on_reprocess(monkeypatch) -> None:
+    """A pre-versioning row (forensics, no history) seeds history on reprocess."""
+    _install(monkeypatch, FakeEnricher())
+    rich = process_article(_raw())
+    legacy = rich.model_copy(update={"enrichment_history": []})  # pre-feature shape
+    assert legacy.forensics is not None and legacy.enrichment_history == []
+
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    reprocessed = process_article(_raw(), prior=legacy)
+
+    assert fake.calls == 0  # carried-forward record is reused, never re-billed
+    assert len(reprocessed.enrichment_history) == 1  # seeded from the legacy record
+    assert reprocessed.forensics is not None and reprocessed.forensics.methods
+
+
+def test_legacy_case_record_only_row_is_preserved_not_wiped(monkeypatch) -> None:
+    """A pre-forensics row (case_record, no forensics/history) survives reprocess.
+
+    The select-best projection must never gut a legacy row that has nothing to
+    version — reprocessing with the enricher off keeps its case_record intact.
+    """
+    _install(monkeypatch, FakeEnricher())
+    base = process_article(_raw())
+    legacy = base.model_copy(
+        update={
+            "forensics": None,
+            "enrichment_history": [],
+            "ai_summary": "legacy analyst note",
+            "case_record": CaseRecord(is_insider_case=True, methods=["legacy method"]),
+        }
+    )
+
+    fake = FakeEnricher()
+    _install(monkeypatch, fake)
+    monkeypatch.setenv("SUMMARIZER_UPGRADE_LEGACY", "0")
+    reprocessed = process_article(_raw(), prior=legacy)
+
+    assert fake.calls == 0  # not re-billed
+    assert reprocessed.ai_summary == "legacy analyst note"  # NOT wiped
+    assert reprocessed.case_record is not None
+    assert reprocessed.case_record.methods == ["legacy method"]
+    assert reprocessed.forensics is None and reprocessed.enrichment_history == []
+
+
 def test_case_record_sanitization_clamps() -> None:
     record = CaseRecord(
         actor_role="x" * 500,

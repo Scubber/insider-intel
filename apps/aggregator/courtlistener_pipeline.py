@@ -277,12 +277,18 @@ def _throttle_wait_seconds(exc: CourtListenerError) -> float:
 
 
 def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
-    """Drop paid-for LLM fields for links whose source text just changed.
+    """Clear the *selected* LLM view for links whose source text just changed.
 
     Without this, the enrich node's carry-forward would keep the thin
-    pre-full-text record forever. Stripping ai_summary, case_record, forensics,
-    and the ``source=="llm"`` ITM hits makes the next processing run re-extract
-    over the full document (budget-bounded as usual).
+    pre-full-text record selected forever. Stripping ai_summary, case_record,
+    forensics, and the ``source=="llm"`` ITM hits makes the next processing run
+    re-extract over the full document (budget-bounded as usual).
+
+    Crucially this clears only the *selected* pointer fields — ``enrichment_history``
+    is the append-only archive and is deliberately preserved. On the re-enrich
+    run the carried-forward history is restored and select-best re-picks the
+    richest generation, so a re-enrichment that comes back thin (or empty)
+    cannot gut the card. Do NOT add ``enrichment_history`` to the update set.
     """
     from apps.aggregator.processed_storage import JsonlProcessedStore
 
@@ -305,6 +311,7 @@ def _clear_llm_fields(processed_path: str, links: set[str]) -> None:
                     "case_record": None,
                     "forensics": None,
                     "entities": row.entities.model_copy(update={"itm_hits": hits}),
+                    # enrichment_history intentionally NOT cleared (see docstring).
                 }
             )
         )

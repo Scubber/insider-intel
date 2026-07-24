@@ -9,7 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, HttpUrl
 
 from shared.schemas.discovery import CaseDiscovery
-from shared.schemas.forensics import PerCaseForensics
+from shared.schemas.forensics import EnrichmentRecord, PerCaseForensics
 
 # Provenance lane for stream filters (orthogonal to Insider Focus).
 Channel = Literal["news", "filings", "tips", "social", "publications"]
@@ -322,6 +322,15 @@ class ProcessedArticle(BaseModel):
     forensics: PerCaseForensics | None = Field(
         default=None,
         description="Ingest-time forensic reconstruction from the unified enricher LLM",
+    )
+    enrichment_history: list[EnrichmentRecord] = Field(
+        default_factory=list,
+        description=(
+            "Append-only log of every enrichment generation (ai_summary + "
+            "forensics) this article has had. Never rewritten; `forensics` and "
+            "`ai_summary` above are the selected-best view over this list, so a "
+            "thin re-enrich can never gut a richer prior generation."
+        ),
     )
     discovery: CaseDiscovery | None = Field(
         default=None,
