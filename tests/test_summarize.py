@@ -106,8 +106,28 @@ def test_filing_with_full_text_qualifies_without_lexical_hit() -> None:
     assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text="INDICTMENT")
     # News with the same empty signal never rides the filings branch.
     assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=body)
-    # A lexical hit still qualifies regardless of channel/text.
+    # A lexical hit still qualifies regardless of channel/text — for non-filings.
     assert qualifies(itm_hits=["IF002"], use_cases=[], channel="news", text="")
+
+
+def test_filing_stub_with_itm_hit_does_not_qualify() -> None:
+    """A metadata-stub filing must NOT enrich just because it carries an ITM hit.
+
+    CourtListener flags filings *by* the ITM-lexicon query, so nearly every
+    filing alias-matches an itm_hit on its docket metadata — stub or not.
+    Enriching a bodyless stub is a paid LLM call with nothing to summarize, so
+    the filings branch requires the real document body regardless of itm_hits.
+    """
+    from shared.agents.summarize import qualifies
+
+    # Stub body + itm_hit (and a use-case) → still skipped on the filings branch.
+    assert not qualifies(
+        itm_hits=["IF002"], use_cases=["data-exfiltration"], channel="filings", text="COMPLAINT"
+    )
+    # Same signal once the real body lands → qualifies.
+    assert qualifies(
+        itm_hits=["IF002"], use_cases=["data-exfiltration"], channel="filings", text="x" * 1_500
+    )
 
 
 def test_article_qualifies_reads_channel_and_text() -> None:

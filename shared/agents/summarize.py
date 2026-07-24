@@ -72,9 +72,16 @@ def qualifies(
     stub — they qualify even without a lexical hit. That is exactly the card
     where an analyst summary matters and the raw docket text reads worst.
     """
+    if channel == "filings":
+        # Court filings are pre-filtered insider-relevant by the CourtListener
+        # ITM-lexicon query, and entity extraction then alias-matches those same
+        # terms in the docket metadata — so nearly every filing carries an
+        # itm_hit, stub or not. An itm_hit alone must therefore NOT unlock spend
+        # here: a metadata stub has no document body to summarize, so enriching
+        # it is a paid LLM call with nothing to read. Require the real body
+        # (clean_text >= filing_min_chars) before spending on a filing.
+        return len((text or "").strip()) >= max(1, filing_min_chars)
     if itm_hits or use_cases:
-        return True
-    if channel == "filings" and len((text or "").strip()) >= max(1, filing_min_chars):
         return True
     return False
 
