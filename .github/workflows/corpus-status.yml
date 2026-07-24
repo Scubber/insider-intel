@@ -60,8 +60,11 @@ jobs:
           for c in tmpl.get("containers", []):
               for e in c.get("env", []):
                   ref = e.get("valueFrom", {}).get("secretKeyRef")
-                  src = f"secret:{ref[\"name\"]}:{ref.get(\"key\",\"latest\")}" if ref else "plain-env"
-                  print(f"  {e[\"name\"]:44s} {src}")
+                  if ref:
+                      src = "secret:" + ref["name"] + ":" + str(ref.get("key", "latest"))
+                  else:
+                      src = "plain-env"
+                  print("  " + e["name"].ljust(44) + src)
           '
           echo
           echo "Expected secret mappings for the LLM chain + ingest:"
