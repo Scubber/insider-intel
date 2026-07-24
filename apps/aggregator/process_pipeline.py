@@ -21,6 +21,7 @@ from shared.agents.summarize import (
 from shared.llm import get_discoverer_provider, get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
 from shared.schemas.articles import resolve_channel
+from shared.schemas.forensics import EnrichmentRecord, append_enrichment
 from shared.settings import get_settings
 from shared.utils.story_key import compute_story_key
 
@@ -182,14 +183,40 @@ def run_processing(
         )
         result.reenrich_cleared = cleared
 
+    # Fresh-batch enrichments: rows that gained a forensic record this run.
+    batch_enriched = sum(
+        1
+        for a in batch
+        if a.forensics is not None
+        and (
+            prior_by_link.get(a.link) is None
+            or getattr(prior_by_link.get(a.link), "forensics", None) is None
+        )
+    )
+
     # Backfill allowance = the reserved slice plus whatever the batch left over.
     backfill_budget = SummaryBudget(reserve + budget.remaining)
-    _backfill_summaries(
+    backfill_saved = _backfill_summaries(
         processed_store,
         budget=backfill_budget,
         settings=settings,
         exclude_links=batch_links,
     )
+    # Zero-enrichment tripwire: enrich_fields consumes budget BEFORE the
+    # provider call, so attempts with zero records produced means every LLM
+    # call failed (dead key / exhausted credits / bad model id) — a condition
+    # that otherwise hides behind per-article warnings while runs report
+    # success. Logged in the refresh job's grep vocabulary ([FAIL]/enrich) so
+    # it surfaces in the Actions highlights, not just Cloud Logging.
+    result.enrich_attempts = budget.spent + backfill_budget.spent
+    result.enrich_saved = batch_enriched + backfill_saved
+    if result.enrich_attempts > 0 and result.enrich_saved == 0:
+        logger.error(
+            "[FAIL] enrichment: %d LLM attempt(s), 0 records produced — "
+            "every provider call failed; check API credits/keys "
+            "(SUMMARIZER_LLM_PROVIDER chain)",
+            result.enrich_attempts,
+        )
     if reenrich_snapshot:
         from apps.aggregator.reenrich import reconcile_reenriched
 
@@ -332,6 +359,13 @@ def _backfill_summaries(
                     "case_record": record,
                     "forensics": forensics,
                     "entities": merged,
+                    # Archive this generation too: the backfill writes the row
+                    # directly (bypassing the graph node), so it must append to
+                    # the same durable history the node maintains.
+                    "enrichment_history": append_enrichment(
+                        list(getattr(row, "enrichment_history", None) or []),
+                        EnrichmentRecord(ai_summary=summary, forensics=forensics),
+                    ),
                 }
             )
         )

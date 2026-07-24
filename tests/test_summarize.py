@@ -401,6 +401,74 @@ def test_backfill_converts_existing_corpus_bounded_by_cap(monkeypatch, tmp_path:
     assert all(r.forensics is not None for r in rows)
 
 
+def test_backfill_archives_generation_in_history(monkeypatch, tmp_path: Path) -> None:
+    """The backfill sweep must append to enrichment_history, not just the slot."""
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save([_raw()])
+    run_processing(raw_path=raw_path, processed_path=processed_path)  # floor row
+
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "1")
+    _install(monkeypatch, FakeEnricher())
+    run_processing(raw_path=raw_path, processed_path=processed_path)  # backfill enriches
+
+    row = JsonlProcessedStore(processed_path).load_all()[0]
+    assert row.forensics is not None
+    assert len(row.enrichment_history) == 1
+    assert row.enrichment_history[0].ai_summary == row.ai_summary
+    assert row.enrichment_history[0].forensics.model == "fake-model"
+
+
+def test_zero_enrichment_tripwire_fires_when_all_calls_fail(
+    monkeypatch, tmp_path: Path, caplog
+) -> None:
+    """Attempts>0 with 0 records ⇒ a loud [FAIL] enrichment line (dead provider)."""
+    import logging as _logging
+
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save([_raw()])
+
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "5")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "0")
+    exploding = ExplodingEnricher()
+    _install(monkeypatch, exploding)
+    with caplog.at_level(_logging.ERROR, logger="apps.aggregator.process_pipeline"):
+        result = run_processing(raw_path=raw_path, processed_path=processed_path)
+
+    assert exploding.calls >= 1
+    assert result.enrich_attempts >= 1 and result.enrich_saved == 0
+    assert any("[FAIL] enrichment" in rec.message for rec in caplog.records)
+
+
+def test_zero_enrichment_tripwire_quiet_on_success_and_noop(
+    monkeypatch, tmp_path: Path, caplog
+) -> None:
+    """No [FAIL] line when enrichment works, or when no attempts were made."""
+    import logging as _logging
+
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    JsonlArticleStore(raw_path).save([_raw()])
+
+    # Working provider → attempts == saved, no tripwire.
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "5")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "0")
+    _install(monkeypatch, FakeEnricher())
+    with caplog.at_level(_logging.ERROR, logger="apps.aggregator.process_pipeline"):
+        result = run_processing(raw_path=raw_path, processed_path=processed_path)
+    assert result.enrich_saved >= 1
+    assert not any("[FAIL] enrichment" in rec.message for rec in caplog.records)
+
+    # Provider off → zero attempts, still no tripwire.
+    caplog.clear()
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "0")
+    with caplog.at_level(_logging.ERROR, logger="apps.aggregator.process_pipeline"):
+        result = run_processing(raw_path=raw_path, processed_path=processed_path, force=True)
+    assert result.enrich_attempts == 0
+    assert not any("[FAIL] enrichment" in rec.message for rec in caplog.records)
+
+
 def test_backfill_dedupes_syndicated_story(monkeypatch, tmp_path: Path) -> None:
     """Same title+day under three domains = one story = one enrichment bill."""
     raw_path = tmp_path / "raw.jsonl"
