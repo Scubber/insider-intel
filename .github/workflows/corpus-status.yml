@@ -45,6 +45,32 @@ jobs:
             --format="table(name, status.runningCount, status.succeededCount, status.failedCount, creationTimestamp, completionTime)" \
             --limit=8 || echo "(could not list executions)"
 
+      - name: Job env audit (names + secret refs only, never values)
+        # Which env vars exist on the job and which are Secret Manager mappings.
+        # Diagnoses silently-skipped LLM chain links: a missing ANTHROPIC_API_KEY /
+        # OPENAI_API_KEY mapping makes the enricher skip that provider with no log.
+        run: |
+          echo "== corpus-refresh container env (name -> source) =="
+          gcloud run jobs describe corpus-refresh \
+            --region "${REGION}" --project "${PROJECT_ID}" --format=json \
+          | python3 -c '
+          import json, sys
+          job = json.load(sys.stdin)
+          tmpl = job["spec"]["template"]["spec"]["template"]["spec"]
+          for c in tmpl.get("containers", []):
+              for e in c.get("env", []):
+                  ref = e.get("valueFrom", {}).get("secretKeyRef")
+                  if ref:
+                      src = "secret:" + ref["name"] + ":" + str(ref.get("key", "latest"))
+                  else:
+                      src = "plain-env"
+                  print("  " + e["name"].ljust(44) + src)
+          '
+          echo
+          echo "Expected secret mappings for the LLM chain + ingest:"
+          echo "  ANTHROPIC_API_KEY (enricher primary), OPENAI_API_KEY (fallback+sol),"
+          echo "  COURTLISTENER_API_TOKEN, PACER_USERNAME/PASSWORD, GEMINI/XAI if funded."
+
       - name: Recent enrichment / re-enrich log markers
         run: |
           echo "== Log markers (last ${{ github.event.inputs.log_freshness }}) =="

@@ -471,8 +471,14 @@ def _print_process(result) -> None:
     print(
         f"Process done. {result.articles_processed}/{result.articles_read} processed; "
         f"saved={result.articles_saved} skipped={result.articles_skipped}{reenrich} "
+        f"enrich={result.enrich_saved}/{result.enrich_attempts} "
         f"errors={len(result.errors)}"
     )
+    if result.enrich_attempts > 0 and result.enrich_saved == 0:
+        print(
+            f"[FAIL] enrichment: {result.enrich_attempts} LLM attempt(s), 0 records "
+            "produced — check API credits/keys (SUMMARIZER_LLM_PROVIDER chain)"
+        )
     for err in result.errors[:10]:
         print(f"  error: {err}")
 

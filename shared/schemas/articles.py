@@ -350,4 +350,12 @@ class ProcessingRunResult(BaseModel):
     articles_skipped: int = 0
     reenrich_cleared: int = 0
     reenrich_restored: int = 0
+    enrich_attempts: int = Field(
+        default=0,
+        description="LLM enrichment calls attempted this run (fresh batch + backfill sweep)",
+    )
+    enrich_saved: int = Field(
+        default=0,
+        description="Enrichment records produced; attempts>0 with saved==0 ⇒ provider dead",
+    )
     errors: list[str] = Field(default_factory=list)
