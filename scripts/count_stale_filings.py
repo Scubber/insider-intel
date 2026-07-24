@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"filings               : {filings}")
     print(f"  with full body text  : {filings_with_body}  (clean_text >= {body_threshold} chars)")
     print(f"  metadata-only stub   : {filings_metadata_only}  (no free RECAP body; PACER-only)")
-    print(f"  enriched STUBS (paid, no body): {enriched_stubs}  (spend the gate fix would have skipped)")
+    print(f"  enriched STUBS (paid, no body): {enriched_stubs}  (spend the body-gate skips)")
     print(f"  already current      : {enriched_on_target}")
     print(f"  STALE (wrong model)  : {stale_model}")
     print(f"  STALE (old clamp)    : {stale_schema}")
