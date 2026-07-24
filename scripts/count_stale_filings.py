@@ -45,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     # RECAP archive had it (backfilled into clean_text). The rest are metadata
     # stubs (docket name/court/parties) whose body lives behind PACER.
     filings_with_body = filings_metadata_only = 0
+    # Wasted-spend crosstab: a metadata stub that nonetheless carries a forensics
+    # record was enriched against no document body — an LLM call we paid for with
+    # nothing to summarize. This is the count the qualifies()-gate fix prevents.
+    enriched_stubs = 0
     body_threshold = args.body_min
     with open(args.corpus, encoding="utf-8") as fh:
         for line in fh:
@@ -60,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             filings += 1
             body_len = len((row.get("clean_text") or "").strip())
+            is_stub = body_len < body_threshold
             if body_len >= body_threshold:
                 filings_with_body += 1
             else:
@@ -68,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
             if not f:
                 never_enriched += 1
                 continue
+            if is_stub:
+                enriched_stubs += 1
             model = (f.get("model") or "").strip()
             try:
                 schema = int(f.get("schema_version") or 1)
@@ -87,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"filings               : {filings}")
     print(f"  with full body text  : {filings_with_body}  (clean_text >= {body_threshold} chars)")
     print(f"  metadata-only stub   : {filings_metadata_only}  (no free RECAP body; PACER-only)")
+    print(f"  enriched STUBS (paid, no body): {enriched_stubs}  (spend the body-gate skips)")
     print(f"  already current      : {enriched_on_target}")
     print(f"  STALE (wrong model)  : {stale_model}")
     print(f"  STALE (old clamp)    : {stale_schema}")
@@ -96,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"BACKFILL_NEVER_ENRICHED={never_enriched}")
     print(f"FILINGS_WITH_BODY={filings_with_body}")
     print(f"FILINGS_METADATA_ONLY={filings_metadata_only}")
+    print(f"ENRICHED_STUBS={enriched_stubs}")
     return 0
 
 

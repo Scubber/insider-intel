@@ -150,6 +150,101 @@ class PerCaseForensics(BaseModel):
     model: str | None = None
 
 
+class EnrichmentRecord(BaseModel):
+    """One stored enrichment generation of an article — never rewritten.
+
+    An article accumulates an append-only list of these (see
+    ``ProcessedArticle.enrichment_history``): one per enrichment run that
+    actually produced output (a re-enrich on the current model, a widened
+    clamp, a richer source body). ``forensics`` carries its own ``model`` /
+    ``extracted_at`` / ``schema_version``; ``ai_summary`` is the analyst note
+    that ran alongside it (the field the old single-slot store could gut on a
+    thin re-run). ``ProcessedArticle.forensics`` / ``ai_summary`` are the
+    *selected* view over this history (:func:`select_best_enrichment`) — this
+    is the durable record.
+    """
+
+    ai_summary: str | None = None
+    forensics: PerCaseForensics
+
+    @property
+    def model(self) -> str:
+        return (self.forensics.model or "").strip()
+
+    @property
+    def schema_version(self) -> int:
+        try:
+            return int(self.forensics.schema_version or 1)
+        except (TypeError, ValueError):
+            return 1
+
+
+def enrichment_richness(rec: EnrichmentRecord | None) -> float:
+    """Analyst value of a generation — higher wins selection.
+
+    Mirrors the recovery merge's scoring: an analyst note dominates, then the
+    method count, then forensic confidence. A gutted generation (no note,
+    methods=0) scores ~0; a full record scores well above it. Centralized here
+    so the graph's select-best and the re-enrich drain rank generations the
+    same way.
+    """
+    if rec is None:
+        return 0.0
+    note = 100.0 if (rec.ai_summary or "").strip() else 0.0
+    methods = len(rec.forensics.methods or [])
+    try:
+        conf = float(rec.forensics.confidence or 0.0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    return note + methods * 10.0 + conf
+
+
+def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord | None:
+    """Pick the richest stored generation (ties break to the newest).
+
+    This is what keeps a thin re-enrichment from downgrading a card: a poorer
+    new generation is appended to history but never *selected* over a richer
+    prior one.
+    """
+    best: EnrichmentRecord | None = None
+    best_key: tuple[float, float] = (-1.0, -1.0)
+    for rec in history:
+        extracted = rec.forensics.extracted_at
+        recency = extracted.timestamp() if extracted is not None else 0.0
+        key = (enrichment_richness(rec), recency)
+        if key > best_key:
+            best_key = key
+            best = rec
+    return best
+
+
+def _enrichment_signature(rec: EnrichmentRecord) -> tuple:
+    """Identity of a generation for dedup — same signature ⇒ same output."""
+    return (
+        rec.model,
+        rec.schema_version,
+        (rec.ai_summary or "").strip(),
+        len(rec.forensics.methods or []),
+        round(float(rec.forensics.confidence or 0.0), 4),
+    )
+
+
+def append_enrichment(
+    history: list[EnrichmentRecord], new: EnrichmentRecord
+) -> list[EnrichmentRecord]:
+    """Return history with ``new`` appended, unless an identical run exists.
+
+    Append-only: existing generations are never mutated or dropped. A re-run of
+    the same model+schema that reproduces the same output (signature) is
+    skipped so history doesn't bloat with duplicates, honoring "keep all, dedup
+    per model." A genuinely different generation always lands.
+    """
+    signatures = {_enrichment_signature(rec) for rec in history}
+    if _enrichment_signature(new) in signatures:
+        return list(history)
+    return [*history, new]
+
+
 def case_record_from_forensics(f: PerCaseForensics) -> CaseRecord:
     """Derive the legacy CaseRecord from a forensic record (UI back-compat).
 

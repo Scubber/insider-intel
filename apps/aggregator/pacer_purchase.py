@@ -149,8 +149,14 @@ def run_pacer_purchases(
     quarter = quarter_key(started_at)
     spent = _spent_cents(ingest_state, quarter)
 
+    # Purchase-eligibility, NOT enrichment-eligibility: PACER exists to acquire
+    # the body of an insider-relevant stub, so a docket-metadata itm_hit/use-case
+    # is enough signal to buy — do NOT require the body (the candidate can't have
+    # one yet; every candidate also passes needs_full_text() below).
     qualifying_links = {
-        row.link for row in JsonlProcessedStore(processed_path).load_all() if article_qualifies(row)
+        row.link
+        for row in JsonlProcessedStore(processed_path).load_all()
+        if article_qualifies(row, filing_requires_body=False)
     }
 
     candidates = [
