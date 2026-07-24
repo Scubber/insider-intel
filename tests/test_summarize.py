@@ -130,6 +130,41 @@ def test_filing_stub_with_itm_hit_does_not_qualify() -> None:
     )
 
 
+def test_purchase_gate_diverges_from_enrichment_gate() -> None:
+    """PACER purchase-eligibility must qualify a bodyless stub the enricher skips.
+
+    Enrichment (filing_requires_body=True) skips a stub — nothing to summarize.
+    PACER purchasing (filing_requires_body=False) MUST accept the same stub —
+    acquiring its body is the whole point; requiring a body first is circular.
+    """
+    from shared.agents.summarize import article_qualifies, qualifies
+
+    # Bodyless filing stub carrying a docket-metadata itm_hit:
+    assert not qualifies(itm_hits=["IF002"], use_cases=[], channel="filings", text="COMPLAINT")
+    assert qualifies(
+        itm_hits=["IF002"],
+        use_cases=[],
+        channel="filings",
+        text="COMPLAINT",
+        filing_requires_body=False,
+    )
+    # A stub with NO insider signal at all is bought by neither gate.
+    assert not qualifies(
+        itm_hits=[], use_cases=[], channel="filings", text="COMPLAINT", filing_requires_body=False
+    )
+
+    from types import SimpleNamespace
+
+    stub = SimpleNamespace(
+        source_id="courtlistener-recap",
+        clean_text="COMPLAINT",
+        use_cases=["data-exfiltration"],
+        entities=SimpleNamespace(itm_hits=[]),
+    )
+    assert not article_qualifies(stub)  # enrichment skips it
+    assert article_qualifies(stub, filing_requires_body=False)  # PACER buys it
+
+
 def test_article_qualifies_reads_channel_and_text() -> None:
     """The backfill-path wrapper resolves channel + clean_text from the row."""
     from types import SimpleNamespace

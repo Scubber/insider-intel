@@ -62,32 +62,45 @@ def qualifies(
     channel: str = "",
     text: str = "",
     filing_min_chars: int = 1_500,
+    filing_requires_body: bool = True,
 ) -> bool:
-    """Spend LLM calls only where the article shows some insider signal.
+    """Whether an article clears the insider-signal bar for a downstream action.
 
-    A lexical ITM hit or a matched use-case always qualifies. Court filings
-    are additionally pre-filtered as insider-relevant by the CourtListener
-    ingestion query, so once their full document body is present — ``text``
-    (clean_text) at or above ``filing_min_chars``, not just a docket-entry
-    stub — they qualify even without a lexical hit. That is exactly the card
-    where an analyst summary matters and the raw docket text reads worst.
+    A lexical ITM hit or a matched use-case always qualifies. Court filings are
+    additionally pre-filtered as insider-relevant by the CourtListener query, so
+    a filing with its full body present (``text``/clean_text at or above
+    ``filing_min_chars``) qualifies even without a lexical hit.
+
+    ``filing_requires_body`` is the enrichment-vs-acquisition switch:
+
+    * ``True`` (default — the **enrichment spend** gate): a filing must carry the
+      real document body. Nearly every filing alias-matches an itm_hit on its
+      docket metadata, but a metadata stub has nothing to summarize, so an
+      itm_hit alone must NOT unlock a paid LLM call — require the body.
+    * ``False`` (the **PACER purchase-eligibility** gate): the whole point there
+      is to ACQUIRE the body of an insider-relevant stub, so a lexical/use-case
+      hit on the docket metadata is sufficient signal to spend money buying it.
+      Requiring a body here would make every purchase candidate ineligible —
+      the case can't have a body yet, that's why we're buying it.
     """
-    if channel == "filings":
-        # Court filings are pre-filtered insider-relevant by the CourtListener
-        # ITM-lexicon query, and entity extraction then alias-matches those same
-        # terms in the docket metadata — so nearly every filing carries an
-        # itm_hit, stub or not. An itm_hit alone must therefore NOT unlock spend
-        # here: a metadata stub has no document body to summarize, so enriching
-        # it is a paid LLM call with nothing to read. Require the real body
-        # (clean_text >= filing_min_chars) before spending on a filing.
+    if channel == "filings" and filing_requires_body:
         return len((text or "").strip()) >= max(1, filing_min_chars)
     if itm_hits or use_cases:
+        return True
+    if channel == "filings" and len((text or "").strip()) >= max(1, filing_min_chars):
         return True
     return False
 
 
-def article_qualifies(article, *, filing_min_chars: int = 1_500) -> bool:
-    """`qualifies` for a ProcessedArticle-shaped object (backfill path)."""
+def article_qualifies(
+    article, *, filing_min_chars: int = 1_500, filing_requires_body: bool = True
+) -> bool:
+    """`qualifies` for a ProcessedArticle-shaped object (backfill / PACER paths).
+
+    ``filing_requires_body`` mirrors :func:`qualifies` — the enrichment backfill
+    leaves it ``True`` (body required); the PACER purchaser passes ``False`` so
+    it can target the bodyless stubs it exists to acquire.
+    """
     entities = getattr(article, "entities", None)
     hits = list(getattr(entities, "itm_hits", None) or [])
     return qualifies(
@@ -96,6 +109,7 @@ def article_qualifies(article, *, filing_min_chars: int = 1_500) -> bool:
         channel=resolve_channel(getattr(article, "source_id", "") or ""),
         text=getattr(article, "clean_text", "") or "",
         filing_min_chars=filing_min_chars,
+        filing_requires_body=filing_requires_body,
     )
 
 
