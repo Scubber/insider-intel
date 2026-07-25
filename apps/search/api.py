@@ -564,6 +564,18 @@ def trending(
     return TrendingResponse(window_days=window_days, items=[TrendingItem(**i) for i in items])
 
 
+@app.get("/evidence/ledger")
+def evidence_ledger(top: int = Query(10, ge=1, le=50)) -> dict:
+    """Corpus-wide Insider Evidence Ledger (sidebar payload).
+
+    Technique frequency (adjudicated vs alleged, never conflated), the
+    detected-by evidence ranking, and observable-channel coverage — pure
+    aggregation over the in-memory index (no LLM, no extra I/O), so it
+    refreshes with every /reload.
+    """
+    return service.evidence_ledger(top=top)
+
+
 @app.get("/social/catalog", response_model=SocialCatalogResponse)
 def social_catalog() -> SocialCatalogResponse:
     """Curated social discovery suggestions plus current subscriptions."""

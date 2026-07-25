@@ -395,6 +395,7 @@
   const PANEL_TOGGLES = [
     ["core", "TRENDING"],
     ["itm", "ITM INDEX"],
+    ["evidence", "EVIDENCE"],
     ["stream", "CASE STREAM"],
     ["wb", "WORKBENCH"],
   ];
@@ -4377,6 +4378,85 @@
     }
   }
 
+  /* EVIDENCE LEDGER pane: what evidence made real cases, aggregated across
+     every extracted forensic record. Pure read of /evidence/ledger — the API
+     recomputes from its in-memory index, so this stays current per /reload. */
+  function renderEvidenceLedger(data) {
+    const body = document.getElementById("ledger-body");
+    if (!body) return;
+    body.innerHTML = "";
+    if (!data || !data.enriched_cases) {
+      const empty = document.createElement("p");
+      empty.className = "trending-empty";
+      empty.textContent = "No extracted forensic records yet — the ledger fills as cases enrich.";
+      body.appendChild(empty);
+      return;
+    }
+    const s = data.strength_totals || {};
+    const summary = document.createElement("p");
+    summary.className = "ledger-summary";
+    summary.textContent =
+      `${data.enriched_cases} cases with extracted methods · ` +
+      `${s.adjudicated_admitted || 0} adjudicated/admitted · ${s.alleged || 0} alleged`;
+    body.appendChild(summary);
+
+    const head = document.createElement("p");
+    head.className = "ledger-section-head";
+    head.textContent = "DETECTED BY — evidence that made real cases";
+    body.appendChild(head);
+
+    const artifacts = (data.detected_by || []).slice(0, 8);
+    const maxCases = artifacts.length ? artifacts[0].cases : 1;
+    artifacts.forEach((a) => {
+      const row = document.createElement("div");
+      row.className = "ledger-row";
+      row.dataset.tip =
+        `${a.cases} case(s) evidenced · ${a.adjudicated_admitted_cases} adjudicated/admitted` +
+        (a.adjudicated_share != null ? ` (${a.adjudicated_share}% of adjudicated cases)` : "") +
+        ` · ${a.mechanical_observables} mechanically-implied observable(s)`;
+      const label = document.createElement("span");
+      label.className = "ledger-label";
+      label.textContent = a.artifact;
+      const bar = document.createElement("span");
+      bar.className = "ledger-bar";
+      const fill = document.createElement("span");
+      fill.className = "ledger-bar-fill";
+      fill.style.width = `${Math.max(4, Math.round((100 * a.cases) / maxCases))}%`;
+      bar.appendChild(fill);
+      const count = document.createElement("span");
+      count.className = "ledger-count";
+      count.textContent = `×${a.cases}`;
+      row.append(label, bar, count);
+      body.appendChild(row);
+    });
+
+    const chHead = document.createElement("p");
+    chHead.className = "ledger-section-head";
+    chHead.textContent = "CHANNEL COVERAGE";
+    body.appendChild(chHead);
+    const channels = Object.entries(data.channels || {}).sort((a, b) => b[1] - a[1]);
+    const chWrap = document.createElement("div");
+    chWrap.className = "ledger-channels";
+    channels.forEach(([ch, n]) => {
+      const chip = document.createElement("span");
+      chip.className = "ledger-chip";
+      chip.textContent = `${ch} ${n}`;
+      chip.dataset.tip = `${n} distinct case(s) with evidence in the ${ch} channel`;
+      chWrap.appendChild(chip);
+    });
+    body.appendChild(chWrap);
+  }
+
+  async function loadEvidenceLedger() {
+    if (!document.getElementById("ledger-body")) return;
+    try {
+      renderEvidenceLedger(await api("/evidence/ledger", { top: 10 }, { timeoutMs: 10000 }));
+    } catch (err) {
+      console.warn("Evidence ledger unavailable", err);
+      renderEvidenceLedger(null);
+    }
+  }
+
   async function loadArticles() {
     setStatus(`Loading stream from ${apiBase}…`);
     const data = await api("/articles", {
@@ -4425,6 +4505,7 @@
       await ensureItmCatalog(true);
       renderMatrixBrowse();
       loadTrending();
+      loadEvidenceLedger();
       await reapplyActiveFilters();
       if (state.dataState) {
         state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
@@ -5174,6 +5255,7 @@
       renderMatrixBrowse();
       await loadSources();
       loadTrending();
+      loadEvidenceLedger();
       loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {

@@ -149,6 +149,27 @@ def search(
     )
 
 
+def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
+    """Corpus-wide evidence ledger from the loaded index (no LLM, no I/O).
+
+    Same aggregation core as the evidence-ledger workflow; recomputed from the
+    in-memory index so it stays current with every /reload. ~1ms-scale over a
+    few thousand rows — no caching needed.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = (
+        {
+            "link": a.link,
+            "title": a.title,
+            "published": a.published.isoformat() if a.published else "",
+            "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
+        }
+        for a in get_index(path).articles
+    )
+    return build_evidence_ledger(rows, top=top)
+
+
 def list_articles(
     *,
     limit: int = 50,

@@ -270,6 +270,11 @@ class ArticleSearchIndex:
         return len(self._articles)
 
     @property
+    def articles(self) -> list[ProcessedArticle]:
+        """All indexed articles (read-only view for corpus-wide aggregations)."""
+        return list(self._articles)
+
+    @property
     def last_processed_at(self) -> datetime | None:
         """Newest processed_at in the corpus — 'freshness' for /health."""
         stamps = [a.processed_at for a in self._articles if a.processed_at]
