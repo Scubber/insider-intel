@@ -189,6 +189,40 @@ is parked pending account review.
      export + meta/OG + snapshot-first — rides threads 6/7). All layers are
      theme-token styled (site theme system applies; green/red semantics hold
      in every theme).
+   - **P1 SHIPPED 2026-07-25** (#126/#127; live at intel.thederpweb.com
+     → EVIDENCE, route #/evidence). First real run: 491 method-bearing cases
+     (51 adjudicated); actor-role coverage 320/491 (65%) — WHO band ships
+     real denominators, no extractor-prompt nudge needed for function.
+     Known under-capture: employment state "departing" at only 7 (filings
+     put boundary language in the body, not the role string) — first P2
+     candidate, a one-line extractor-prompt nudge riding the same call.
+   - **OPERATOR FINDINGS SEED (verbatim thesis, captured 2026-07-25 — the
+     first draft input to the P2 findings layer, in the operator's voice):**
+     "We analyzed insider threats across many court cases. We found
+     executives to be the largest insider threat. So why are we so afraid of
+     investigating our executives? Well, because they sign our paychecks.
+     Our biggest threat are those above us, but we often don't wanna do
+     anything about it. So how do you respond? How do you send the signal
+     when it's to those you report to? This is the data. What do we do
+     about it?"
+     Data behind it (first ledger run): executive/officer = 230 of 320
+     role-known cases (47%), 26 adjudicated — the largest function class by
+     far. Honest framing for the published finding: partly selection (exec
+     misconduct is what gets LITIGATED — securities suits), and that is the
+     point, not a weakness: executive-class insider risk is the class that
+     internal programs structurally cannot touch, so it surfaces in court
+     instead of in a SOC. Supporting ledger fact: the evidence that makes
+     executive cases is largely EXTERNAL/public record (SEC Form 4s — 36
+     cases, 0% adjudicated overlap with internal telemetry; public
+     statements vs internal records — 83 cases; brokerage records) — i.e.
+     detecting upward does not require permission to surveil upward.
+     Program response direction for the finding's recommendation section:
+     pre-committed role-agnostic escalation triggers set by the BOARD before
+     any case exists; reporting line independent of the executive chain
+     (audit committee / external counsel); monitor the public record classes
+     (Form 4 timing vs disclosure calendars) that need no internal
+     authority; whistleblower/SEC channels as the documented relief valve
+     when internal signal-sending is structurally blocked.
 
 ---
 
