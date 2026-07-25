@@ -144,6 +144,51 @@ is parked pending account review.
    - **NOT chosen**: AU courts direct (no API; AustLII scraping-hostile —
      AU coverage stays via phase-0 feeds) and EU national courts
      (fragmented, non-English, weak APIs).
+9. **EVIDENCE flagship page — the ultimate product of the research.** Fully
+   designed with the operator (interactive mock iterated to sign-off; concept
+   at claude.ai/code/artifact/f97f1a20-b69b-431b-ac56-500fe9a1dfe3 — private
+   to the operator). Decision: a **fifth masthead tab** `EVIDENCE`
+   (route `#/evidence`, full-width takeover) owning the *corpus altitude*;
+   per-technique drill-down goes to the **existing dossier** (never a second
+   per-technique page); Workbench gets only a corpus footnote. Page design,
+   settled through operator review:
+   - **Theme-grouped technique table** (MOTIVE/MEANS/PREPARATION/
+     INFRINGEMENT/ANTI-FORENSICS — the matrix's own spine), each theme with
+     its evidence fingerprint + rollups; corroboration strip ("N of M ITM
+     detections corroborated by real-case evidence" — needs a hand-authored
+     ~30-line crosswalk: evidence record classes ↔ ITM DT ids).
+   - **WHERE THE EVIDENCE LIVES**: one question, one denominator — bar =
+     share of all method-bearing cases whose trail includes the record class;
+     green segment INSIDE the bar = adjudicated subset; mech/inferred demoted
+     to a chip+tooltip. Color law page-wide: green = court-proven,
+     red = observed/alleged. Explicit legend under the header (operator asked
+     "what's green vs red" — never ship a bar without the legend).
+   - **WHO band** (operator: "can we profile?"): actor_role/actor_profile
+     normalized on TWO axes — function (exec/manager/technical/sales/
+     contractor/temp) × employment state (current/departing/former-fired/
+     third-party). **Roles, never individuals** (the persona graph stays
+     scrapped). Ships with its own coverage denominator; FIRST STEP is a
+     read-only coverage count of actor_role over the corpus (if low, add a
+     one-line extractor-prompt nudge — rides the same enrichment call).
+   - **Report rigor** (operator: "does this read like real research?" —
+     gaps identified and folded in): (a) FINDINGS layer — 3-5 named claims
+     with implication+recommendation, drafted by the off-site LLM from the
+     ledger JSON via the export-llm lane, operator-approved, versioned;
+     (b) LIMITATIONS block stating **selection bias** first (court data =
+     caught + litigated, not insider behavior — reframe as "the evidence that
+     survives to court"); (c) small-n honesty: counts beside every %,
+     suppress % under n<10; (d) **dwell time** — act-to-detection interval
+     extracted from each case's stored forensics.timeline (median months to
+     discovery by technique × role — the most benchmarkable stat here);
+     (e) maturity crosswalk mapping coverage questions to CISA/NITTF program
+     elements (both guides already in the publications lane).
+   - Phasing: **P1 the instrument** (tab + theme table + crosswalk + WHO +
+     limitations + small-n + dossier section), **P2 the report** (findings
+     layer + maturity crosswalk + workbench footnote + sidebar
+     click-throughs), **P3 depth & reach** (dwell-time; static crawlable
+     export + meta/OG + snapshot-first — rides threads 6/7). All layers are
+     theme-token styled (site theme system applies; green/red semantics hold
+     in every theme).
 
 ---
 
