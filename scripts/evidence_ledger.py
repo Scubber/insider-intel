@@ -81,6 +81,25 @@ def render_markdown(ledger: dict) -> str:
             f"{', '.join(a['top_channels'])} | {examples} |"
         )
 
+    roles = ledger.get("roles") or {}
+    out.append("")
+    out.append("## 2b · WHO — actor profile (roles, never individuals)")
+    out.append("")
+    out.append(
+        f"Role signal present for **{roles.get('known', 0)}** of "
+        f"{ledger['enriched_cases']} cases. Percentages suppressed below "
+        f"n={ledger.get('small_n_floor', 10)}."
+    )
+    for axis, title in (("function", "FUNCTION"), ("employment_state", "EMPLOYMENT STATE")):
+        out.append("")
+        out.append(f"**{title}**")
+        out.append("")
+        out.append("| Role | Cases | Adjud./adm. | Share |")
+        out.append("|---|---|---|---|")
+        for r in roles.get(axis, []):
+            share = f"{r['share_pct']}%" if r.get("share_pct") is not None else "—"
+            out.append(f"| {r['label']} | {r['cases']} | {r['adjudicated_admitted']} | {share} |")
+
     out.append("")
     out.append("## 3 · Channel coverage")
     out.append("")

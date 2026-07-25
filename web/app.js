@@ -298,10 +298,10 @@
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
   const WIDE_MQ = window.matchMedia("(min-width: 1200px)");
-  const PANES = new Set(["articles", "matrix", "workbench", "settings"]);
+  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
-  const TAKEOVER_PANES = new Set(["workbench", "settings"]);
+  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -540,6 +540,9 @@
       const id = decodeURIComponent(path.slice("/technique/".length)).trim();
       if (id) return { view: "technique", id: id.toUpperCase() };
     }
+    if (path === "/evidence" || path === "/evidence/") {
+      return { view: "evidence" };
+    }
     if (path.startsWith("/board/")) {
       const rest = path.slice("/board/".length);
       const slash = rest.indexOf("/");
@@ -564,6 +567,10 @@
   async function applyRoute(route) {
     if (route.view === "technique" && route.id) {
       await showDossier(route.id);
+      return;
+    }
+    if (route.view === "evidence") {
+      openEvidenceView();
       return;
     }
     if (route.view === "board") {
@@ -3300,6 +3307,7 @@
     if (els.streamTitle) els.streamTitle.textContent = `${tech.id} dossier`;
     if (els.streamCount) els.streamCount.textContent = "";
     renderDossierShell(tech);
+    loadDossierEvidence(tech.id);
     const data = await api("/articles", {
       limit: 50,
       min_score: 0,
@@ -4469,6 +4477,300 @@
     }
   }
 
+  /* ── EVIDENCE takeover page (#/evidence): the corpus-altitude research
+     view. Pure reads of /evidence/ledger; color law: --accent = court-proven,
+     --signal = observed/alleged (the legend carries the words). ─────────── */
+  const EVP_THEME_LABELS = {
+    motive: "MOTIVE",
+    means: "MEANS",
+    preparation: "PREPARATION",
+    infringement: "INFRINGEMENT",
+    "anti-forensics": "ANTI-FORENSICS",
+  };
+
+  function evpEl(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+
+  function evpShareBar(allPct, adjPct) {
+    const bar = evpEl("span", "evp-bar");
+    const all = evpEl("span", "evp-bar-all");
+    all.style.width = `${Math.min(100, Math.max(allPct > 0 ? 2 : 0, allPct))}%`;
+    const adj = evpEl("span", "evp-bar-adj");
+    adj.style.width = `${Math.min(100, adjPct)}%`;
+    all.appendChild(adj);
+    bar.appendChild(all);
+    return bar;
+  }
+
+  function evpAxisRows(container, rows, total, floor) {
+    container.innerHTML = "";
+    rows.forEach((r) => {
+      if (r.label === "unknown") return;
+      const row = evpEl("div", "evp-row");
+      const top = evpEl("div", "evp-row-top");
+      top.appendChild(evpEl("span", "evp-row-label", r.label));
+      const share = r.share_pct != null ? `${r.share_pct}%` : `${r.cases} case(s)`;
+      const count = evpEl("span", "evp-row-count", `${share} · ${r.adjudicated_admitted} adj.`);
+      if (r.share_pct == null && r.cases < floor) {
+        count.dataset.tip = `Below the small-sample floor (${floor}) — counts only, no percentage`;
+      }
+      top.appendChild(count);
+      row.appendChild(top);
+      const allPct = total ? (100 * r.cases) / total : 0;
+      const adjPct = r.cases ? (100 * r.adjudicated_admitted) / r.cases : 0;
+      row.appendChild(evpShareBar(allPct, adjPct));
+      container.appendChild(row);
+    });
+    const unknown = rows.find((r) => r.label === "unknown");
+    if (unknown && unknown.cases) {
+      container.appendChild(
+        evpEl("p", "evp-note", `unknown: ${unknown.cases} case(s) — counted, not hidden`)
+      );
+    }
+  }
+
+  function renderEvidencePage(data) {
+    const stats = document.getElementById("evp-stats");
+    if (!stats) return;
+    if (!data || !data.enriched_cases) {
+      stats.innerHTML = "";
+      stats.appendChild(
+        evpEl("p", "evp-note", "No extracted forensic records yet — the page fills as cases enrich.")
+      );
+      return;
+    }
+    const s = data.strength_totals || {};
+    const floor = data.small_n_floor || 10;
+    stats.innerHTML = "";
+    const stat = (value, label, cls) => {
+      const wrap = evpEl("span", cls ? `evp-stat ${cls}` : "evp-stat");
+      wrap.appendChild(evpEl("b", "", String(value)));
+      const sub = evpEl("span");
+      sub.appendChild(evpEl("span", "", label));
+      wrap.appendChild(sub);
+      return wrap;
+    };
+    stats.append(
+      stat(data.enriched_cases, "CASES W/ METHODS"),
+      stat(s.adjudicated_admitted || 0, "ADJUDICATED / ADMITTED", "evp-adj"),
+      stat(s.alleged || 0, "ALLEGED"),
+      stat((data.techniques || []).length, "TOP TECHNIQUES SHOWN"),
+      stat(`${data.roles && data.roles.known ? data.roles.known : 0}`, "ROLE KNOWN (CASES)")
+    );
+
+    const corr = document.getElementById("evp-corr");
+    if (corr) {
+      corr.innerHTML = "";
+      const c = data.corroboration || {};
+      if (c.detections_in_scope) {
+        const line = evpEl("span");
+        line.innerHTML = "";
+        const b = evpEl("b", "", `${c.corroborated} of ${c.detections_in_scope}`);
+        line.appendChild(b);
+        line.appendChild(
+          document.createTextNode(
+            " ITM detections (across observed techniques) corroborated by real-case evidence"
+          )
+        );
+        const meter = evpEl("span", "evp-corr-meter");
+        const fill = evpEl("i");
+        fill.style.width = `${Math.round((100 * c.corroborated) / c.detections_in_scope)}%`;
+        meter.appendChild(fill);
+        corr.append(line, meter);
+      } else {
+        corr.appendChild(evpEl("span", "evp-note", "Corroboration pending first enriched cases."));
+      }
+    }
+
+    const roles = data.roles || {};
+    const fnBox = document.getElementById("evp-who-fn");
+    const stBox = document.getElementById("evp-who-state");
+    if (fnBox) evpAxisRows(fnBox, roles.function || [], data.enriched_cases, floor);
+    if (stBox) evpAxisRows(stBox, roles.employment_state || [], data.enriched_cases, floor);
+
+    const table = document.getElementById("evp-techniques");
+    if (table) {
+      table.innerHTML = "";
+      const headRow = evpEl("tr");
+      ["TECHNIQUE", "CASES", "ADJ.", "DETECTIONS CORROBORATED"].forEach((h, i) => {
+        const th = evpEl("th", i === 1 || i === 2 ? "num" : "", h);
+        headRow.appendChild(th);
+      });
+      table.appendChild(headRow);
+      const byTheme = new Map();
+      (data.techniques || []).forEach((t) => {
+        const key = t.theme || "other";
+        if (!byTheme.has(key)) byTheme.set(key, []);
+        byTheme.get(key).push(t);
+      });
+      const themeRollups = new Map((data.themes || []).map((t) => [t.theme, t]));
+      const order = ["motive", "means", "preparation", "infringement", "anti-forensics", "other"];
+      order.forEach((theme) => {
+        const techs = byTheme.get(theme);
+        if (!techs || !techs.length) return;
+        const roll = themeRollups.get(theme);
+        const tr = evpEl("tr", "evp-theme-row");
+        const label = evpEl("td");
+        label.colSpan = 2;
+        label.appendChild(evpEl("b", "", EVP_THEME_LABELS[theme] || theme.toUpperCase()));
+        tr.appendChild(label);
+        const adj = evpEl("td", "num evp-adjn", roll ? String(roll.adjudicated_admitted) : "");
+        const cases = evpEl("td", "", roll ? `${roll.cases} case-technique obs.` : "");
+        tr.append(adj, cases);
+        table.appendChild(tr);
+        techs.forEach((t) => {
+          const row = evpEl("tr");
+          const cell = evpEl("td");
+          const idBtn = evpEl("button", "evp-tech-id", t.id);
+          idBtn.type = "button";
+          idBtn.dataset.tip = (t.exemplars || []).join(" · ") || "Open dossier";
+          idBtn.addEventListener("click", () => {
+            selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
+          });
+          cell.appendChild(idBtn);
+          row.appendChild(cell);
+          row.appendChild(evpEl("td", "num", String(t.cases)));
+          row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
+          const dets = t.detections || [];
+          const corroborated = dets.filter((d) => d.corroborated).length;
+          const dcell = evpEl(
+            "td",
+            "",
+            dets.length ? `${corroborated}/${dets.length}` : "— none catalogued"
+          );
+          if (dets.length) {
+            dcell.dataset.tip = dets
+              .map((d) => `${d.corroborated ? "✓" : "○"} ${d.id} ${d.title}`)
+              .join(" · ");
+          }
+          row.appendChild(dcell);
+          table.appendChild(row);
+        });
+      });
+    }
+
+    const trail = document.getElementById("evp-trail");
+    if (trail) {
+      trail.innerHTML = "";
+      (data.detected_by || []).slice(0, 10).forEach((a) => {
+        const row = evpEl("div", "evp-row");
+        const top = evpEl("div", "evp-row-top");
+        top.appendChild(evpEl("span", "evp-row-label", a.artifact));
+        const ratio =
+          a.cases >= floor && data.enriched_cases
+            ? `1 in ${Math.max(1, Math.round(data.enriched_cases / a.cases))} cases`
+            : `${a.cases} case(s)`;
+        const count = evpEl("span", "evp-row-count", `${ratio} · ${a.adjudicated_admitted_cases} adj.`);
+        count.dataset.tip =
+          `${a.cases} case(s) touch this record class · ` +
+          `${a.mechanical_observables} mechanically implied vs ` +
+          `${a.inferred_observables || 0} inferred observable(s)` +
+          ((a.examples || []).length ? ` — e.g. ${a.examples.join("; ")}` : "");
+        top.appendChild(count);
+        row.appendChild(top);
+        const allPct = data.enriched_cases ? (100 * a.cases) / data.enriched_cases : 0;
+        const adjPct = a.cases ? (100 * a.adjudicated_admitted_cases) / a.cases : 0;
+        row.appendChild(evpShareBar(allPct, adjPct));
+        trail.appendChild(row);
+      });
+    }
+
+    const chips = document.getElementById("evp-channels");
+    if (chips) {
+      chips.innerHTML = "";
+      Object.entries(data.channels || {})
+        .sort((x, y) => y[1] - x[1])
+        .forEach(([ch, n]) => {
+          const chip = evpEl("span", "evp-chip", `${ch} ${n}`);
+          chip.dataset.tip = `${n} distinct case(s) with evidence in the ${ch} channel`;
+          chips.appendChild(chip);
+        });
+    }
+  }
+
+  let evidencePageLoaded = false;
+
+  async function loadEvidencePage(force) {
+    if (!document.getElementById("evp-stats")) return;
+    if (evidencePageLoaded && !force) return;
+    try {
+      renderEvidencePage(await api("/evidence/ledger", { top: 25 }, { timeoutMs: 15000 }));
+      evidencePageLoaded = true;
+    } catch (err) {
+      console.warn("Evidence page unavailable", err);
+      renderEvidencePage(null);
+    }
+  }
+
+  function openEvidenceView() {
+    setActivePane("evidence");
+    navigate("/evidence");
+    loadEvidencePage();
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus("Insider Evidence Matrix");
+  }
+
+  /* Dossier OBSERVED EVIDENCE section: per-technique detail (case-scoped),
+     fail-soft — a sleeping API or unobserved technique just hides the block. */
+  async function loadDossierEvidence(techId) {
+    const box = document.getElementById("dossier-evidence");
+    if (!box) return;
+    box.hidden = true;
+    try {
+      const d = await api(`/evidence/technique/${encodeURIComponent(techId)}`, {}, { timeoutMs: 10000 });
+      if (!d || !d.cases) return;
+      const countEl = document.getElementById("dossier-evidence-count");
+      if (countEl) {
+        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} adjudicated/admitted · ${d.alleged} alleged`;
+      }
+      const dets = document.getElementById("dossier-evidence-detections");
+      if (dets) {
+        dets.innerHTML = "";
+        (d.detections || []).forEach((det) => {
+          const row = evpEl("div", "evp-row-top");
+          row.style.padding = "0.15rem 0";
+          const mark = det.corroborated ? "✓" : "○";
+          const label = evpEl(
+            "span",
+            det.corroborated ? "evp-adjn" : "evp-row-count",
+            `${mark} ${det.id} ${det.title}`
+          );
+          if (det.corroborated) {
+            label.dataset.tip = `Corroborated by ${det.cases} case(s) via: ${(det.via || []).join("; ")}`;
+          } else {
+            label.dataset.tip = "Not yet observed as evidence in this technique's cases";
+          }
+          row.appendChild(label);
+          dets.appendChild(row);
+        });
+      }
+      const trail = document.getElementById("dossier-evidence-trail");
+      if (trail) {
+        trail.innerHTML = "";
+        (d.evidence || []).forEach((e) => {
+          const row = evpEl("div", "evp-row");
+          const top = evpEl("div", "evp-row-top");
+          top.appendChild(evpEl("span", "evp-row-label", e.artifact));
+          top.appendChild(evpEl("span", "evp-row-count", `×${e.cases}`));
+          row.appendChild(top);
+          row.appendChild(evpShareBar(d.cases ? (100 * e.cases) / d.cases : 0, 0));
+          trail.appendChild(row);
+        });
+      }
+      box.hidden = false;
+    } catch (err) {
+      console.warn("Dossier evidence unavailable", err);
+    }
+  }
+
   async function loadArticles() {
     setStatus(`Loading stream from ${apiBase}…`);
     const data = await api("/articles", {
@@ -4518,6 +4820,8 @@
       renderMatrixBrowse();
       loadTrending();
       loadEvidenceLedger();
+      evidencePageLoaded = false;
+      if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
       await reapplyActiveFilters();
       if (state.dataState) {
         state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
@@ -4754,6 +5058,10 @@
         openMatrixView();
         return;
       }
+      if (pane === "evidence") {
+        openEvidenceView();
+        return;
+      }
       if (pane === "articles" && state.view !== "stream") setView("stream");
       setActivePane(pane);
       try {
@@ -4839,6 +5147,10 @@
     els.mobileTabs.addEventListener("click", (event) => {
       const btn = event.target.closest(".mobile-tab[data-pane]");
       if (!btn) return;
+      if (btn.dataset.pane === "evidence") {
+        openEvidenceView();
+        return;
+      }
       setActivePane(btn.dataset.pane || "articles");
     });
   }
@@ -5272,6 +5584,9 @@
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);
+      } else if (route.view === "evidence") {
+        await loadArticles();
+        openEvidenceView();
       } else if (route.view === "board") {
         await loadArticles();
         await importBoardFromRoute(route);

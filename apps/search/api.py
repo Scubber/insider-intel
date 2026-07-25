@@ -566,14 +566,28 @@ def trending(
 
 @app.get("/evidence/ledger")
 def evidence_ledger(top: int = Query(10, ge=1, le=50)) -> dict:
-    """Corpus-wide Insider Evidence Ledger (sidebar payload).
+    """Corpus-wide Insider Evidence Ledger (EVIDENCE page + sidebar payload).
 
-    Technique frequency (adjudicated vs alleged, never conflated), the
-    detected-by evidence ranking, and observable-channel coverage — pure
-    aggregation over the in-memory index (no LLM, no extra I/O), so it
-    refreshes with every /reload.
+    Theme-grouped technique frequency (adjudicated vs alleged, never
+    conflated), ITM-detection corroboration, actor-role profile (roles, never
+    individuals), the evidence record-class ranking, and channel coverage —
+    pure aggregation over the in-memory index joined with the packaged ITM
+    catalog (no LLM, no extra I/O), refreshed with every /reload.
     """
     return service.evidence_ledger(top=top)
+
+
+@app.get("/evidence/technique/{tech_id}")
+def evidence_technique(tech_id: str) -> dict:
+    """Per-technique observed-evidence detail for the Matrix dossier.
+
+    Case-scoped: evidence seen in cases EXHIBITING the technique. 404 when the
+    technique has no observed cases in the corpus.
+    """
+    detail = service.evidence_technique(tech_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"no observed cases for {tech_id!r}")
+    return detail
 
 
 @app.get("/social/catalog", response_model=SocialCatalogResponse)
