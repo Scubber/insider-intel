@@ -132,8 +132,15 @@ is parked pending account review.
      `courtlistener_pipeline.py` (`channel="filings"`, provenance `fcl-uk-*`,
      UK-localized query projection: add "breach of confidence", "misuse of
      private information", restrictive-covenant terms).
-   - **Phase 2 — CanLII**: broad CA coverage, API key by request (operator
-     signup needed first).
+   - **Phase 2 — CanLII: DOWNGRADED after reading the API docs**
+     (github.com/canlii/API_documentation). The API is **metadata-only**: no
+     full-text search (so the insider lexicon cannot flag cases server-side —
+     only title matching, near-zero signal on "R. v. Smith" captions) and no
+     decision text (every hit a permanent stub with no PACER-like purchase
+     path). Do NOT build a pipeline module or request an API key for this.
+     Phase-2-lite instead: CanLII's per-court **RSS feeds of new decisions**
+     (e.g. ONSC, Federal Court) into the ordinary RSS lane, title-scored —
+     zero engineering, low yield, honest.
    - **NOT chosen**: AU courts direct (no API; AustLII scraping-hostile —
      AU coverage stays via phase-0 feeds) and EU national courts
      (fragmented, non-English, weak APIs).
