@@ -12,13 +12,21 @@ Usage: evidence_ledger.py CORPUS.jsonl [--json ledger.json] [--top 25]
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from shared.utils.evidence import CHANNELS, build_evidence_ledger  # noqa: E402
+# Load the aggregation core as a standalone module FILE, not via the
+# shared.utils package: the package __init__ imports entity/ITM modules that
+# need pydantic, which the bare Actions runner does not have. The core itself
+# is pure stdlib by contract.
+_CORE_PATH = Path(__file__).resolve().parent.parent / "shared" / "utils" / "evidence.py"
+_spec = importlib.util.spec_from_file_location("evidence_core", _CORE_PATH)
+_core = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_core)
+CHANNELS = _core.CHANNELS
+build_evidence_ledger = _core.build_evidence_ledger
 
 
 def _iter_rows(path: str):
