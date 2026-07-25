@@ -63,12 +63,12 @@ def qualifies(
     text: str = "",
     filing_min_chars: int = 1_500,
     filing_requires_body: bool = True,
+    itm_alignment: str | None = None,
 ) -> bool:
     """Whether an article clears the insider-signal bar for a downstream action.
 
-    A lexical ITM hit or a matched use-case always qualifies. Court filings are
-    additionally pre-filtered as insider-relevant by the CourtListener query, so
-    a filing with its full body present (``text``/clean_text at or above
+    Court filings are pre-filtered insider-relevant by the CourtListener query,
+    so a filing with its full body present (``text``/clean_text at or above
     ``filing_min_chars``) qualifies even without a lexical hit.
 
     ``filing_requires_body`` is the enrichment-vs-acquisition switch:
@@ -82,10 +82,21 @@ def qualifies(
       hit on the docket metadata is sufficient signal to spend money buying it.
       Requiring a body here would make every purchase candidate ineligible —
       the case can't have a body yet, that's why we're buying it.
+
+    ``itm_alignment`` tightens the non-filings bar when the caller knows it
+    (the classify_itm_alignment verdict): enrichment should spend ONLY where a
+    forensic extraction is plausible. A classified use case always qualifies
+    (a concrete insider scenario), and so does alignment=="insider" (ITM hit +
+    framing/motive). A bare weak lexical hit — the "Zimbra CVE roundup matched
+    one alias" class — does NOT: those calls come back insider=False,
+    methods=0, pure spend. ``None`` (callers without an alignment verdict,
+    e.g. the PACER gate) keeps the permissive any-hit behavior.
     """
     if channel == "filings" and filing_requires_body:
         return len((text or "").strip()) >= max(1, filing_min_chars)
-    if itm_hits or use_cases:
+    if use_cases:
+        return True
+    if itm_hits and (itm_alignment is None or itm_alignment == "insider"):
         return True
     if channel == "filings" and len((text or "").strip()) >= max(1, filing_min_chars):
         return True
@@ -93,16 +104,27 @@ def qualifies(
 
 
 def article_qualifies(
-    article, *, filing_min_chars: int = 1_500, filing_requires_body: bool = True
+    article,
+    *,
+    filing_min_chars: int = 1_500,
+    filing_requires_body: bool = True,
+    use_itm_alignment: bool = False,
 ) -> bool:
     """`qualifies` for a ProcessedArticle-shaped object (backfill / PACER paths).
 
     ``filing_requires_body`` mirrors :func:`qualifies` — the enrichment backfill
     leaves it ``True`` (body required); the PACER purchaser passes ``False`` so
     it can target the bodyless stubs it exists to acquire.
+
+    ``use_itm_alignment=True`` (the enrichment backfill) reads the row's stored
+    ``itm_alignment`` so weak-hit news never spends; the PACER path leaves it
+    ``False`` — CourtListener already pre-filtered those dockets, and a
+    watchlist catch-all match carries no framing language yet is exactly what
+    the operator asked to buy.
     """
     entities = getattr(article, "entities", None)
     hits = list(getattr(entities, "itm_hits", None) or [])
+    alignment = getattr(article, "itm_alignment", None) if use_itm_alignment else None
     return qualifies(
         itm_hits=hits,
         use_cases=list(getattr(article, "use_cases", None) or []),
@@ -110,6 +132,7 @@ def article_qualifies(
         text=getattr(article, "clean_text", "") or "",
         filing_min_chars=filing_min_chars,
         filing_requires_body=filing_requires_body,
+        itm_alignment=alignment,
     )
 
 
@@ -266,6 +289,7 @@ def enrich_fields(
     use_cases: list[str],
     settings: Settings,
     budget: SummaryBudget,
+    itm_alignment: str | None = None,
 ) -> tuple[str | None, PerCaseForensics | None, CaseRecord | None, list[ItmHit]]:
     """Run the unified enricher LLM for one article. Never raises.
 
@@ -273,6 +297,8 @@ def enrich_fields(
     the provider is off, the article doesn't qualify, the budget is exhausted,
     or the call/parse fails. The forensic record is stamped by the caller with
     the article link/title and the final merged ``candidate_technique_ids``.
+    ``itm_alignment`` (the classify verdict) tightens the non-filings gate:
+    weak-hit articles yield no extractable forensics, so they must not spend.
     """
     empty: tuple[str | None, PerCaseForensics | None, CaseRecord | None, list[ItmHit]] = (
         None,
@@ -289,6 +315,7 @@ def enrich_fields(
         channel=resolve_channel(source),
         text=text,
         filing_min_chars=settings.summarizer_filing_min_text_chars,
+        itm_alignment=itm_alignment,
     ):
         return empty
     if not budget.take():

@@ -130,6 +130,48 @@ def test_filing_stub_with_itm_hit_does_not_qualify() -> None:
     )
 
 
+def test_weak_alignment_news_does_not_spend() -> None:
+    """Enrich only where extraction is plausible: weak-hit news is skipped.
+
+    A stray alias match in a CVE roundup produces itm_hits with alignment
+    "weak"; enriching it returns insider=False, methods=0 — pure spend. With
+    the alignment verdict provided, only use-case or insider-aligned articles
+    qualify. Callers without a verdict (None) keep the permissive behavior.
+    """
+    from shared.agents.summarize import qualifies
+
+    hit = ["MT012"]
+    # Weak alignment → skipped, even with a lexical hit.
+    assert not qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment="weak")
+    # Insider alignment → qualifies.
+    assert qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment="insider")
+    # A classified use case qualifies regardless of alignment.
+    assert qualifies(
+        itm_hits=[], use_cases=["overemployment"], channel="news", itm_alignment="weak"
+    )
+    # No verdict (legacy/PACER callers) → any hit still qualifies.
+    assert qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment=None)
+
+
+def test_backfill_skips_weak_alignment_rows(monkeypatch, tmp_path: Path) -> None:
+    """The backfill sweep must not bill weak-alignment news rows."""
+    from types import SimpleNamespace
+
+    from shared.agents.summarize import article_qualifies
+
+    weak = SimpleNamespace(
+        source_id="zdnet-security",
+        clean_text="CVE roundup mentioning privilege escalation once",
+        use_cases=[],
+        itm_alignment="weak",
+        entities=SimpleNamespace(itm_hits=["MT012"]),
+    )
+    assert article_qualifies(weak)  # without the verdict: permissive (legacy)
+    assert not article_qualifies(weak, use_itm_alignment=True)  # sweep path: skipped
+    insider = SimpleNamespace(**{**weak.__dict__, "itm_alignment": "insider"})
+    assert article_qualifies(insider, use_itm_alignment=True)
+
+
 def test_purchase_gate_diverges_from_enrichment_gate() -> None:
     """PACER purchase-eligibility must qualify a bodyless stub the enricher skips.
 
