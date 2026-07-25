@@ -60,17 +60,25 @@ def render_markdown(ledger: dict) -> str:
         )
 
     out.append("")
-    out.append("## 2 · Detected by — evidence that made real cases")
+    out.append("## 2 · Evidence trail — where case evidence lives")
     out.append("")
-    out.append("Artifacts ranked by distinct cases they evidenced. `mech` counts")
-    out.append("mechanically-implied observables — the defensible detection claims.")
+    out.append("NOT necessarily how each case was detected. Each row is a record class the")
+    out.append("described behavior touches: `mech` = the act NECESSARILY produced this")
+    out.append("record (defensible); `inferred` = where an analyst would look (a hunting")
+    out.append("lead, not a detection fact). `e.g.` shows real artifact strings folded")
+    out.append("into the family.")
     out.append("")
-    out.append("| Evidentiary artifact | Cases | Adjud./adm. cases | mech obs | Top channels |")
-    out.append("|---|---|---|---|---|")
+    out.append(
+        "| Evidence record class | Cases | Adjud./adm. cases | mech | inferred "
+        "| Top channels | e.g. |"
+    )
+    out.append("|---|---|---|---|---|---|---|")
     for a in ledger["detected_by"]:
+        examples = "; ".join(a.get("examples") or [])
         out.append(
             f"| {a['artifact']} | {a['cases']} | {a['adjudicated_admitted_cases']} | "
-            f"{a['mechanical_observables']} | {', '.join(a['top_channels'])} |"
+            f"{a['mechanical_observables']} | {a.get('inferred_observables', 0)} | "
+            f"{', '.join(a['top_channels'])} | {examples} |"
         )
 
     out.append("")
@@ -90,8 +98,8 @@ def render_markdown(ledger: dict) -> str:
     for a in ledger["detected_by"][:10]:
         share = f"{a['adjudicated_share']}%" if a["adjudicated_share"] is not None else "n/a"
         out.append(
-            f"- **{a['artifact']}** — evidenced {a['cases']} case(s); {share} of "
-            f"adjudicated/admitted cases. Can you produce this artifact on demand?"
+            f"- **{a['artifact']}** — touched by {a['cases']} case(s); {share} of "
+            f"adjudicated/admitted cases. Can you produce this record class on demand?"
         )
 
     out.append("")

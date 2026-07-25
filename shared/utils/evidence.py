@@ -44,7 +44,10 @@ _ARTIFACT_FAMILIES: list[tuple[str, str]] = [
     (r"crm", "CRM access logs"),
     (r"cloud storage|icloud|drive", "personal cloud storage contents"),
     (r"print", "print logs"),
-    (r"vpn|network log|server (request|log)|application log", "network / application logs"),
+    (
+        r"vpn|network log|server (request|log)|application log",
+        "server & application logs (VPN, web, app)",
+    ),
     (r"badge|physical", "badge / physical access records"),
     (
         r"earnings call|public (statement|disclosure|filing)|press release|proxy",
@@ -54,9 +57,12 @@ _ARTIFACT_FAMILIES: list[tuple[str, str]] = [
         r"corporate (registration|formation)|account.?opening|onboarding",
         "entity-formation / account-opening records",
     ),
-    (r"endpoint|edr|device|forensic imag", "endpoint forensics / EDR"),
+    (
+        r"endpoint|edr|device|forensic imag",
+        "workstation/device artifacts (EDR, disk forensics)",
+    ),
     (r"training|policy|manual|guideline", "internal policy / training materials"),
-    (r"siem|audit log", "SIEM / audit logs"),
+    (r"siem|audit log", "central audit trails (SIEM, audit logs)"),
 ]
 _ARTIFACT_RX = [(re.compile(p, re.I), label) for p, label in _ARTIFACT_FAMILIES]
 
@@ -94,6 +100,8 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
     artifact_cases: dict[str, set] = defaultdict(set)
     artifact_strong: dict[str, set] = defaultdict(set)
     artifact_mech: Counter = Counter()
+    artifact_inferred: Counter = Counter()
+    artifact_examples: dict[str, list[str]] = defaultdict(list)
     artifact_channels: dict[str, Counter] = defaultdict(Counter)
     channel_cases: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
@@ -128,12 +136,21 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for obs in m.get("observables") or []:
                 if not isinstance(obs, dict):
                     continue
-                fam = artifact_family(str(obs.get("artifact") or ""))
+                raw_artifact = str(obs.get("artifact") or "").strip()
+                fam = artifact_family(raw_artifact)
                 artifact_cases[fam].add(link)
                 if m_strong:
                     artifact_strong[fam].add(link)
                 if str(obs.get("basis") or "") == "mechanically_implied":
                     artifact_mech[fam] += 1
+                else:
+                    artifact_inferred[fam] += 1
+                if (
+                    raw_artifact
+                    and raw_artifact.lower() not in {e.lower() for e in artifact_examples[fam]}
+                    and len(artifact_examples[fam]) < 3
+                ):
+                    artifact_examples[fam].append(raw_artifact[:70])
                 ch = str(obs.get("channel") or "").lower()
                 if ch in CHANNELS:
                     artifact_channels[fam][ch] += 1
@@ -170,6 +187,8 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                     round(100 * len(artifact_strong[fam]) / strong_total) if strong_total else None
                 ),
                 "mechanical_observables": artifact_mech[fam],
+                "inferred_observables": artifact_inferred[fam],
+                "examples": artifact_examples[fam],
                 "top_channels": [c for c, _ in artifact_channels[fam].most_common(3)],
             }
             for fam, links in ranked_artifacts[:top]

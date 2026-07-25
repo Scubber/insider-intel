@@ -4402,27 +4402,39 @@
 
     const head = document.createElement("p");
     head.className = "ledger-section-head";
-    head.textContent = "DETECTED BY — evidence that made real cases";
+    head.textContent = "EVIDENCE TRAIL — record classes case evidence lives in";
+    head.dataset.tip =
+      "Not necessarily how each case was DETECTED. Solid bar = the described act " +
+      "necessarily produced this record (mechanically implied); faded bar = where " +
+      "an analyst would look (inferred — a hunting lead, not a detection fact).";
     body.appendChild(head);
 
     const artifacts = (data.detected_by || []).slice(0, 8);
     const maxCases = artifacts.length ? artifacts[0].cases : 1;
     artifacts.forEach((a) => {
+      const mech = a.mechanical_observables || 0;
+      const inferred = a.inferred_observables || 0;
+      const totalObs = Math.max(1, mech + inferred);
       const row = document.createElement("div");
       row.className = "ledger-row";
+      const examples = (a.examples || []).length ? ` — e.g. ${a.examples.join("; ")}` : "";
       row.dataset.tip =
-        `${a.cases} case(s) evidenced · ${a.adjudicated_admitted_cases} adjudicated/admitted` +
+        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} adjudicated/admitted` +
         (a.adjudicated_share != null ? ` (${a.adjudicated_share}% of adjudicated cases)` : "") +
-        ` · ${a.mechanical_observables} mechanically-implied observable(s)`;
+        ` · ${mech} mechanically implied vs ${inferred} inferred observable(s)${examples}`;
       const label = document.createElement("span");
       label.className = "ledger-label";
       label.textContent = a.artifact;
       const bar = document.createElement("span");
       bar.className = "ledger-bar";
-      const fill = document.createElement("span");
-      fill.className = "ledger-bar-fill";
-      fill.style.width = `${Math.max(4, Math.round((100 * a.cases) / maxCases))}%`;
-      bar.appendChild(fill);
+      const width = Math.max(4, Math.round((100 * a.cases) / maxCases));
+      const mechFill = document.createElement("span");
+      mechFill.className = "ledger-bar-fill";
+      mechFill.style.width = `${Math.round((width * mech) / totalObs)}%`;
+      const infFill = document.createElement("span");
+      infFill.className = "ledger-bar-fill ledger-bar-inferred";
+      infFill.style.width = `${Math.round((width * inferred) / totalObs)}%`;
+      bar.append(mechFill, infFill);
       const count = document.createElement("span");
       count.className = "ledger-count";
       count.textContent = `×${a.cases}`;

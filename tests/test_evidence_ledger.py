@@ -95,7 +95,9 @@ def test_ledger_endpoint_aggregates_corpus(tmp_path, monkeypatch) -> None:
         arts = {a["artifact"]: a for a in data["detected_by"]}
         usb = arts["removable-media (USB) logs"]
         assert usb["cases"] == 2 and usb["adjudicated_admitted_cases"] == 1
-        assert usb["mechanical_observables"] == 2
+        assert usb["mechanical_observables"] == 2 and usb["inferred_observables"] == 0
+        # Real artifact strings ride along so the UI can show what the family holds.
+        assert usb["examples"] == ["EDR removable-media events"]
         assert data["channels"]["endpoint"] == 2
 
         # Bounds validated.
