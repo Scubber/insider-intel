@@ -557,18 +557,79 @@ body {
 /* PANELS-row hides: hidden panels release their space to the neighbors. */
 .app-shell.hide-core .pane-trending,
 .app-shell.hide-itm .pane-matrix,
+.app-shell.hide-evidence .pane-evidence,
 .app-shell.hide-stream .pane-articles,
 .app-shell.hide-wb:not([data-pane="workbench"]) .pane-workbench {
   display: none !important;
 }
 
+/* EVIDENCE LEDGER pane (left rail, under ITM INDEX) */
+.ledger-explainer,
+.ledger-summary {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--muted, #8a8f98);
+  margin: 0 0 0.5rem;
+}
+.ledger-section-head {
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  color: var(--muted, #8a8f98);
+  margin: 0.7rem 0 0.35rem;
+}
+.ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.14rem 0;
+  font-size: 0.72rem;
+}
+.ledger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ledger-bar {
+  display: inline-block;
+  height: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ledger-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent, #d24a43);
+  border-radius: 3px;
+}
+.ledger-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8a8f98);
+  font-size: 0.68rem;
+}
+.ledger-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.ledger-chip {
+  font-size: 0.64rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+  color: var(--muted, #8a8f98);
+}
+
 @media (min-width: 1200px) {
-  .app-shell.hide-core.hide-itm:not([data-pane="workbench"]):not([data-pane="settings"])
+  .app-shell.hide-core.hide-itm.hide-evidence:not([data-pane="workbench"]):not(
+      [data-pane="settings"]
+    )
     .pane-grid {
     grid-template-columns: minmax(0, 1fr) 300px;
   }
 
-  .app-shell.hide-core.hide-itm .left-rail {
+  .app-shell.hide-core.hide-itm.hide-evidence .left-rail {
     display: none;
   }
 

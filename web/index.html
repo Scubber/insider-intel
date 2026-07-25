@@ -376,6 +376,36 @@
             </p>
           </div>
         </aside>
+        <aside class="pane pane-evidence" data-panel-key="evidence" aria-label="Evidence ledger">
+          <div class="pane-head">
+            <h2>EVIDENCE LEDGER</h2>
+            <span class="pane-head-actions">
+              <button
+                type="button"
+                class="panel-collapse"
+                data-panel="evidence"
+                aria-label="Collapse Evidence Ledger"
+                data-tip="Collapse to header bar"
+                data-tip-pos="bottom-end"
+              >−</button>
+              <button
+                type="button"
+                class="panel-hide"
+                data-panel="evidence"
+                aria-label="Hide Evidence Ledger"
+                data-tip="Hide this panel — restore it from the PANELS row"
+                data-tip-pos="bottom-end"
+              >✕</button>
+            </span>
+          </div>
+          <div class="pane-body">
+            <p class="ledger-explainer">
+              WHAT EVIDENCE MADE REAL CASES — aggregated from every extracted
+              forensic record in the corpus. Adjudicated ≠ alleged.
+            </p>
+            <div id="ledger-body" class="ledger-body" aria-live="polite"></div>
+          </div>
+        </aside>
         </div>
 
         <section class="pane pane-articles" data-panel-key="stream" data-pane-panel="articles" aria-label="Articles">
