@@ -768,6 +768,96 @@ body {
   border-radius: 999px;
   color: var(--muted);
 }
+.evp-findings {
+  border-top: 1px solid var(--line);
+  padding-top: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.evp-finding {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--signal);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.7rem;
+}
+.evp-finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+.evp-finding-id {
+  color: var(--signal);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.evp-finding-title {
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.evp-finding-meta {
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  margin-left: auto;
+}
+.evp-finding-claim {
+  font-size: 0.78rem;
+  max-width: 80ch;
+  margin: 0 0 0.5rem;
+}
+.evp-finding h5 {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0.55rem 0 0.25rem;
+}
+.evp-finding ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.74rem;
+}
+.evp-finding li {
+  margin-bottom: 0.25rem;
+}
+.evp-finding-caveat {
+  font-size: 0.72rem;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  padding-left: 0.6rem;
+  max-width: 78ch;
+  margin: 0.45rem 0 0;
+}
+.evp-finding-caveat b {
+  color: var(--ink);
+}
+.evp-more-link {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-bottom: 1px dotted var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.ttp-corpus-foot {
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  padding: 0.3rem 0.55rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 0.45rem 0 0;
+}
+.ttp-corpus-foot b {
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+
 .evp-limits {
   border-top: 1px solid var(--line);
   margin-top: 1rem;

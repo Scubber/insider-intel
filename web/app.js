@@ -1676,9 +1676,44 @@
 
       renderTtpObservables(wrap, section.observables);
       renderTtpDetection(wrap, section.detection);
+      appendCorpusFootnote(wrap, section.id);
 
       container.appendChild(wrap);
     });
+  }
+
+  // Corpus footnote: connect the analyst's board to the research base — a
+  // one-liner from the cached evidence ledger (fail-soft when absent).
+  function appendCorpusFootnote(wrap, techId) {
+    const ledger = state.evidenceLedger;
+    if (!ledger || !techId) return;
+    const tech = (ledger.techniques || []).find(
+      (t) => t.id === String(techId).toUpperCase()
+    );
+    if (!tech || !tech.cases) return;
+    const foot = document.createElement("p");
+    foot.className = "ttp-corpus-foot";
+    const fams = (tech.top_families || [])
+      .slice(0, 2)
+      .map((f) => f.artifact)
+      .join(" & ");
+    const strong = document.createElement("b");
+    strong.textContent = "CORPUS:";
+    foot.appendChild(strong);
+    foot.appendChild(
+      document.createTextNode(
+        ` seen in ${tech.cases} real case(s) (${tech.adjudicated_admitted} adjudicated)` +
+          (fams ? ` — evidence concentrated in ${fams}` : "") +
+          " · "
+      )
+    );
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "evp-more-link";
+    link.textContent = "full evidence profile →";
+    link.addEventListener("click", () => openEvidenceView());
+    foot.appendChild(link);
+    wrap.appendChild(foot);
   }
 
   // Forensic observables grouped by artifact (log source), each with a
@@ -4470,7 +4505,9 @@
   async function loadEvidenceLedger() {
     if (!document.getElementById("ledger-body")) return;
     try {
-      renderEvidenceLedger(await api("/evidence/ledger", { top: 10 }, { timeoutMs: 10000 }));
+      const data = await api("/evidence/ledger", { top: 25 }, { timeoutMs: 10000 });
+      state.evidenceLedger = data;
+      renderEvidenceLedger(data);
     } catch (err) {
       console.warn("Evidence ledger unavailable", err);
       renderEvidenceLedger(null);
@@ -4692,10 +4729,65 @@
     }
   }
 
+  function renderFindings(data) {
+    const box = document.getElementById("evp-findings");
+    const list = document.getElementById("evp-findings-list");
+    if (!box || !list) return;
+    const findings = (data && data.findings) || [];
+    if (!findings.length) {
+      box.hidden = true;
+      return;
+    }
+    list.innerHTML = "";
+    findings.forEach((f) => {
+      const card = evpEl("article", "evp-finding");
+      const head = evpEl("div", "evp-finding-head");
+      head.appendChild(evpEl("span", "evp-finding-id", f.id));
+      head.appendChild(evpEl("span", "evp-finding-title", f.title));
+      head.appendChild(evpEl("span", "evp-finding-meta", `${f.date} · ${f.ledger_run || ""}`));
+      card.appendChild(head);
+      card.appendChild(evpEl("p", "evp-finding-claim", f.claim));
+      if ((f.data || []).length) {
+        card.appendChild(evpEl("h5", "", "THE DATA"));
+        const ul = evpEl("ul");
+        f.data.forEach((d) => ul.appendChild(evpEl("li", "", d)));
+        card.appendChild(ul);
+      }
+      if (f.caveat) {
+        const cav = evpEl("p", "evp-finding-caveat");
+        cav.appendChild(evpEl("b", "", "Honest caveat: "));
+        cav.appendChild(document.createTextNode(f.caveat));
+        card.appendChild(cav);
+      }
+      if ((f.recommendations || []).length) {
+        card.appendChild(evpEl("h5", "", "WHAT TO DO ABOUT IT"));
+        const ul = evpEl("ul");
+        f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
+        card.appendChild(ul);
+      }
+      list.appendChild(card);
+    });
+    box.hidden = false;
+  }
+
+  async function loadFindings() {
+    // Findings ship as a static, Pages-served file (versioned + operator-
+    // approved by merge), so they render even while the API is waking.
+    try {
+      const resp = await fetch("findings.json", { cache: "no-cache" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      renderFindings(await resp.json());
+    } catch (err) {
+      console.warn("Findings unavailable", err);
+      renderFindings(null);
+    }
+  }
+
   let evidencePageLoaded = false;
 
   async function loadEvidencePage(force) {
     if (!document.getElementById("evp-stats")) return;
+    loadFindings();
     if (evidencePageLoaded && !force) return;
     try {
       renderEvidencePage(await api("/evidence/ledger", { top: 25 }, { timeoutMs: 15000 }));
