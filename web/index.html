@@ -58,6 +58,7 @@
         <nav class="masthead-nav" aria-label="Sections">
           <button type="button" class="masthead-nav-item active" data-pane="articles" data-tip="Live case stream with filters" data-tip-pos="bottom">STREAM</button>
           <button type="button" class="masthead-nav-item" data-pane="matrix" data-tip="Browse the Insider Threat Matrix" data-tip-pos="bottom">MATRIX</button>
+          <button type="button" class="masthead-nav-item" data-pane="evidence" data-tip="What real cases actually left behind — corpus-wide evidence research" data-tip-pos="bottom">EVIDENCE</button>
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
@@ -295,6 +296,7 @@
       <nav class="mobile-tabs" id="mobile-tabs" aria-label="Primary panes">
         <button type="button" class="mobile-tab active" data-pane="articles">Articles</button>
         <button type="button" class="mobile-tab" data-pane="matrix">Matrix</button>
+        <button type="button" class="mobile-tab" data-pane="evidence">Evidence</button>
         <button type="button" class="mobile-tab" data-pane="workbench">
           Workbench<span class="board-badge" id="board-badge" hidden></span>
         </button>
@@ -486,6 +488,16 @@
             <div class="kw-group">
               <h4>Related detections</h4>
               <ul id="dossier-detection-list" class="chip-list"></ul>
+            </div>
+            <div class="kw-group" id="dossier-evidence" hidden>
+              <h4>Observed evidence <span class="meta" id="dossier-evidence-count"></span></h4>
+              <p class="kw-hint">
+                From real cases exhibiting this technique (case-scoped). ✓ = the ITM detection is
+                corroborated by case evidence; bars = share of this technique's cases whose
+                record trail includes the class (darker = adjudicated subset).
+              </p>
+              <div id="dossier-evidence-detections"></div>
+              <div id="dossier-evidence-trail"></div>
             </div>
             <div class="kw-group">
               <h4>Related preventions</h4>
@@ -765,6 +777,69 @@
           </div>
         </section>
 
+        <section class="pane pane-evidence-page" data-pane-panel="evidence" aria-label="Evidence research">
+          <div class="pane-head">
+            <h2>THE INSIDER EVIDENCE MATRIX</h2>
+          </div>
+          <div class="pane-body">
+            <p class="evp-sub">
+              Every extracted forensic record in the corpus, mapped onto the Insider Threat
+              Matrix™: which techniques appear in real filings, what evidence those cases left,
+              and which ITM detections the courtroom record corroborates.
+            </p>
+            <div class="evp-stats" id="evp-stats" aria-live="polite"></div>
+            <div class="evp-legend">
+              <span><i class="evp-lg-all"></i>ALL CASES (mostly alleged)</span>
+              <span><i class="evp-lg-adj"></i>ADJUDICATED / ADMITTED — court-proven subset</span>
+              <span><i class="evp-lg-corr"></i>ITM DETECTION CORROBORATED</span>
+            </div>
+            <div class="evp-corr" id="evp-corr"></div>
+            <div class="evp-who">
+              <p class="evp-section-head">
+                WHO — ACTOR PROFILE
+                <span class="evp-note">(roles, never individuals · coverage shown)</span>
+              </p>
+              <div class="evp-who-grid">
+                <div><p class="evp-axis-head">FUNCTION</p><div id="evp-who-fn"></div></div>
+                <div>
+                  <p class="evp-axis-head">EMPLOYMENT STATE AT THE ACT</p>
+                  <div id="evp-who-state"></div>
+                </div>
+              </div>
+            </div>
+            <div class="evp-cols">
+              <div class="evp-col">
+                <p class="evp-section-head">TECHNIQUES OBSERVED — BY ITM THEME (click → dossier)</p>
+                <div class="evp-scroll"><table class="evp-table" id="evp-techniques"></table></div>
+              </div>
+              <div class="evp-col">
+                <p class="evp-section-head">WHERE THE EVIDENCE LIVES</p>
+                <p class="evp-note">
+                  When a real insider case lands, where is its evidence? Bar = share of cases
+                  whose record trail includes this class; the darker segment is the adjudicated
+                  subset.
+                </p>
+                <div id="evp-trail"></div>
+                <div class="evp-chips" id="evp-channels"></div>
+              </div>
+            </div>
+            <div class="evp-limits">
+              <p class="evp-section-head">LIMITATIONS — READ BEFORE CITING</p>
+              <p>
+                <b>Selection bias:</b> court data measures insiders who were <b>caught, and whose
+                cases were litigated</b> — not insider behavior at large. Read every number as
+                "of litigated insider cases" — equivalently, this is the evidence that survives
+                to court: the definition of evidence a program should be able to produce.
+                <b>Small samples:</b> percentages are suppressed below a floor of cases; counts
+                are always shown. <b>Attribution scope:</b> technique ids are case-level, so
+                evidence is scoped to cases <i>exhibiting</i> a technique. <b>Collection bias:</b>
+                the corpus reflects our own query lexicon and sweep history. Records are
+                machine-extracted from filings and normalized; adjudicated/admitted and alleged
+                are never conflated. ITM™ owned by Forscie Limited — not affiliated.
+              </p>
+            </div>
+          </div>
+        </section>
         <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">
           <div class="pane-head">
             <h2>Settings</h2>

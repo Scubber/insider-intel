@@ -149,13 +149,7 @@ def search(
     )
 
 
-def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
-    """Corpus-wide evidence ledger from the loaded index (no LLM, no I/O).
-
-    Same aggregation core as the evidence-ledger workflow; recomputed from the
-    in-memory index so it stays current with every /reload. ~1ms-scale over a
-    few thousand rows — no caching needed.
-    """
+def _raw_evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     from shared.utils.evidence import build_evidence_ledger
 
     rows = (
@@ -168,6 +162,77 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
         for a in get_index(path).articles
     )
     return build_evidence_ledger(rows, top=top)
+
+
+def _catalog_detections() -> dict[str, list[dict]]:
+    """technique id -> [{'id','title'}, ...] from the packaged ITM catalog."""
+    return {
+        tech.id.upper(): [{"id": d.id, "title": d.title} for d in tech.detections]
+        for tech in load_itm_index().techniques
+    }
+
+
+def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
+    """Corpus-wide evidence ledger from the loaded index (no LLM, no I/O).
+
+    Same aggregation core as the evidence-ledger workflow, then joined against
+    the packaged ITM catalog: each top technique's detections get real-case
+    corroboration stamps, and the header strip gets the totals ("N of M ITM
+    detections across observed techniques corroborated"). Recomputed from the
+    in-memory index so it stays current with every /reload.
+    """
+    from shared.utils.evidence import corroborate_detections
+
+    ledger = _raw_evidence_ledger(path, top=top)
+    families = ledger.pop("technique_families", {})
+    ledger.pop("technique_counts", {})
+    by_tech = _catalog_detections()
+
+    corroborated_ids: set[str] = set()
+    all_ids: set[str] = set()
+    for tech_id in families:
+        for det in corroborate_detections(by_tech.get(tech_id, []), families.get(tech_id, {})):
+            all_ids.add(det["id"])
+            if det["corroborated"]:
+                corroborated_ids.add(det["id"])
+    for tech in ledger["techniques"]:
+        tech["detections"] = corroborate_detections(
+            by_tech.get(tech["id"], []), families.get(tech["id"], {})
+        )
+    ledger["corroboration"] = {
+        "detections_in_scope": len(all_ids),
+        "corroborated": len(corroborated_ids),
+    }
+    return ledger
+
+
+def evidence_technique(tech_id: str, path: str | Path | None = None) -> dict | None:
+    """Per-technique evidence detail for the dossier's OBSERVED EVIDENCE section.
+
+    Case-scoped join (evidence seen in cases EXHIBITING the technique — stated
+    as such in the UI). Returns None for a technique with no observed cases.
+    """
+    from shared.utils.evidence import corroborate_detections, technique_theme
+
+    tech_id = (tech_id or "").upper().strip()
+    ledger = _raw_evidence_ledger(path, top=1)
+    families = ledger.get("technique_families", {}).get(tech_id)
+    counts = ledger.get("technique_counts", {}).get(tech_id)
+    if not counts:
+        return None
+    detections = corroborate_detections(_catalog_detections().get(tech_id, []), families or {})
+    ranked = sorted((families or {}).items(), key=lambda kv: -kv[1])
+    return {
+        "id": tech_id,
+        "theme": technique_theme(tech_id),
+        "cases": counts["cases"],
+        "adjudicated_admitted": counts["adjudicated_admitted"],
+        "alleged": counts["alleged"],
+        "enriched_cases": ledger["enriched_cases"],
+        "small_n_floor": ledger["small_n_floor"],
+        "detections": detections,
+        "evidence": [{"artifact": fam, "cases": n} for fam, n in ranked[:8]],
+    }
 
 
 def list_articles(

@@ -108,3 +108,61 @@ def test_core_handles_empty_and_malformed_rows() -> None:
     ledger = build_evidence_ledger([{}, {"forensics": None}, "not-a-dict", {"forensics": {}}])
     assert ledger["enriched_cases"] == 0
     assert ledger["techniques"] == [] and ledger["detected_by"] == []
+
+
+def test_role_normalizer_two_axes() -> None:
+    from shared.utils.evidence import normalize_role
+
+    assert normalize_role("departing engineer — file share") == ("technical", "departing")
+    assert normalize_role("fired former employee") == ("unknown", "former/fired")
+    assert normalize_role("Chief Financial Officer") == ("executive/officer", "current")
+    assert normalize_role("third-party consultant") == ("contractor/vendor", "third-party")
+    assert normalize_role("") == ("unknown", "unknown")
+
+
+def test_ledger_themes_roles_and_small_n(tmp_path, monkeypatch) -> None:
+    from shared.utils.evidence import SMALL_N_FLOOR
+
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        # Theme grouping: IF002 lands under infringement, with a theme rollup.
+        techs = {t["id"]: t for t in data["techniques"]}
+        assert techs["IF002"]["theme"] == "infringement"
+        themes = {t["theme"]: t for t in data["themes"]}
+        assert themes["infringement"]["cases"] == 2
+        # Corroboration: DT ids stamped onto techniques (catalog join), and the
+        # USB family corroborates the USB-artifact detections when present.
+        assert "detections" in techs["IF002"]
+        assert "corroboration" in data
+        # Roles axis present with small-n suppression (2 cases < floor → no %).
+        assert data["small_n_floor"] == SMALL_N_FLOOR
+        fn = {r["label"]: r for r in data["roles"]["function"]}
+        assert all(r["share_pct"] is None for r in fn.values())  # n=2 < 10
+        # per-technique top families ride along for the page.
+        assert techs["IF002"]["top_families"][0]["artifact"] == "removable-media (USB) logs"
+
+
+def test_evidence_technique_endpoint(tmp_path, monkeypatch) -> None:
+    with _client(tmp_path, monkeypatch) as client:
+        resp = client.get("/evidence/technique/if002")
+        assert resp.status_code == 200
+        d = resp.json()
+        assert d["id"] == "IF002" and d["theme"] == "infringement"
+        assert d["cases"] == 2 and d["adjudicated_admitted"] == 1
+        assert d["evidence"][0]["artifact"] == "removable-media (USB) logs"
+        assert isinstance(d["detections"], list)
+        # Unobserved technique → 404, not an empty body.
+        assert client.get("/evidence/technique/ZZ999").status_code == 404
+
+
+def test_crosswalk_ids_exist_in_catalog() -> None:
+    """Every DT id in the crosswalk must be a real catalog detection."""
+    from shared.itm.index import load_itm_index
+    from shared.utils.evidence import EVIDENCE_DT_CROSSWALK
+
+    catalog_ids = {d.id for tech in load_itm_index().techniques for d in tech.detections}
+    if not catalog_ids:  # packaged index missing in some environments
+        return
+    mapped = {dt for dts in EVIDENCE_DT_CROSSWALK.values() for dt in dts}
+    missing = mapped - catalog_ids
+    assert not missing, f"crosswalk references unknown detections: {sorted(missing)}"
