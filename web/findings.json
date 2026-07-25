@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updated": "2026-07-25",
+  "note": "Findings are operator-approved by merge (GitOps). Each finding states its claim, the ledger data behind it, the honest caveat, and recommendations. Numbers cite the ledger run of the stated date; the live EVIDENCE page recomputes continuously.",
+  "findings": [
+    {
+      "id": "F1",
+      "date": "2026-07-25",
+      "ledger_run": "2026-07-25 · 491 method-bearing cases · 51 adjudicated/admitted · role known for 320",
+      "title": "The largest insider-threat class is the one your program structurally cannot investigate",
+      "claim": "Across litigated insider cases, executives and officers are the largest actor class by a wide margin — and organizations are structurally afraid to investigate them, because the people who would authorize the investigation are the people it would investigate. The biggest threat sits above the program, and the program reports to it.",
+      "data": [
+        "Executive/officer: 230 of 320 role-known cases (47%) — the largest function class; 26 adjudicated/admitted.",
+        "The evidence that makes executive cases is largely EXTERNAL to org telemetry: SEC Form 4 filings (36 cases), public-statements-vs-internal-records discrepancies (83 cases), brokerage/trade records (34 cases).",
+        "Next-largest function classes are an order of magnitude smaller: manager 28, technical 25, sales/finance 16."
+      ],
+      "caveat": "Selection bias is real — court data over-represents executive misconduct because that is what gets LITIGATED (securities suits). But here the bias is the finding, not noise around it: executive-class insider risk is precisely the class that internal programs cannot touch, so it surfaces in court instead of in a SOC. The skew measures the blind spot.",
+      "recommendations": [
+        "Pre-commit role-agnostic escalation triggers, ratified by the board while no case exists. The courage happens once, in a policy meeting — not per-case against a name.",
+        "Route officer-level escalation around the executive chain: the insider-risk function's path for this class terminates at the audit committee or external counsel, never at an executive it might investigate.",
+        "Monitor the record classes that require no internal authority: Form 4 timing against disclosure calendars, public statements against internal reports. The paper trail that convicts executives is public.",
+        "Treat external channels (SEC whistleblower and equivalents) as designed relief valves, not betrayal — this corpus is partly built from cases that reached daylight exactly that way."
+      ]
+    }
+  ]
+}
