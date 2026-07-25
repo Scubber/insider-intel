@@ -117,6 +117,26 @@ is parked pending account review.
    Explicitly NOT chosen: `min-instances=1` (~$3-6/mo — revisit only if
    interactive search latency matters) and a keep-warm pinger (unreliable
    hack).
+8. **International court-filings lanes** (maturity direction; phase 0 SHIPPED).
+   No CourtListener equivalent exists abroad; foreign courts publish
+   *judgments* (adjudicated facts) not *dockets/filings* (rich affidavits),
+   so these lanes yield cleaner claim_status but less raw hunt material and
+   nothing PACER-like to buy. Phasing:
+   - **Phase 0 — DONE 2026-07-24**: prosecution/regulator press feeds (AFP,
+     OAIC, CPS, NCA, ICO, Justice Canada) added to `DEFAULT_FEEDS` under
+     `insider-legal` — where AU/UK/CA insider criminal cases surface first.
+     Verify URLs in the next refresh log ([FAIL] = fix the path).
+   - **Phase 1 — UK Find Case Law** (The National Archives): free official
+     API + Atom feeds, full judgment text (E&W, 2001+), English. Build as a
+     second filings-channel pipeline module mirroring
+     `courtlistener_pipeline.py` (`channel="filings"`, provenance `fcl-uk-*`,
+     UK-localized query projection: add "breach of confidence", "misuse of
+     private information", restrictive-covenant terms).
+   - **Phase 2 — CanLII**: broad CA coverage, API key by request (operator
+     signup needed first).
+   - **NOT chosen**: AU courts direct (no API; AustLII scraping-hostile —
+     AU coverage stays via phase-0 feeds) and EU national courts
+     (fragmented, non-English, weak APIs).
 
 ---
 
