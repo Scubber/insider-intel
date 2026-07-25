@@ -19,7 +19,7 @@ API on Cloud Run (`insider-intel-api`), UI on GitHub Pages
 | **Ingest pacing/caps** | `COURTLISTENER_REQUEST_DELAY_SECONDS=5`, `COURTLISTENER_HISTORY_QUERIES_PER_WINDOW=0` (full-query rotation each run = history **drain mode**), `COURTLISTENER_BACKFILL_MAX_DOCKETS=50`. Budget ≈ 110 req/run × 4 runs ≈ 440/day (< 600). Set in `deploy-api.yml`. |
 | **History sweep** | Now rotates the **full** `DEFAULT_QUERIES` set (was a hand-picked 4), so social-engineering / sim-swap / device-identifier (Scattered-Spider class) cases finally get swept for old filings. Cursor holds until a window's rotation completes. |
 | **Enrichment** | **ON.** Haiku 4.5 (`SUMMARIZER_MODEL=claude-haiku-4-5-20251001`), `SUMMARIZER_MAX_ARTICLES_PER_RUN=100` + discoverer 15/run. Bills LLM every run. |
-| **PACER purchasing** | **Creds mapped but PARKED** — `PACER_PURCHASE_MAX_PER_RUN=0`. The account is **Under Review** (search privileges inactive). Do NOT un-park until the account clears, or attempts fail and the est-spend counter can be consumed. |
+| **PACER purchasing** | **ARMED** (2026-07-24) — account #9182404 cleared review, search privileges active. `PACER_PURCHASE_MAX_PER_RUN=5`, hard-capped by `PACER_QUARTERLY_BUDGET_CENTS=2700` ($27/quarter, under the $30 fee waiver — typical usage bills nothing). Buys only insider-qualifying cases after the free archive came up empty. |
 | **Corpus size** | ≈ **1,672 rows / 1,431 filings**; only **~295 filings carry a document body** (`clean_text ≥ 1500`). **~79% are metadata stubs** whose documents are PACER-only (not in the free RECAP archive). |
 | **Company watchlist** | `COURTLISTENER_COMPANY_WATCHLIST=Voya, Voya India` — each expands to a scoped insider query + a bare catch-all. |
 
@@ -86,9 +86,9 @@ is parked pending account review.
 2. **Collect-only vs enrich** — if enrichment is done off-site, set
    `SUMMARIZER_MAX_ARTICLES_PER_RUN=0` (+ discoverer 0) to stop paying Haiku;
    trade-off is the live app stops enriching new cases.
-3. **PACER activation** — when the account clears review, flip
-   `PACER_PURCHASE_MAX_PER_RUN` 0→5 in `deploy-api.yml` + merge. Only then do
-   un-free affidavits (the intrusion-case bodies) start landing. Budget hard-cap
+3. **PACER activation** — DONE 2026-07-24: account cleared review and
+   `PACER_PURCHASE_MAX_PER_RUN` was flipped 0→5. Un-free affidavits (the
+   intrusion-case bodies) now land via RECAP Fetch, hard-capped at
    `PACER_QUARTERLY_BUDGET_CENTS=2700` ($27, under the $30 fee waiver).
 4. **Discovery lanes** — (a) ingest the FLP tech-cases-bot feed
    (`mastodon.social/@techcases.rss`) → extract CourtListener docket links (prod
