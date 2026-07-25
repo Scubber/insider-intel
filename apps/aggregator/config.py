@@ -135,6 +135,48 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.justice.gov/news/rss?type=press_release&subtype=press_release",
         category="insider-legal",
     ),
+    # International prosecution/regulator lanes (maturity phase 0): foreign
+    # courts have no CourtListener equivalent, but insider CRIMINAL cases in
+    # AU/UK/CA surface first through prosecutor and privacy-regulator press
+    # feeds (e.g. the Origin Energy fired-employee-credential extortion).
+    # Scored by the same lexicon; a dead URL fails soft as [FAIL] in the
+    # refresh log.
+    FeedSource(
+        id="afp-news",
+        name="Australian Federal Police — Media",
+        url="https://www.afp.gov.au/rss.xml",
+        category="insider-legal",
+    ),
+    FeedSource(
+        id="oaic-news",
+        name="OAIC (AU privacy regulator) — News",
+        url="https://www.oaic.gov.au/rss",
+        category="insider-legal",
+    ),
+    FeedSource(
+        id="cps-news",
+        name="Crown Prosecution Service (UK) — News",
+        url="https://www.cps.gov.uk/rss.xml",
+        category="insider-legal",
+    ),
+    FeedSource(
+        id="nca-news",
+        name="UK National Crime Agency — News",
+        url="https://www.nationalcrimeagency.gov.uk/news?format=feed&type=rss",
+        category="insider-legal",
+    ),
+    FeedSource(
+        id="ico-news",
+        name="ICO (UK privacy regulator) — News",
+        url="https://ico.org.uk/rss/news",
+        category="insider-legal",
+    ),
+    FeedSource(
+        id="justice-canada-news",
+        name="Justice Canada — News Releases",
+        url="https://api.io.canada.ca/io-server/gc/news/en/v2?dept=departmentofjustice&type=newsreleases&format=atom&atomtitle=Justice%20Canada",
+        category="insider-legal",
+    ),
     FeedSource(
         id="hstoday",
         name="HSToday",
