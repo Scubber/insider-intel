@@ -1,0 +1,52 @@
+name: evidence-ledger
+
+# Read-only: aggregate every stored forensic record into the Insider Evidence
+# Ledger — technique frequency (adjudicated vs alleged), the detected-by
+# evidence ranking, channel coverage, and program coverage-questions, with a
+# collection-bias-caveated trend appendix. Pure code over stored records: no
+# corpus mutation, no LLM spend. Prints the markdown to the log and writes
+# .md/.json copies to the bucket's export/ prefix (same lane as export-llm).
+on:
+  workflow_dispatch:
+    inputs:
+      top:
+        description: "Rows per ranking table"
+        required: false
+        default: "25"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  BUCKET: gs://insider-intel-502413-corpus
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build ledger and write to export/ prefix
+        env:
+          TOP: ${{ github.event.inputs.top }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${OBJ}" corpus.jsonl
+          python3 scripts/evidence_ledger.py corpus.jsonl \
+            --top "${TOP:-25}" --json evidence-ledger.json \
+            | tee evidence-ledger.md
+          gcloud storage cp evidence-ledger.md "${BUCKET}/export/evidence-ledger.md"
+          gcloud storage cp evidence-ledger.json "${BUCKET}/export/evidence-ledger.json"
+          echo
+          echo "Pull with:"
+          echo "  gcloud storage cp ${BUCKET}/export/evidence-ledger.md ."
+          echo "  gcloud storage cp ${BUCKET}/export/evidence-ledger.json ."
