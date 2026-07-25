@@ -251,6 +251,24 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="insider-osint",
     ),
     FeedSource(
+        id="databreaches-insider",
+        name="DataBreaches.net — Insider",
+        # The site's insider category feed: every post is insider-relevant, so
+        # this catches insider items the main feed's 10-item window ages out.
+        url="https://databreaches.net/category/insider/feed/",
+        category="insider-osint",
+        max_items=25,
+    ),
+    FeedSource(
+        id="insurancebusiness-au-cyber",
+        name="Insurance Business AU — Cyber",
+        # Cyber-insurance trade press surfaces breach/settlement detail
+        # (e.g. the Origin Energy fired-employee-credential case) that
+        # security outlets under-cover.
+        url="https://www.insurancebusinessmag.com/au/rss/",
+        category="insider-osint",
+    ),
+    FeedSource(
         id="bankinfosecurity",
         name="BankInfoSecurity",
         url="https://www.bankinfosecurity.com/rss-feeds",
