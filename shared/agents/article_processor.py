@@ -233,6 +233,9 @@ def _node_summarize(state: ArticleProcessState) -> ArticleProcessState:
         use_cases=list(state.get("use_cases") or []),
         settings=settings,
         budget=budget,
+        # Spend only where extraction is plausible: weak-alignment news (one
+        # stray alias in a CVE roundup) returns methods=0 — skip it.
+        itm_alignment=classify_itm_alignment(entities),
     )
     merged = merge_llm_hits(entities, llm_hits)
     history = _prior_enrichment_history(state)

@@ -288,7 +288,12 @@ def _backfill_summaries(
             row.link in exclude_links
             or row.forensics is not None
             or (row.story_key or "").strip() in enriched_keys
-            or not article_qualifies(row, filing_min_chars=filing_min_chars)
+            # use_itm_alignment: sweep only rows where extraction is plausible
+            # (classified use case, insider alignment, or a filing body) —
+            # weak-hit news yields methods=0 and must not spend.
+            or not article_qualifies(
+                row, filing_min_chars=filing_min_chars, use_itm_alignment=True
+            )
         ):
             continue
         if row.case_record is None:
@@ -331,6 +336,7 @@ def _backfill_summaries(
             use_cases=row.use_cases,
             settings=settings,
             budget=budget,
+            itm_alignment=row.itm_alignment,
         )
         if forensics is None:
             logger.warning("Backfill enrichment failed for %s", row.link)
