@@ -177,6 +177,40 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://api.io.canada.ca/io-server/gc/news/en/v2?dept=departmentofjustice&type=newsreleases&format=atom&atomtitle=Justice%20Canada",
         category="insider-legal",
     ),
+    # CanLII per-court new-decision feeds (intl phase 2-lite; HANDOFF thread
+    # 8). The CanLII API is metadata-only, so CA coverage is these RSS lanes:
+    # title/keyword-scored court decisions from the venues where Canadian
+    # insider cases (trade secrets, fiduciary breach, wrongful dismissal +
+    # data theft) are litigated. channel="filings" so the enrichment body-gate
+    # applies — titles alone never spend LLM budget.
+    FeedSource(
+        id="canlii-onsc",
+        name="CanLII — Ontario Superior Court",
+        url="https://www.canlii.org/en/on/onsc/rss_new.xml",
+        category="insider-legal",
+        channel="filings",
+    ),
+    FeedSource(
+        id="canlii-fc",
+        name="CanLII — Federal Court of Canada",
+        url="https://www.canlii.org/en/ca/fct/rss_new.xml",
+        category="insider-legal",
+        channel="filings",
+    ),
+    FeedSource(
+        id="canlii-bcsc",
+        name="CanLII — BC Supreme Court",
+        url="https://www.canlii.org/en/bc/bcsc/rss_new.xml",
+        category="insider-legal",
+        channel="filings",
+    ),
+    FeedSource(
+        id="canlii-abkb",
+        name="CanLII — Alberta Court of King's Bench",
+        url="https://www.canlii.org/en/ab/abkb/rss_new.xml",
+        category="insider-legal",
+        channel="filings",
+    ),
     FeedSource(
         id="hstoday",
         name="HSToday",
