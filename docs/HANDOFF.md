@@ -103,6 +103,20 @@ is parked pending account review.
    `web/index.html`'s `<head>` so browsers/readers auto-detect it. One-line
    `web/**` change (separate `pages.yml` deploy). Deferred by the operator —
    roadmap, not urgent.
+7. **Cold-start UX (~30s API wake)** — decided direction, parked by the
+   operator. Plan (two independent PRs, $0 added spend):
+   (a) **Snapshot-first UI + snapshot-on-refresh**: export the static snapshot
+   (`scripts/export_demo_snapshot.py` machinery) on every corpus refresh and
+   deploy to Pages; flip `web/app.js` to render from the snapshot immediately
+   (stale-while-revalidate) and hydrate to live data when the API wakes —
+   badge upgrades "Snapshot Nh ago" → "Live". Corpus changes only 4×/day, so a
+   ≤6h snapshot IS current for the reading path.
+   (b) **Faster wake**: `--cpu-boost` on the Cloud Run service + persist the
+   prebuilt search index to the bucket at refresh time so API boot reads the
+   index instead of rebuilding it through the FUSE mount (~30s → ~8-10s).
+   Explicitly NOT chosen: `min-instances=1` (~$3-6/mo — revisit only if
+   interactive search latency matters) and a keep-warm pinger (unreliable
+   hack).
 
 ---
 
