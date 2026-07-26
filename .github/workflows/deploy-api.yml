@@ -54,11 +54,16 @@ jobs:
           # holds the old and new index simultaneously, which is the spike
           # that kills it. Scale-to-zero means the bump costs only while
           # serving.
+          # ADMIN_API_TOKEN gates the write/ops endpoints (/reload,
+          # subscription writes, ingest_url) — create the secret BEFORE this
+          # mapping first deploys:
+          #   openssl rand -hex 32 | gcloud secrets create ADMIN_API_TOKEN --data-file=-
           gcloud run deploy insider-intel-api \
             --image "${IMAGE}:${GITHUB_SHA::7}" \
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
-            --memory=2Gi
+            --memory=2Gi \
+            --update-secrets 'ADMIN_API_TOKEN=ADMIN_API_TOKEN:latest'
       - name: Roll refresh job to same image
         # Re-assert the ingest config here (GitOps: repo is the source of truth).
         # --update-env-vars merges, so the API keys/secret mappings on the job are
@@ -125,7 +130,7 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --task-timeout=60m \
-            --update-secrets 'ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest,PACER_USERNAME=PACER_USERNAME:latest,PACER_PASSWORD=PACER_PASSWORD:latest' \
+            --update-secrets 'ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest,PACER_USERNAME=PACER_USERNAME:latest,PACER_PASSWORD=PACER_PASSWORD:latest,ADMIN_API_TOKEN=ADMIN_API_TOKEN:latest' \
             --update-env-vars '^##^SUMMARIZER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##SUMMARIZER_MODEL=claude-haiku-4-5-20251001##OPENAI_COMPAT_MODEL=gpt-4o##SUMMARIZER_MAX_ARTICLES_PER_RUN=100##SUMMARIZER_BACKFILL_RESERVE=60##DISCOVERER_LLM_PROVIDER=anthropic,openai,sol,gemini,xai##DISCOVERER_MAX_ARTICLES_PER_RUN=15##LLM_CUSTOM_PROVIDERS={"sol":{"base_url":"https://api.openai.com/v1","model":"gpt-5.6-sol","api_key_env":"OPENAI_API_KEY"}}##COURTLISTENER_REQUEST_DELAY_SECONDS=5##COURTLISTENER_HISTORY_QUERIES_PER_WINDOW=0##COURTLISTENER_BACKFILL_MAX_DOCKETS=50##PACER_PURCHASE_MAX_PER_RUN=5'
       - name: Smoke test
         run: |
@@ -136,12 +141,27 @@ jobs:
           curl -sf "${URL}/trending?limit=3" >/dev/null && echo "trending OK"
           curl -sf "${URL}/feed.xml?limit=1" | grep -q '<feed' && echo "feed.xml OK"
           curl -sf "${URL}/evidence/ledger?top=3" | grep -q '"detected_by"' && echo "evidence ledger OK"
-          # subscription write path round-trip (catches read-only mount regressions)
-          curl -sf -X POST "${URL}/social/subscriptions" \
+          # write/ops endpoints are token-gated: unauthenticated writes must 401
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${URL}/social/subscriptions" \
             -H 'Content-Type: application/json' \
-            -d '{"platform":"reddit","id":"deploy-smoke-probe"}' >/dev/null
-          curl -sf -X DELETE "${URL}/social/subscriptions/reddit/deploy-smoke-probe" >/dev/null
-          echo "subscription round-trip OK"
+            -d '{"platform":"reddit","id":"deploy-smoke-probe"}')
+          test "${CODE}" = "401" && echo "admin gate OK (unauthenticated write → 401)"
+          RELOAD_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${URL}/reload")
+          test "${RELOAD_CODE}" = "401" && echo "reload gate OK (unauthenticated → 401)"
+          # authenticated round-trip when the deployer can read the secret
+          # (catches read-only mount regressions); skipped gracefully otherwise
+          TOKEN=$(gcloud secrets versions access latest --secret=ADMIN_API_TOKEN 2>/dev/null || true)
+          if [ -n "${TOKEN}" ]; then
+            curl -sf -X POST "${URL}/social/subscriptions" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H 'Content-Type: application/json' \
+              -d '{"platform":"reddit","id":"deploy-smoke-probe"}' >/dev/null
+            curl -sf -X DELETE "${URL}/social/subscriptions/reddit/deploy-smoke-probe" \
+              -H "Authorization: Bearer ${TOKEN}" >/dev/null
+            echo "authenticated subscription round-trip OK"
+          else
+            echo "deployer cannot read ADMIN_API_TOKEN — skipping authenticated round-trip"
+          fi
           # extract endpoint assembles stored forensics — no LLM at read time.
           # An unindexed link short-circuits early (mode=seeds, count=0).
           EXTRACT=$(curl -sf -X POST "${URL}/extract/ttps" \

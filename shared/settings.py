@@ -192,6 +192,16 @@ class Settings(BaseSettings):
 
     # One-way corporate pull — bearer token for GET /export/articles
     export_api_token: str | None = Field(default=None, alias="EXPORT_API_TOKEN")
+    admin_api_token: str | None = Field(
+        default=None,
+        alias="ADMIN_API_TOKEN",
+        description=(
+            "Bearer token required on the API's write/ops endpoints (/reload, "
+            "subscription writes, ingest_url) when set. Unset = open, for local "
+            "dev; prod sets it via Secret Manager on both the service (to "
+            "verify) and the corpus-refresh job (to call /reload)."
+        ),
+    )
 
     # POST /extract/ttps assembles stored forensics in code — no LLM at read
     # time — so the limiter is now only a CPU/abuse guard, not a spend cap.

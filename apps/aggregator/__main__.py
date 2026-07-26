@@ -492,6 +492,8 @@ def _try_reload_api() -> None:
     url = f"http://{settings.search_host}:{settings.search_port}/reload"
     try:
         req = urllib.request.Request(url, method="POST")
+        if settings.admin_api_token:
+            req.add_header("Authorization", f"Bearer {settings.admin_api_token}")
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         print(f"API reloaded ({url}): {body}")

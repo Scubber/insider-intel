@@ -146,5 +146,7 @@ jobs:
           gcloud storage cp merged.jsonl "${OBJ}"
 
           echo "Reloading the API so the restore is served"
-          curl -fsS -X POST https://api.intel.thederpweb.com/reload || \
+          TOKEN=$(gcloud secrets versions access latest --secret=ADMIN_API_TOKEN 2>/dev/null || true)
+          curl -fsS -X POST https://api.intel.thederpweb.com/reload \
+            ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"} || \
             echo "(reload POST failed — the next scheduled refresh will pick it up)"

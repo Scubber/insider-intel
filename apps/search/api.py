@@ -77,6 +77,27 @@ def _require_export_token(
         raise HTTPException(status_code=403, detail="Invalid export token")
 
 
+def _require_admin_token(
+    authorization: str | None = Header(default=None),
+) -> None:
+    """Write/ops auth — ADMIN_API_TOKEN bearer required when configured.
+
+    Guards the endpoints a stranger could abuse on the public API: /reload
+    (the OOM-fatal index swap), subscription writes (config/ tamper), and the
+    ingest_url endpoints (arbitrary-URL fetch + CPU). Unset = open so local
+    dev and the compose stack keep working with zero setup; prod sets the
+    token on both the service and the corpus-refresh job.
+    """
+    expected = get_settings().admin_api_token
+    if not expected or not expected.strip():
+        return
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    provided = authorization.split(" ", 1)[1].strip()
+    if not secrets.compare_digest(provided, expected.strip()):
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+
+
 @app.get("/health")
 def health() -> dict[str, object]:
     index = service.get_index()
@@ -608,7 +629,9 @@ def list_social_subscriptions() -> list[SocialSourceInfo]:
 
 
 @app.post("/social/subscriptions", response_model=SocialSourceInfo)
-def add_social_subscription(body: SocialSubscriptionRequest) -> SocialSourceInfo:
+def add_social_subscription(
+    body: SocialSubscriptionRequest, _auth: None = Depends(_require_admin_token)
+) -> SocialSourceInfo:
     """Subscribe a subreddit / X handle; pulled on the next social ingest run."""
     try:
         return service.add_social_subscription(body.platform, body.id, name=body.name)
@@ -617,7 +640,9 @@ def add_social_subscription(body: SocialSubscriptionRequest) -> SocialSourceInfo
 
 
 @app.delete("/social/subscriptions/{platform}/{handle}")
-def remove_social_subscription(platform: str, handle: str) -> dict[str, object]:
+def remove_social_subscription(
+    platform: str, handle: str, _auth: None = Depends(_require_admin_token)
+) -> dict[str, object]:
     if platform not in ("reddit", "x"):
         raise HTTPException(status_code=400, detail="platform must be reddit or x")
     removed = service.remove_social_subscription(platform, handle)
@@ -631,7 +656,9 @@ class SocialIngestUrlRequest(BaseModel):
 
 
 @app.post("/social/ingest_url")
-def social_ingest_url(body: SocialIngestUrlRequest) -> dict[str, object]:
+def social_ingest_url(
+    body: SocialIngestUrlRequest, _auth: None = Depends(_require_admin_token)
+) -> dict[str, object]:
     """Flag one social post by URL: fetch, store, process, and index it now."""
     from apps.aggregator.process_pipeline import run_processing
     from apps.aggregator.reddit_pipeline import ingest_reddit_post_url
@@ -669,7 +696,9 @@ class PublicationIngestUrlRequest(BaseModel):
 
 
 @app.post("/publications/ingest_url")
-def publications_ingest_url(body: PublicationIngestUrlRequest) -> dict[str, object]:
+def publications_ingest_url(
+    body: PublicationIngestUrlRequest, _auth: None = Depends(_require_admin_token)
+) -> dict[str, object]:
     """Flag one publication by URL: fetch (PDF-aware), store, process, index."""
     from apps.aggregator.process_pipeline import run_processing
     from apps.aggregator.publications_pipeline import ingest_publication_url
@@ -706,7 +735,7 @@ def publications_ingest_url(body: PublicationIngestUrlRequest) -> dict[str, obje
 
 
 @app.post("/reload")
-def reload_index() -> dict[str, object]:
+def reload_index(_auth: None = Depends(_require_admin_token)) -> dict[str, object]:
     settings = get_settings()
     try:
         index = service.get_index(settings.processed_articles_path, reload=True)

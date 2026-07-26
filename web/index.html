@@ -994,6 +994,19 @@
                   TODO: pause/remove and onboarding are not wired — sources are managed
                   server-side today.
                 </p>
+                <div class="settings-field">
+                  <label for="admin-token-input">OPERATOR TOKEN</label>
+                  <input
+                    type="password"
+                    id="admin-token-input"
+                    placeholder="required for subscribe / flag-URL / reload"
+                    autocomplete="off"
+                  />
+                  <p class="kw-hint">
+                    Sent as a bearer on write actions (subscriptions, flag-a-URL,
+                    reload). Stored only in this browser. Leave empty as a reader.
+                  </p>
+                </div>
               </div>
             </section>
 
