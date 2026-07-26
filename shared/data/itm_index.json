@@ -1,8 +1,8 @@
 {
-  "itm_version": "2.8.0",
+  "itm_version": "2.9.0",
   "mitre_version": "19.1",
-  "refreshed_at": "2026-07-11T16:24:56.892716+00:00",
-  "source_url": "C:\\Users\\MYPC\\AppData\\Local\\Temp\\itm.json",
+  "refreshed_at": "2026-07-26T19:54:32.287879+00:00",
+  "source_url": "https://raw.githubusercontent.com/forscie/insider-threat-matrix/main/insider-threat-matrix.json",
   "articles": [
     {
       "id": "AR1",
@@ -2051,10 +2051,6 @@
           "title": "Asset Discovery Audit"
         },
         {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
-        {
           "id": "DT151",
           "title": "Internal Whistleblowing"
         },
@@ -2803,12 +2799,7 @@
       "aliases": [
         "access to organizational funds"
       ],
-      "detections": [
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        }
-      ],
+      "detections": [],
       "preventions": [
         {
           "id": "PV023",
@@ -5124,10 +5115,6 @@
           "title": "DNS Monitoring"
         },
         {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
-        {
           "id": "DT151",
           "title": "Internal Whistleblowing"
         },
@@ -6261,6 +6248,81 @@
       ]
     },
     {
+      "id": "PR044",
+      "title": "Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "A subject identifies or enumerates accounts, identities, groups, roles, privileges, or related account attributes within organizational systems in preparation for an infringement. The activity may involve local operating system accounts, directory or domain identities, email accounts, cloud identities, service account…",
+      "aliases": [
+        "account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT111",
+          "title": "Cyber Deception, Honey SPN"
+        },
+        {
+          "id": "DT011",
+          "title": "Cyber Deception, Honey User"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV056",
+          "title": "Azure Conditional Access Policies"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV078",
+          "title": "Service Account Classification and Scope Limitation"
+        }
+      ]
+    },
+    {
       "id": "PR038",
       "title": "AI-Assisted Capability Development",
       "article_id": "AR3",
@@ -7043,7 +7105,16 @@
       "parent_id": null,
       "description_text": "A subject collects, copies, retrieves, exports, records, or stages credentials, secrets, keys, certificates, tokens, or other authentication material in preparation for later access or misuse. This behavior may involve credentials assigned to the subject, credentials assigned to another individual, shared credentials,…",
       "aliases": [
-        "credential collection"
+        "credential collection",
+        "credential theft",
+        "steal credentials",
+        "harvest credentials",
+        "password harvest",
+        "cloud credentials",
+        "stolen credentials",
+        "browser credentials",
+        "credential dump",
+        "ai credentials"
       ],
       "detections": [
         {
@@ -8598,7 +8669,9 @@
       "aliases": [
         "impersonation",
         "account impersonation",
-        "spoofed identity"
+        "spoofed identity",
+        "sim swap",
+        "sim swapping"
       ],
       "detections": [
         {
@@ -8969,94 +9042,6 @@
       ]
     },
     {
-      "id": "PR024",
-      "title": "Increase Privileges",
-      "article_id": "AR3",
-      "theme": "preparation",
-      "parent_id": null,
-      "description_text": "A subject uses techniques to increase or add privileges assigned to a user account under their control. This enables them to access systems, services, or data that is not possible with their standard permissions.",
-      "aliases": [
-        "increase privileges",
-        "privilege escalation",
-        "elevate privileges"
-      ],
-      "detections": [
-        {
-          "id": "DT045",
-          "title": "Agent Capable of User Activity Monitoring"
-        },
-        {
-          "id": "DT047",
-          "title": "Agent Capable of User Behaviour Analytics"
-        },
-        {
-          "id": "DT106",
-          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
-        }
-      ],
-      "preventions": [
-        {
-          "id": "PV023",
-          "title": "Access Reviews"
-        },
-        {
-          "id": "PV002",
-          "title": "Restrict Access to Administrative Privileges"
-        }
-      ]
-    },
-    {
-      "id": "PR024.001",
-      "title": "Privilege Escalation through Kerberoasting",
-      "article_id": "AR3",
-      "theme": "preparation",
-      "parent_id": "PR024",
-      "description_text": "Kerberoasting is a technique that can be exploited by a subject to escalate privileges and gain unauthorized access to sensitive systems within a network. From the perspective of a subject—who may be a low-privileged user with legitimate access to the network—the attack takes advantage of weaknesses in the Kerberos au…",
-      "aliases": [
-        "privilege escalation through kerberoasting"
-      ],
-      "detections": [
-        {
-          "id": "DT046",
-          "title": "Agent Capable of Endpoint Detection and Response"
-        },
-        {
-          "id": "DT045",
-          "title": "Agent Capable of User Activity Monitoring"
-        },
-        {
-          "id": "DT047",
-          "title": "Agent Capable of User Behaviour Analytics"
-        },
-        {
-          "id": "DT111",
-          "title": "Cyber Deception, Honey SPN"
-        },
-        {
-          "id": "DT102",
-          "title": "User and Entity Behavior Analytics (UEBA)"
-        }
-      ],
-      "preventions": [
-        {
-          "id": "PV023",
-          "title": "Access Reviews"
-        },
-        {
-          "id": "PV015",
-          "title": "Application Whitelisting"
-        },
-        {
-          "id": "PV003",
-          "title": "Enforce an Acceptable Use Policy"
-        },
-        {
-          "id": "PV048",
-          "title": "Privileged Access Management (PAM)"
-        }
-      ]
-    },
-    {
       "id": "PR005",
       "title": "IT Ticketing System Exploration",
       "article_id": "AR3",
@@ -9175,6 +9160,460 @@
         {
           "id": "PV050",
           "title": "Social Media Screening"
+        }
+      ]
+    },
+    {
+      "id": "PR047",
+      "title": "Lateral Movement",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "The subject accesses, connects to, or obtains the ability to execute actions on an additional organizational system beyond their current operating context. Destination systems may include servers, jump hosts, administrative workstations, cloud workloads, network devices, employee endpoints, or other systems reachable…",
+      "aliases": [
+        "lateral movement"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "PR047.003",
+      "title": "Centralized Management Platform Access",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR047",
+      "description_text": "The subject uses a cloud control plane, software deployment system, endpoint-management platform, configuration-management service, or orchestration tool to access, manage, or execute actions on additional organizational systems outside an approved operational requirement.",
+      "aliases": [
+        "centralized management platform access"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT115",
+          "title": "AWS Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT117",
+          "title": "Azure Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT116",
+          "title": "GCP Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT118",
+          "title": "OCI Unauthorized System or Service Modification"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "PR047.005",
+      "title": "Exploitation of Remote Services",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR047",
+      "description_text": "The subject exploits a vulnerability in a network-accessible service, application, management interface, operating-system component, or hypervisor to obtain unauthorized access or execution capability on an additional organizational system. This object applies as Preparation where exploitation is used to reach or esta…",
+      "aliases": [
+        "exploitation of remote services"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV040",
+          "title": "Network Access Control (NAC)"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
+      "id": "PR047.002",
+      "title": "Remote Administrative Services",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR047",
+      "description_text": "The subject uses a network-accessible administrative service or operating-system management interface to access resources, transfer content, execute commands, or perform actions on an additional organizational system without establishing an ordinary interactive desktop session. Methods may include Server Message Block…",
+      "aliases": [
+        "remote administrative services"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT083",
+          "title": "Map Network Drive MRU"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT085",
+          "title": "Network Registry Key"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        },
+        {
+          "id": "DT084",
+          "title": "TypedPaths"
+        },
+        {
+          "id": "DT068",
+          "title": "Windows Event Log, Logon and Logoff"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR047.001",
+      "title": "Remote Interactive Access",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR047",
+      "description_text": "The subject establishes an interactive command-line, graphical, or cloud-native session with an additional organizational system. The subject may use Remote Desktop Protocol, Secure Shell, Virtual Network Computing, a cloud virtual-machine console, or an equivalent service to operate the destination system.",
+      "aliases": [
+        "remote interactive access"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT120",
+          "title": "Modification of RDP Registry Keys"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT121",
+          "title": "RDP Group Membership Changes"
+        },
+        {
+          "id": "DT119",
+          "title": "SystemPropertiesRemote.exe Execution"
+        },
+        {
+          "id": "DT068",
+          "title": "Windows Event Log, Logon and Logoff"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
+      "id": "PR047.004",
+      "title": "Remote Session Hijacking",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR047",
+      "description_text": "The subject takes control of an existing authenticated remote service session to operate an additional organizational system under the identity and access context of the session owner. The subject may hijack an active or disconnected RDP session, reuse an SSH agent or socket, or otherwise attach to a pre-existing remo…",
+      "aliases": [
+        "remote session hijacking"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        },
+        {
+          "id": "DT068",
+          "title": "Windows Event Log, Logon and Logoff"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
         }
       ]
     },
@@ -9805,6 +10244,310 @@
       ]
     },
     {
+      "id": "PR024",
+      "title": "Privilege Elevation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "The subject activates, obtains, or creates an execution, identity, or authorization context that provides greater effective access than their normal operating context. The elevated context may be available through permissions legitimately assigned to the subject, or obtained through misuse, circumvention, identity man…",
+      "aliases": [
+        "privilege elevation",
+        "increase privileges",
+        "privilege escalation",
+        "elevate privileges"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT106",
+          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR024.004",
+      "title": "Authorization Attribute Manipulation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR024",
+      "description_text": "The subject creates or modifies an identity, directory, group, role, token, or authorization attribute so that an account or process receives permissions beyond its normal access context. This may include introducing privileged Security Identifier History values, modifying group or role assignments, or altering identi…",
+      "aliases": [
+        "authorization attribute manipulation"
+      ],
+      "detections": [],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR024.003",
+      "title": "Elevation Control Circumvention",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR024",
+      "description_text": "The subject bypasses, manipulates, or abuses a technical control intended to regulate elevated execution or access to protected capabilities. This may include abuse of set-user-ID or set-group-ID permissions, bypass of Windows User Account Control, manipulation of sudoers or cached sudo authorization, or alteration of…",
+      "aliases": [
+        "elevation control circumvention"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR024.002",
+      "title": "Privilege Activation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR024",
+      "description_text": "The subject activates elevated permissions that are assigned to them or conditionally available through an established organizational or operating-system mechanism. This may include sudo, an elevation prompt, just-in-time access, privileged identity management, cloud role assumption, or an equivalent governed process.…",
+      "aliases": [
+        "privilege activation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT106",
+          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
+        },
+        {
+          "id": "DT063",
+          "title": "Microsoft Entra ID Sign-in Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR024.001",
+      "title": "Privilege Escalation through Kerberoasting",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR024",
+      "description_text": "Kerberoasting is a technique that can be exploited by a subject to escalate privileges and gain unauthorized access to sensitive systems within a network. From the perspective of a subject—who may be a low-privileged user with legitimate access to the network—the attack takes advantage of weaknesses in the Kerberos au…",
+      "aliases": [
+        "privilege escalation through kerberoasting"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT111",
+          "title": "Cyber Deception, Honey SPN"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "PR024.005",
+      "title": "Vulnerability Exploitation for Elevated Access",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR024",
+      "description_text": "The subject exploits a vulnerability in an operating system, application, kernel component, service, driver, hypervisor, container runtime, or other privileged software to obtain permissions beyond their existing execution context. This Sub-section applies as Preparation where exploitation increases the subject’s capa…",
+      "aliases": [
+        "vulnerability exploitation for elevated access"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT114",
+          "title": "Baseline System Performance Profiling"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
       "id": "PR001",
       "title": "Read Windows Registry",
       "article_id": "AR3",
@@ -10152,7 +10895,10 @@
         "social engineering",
         "pretexting",
         "phishing outbound",
-        "posing as it support"
+        "posing as it support",
+        "help desk impersonation",
+        "help desk social engineering",
+        "vishing"
       ],
       "detections": [
         {
@@ -10963,6 +11709,742 @@
       ]
     },
     {
+      "id": "PR046",
+      "title": "System Persistence",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "The subject modifies a system, application, or operating environment to preserve unauthorized access, execution, or control beyond the initial activity. The persistence mechanism is intended to remain available following events that would ordinarily interrupt the subject’s access, including system restart, user logoff…",
+      "aliases": [
+        "system persistence"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT115",
+          "title": "AWS Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT117",
+          "title": "Azure Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT116",
+          "title": "GCP Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT044",
+          "title": "Linux dpkg Log"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT118",
+          "title": "OCI Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR046.010",
+      "title": "Boot or Firmware Modification",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject modifies a bootloader, boot image, boot partition, firmware component, Unified Extensible Firmware Interface configuration, or network-device boot mechanism to preserve unauthorized execution or control.",
+      "aliases": [
+        "boot or firmware modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV031",
+          "title": "Bootloader Password"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR046.004",
+      "title": "Event-Triggered Execution",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject creates or modifies an event subscription, event handler, system hook, or equivalent trigger that executes unauthorized commands or code when specified conditions are met.",
+      "aliases": [
+        "event-triggered execution"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR046.007",
+      "title": "Office Application Startup",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject creates or modifies an Office template, macro, add-in, Outlook rule, form, home page, or related startup configuration so that unauthorized functionality executes through a Microsoft Office application.",
+      "aliases": [
+        "office application startup"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT036",
+          "title": "Windows Jump Lists"
+        },
+        {
+          "id": "DT026",
+          "title": "Windows LNK Files"
+        },
+        {
+          "id": "DT027",
+          "title": "Windows Prefetch"
+        },
+        {
+          "id": "DT032",
+          "title": "Windows Thumbcache"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR046.001",
+      "title": "Scheduled Execution",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject creates or modifies a scheduled task, cron job, system timer, or equivalent mechanism to execute unauthorized commands or code automatically at a future time or recurring interval.",
+      "aliases": [
+        "scheduled execution"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR046.009",
+      "title": "Server Software Component Modification",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject installs or modifies an extensible server component, stored procedure, transport agent, server module, service library, or virtualization package to preserve unauthorized execution or access. This Sub-section excludes web shells, which are represented separately under PR046.006 – Web Shell Deployment.",
+      "aliases": [
+        "server software component modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR046.002",
+      "title": "Service or Daemon Creation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject creates or modifies a system service, daemon, launch agent, or equivalent background component to execute unauthorized functionality automatically or continuously.",
+      "aliases": [
+        "service or daemon creation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR046.008",
+      "title": "Software Extension Installation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject installs, sideloads, replaces, or modifies a software extension so that unauthorized functionality executes through a browser, integrated development environment, or other supported host application.",
+      "aliases": [
+        "software extension installation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT060",
+          "title": "Chrome Browser Extensions"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV091",
+          "title": "Browser Security Enforcement and Isolation"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV077",
+          "title": "Controlled Software Inventory Management"
+        },
+        {
+          "id": "PV029",
+          "title": "Enterprise-Managed Web Browsers"
+        }
+      ]
+    },
+    {
+      "id": "PR046.005",
+      "title": "SSH Authorized Key Modification",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject adds, replaces, or modifies a Secure Shell (SSH) authorized key or related trust configuration to preserve unauthorized remote access to a system, virtual machine, hypervisor, or network device.",
+      "aliases": [
+        "ssh authorized key modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR046.003",
+      "title": "Startup or Logon Modification",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject modifies startup folders, Registry autorun locations, XDG autostart entries, login items, shortcuts, or equivalent configurations so that unauthorized code executes during system startup or account logon.",
+      "aliases": [
+        "startup or logon modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR046.006",
+      "title": "Web Shell Deployment",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR046",
+      "description_text": "The subject places or modifies a server-side script, application file, or web component that permits unauthorized remote command execution through a web server or hosted application.",
+      "aliases": [
+        "web shell deployment"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV080",
+          "title": "Change Management"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR048",
+      "title": "System Profiling",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "The subject gathers technical information about an organizational system to understand its operating environment and to assess how it may support subsequent activities. Information collected may include the system name, operating system, version, architecture, hardware configuration, firmware or BIOS details, patch le…",
+      "aliases": [
+        "system profiling"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT088",
+          "title": "Bash History"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
       "id": "PR013",
       "title": "Testing Ability to Print",
       "article_id": "AR3",
@@ -11057,6 +12539,69 @@
         {
           "id": "PV001",
           "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
+      "id": "PR045",
+      "title": "Unauthorized Hardware Introduction",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "A subject introduces, connects, installs, or positions unauthorized hardware within an organizational environment to establish a capability that may support a later infringement. The hardware may provide network access, input capture, command execution, communications, surveillance, remote connectivity, or direct inte…",
+      "aliases": [
+        "unauthorized hardware introduction"
+      ],
+      "detections": [
+        {
+          "id": "DT112",
+          "title": "Asset Discovery Audit"
+        },
+        {
+          "id": "DT144",
+          "title": "Asset Register Correlation"
+        },
+        {
+          "id": "DT143",
+          "title": "Automated Visual and Thermal Baseline Scanning of Server Environments"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT008",
+          "title": "Tamper Seal"
+        },
+        {
+          "id": "DT149",
+          "title": "Unauthorized USB HID Device Connections"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV075",
+          "title": "Centralized Asset Inventory Control"
+        },
+        {
+          "id": "PV040",
+          "title": "Network Access Control (NAC)"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV084",
+          "title": "Physical Port Security for Workstations"
+        },
+        {
+          "id": "PV009",
+          "title": "Prohibition of Devices On-site"
+        },
+        {
+          "id": "PV083",
+          "title": "USB Peripheral Allow-Listing"
         }
       ]
     },
@@ -11216,6 +12761,262 @@
       ],
       "detections": [],
       "preventions": []
+    },
+    {
+      "id": "IF040",
+      "title": "Data Integrity Manipulation",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "The subject inserts, deletes, alters, substitutes, suppresses, or misrepresents organizational data in a manner that compromises its accuracy, completeness, authenticity, or reliability. The manipulation may affect stored records, data moving between systems, or information generated and presented while an application…",
+      "aliases": [
+        "data integrity manipulation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "IF040.002",
+      "title": "Data in Transit Manipulation",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF040",
+      "description_text": "The subject intercepts, alters, substitutes, suppresses, or redirects organizational data while it is moving between systems, applications, processes, interfaces, devices, or recipients. The destination consequently receives information that differs from the data originally transmitted. The behavior may affect network…",
+      "aliases": [
+        "data in transit manipulation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
+      "id": "IF040.003",
+      "title": "Runtime Data Presentation Manipulation",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF040",
+      "description_text": "The subject modifies an application, executable, library, extension, runtime component, or processing pathway so that organizational data is altered as it is accessed, processed, rendered, or displayed. The underlying stored data may remain unchanged while an operator, customer, investigator, or decision-maker is pres…",
+      "aliases": [
+        "runtime data presentation manipulation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "IF040.001",
+      "title": "Stored Record Manipulation",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF040",
+      "description_text": "The subject inserts, deletes, alters, substitutes, or suppresses data retained within an organizational system so that the authoritative record becomes inaccurate, incomplete, misleading, or unreliable. Affected information may include database entries, business records, documents, stored communications, transactions,…",
+      "aliases": [
+        "stored record manipulation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        },
+        {
+          "id": "DT108",
+          "title": "macOS File System Events (FSEvents) Store Database"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
     },
     {
       "id": "IF022",
@@ -16940,10 +18741,6 @@
           "title": "Edge Browser History"
         },
         {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
-        {
           "id": "DT017",
           "title": "Firefox Browser History"
         }
@@ -16970,10 +18767,6 @@
         "creation of fictitious invoices"
       ],
       "detections": [
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
         {
           "id": "DT068",
           "title": "Windows Event Log, Logon and Logoff"
@@ -17071,10 +18864,6 @@
         {
           "id": "DT047",
           "title": "Agent Capable of User Behaviour Analytics"
-        },
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
         },
         {
           "id": "DT151",
@@ -17226,10 +19015,6 @@
           "title": "Edge Browser History"
         },
         {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
-        {
           "id": "DT017",
           "title": "Firefox Browser History"
         },
@@ -17292,10 +19077,6 @@
         "modification of invoices"
       ],
       "detections": [
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
         {
           "id": "DT049",
           "title": "Social Media Monitoring"
@@ -17397,10 +19178,6 @@
         {
           "id": "DT018",
           "title": "Edge Browser History"
-        },
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
         },
         {
           "id": "DT017",
@@ -18141,10 +19918,6 @@
       ],
       "detections": [
         {
-          "id": "DT067",
-          "title": "Financial Auditing"
-        },
-        {
           "id": "DT151",
           "title": "Internal Whistleblowing"
         },
@@ -18340,10 +20113,6 @@
         {
           "id": "DT048",
           "title": "Data Loss Prevention Solution"
-        },
-        {
-          "id": "DT067",
-          "title": "Financial Auditing"
         },
         {
           "id": "DT050",
@@ -19743,7 +21512,36 @@
       "parent_id": null,
       "description_text": "Undisclosed Concurrent Employment occurs when a subject performs work for another employer, client, or commercial entity while remaining employed by the primary organization, and does so without required disclosure, approval, or contractual permission. The behavior becomes an insider threat concern where the secondary…",
       "aliases": [
-        "undisclosed concurrent employment"
+        "undisclosed concurrent employment",
+        "overemployment",
+        "over-employment",
+        "over employed",
+        "overemployed",
+        "moonlighting",
+        "moonlight",
+        "moonlighting policy",
+        "side job",
+        "side hustle",
+        "second job",
+        "dual employment",
+        "concurrent employment",
+        "undisclosed employment",
+        "secret second job",
+        "multiple jobs",
+        "working two jobs",
+        "two jobs",
+        "outside employment",
+        "outside employment policy",
+        "outside employment disclosure",
+        "conflict of interest disclosure",
+        "coi disclosure",
+        "secondary employment",
+        "additional employment",
+        "j2",
+        "job 2",
+        "side project competitor",
+        "consulting on the side",
+        "advisory role undisclosed"
       ],
       "detections": [],
       "preventions": [
@@ -21462,7 +23260,14 @@
       "aliases": [
         "network obfuscation",
         "proxy chaining",
-        "traffic obfuscation"
+        "traffic obfuscation",
+        "vpn evasion",
+        "anonymization",
+        "ip masking",
+        "residential proxy",
+        "ngrok",
+        "unmonitored network",
+        "switching networks"
       ],
       "detections": [],
       "preventions": []
@@ -21792,6 +23597,53 @@
       ]
     },
     {
+      "id": "AF037",
+      "title": "Parent Process ID Spoofing",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "The subject causes a newly created process to record or present a false parent process identifier, obscuring the process responsible for initiating the activity. This creates a misleading parent-child relationship within process trees and may cause unauthorized execution to appear as though it originated from a truste…",
+      "aliases": [
+        "parent process id spoofing"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
       "id": "AF011",
       "title": "Physical Destruction of Storage Media",
       "article_id": "AR5",
@@ -21868,6 +23720,69 @@
         }
       ],
       "preventions": []
+    },
+    {
+      "id": "AF036",
+      "title": "Rootkit",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "A subject deploys or uses rootkit functionality to conceal programs, files, processes, network connections, services, drivers, accounts, or other system components from security monitoring and subsequent investigation. Rootkits manipulate or intercept operating system functions responsible for reporting system activit…",
+      "aliases": [
+        "rootkit"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT081",
+          "title": "Security Software Anti-Tampering Alerts"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
     },
     {
       "id": "AF028",
@@ -22420,6 +24335,93 @@
         {
           "id": "PV002",
           "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF035",
+      "title": "Trusted Tool Misuse",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "The subject uses applications, binaries, scripts, services, or administrative utilities already trusted or commonly present within the organizational environment to support or conceal an infringement without introducing new software. Trusted tool misuse may involve operating system utilities, command and scripting env…",
+      "aliases": [
+        "trusted tool misuse"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT088",
+          "title": "Bash History"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        },
+        {
+          "id": "DT131",
+          "title": "Snipping Tool Cached Recordings"
+        },
+        {
+          "id": "DT129",
+          "title": "Snipping Tool Cached Screenshots"
+        },
+        {
+          "id": "DT043",
+          "title": "Sysmon Process Create Event"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV077",
+          "title": "Controlled Software Inventory Management"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV005",
+          "title": "Install an Anti-Virus Solution"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
         }
       ]
     },

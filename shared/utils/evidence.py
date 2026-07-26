@@ -211,8 +211,8 @@ EVIDENCE_DT_CROSSWALK: dict[str, tuple[str, ...]] = {
     "badge / physical access records": ("DT033", "DT103", "DT137"),
     "personal messaging / phone records": ("DT107", "DT154", "DT155"),
     "authentication logs": ("DT050", "DT062", "DT063", "DT068"),
-    "brokerage / trade records": ("DT067",),
-    "SEC Form 4 / insider-transaction filings": ("DT067",),
+    "brokerage / trade records": ("DT152",),  # Financial Auditing (DT067 pre-ITM-2.9)
+    "SEC Form 4 / insider-transaction filings": ("DT152",),
 }
 
 

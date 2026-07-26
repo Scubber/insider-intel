@@ -140,7 +140,7 @@ permanently scrapped as PII-shaped); **adjudicated/admitted vs alleged vs
 reported are never conflated** (`case_strength`); percentages suppressed
 below `SMALL_N_FLOOR`; the evidence→ITM detection crosswalk
 (`EVIDENCE_DT_CROSSWALK`) stays conservative — external/legal record classes
-map only to DT067. Color law: `--accent` = court-proven, `--signal` =
+map only to DT152 (Financial Auditing; DT067 before ITM 2.9). Color law: `--accent` = court-proven, `--signal` =
 observed/alleged, always with an explicit legend.
 
 ## Everyday commands
