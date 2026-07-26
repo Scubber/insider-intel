@@ -2071,6 +2071,39 @@ body {
   color: var(--muted);
 }
 
+/* LLM-adjudicated non-case: muted, dashed — visually "filed as background". */
+.case-stamp.context {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.article-row.context-row .article-item {
+  opacity: 0.75;
+}
+
+.context-toggle-row {
+  list-style: none;
+  padding: 0.6rem 0;
+  text-align: center;
+}
+
+.context-toggle {
+  background: none;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+  border-radius: var(--radius, 2px);
+}
+
+.context-toggle:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
 .case-stamp.insider-type-malicious {
   color: #a8352a;
 }

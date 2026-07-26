@@ -91,16 +91,40 @@ def qualifies(
     one alias" class — does NOT: those calls come back insider=False,
     methods=0, pure spend. ``None`` (callers without an alignment verdict,
     e.g. the PACER gate) keeps the permissive any-hit behavior.
+
+    A bodied filing additionally needs an insider signal IN THE BODY. The
+    per-article itm_hits fire off docket metadata (which embeds the query tag
+    that found the case), so they say nothing about the document itself — and
+    the corpus audit showed 2/3 of body-length-only enrichments came back
+    is_insider_case=False (Valnet v. Google-class dockets that merely matched
+    query language). Scanning the fetched text for ITM aliases costs nothing
+    and a skipped filing re-qualifies automatically once a later pass
+    classifies it (use_cases / alignment).
+
+    News (``channel=="news"``) must carry a lexical technique hit — the
+    use-cases-only path stays open for social/tips confessions, where
+    first-person framing is the signal, but vendor commentary that merely
+    frames a use case bills as methods=0 non-cases.
     """
+    body = (text or "").strip()
     if channel == "filings" and filing_requires_body:
-        return len((text or "").strip()) >= max(1, filing_min_chars)
-    if use_cases:
+        if len(body) < max(1, filing_min_chars):
+            return False
+        return bool(use_cases) or itm_alignment == "insider" or _body_has_itm_signal(body)
+    if use_cases and channel != "news":
         return True
     if itm_hits and (itm_alignment is None or itm_alignment == "insider"):
         return True
-    if channel == "filings" and len((text or "").strip()) >= max(1, filing_min_chars):
-        return True
+    if channel == "filings" and len(body) >= max(1, filing_min_chars):
+        return bool(use_cases) or itm_alignment == "insider" or _body_has_itm_signal(body)
     return False
+
+
+def _body_has_itm_signal(body: str) -> bool:
+    """Does the document body itself alias-match at least one ITM technique?"""
+    from shared.utils.entities import match_itm_techniques
+
+    return bool(match_itm_techniques(body))
 
 
 def article_qualifies(

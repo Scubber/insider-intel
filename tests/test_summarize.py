@@ -95,18 +95,33 @@ def _install(monkeypatch, provider) -> None:
     )
 
 
-def test_filing_with_full_text_qualifies_without_lexical_hit() -> None:
-    """Full-text court filings qualify even with no ITM/use-case signal."""
+def test_filing_needs_body_and_insider_signal() -> None:
+    """Bodied filings only bill when the body itself carries an insider signal.
+
+    The per-article itm_hits fire off docket metadata (query tags), so the
+    gate scans the fetched text for ITM aliases instead — the corpus audit
+    showed 2/3 of body-length-only enrichments adjudicated as non-cases.
+    """
     from shared.agents.summarize import qualifies
 
-    body = "x" * 1_500
-    # A real document body → qualifies on the filings branch.
-    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=body)
+    signal_body = ("x " * 800) + "the employee copied files to a USB drive for data exfiltration"
+    noise_body = "y" * 2_000
+    # Body + in-body ITM signal → qualifies.
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=signal_body)
+    # Body with no insider signal (Valnet v. Google class) → does NOT bill.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=noise_body)
+    # Signal-less body still qualifies when classification already vouches.
+    assert qualifies(
+        itm_hits=[], use_cases=["data-exfiltration"], channel="filings", text=noise_body
+    )
+    assert qualifies(
+        itm_hits=[], use_cases=[], channel="filings", text=noise_body, itm_alignment="insider"
+    )
     # A docket-entry stub → below the threshold → does not qualify.
     assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text="INDICTMENT")
     # News with the same empty signal never rides the filings branch.
-    assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=body)
-    # A lexical hit still qualifies regardless of channel/text — for non-filings.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=noise_body)
+    # A lexical hit still qualifies for non-filings callers without a verdict.
     assert qualifies(itm_hits=["IF002"], use_cases=[], channel="news", text="")
 
 
@@ -145,9 +160,13 @@ def test_weak_alignment_news_does_not_spend() -> None:
     assert not qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment="weak")
     # Insider alignment → qualifies.
     assert qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment="insider")
-    # A classified use case qualifies regardless of alignment.
-    assert qualifies(
+    # News never bills on use-case framing alone — vendor commentary class.
+    assert not qualifies(
         itm_hits=[], use_cases=["overemployment"], channel="news", itm_alignment="weak"
+    )
+    # Outside news (social/tips confessions) a classified use case still qualifies.
+    assert qualifies(
+        itm_hits=[], use_cases=["overemployment"], channel="social", itm_alignment="weak"
     )
     # No verdict (legacy/PACER callers) → any hit still qualifies.
     assert qualifies(itm_hits=hit, use_cases=[], channel="news", itm_alignment=None)
@@ -215,15 +234,26 @@ def test_article_qualifies_reads_channel_and_text() -> None:
 
     entities = SimpleNamespace(itm_hits=[])
     full = SimpleNamespace(
-        source_id="courtlistener-recap", clean_text="y" * 2_000, use_cases=[], entities=entities
+        source_id="courtlistener-recap",
+        clean_text=("y " * 800) + "copied files to a USB drive for data exfiltration",
+        use_cases=[],
+        entities=entities,
     )
     stub = SimpleNamespace(
         source_id="courtlistener-recap", clean_text="COMPLAINT", use_cases=[], entities=entities
     )
     assert article_qualifies(full)
     assert not article_qualifies(stub)
-    # Threshold is tunable; 0 enriches every filing.
-    assert article_qualifies(stub, filing_min_chars=0)
+    # Threshold is tunable, but the in-body insider-signal check still holds:
+    # a bare stub stays out even at 0; a signal-bearing snippet gets in.
+    assert not article_qualifies(stub, filing_min_chars=0)
+    signal_stub = SimpleNamespace(
+        source_id="courtlistener-recap",
+        clean_text="INDICTMENT: data exfiltration via USB drive",
+        use_cases=[],
+        entities=entities,
+    )
+    assert article_qualifies(signal_stub, filing_min_chars=0)
 
 
 def test_provider_unset_is_a_noop() -> None:
