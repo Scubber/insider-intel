@@ -357,6 +357,7 @@
     defScope: "insider",
     defSignal: SIG_DEFAULT,
     notify: { digest: false, alerts: false, alertSig: 80, email: "" },
+    showContext: false,
   };
 
   (function loadUiState() {
@@ -372,6 +373,7 @@
         if (raw.notify && typeof raw.notify === "object") {
           uiState.notify = { ...uiState.notify, ...raw.notify };
         }
+        if (typeof raw.showContext === "boolean") uiState.showContext = raw.showContext;
       }
     } catch {
       /* first visit or corrupt state — defaults stand */
@@ -3691,7 +3693,15 @@
     if (sig != null) metaParts.push(`SIG ${sig}`);
     metaText.textContent = metaParts.join(" · ");
     meta.appendChild(metaText);
-    if (article.insider_type) {
+    if (isContextArticle(article)) {
+      // The enricher's own verdict outranks the heuristic insider_type stamp.
+      li.classList.add("context-row");
+      const stamp = document.createElement("span");
+      stamp.className = "case-stamp context";
+      stamp.textContent = "CONTEXT";
+      stamp.title = "LLM-adjudicated: related coverage, not an insider case";
+      meta.appendChild(stamp);
+    } else if (article.insider_type) {
       const stamp = document.createElement("span");
       stamp.className = `case-stamp insider-type-${article.insider_type}`;
       stamp.textContent =
@@ -3995,8 +4005,26 @@
     return li;
   }
 
+  /** LLM-adjudicated non-case: enriched, and the model itself said not insider.
+   *  Only an explicit false verdict counts — un-enriched rows are unknown, not
+   *  context. A cluster is context only when every member is. */
+  function isContextArticle(article) {
+    const f = article && article.forensics;
+    return Boolean(f) && f.is_insider_case === false;
+  }
+
+  function isContextCluster(cluster) {
+    const members = [cluster.primary, ...(cluster.siblings || [])].filter(Boolean);
+    return members.length > 0 && members.every(isContextArticle);
+  }
+
   function renderArticles(dataOrResults, title, options = {}) {
-    const clusters = clustersFromResponse(dataOrResults);
+    state.lastStream = { dataOrResults, title, options };
+    const allClusters = clustersFromResponse(dataOrResults);
+    const contextCount = allClusters.filter(isContextCluster).length;
+    const clusters = uiState.showContext
+      ? allClusters
+      : allClusters.filter((c) => !isContextCluster(c));
     state.clusters = clusters;
     state.articles = flattenClusterMembers(clusters);
     // Rail snapshot: renderDossierArticles also overwrites state.articles, so
@@ -4023,6 +4051,27 @@
     clusters.forEach((cluster) => {
       els.articleList.appendChild(buildArticleRow(cluster));
     });
+
+    // Context rows are LLM-adjudicated non-cases (is_insider_case=false):
+    // hidden by default so the case stream stays cases, one click to reveal.
+    if (contextCount) {
+      const foot = document.createElement("li");
+      foot.className = "context-toggle-row";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "context-toggle";
+      toggle.textContent = uiState.showContext
+        ? `HIDE ${contextCount} CONTEXT ITEM${contextCount === 1 ? "" : "S"} (not insider cases)`
+        : `SHOW ${contextCount} CONTEXT ITEM${contextCount === 1 ? "" : "S"} (not insider cases)`;
+      toggle.addEventListener("click", () => {
+        uiState.showContext = !uiState.showContext;
+        saveUiState();
+        const last = state.lastStream;
+        if (last) renderArticles(last.dataOrResults, last.title, last.options);
+      });
+      foot.appendChild(toggle);
+      els.articleList.appendChild(foot);
+    }
   }
 
   function activeArticleListEl() {

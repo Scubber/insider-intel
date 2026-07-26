@@ -13,7 +13,7 @@ from shared.schemas import RawArticle
 from tests.test_summarize import FakeEnricher, _install
 
 TARGET = "claude-sonnet-5"
-BODY = "Insider data exfiltration via removable media, trade secret theft. " * 40
+BODY = "Former employee insider data exfiltration via removable media, trade secret theft. " * 40
 
 
 def _seed(
