@@ -47,10 +47,18 @@ jobs:
           docker push "${IMAGE}:latest"
       - name: Deploy API service
         run: |
+          # --memory is asserted here (GitOps): the service ran at the legacy
+          # 1Gi and started OOM-killing instances mid-request (burst 503s
+          # "connection to the instance had an error" across every endpoint,
+          # 2026-07-26) once the corpus reached ~6.6k enriched rows — /reload
+          # holds the old and new index simultaneously, which is the spike
+          # that kills it. Scale-to-zero means the bump costs only while
+          # serving.
           gcloud run deploy insider-intel-api \
             --image "${IMAGE}:${GITHUB_SHA::7}" \
             --region "${REGION}" \
-            --project "${PROJECT_ID}"
+            --project "${PROJECT_ID}" \
+            --memory=2Gi
       - name: Roll refresh job to same image
         # Re-assert the ingest config here (GitOps: repo is the source of truth).
         # --update-env-vars merges, so the API keys/secret mappings on the job are
