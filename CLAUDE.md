@@ -58,12 +58,41 @@ The **enrich** node (`shared/agents/summarize.py`, `SUMMARIZER_LLM_PROVIDER`)
 makes **one unified LLM call per qualifying article** that produces the analyst
 note (`ai_summary`), a full forensic record (`ProcessedArticle.forensics`:
 actions with tools/quantities, observables typed by channel, per-case hunt
-queries, ITM adjudication), and derives the legacy `case_record` from it. Each
-article is billed once, ever — the graph carries `prior_forensics` forward on
-reprocess, and the corpus-refresh backfill sweep converts the existing corpus
-gradually (newest-first, then legacy `case_record`-only rows when
-`SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`. The
-hunt report reads these stored records — no LLM at read time.
+queries, ITM adjudication incl. `is_insider_case`), and derives the legacy
+`case_record` from it. **What "qualifying" means is the spend policy**
+(`summarize.py::qualifies`) — a 2026-07 corpus audit found 66% of billed calls
+were LLM-adjudicated non-cases before these gates:
+
+- **Filings**: full body present (`clean_text ≥ SUMMARIZER_FILING_MIN_TEXT_CHARS`)
+  **and** an insider signal *in the body itself* (ITM alias match on the
+  fetched text, or use-case / insider-alignment verdict). The per-article
+  `itm_hits` fire off docket metadata — which embeds the CL query tag — so
+  they must never unlock a filings bill on their own.
+- **News**: lexical ITM technique hit with `itm_alignment=="insider"`;
+  use-case framing alone never bills (vendor-commentary class).
+- **Social/tips**: a classified use case suffices (first-person confessions).
+- **PACER purchase eligibility** deliberately stays looser
+  (`filing_requires_body=False`, metadata signal OK) — it buys bodies for
+  stubs, so it can't require one.
+
+Each article is billed once, ever — the graph carries `prior_forensics` and
+the append-only `enrichment_history` forward on reprocess, and the
+corpus-refresh backfill sweep converts the existing corpus gradually
+(newest-first, then legacy `case_record`-only rows when
+`SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`
+with `SUMMARIZER_BACKFILL_RESERVE` guaranteed to the sweep. The hunt report
+reads these stored records — no LLM at read time.
+
+**Enrichments are append-only, never rewritten** (operator mandate):
+every generation lands in `ProcessedArticle.enrichment_history`
+(`shared/schemas/forensics.py::EnrichmentRecord`, deduped by signature); the
+top-level `ai_summary`/`forensics` are a select-best-by-richness *projection*
+(`enrichment_richness`: analyst note + method count + confidence, ties →
+newest). A thin re-enrich can therefore never gut a rich record, and
+`_clear_llm_fields` intentionally does NOT clear history. If a run's LLM
+attempts all produce nothing, the job logs
+`[FAIL] enrichment: N LLM attempt(s), 0 records produced` — that tripwire
+firing means a dead provider (missing key or $0 balance), not a quiet day.
 
 `SUMMARIZER_LLM_PROVIDER` is an ordered fallback chain (comma-separated; each
 tried until one succeeds, unfunded named entries skipped). Prod leads with
@@ -84,7 +113,35 @@ min-score gate. One-off flagging: `ingest_publication_url` CLI /
 end to end: `use_case` / `insider_type` / `channel` params on `/articles`,
 `/search`, `/sources`; registry at `GET /usecases`; subscriptions at
 `/social/catalog` + `/social/subscriptions`; one-off flagging via
-`POST /social/ingest_url` (accepts Reddit `/s/` share links).
+`POST /social/ingest_url` (accepts Reddit `/s/` share links). The filings
+lane also carries international coverage: CanLII per-court RSS
+(`canlii-*` feeds, `channel="filings"`) plus prosecutor/regulator feeds
+(AFP, OAIC, CPS, NCA, ICO, Justice Canada) in `config.py`.
+
+The stream acts on the enricher's own verdict: rows whose stored forensics
+say `is_insider_case=false` render as muted **CONTEXT** (not insider cases)
+and are hidden by default behind a toggle — un-enriched rows are unknown,
+never context.
+
+## EVIDENCE — the research product
+
+Corpus-wide forensic aggregation, the flagship output of this project.
+Core is `shared/utils/evidence.py` — **pure stdlib on purpose** so bare
+Actions runners can load it via `importlib.util.spec_from_file_location`
+without the pydantic import chain (see `scripts/evidence_ledger.py`). Served
+at `GET /evidence/ledger` and `GET /evidence/technique/{id}`
+(`apps/search/service.py`), rendered as the EVIDENCE page (`#/evidence`
+takeover pane) with per-technique tie-ins in the dossier and workbench.
+Published findings live in `web/findings.json` — **merging the authoring PR
+IS operator approval**; the page renders findings even during API cold-start.
+
+Its invariants: **roles, never individuals** (no persona/entity resolution —
+permanently scrapped as PII-shaped); **adjudicated/admitted vs alleged vs
+reported are never conflated** (`case_strength`); percentages suppressed
+below `SMALL_N_FLOOR`; the evidence→ITM detection crosswalk
+(`EVIDENCE_DT_CROSSWALK`) stays conservative — external/legal record classes
+map only to DT067. Color law: `--accent` = court-proven, `--signal` =
+observed/alleged, always with an explicit legend.
 
 ## Everyday commands
 
@@ -102,6 +159,17 @@ gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corp
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'
 ```
+
+**No GCP access?** (Claude Code on the web sandboxes can't reach GCP or the
+prod API directly.) Read-only `workflow_dispatch` diagnostics cover it —
+dispatch from the Actions tab or the GitHub API: `refresh-corpus` /
+`watch-refresh` (force + watch a refresh), `corpus-status` (state + job env
+audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
+`corpus-noninsider` (spend-waste audit), `evidence-ledger` (writes
+`export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
+round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
+A dispatch workflow must exist on `main` to be invokable; it then runs the
+file from whatever ref you pass, so branch diagnostics work without merging.
 
 Deploys: **merge to `main`** → `ci.yml` + `deploy-api.yml` (keyless OIDC via
 Workload Identity pool `github`; no stored credentials) + `pages.yml` for
@@ -123,7 +191,9 @@ legacy fallback.
   archive came up empty, capped by `PACER_PURCHASE_MAX_PER_RUN` and
   `PACER_QUARTERLY_BUDGET_CENTS` (default $27/quarter — under PACER's $30
   fee waiver, so typical usage bills nothing). No-op without
-  `PACER_USERNAME`/`PACER_PASSWORD`. Never add another purchase path.
+  `PACER_USERNAME`/`PACER_PASSWORD`. **Armed in prod since 2026-07-24**
+  (`PACER_PURCHASE_MAX_PER_RUN=5` in `deploy-api.yml`; set 0 to re-park).
+  Never add another purchase path.
 - **`POST /extract/ttps` spends NO LLM credits** — it assembles each boarded
   article's stored ingest-time `forensics` record (or a floor-derived one for
   not-yet-enriched articles) into technique sections in code
@@ -138,6 +208,16 @@ legacy fallback.
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).
+- **Enrichment history is append-only.** Never overwrite or clear
+  `enrichment_history`; the top-level LLM fields are a select-best
+  projection, not the storage. "I don't want rewrites. I want data stored."
+- **The EVIDENCE product reports roles, never individuals**, and never
+  conflates adjudicated with alleged. No persona graphs, no entity
+  resolution across cases.
+- **Service resources and job secret mappings are asserted in
+  `deploy-api.yml`** (`--memory`, `--task-timeout`, `--update-secrets`) so
+  every deploy self-heals them. Change them there, by merge — never with
+  ad-hoc gcloud.
 - Secrets: Secret Manager / env only. `detect-secrets` hook + baseline are
   enforced via pre-commit (`make precommit`).
 - Actions in workflows are **SHA-pinned**; keep it that way.
@@ -147,18 +227,37 @@ legacy fallback.
 - `.mcp.json` provides **Playwright MCP** (official Docker image,
   `--network=host`) — use it to drive/screenshot local (:5500/:8000) or prod
   UI. Physical-click testing catches what curl can't (see gotchas).
-- `deploy-api.yml` smoke-tests `/health`, `/articles`, `/social/catalog`, and
-  a subscription write round-trip after every deploy. Extend it when adding
+- `deploy-api.yml` smoke-tests `/health`, `/articles`, `/social/catalog`,
+  `/trending`, `/feed.xml`, `/evidence/ledger`, a subscription write
+  round-trip, and `/extract/ttps` after every deploy. Extend it when adding
   endpoints with side effects.
 - After lexicon/taxonomy/feed changes: `process --force`, then `POST /reload`
   (locally automatic on next request; prod via the refresh job or curl).
 
 ## Hard-won gotchas
 
-- **UI silently falls back to the static `web/demo/` snapshot** whenever the
-  API boot check fails (including Cloud Run cold starts). "Snapshot <date>"
-  in the status badge means the live API wasn't reached — not that the deploy
-  failed. Badge shows "Updated N min ago" from `/health.last_indexed_at`.
+- **The shipped UI has NO offline/demo code** (`web/demo/` is gone;
+  `scripts/ui_smoke.py` enforces the ban). If the API is unreachable the
+  stream shows a retryable error while the masthead may still say LIVE with
+  cached `/health` numbers — mixed state means "API was up at boot, dead
+  now", not a deploy failure. The only offline build is the separate
+  single-file preview (`scripts/export_preview.py`).
+- **Burst 503s across ALL endpoints at identical timestamps = instance
+  OOM-kill, not an app bug** ("connection to the instance had an error" in
+  Cloud Run logs; `/health` keeps working because it's tiny). `/reload` is
+  the fatal spike — it holds old + new index simultaneously. Memory is
+  asserted in `deploy-api.yml` (2Gi as of 2026-07); it must grow with the
+  corpus. Diagnose with the `service-logs` dispatch workflow.
+- **Never run manual `--set-secrets` on the job** — it REPLACES the whole
+  mapping set and silently dropped the ANTHROPIC/OPENAI/COURTLISTENER keys
+  once, killing enrichment for two days (the provider chain skips keyless
+  providers with no log). `deploy-api.yml` re-asserts all mappings with
+  merge-semantics `--update-secrets` on every deploy; verify with the
+  `corpus-status` env audit.
+- **Job task-timeout must exceed a full-throughput run**: at 45m a heavy
+  run hit the timeout and Cloud Run's retry re-billed already-enriched
+  articles (history select-best absorbed it, but it doubled spend). Now 60m
+  in `deploy-api.yml`, with the `watch-refresh` watcher at 75m.
 - **Cloud Run domain-mapping certs propagate slowly**: the console can say
   provisioned while edges still fail TLS for a while. Verify with your own
   repeated curls before cutting anything over.
