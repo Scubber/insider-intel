@@ -218,6 +218,12 @@ legacy fallback.
   `deploy-api.yml`** (`--memory`, `--task-timeout`, `--update-secrets`) so
   every deploy self-heals them. Change them there, by merge — never with
   ad-hoc gcloud.
+- **Write/ops endpoints are token-gated in prod** (`ADMIN_API_TOKEN`):
+  `/reload` (the OOM-fatal index swap), subscription writes, and both
+  `ingest_url` endpoints require the bearer when the token is set — unset
+  stays open for local dev. The secret maps to both the service (verify) and
+  the job (call). The read product stays anonymous. Don't add new write or
+  compute-heavy endpoints without this dependency.
 - Secrets: Secret Manager / env only. `detect-secrets` hook + baseline are
   enforced via pre-commit (`make precommit`).
 - Actions in workflows are **SHA-pinned**; keep it that way.

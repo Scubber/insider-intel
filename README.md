@@ -1,194 +1,157 @@
 # insider-intel
 
-**Multi-domain insider-risk** OSINT aggregator (HR / legal / business / infosec)
-aligned to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) for
-minting hunt / detection keywords. Not an infosec-only news reader — sourcing
-runbook: [`docs/sourcing.md`](docs/sourcing.md).
+**Evidence-based insider-threat research, built from what actually reaches
+court.**
 
-Public UI: **https://intel.thederpweb.com**.
-Repo: **https://github.com/Scubber/insider-intel**. Brand hub: thederpweb.com.
+insider-intel is an open OSINT research instrument whose purpose is to
+**discover novel insider techniques** — tradecraft that shows up in real
+cases before it shows up in any framework. It ingests litigated insider cases
+(US federal dockets, opinions, international prosecutor and regulator feeds),
+insider-relevant news, first-person social confessions, and long-form
+publications; forensically enriches each case with an LLM at ingest time; and
+aggregates the corpus into corpus-level evidence: **how insider incidents
+actually happen, who commits them, what record classes actually detect and
+convict them — and which methods don't yet map to anything in the matrix.**
+Hunt terms and detection queries fall out of that as byproducts; the mission
+is the discovery.
 
-Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
+**Live:** [intel.thederpweb.com](https://intel.thederpweb.com) · API:
+[api.intel.thederpweb.com](https://api.intel.thederpweb.com)
 
-## For Cursor / AI agents
+Everything is mapped to the
+[Insider Threat Matrix™](https://insiderthreatmatrix.org/) (Motive · Means ·
+Preparation · Infringement · Anti-Forensics).
 
-**Start here:** [`CLAUDE.md`](CLAUDE.md) — the agent operating manual
-(architecture map, commands, production invariants, hard-won gotchas).
-Dev environment: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · hosting:
-[`docs/hosting.md`](docs/hosting.md) · process: [`docs/PROCESS.md`](docs/PROCESS.md) ·
-roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md).
-Older handoff notes: [`docs/CURSOR_HANDOFF.md`](docs/CURSOR_HANDOFF.md).
+---
 
-## Release status
+## The EVIDENCE ledger — the research product
 
-**MVP prototype candidate** (`mvp-prototype-0.1`) — process: **Kanban + milestone gates**
-([M1](https://github.com/Scubber/insider-intel/milestone/1) closed at tag;
-[M2 Hosted MVP](https://github.com/Scubber/insider-intel/milestone/2) next).
-Public UI and API are **hosted and self-refreshing** (GCS corpus + 6h
-scheduled ingest + keyless CD on merge to `main` — see [`docs/hosting.md`](docs/hosting.md)).
+The flagship output is the **EVIDENCE page**
+([intel.thederpweb.com → EVIDENCE](https://intel.thederpweb.com/#/evidence)):
+a continuously recomputed forensic aggregation across every method-bearing case
+in the corpus. It answers questions a single case report can't:
 
-## MVP capability status
+- **Who?** Actor profile on two axes — function (executive/officer, manager,
+  technical, sales/finance…) × employment state (current, departing, former) —
+  as **roles, never individuals**.
+- **How?** Technique prevalence by ITM theme, with the artifact families each
+  technique leaves behind (device forensics, central audit trails,
+  server/application logs, financial and public records).
+- **How was it proven?** Every count is split by **case strength** —
+  adjudicated/admitted vs alleged vs reported — and the two are never
+  conflated. Percentages are suppressed below a small-n floor.
+- **What detects it?** An evidence→ITM detection crosswalk ties observed
+  record classes back to matrix detections, marking which are corroborated by
+  real cases.
 
-| Layer | Status |
-|-------|--------|
-| RSS ingestion (easy add sources) | ✅ |
-| CourtListener RECAP + SEC/DOJ legal feeds | ✅ |
-| Multi-domain RSS (HR Dive, employment-law blogs) | ✅ |
-| Sitemap archive backfill (`ingest_archive`) | ✅ |
-| Google Alerts / web-keyword RSS (when configured) | ✅ |
-| Social media (Reddit JSON + X, `channel=social`) with discovery catalog + subscriptions | ✅ |
-| Use-case + insider-type classification (heuristic; optional local/Anthropic LLM refiner) | ✅ |
-| LangGraph processing (ITM technique match + score) | ✅ |
-| Slim ITM taxonomy (`shared/data/itm_index.json`) | ✅ |
-| Local storage (JSONL) | ✅ |
-| Article stream + sources + ITM filters + search API | ✅ |
-| Static UI (`web/`) — Stream \| Matrix + ITM chips + operator-term workbench | ✅ |
-| One-way corporate export (CLI NDJSON + `GET /export/articles`) | ✅ |
-| Web scrapers (non-RSS) | ✅ sitemap archive MVP (`ingest_archive`) |
-| Postgres + pgvector | 🔜 |
-| LLM case records + summaries at ingest (`SUMMARIZER_LLM_PROVIDER`; `ai_summary`, `case_record`, LLM-adjudicated ITM hits) | ✅ opt-in |
-| GitHub Pages + Cloud Run (GCS corpus, 6h refresh, OIDC CD) | ✅ |
+Published findings live in [`web/findings.json`](web/findings.json) and render
+on the EVIDENCE page with their claim, the ledger data behind it, the honest
+caveat, and program recommendations. Findings are operator-approved by merge —
+the GitOps trail *is* the editorial record.
 
-## Quick start (local)
+### Methodology, honestly
 
-Containerized (recommended — see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)):
+Court data is a biased sample: it over-represents what gets litigated. The
+ledger treats that bias as measurable signal (selection bias is stated first
+in the page's limitations), separates proof standards everywhere, refuses
+persona/entity resolution by design, and keeps every number reproducible from
+stored forensic records — **no LLM runs at read time**.
 
-```bash
-make up     # API :8000 + UI :5500 + Postgres sidecar; make test / lint / shell
-```
+## What the platform does
 
-Or bare-metal:
-
-```bash
-# Install (Python 3.12+)
-pip install -e ".[dev]"
-
-# Full pipeline: fetch feeds → process → embed
-python -m apps.aggregator all
-
-# API
-python -m apps.search serve
-# → http://127.0.0.1:8000/docs
-
-# UI (separate terminal)
-python -m http.server 5500 --directory web
-# → http://127.0.0.1:5500
-```
-
-### Commands
-
-```bash
-python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.example.json -v
-python -m apps.aggregator ingest_courtlistener
-python -m apps.aggregator ingest_web_keywords  # requires WEB_KEYWORD_FEED_URLS
-python -m apps.aggregator social suggest       # curated subreddit / X catalog
-python -m apps.aggregator social add reddit overemployed
-python -m apps.aggregator ingest_social        # pull subscribed social sources
-python -m apps.aggregator ingest_social_url https://www.reddit.com/r/jobsearchhacks/s/...
-python -m apps.aggregator process --force
-python -m apps.aggregator export --out dist/export
-python -m apps.aggregator refresh_itm   # refresh slim ITM index from Forscie JSON
-python -m apps.search query "exfiltration" --mode hybrid
-```
-
-After lexicon / ITM / feed changes: `process --force`, then `POST /reload` if the
-API is already running. Default `PROCESS_MIN_SCORE=0.15` (UI stream matches).
-
-### Corporate integration (one-way out)
-
-Corporate tools **pull** OSINT; this repo never reads Graph/Teams/email/SIEM.
-
-```bash
-python -m apps.aggregator export --out dist/export
-# → dist/export/articles.ndjson + manifest.json (schema insider-intel.export.v1)
-```
-
-Or set `EXPORT_API_TOKEN` and `GET /export/articles` with `Authorization: Bearer …`.
-
-### Launch UI + API together
-
-```bash
-python scripts/launch_local.py
-# → API :8000 + UI :5500, opens in Cursor Simple Browser
-# python scripts/launch_local.py --browser   # OS default browser instead
-```
-
-A Cursor project hook also auto-runs this after agent turns that edit `insider-intel/`.
-Or run task **insider-intel: open Simple Browser** from the Command Palette.
+| | |
+|---|---|
+| **Case stream** | Chronological insider-case reader with signal scoring, use-case + insider-type classification, and analyst notes. Cases the enricher itself adjudicates as *not* insider render as muted CONTEXT, hidden by default. |
+| **Filings lane** | CourtListener RECAP dockets + opinions flagged by a hand-authored insider query lexicon; full-document bodies backfilled; targeted PACER purchasing (budget-capped) for high-signal stubs; CanLII and international prosecutor/regulator feeds. |
+| **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, per-case hunt queries), and an ITM adjudication. Every generation is stored append-only; the visible record is a select-best projection. |
+| **Novel-technique discovery** | A second LLM pass over each filing's forensic record flags methods that don't map cleanly to existing ITM techniques — candidate tradecraft the frameworks haven't named yet. |
+| **ITM matrix** | Five-theme technique browser; per-technique dossiers with related cases, detections/preventions, and corpus evidence tie-ins. |
+| **Workbench** | Flag cases, extract a MODUS OPERANDI report assembled from stored forensics (no LLM spend), export operator hunt terms and per-stack hunt queries for Teams/email/SIEM paste. |
+| **Social + tips** | Subscribed Reddit/X sources and one-off URL flagging surface first-person confessions (overemployment, data theft) the news never covers. |
+| **Syndication** | Atom feed (`/feed.xml`), one-way corporate export (`GET /export/articles`, NDJSON + bearer token). |
 
 ## Architecture
 
 ```
-RSS feeds
-   → ingest → data/raw/articles.jsonl
-   → LangGraph (ITM match + score) → data/processed/articles.jsonl
-   → FastAPI /articles /itm /sources /search
-   → web/ (Stream | Matrix tabs + ITM filters + operator / technique handoff)
+RSS / CourtListener / social / publications
+   → ingest lanes → raw corpus (JSONL in GCS)
+   → LangGraph processing: ITM alias match → score → classify → LLM enrich → embed
+   → FastAPI (Cloud Run) : /articles /search /itm /evidence/ledger /extract/ttps
+   → static UI (GitHub Pages) : Stream | Matrix | EVIDENCE | Workbench
 ```
 
-Articles are tagged with Insider Threat Matrix™ technique IDs across Motive,
-Means, Preparation, Infringement, and Anti-Forensics. The keyword workbench
-exports **operator search terms** (plaintext / JSON / LLM prompt) for Teams,
-email, and SIEM paste; ITM chips remain taxonomy and filter context — not the
-primary clipboard payload. The reader defaults to **ITM-aligned insider
-scenarios only** (Motive / Means / Preparation / Infringement / Anti-Forensics),
-with header chips to switch **ITM-aligned** vs **All indexed**. Use the
-**Matrix** tab for a five-column technique browser (search → DT/PV handoff →
-related articles). No SIEM dialect builders (KQL/SPL) in MVP.
+Production is fully automated: the corpus self-refreshes every 6 hours via a
+Cloud Run job, and every merge to `main` deploys (keyless OIDC — no stored
+credentials). LLM spend is gated by insider-signal checks and billed **once
+per article, ever**; enrichment history is append-only.
+
+For contributors and agents: [`CLAUDE.md`](CLAUDE.md) is the operating manual
+(architecture, invariants, gotchas); [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+covers the dev environment, [`docs/hosting.md`](docs/hosting.md) production,
+and [`docs/HANDOFF.md`](docs/HANDOFF.md) the current live state.
+
+## Run it locally
+
+```bash
+make up     # API :8000 + UI :5500 + Postgres sidecar
+make test   # same targets CI runs — green local == green CI
+```
+
+Or bare-metal (Python 3.12+):
+
+```bash
+pip install -e ".[dev]"
+python -m apps.aggregator all        # ingest → process → embed
+python -m apps.search serve          # API → http://127.0.0.1:8000/docs
+python -m http.server 5500 --directory web
+```
+
+Useful commands:
+
+```bash
+python -m apps.aggregator ingest_courtlistener        # pull flagged filings
+python -m apps.aggregator backfill_courtlistener_text # fetch full document bodies
+python -m apps.aggregator social suggest              # curated subreddit/X catalog
+python -m apps.aggregator ingest_social_url <url>     # flag one post
+python -m apps.aggregator process --force             # reprocess after config changes
+python scripts/evidence_ledger.py data/processed/articles.jsonl  # ledger, offline
+```
+
+Copy `.env.example` → `.env` for configuration; everything flows through
+`shared/settings.py`. No paid APIs are required to run the pipeline — LLM
+enrichment, PACER purchasing, and social API auth are all optional and
+key-gated.
 
 ## Adding sources
 
-Edit `apps/aggregator/config.py` or pass JSON like
-`apps/aggregator/feeds.example.json` /
-`apps/aggregator/feeds.insider_board.example.json`.
-
-## Configuration
-
-Copy `.env.example` → `.env`. For hosted UI later, set `CORS_ORIGINS` and
-`web/config.js` API base URL. See [docs/hosting.md](docs/hosting.md).
-
-**Public UI:** `https://intel.thederpweb.com` (GitHub Pages).
-**Public API:** `https://api.intel.thederpweb.com` (Cloud Run — see [docs/hosting.md](docs/hosting.md)).
-The shipped UI talks only to the live API; if it's unreachable it shows a
-retryable error state (no snapshot fallback).
-
-**Standalone preview:** a self-contained single-file build for sharing/demos
-that runs the UI offline against an embedded snapshot — entirely separate from
-the shipped site:
-
-```bash
-python scripts/export_demo_snapshot.py   # refresh preview/data snapshot
-python -m scripts.export_preview         # → dist/insider-intel-demo.html
-```
+Edit `apps/aggregator/config.py` (80+ curated feeds across security, legal,
+HR, and regulator domains) or pass a feeds JSON like
+`apps/aggregator/feeds.example.json`. CourtListener queries live in
+`courtlistener.py::DEFAULT_QUERIES` — a hand-authored insider lexicon
+projected from ITM techniques.
 
 ## Tests
 
 ```bash
 pytest
 ruff check apps shared tests
+python scripts/ui_smoke.py   # headless UX smoke over the real UI (Playwright)
 ```
 
-### UI verification
+## Design principles
 
-After any change under `web/`, run the headless UX smoke test — it boots the UI
-in demo mode and drives the core journeys (stream, technique dossier, hunt,
-extraction board, themes) plus landscape and snippet regression guards:
+- **Evidence over narrative** — every claim traces to stored forensic records
+  and separates adjudicated from alleged.
+- **Roles, never individuals** — no persona graphs, no entity resolution
+  across cases.
+- **Spend discipline** — LLM calls only where forensic extraction is
+  plausible; each article billed once; all read paths are LLM-free.
+- **One-way corporate boundary** — corporate tools pull OSINT out; this
+  system never reads Graph/Teams/email/SIEM.
+- **GitOps everything** — merge to `main` is the only deploy, approval, and
+  publish mechanism.
 
-```bash
-pip install playwright   # once; Chromium is resolved automatically
-python scripts/ui_smoke.py            # serves web/ and runs the checks
-python scripts/ui_smoke.py --headed   # watch it run
-python scripts/ui_smoke.py --url http://127.0.0.1:5500  # test a running instance
-```
+## Attribution
 
-Exit code is non-zero if any check fails.
-
-## Design notes
-
-- **Product:** ITM-aligned insider OSINT → hunt/detection keywords (not a generic cyber news feed).
-- **Cheap by default:** no paid APIs required for MVP.
-- **Embeddings:** local hashing embedder — swap later.
-- **Storage:** JSONL MVP; `DATABASE_URL` reserved for Postgres/pgvector.
-- **Scrapers:** sitemap keyword archive (`ingest_archive`) for HR Dive /
-  Proskauer; expand `archive_sources.py` for more publishers.
-- **Hosting:** local-first; `web/` is Pages-ready; FastAPI stays a separate service.
+Insider Threat Matrix™ is owned by Forscie Limited — see [`NOTICE`](NOTICE).
+This project is not affiliated with or endorsed by Forscie.

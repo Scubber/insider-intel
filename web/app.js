@@ -347,6 +347,7 @@
      signal floor, defaults, notification prefs. One JSON blob alongside the
      existing insider-intel-* keys. ─────────────────────────────────────── */
   const UI_STATE_KEY = "insider-intel-ui-v2";
+  const ADMIN_TOKEN_KEY = "insider-intel-admin-token";
   const KBD_HINTS_KEY = "insider-intel-kbd-hints";
 
   const uiState = {
@@ -742,6 +743,15 @@
     applyRedacted(localStorage.getItem("insider-intel-redacted") === "true");
     redactToggle.addEventListener("change", () => applyRedacted(redactToggle.checked));
   }
+  const adminTokenInput = document.getElementById("admin-token-input");
+  if (adminTokenInput) {
+    adminTokenInput.value = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+    adminTokenInput.addEventListener("change", () => {
+      const value = adminTokenInput.value.trim();
+      if (value) localStorage.setItem(ADMIN_TOKEN_KEY, value);
+      else localStorage.removeItem(ADMIN_TOKEN_KEY);
+    });
+  }
   if (els.kbdHintsToggle) {
     const applyKbdHints = (on) => {
       if (on) document.documentElement.removeAttribute("data-kbd-hints");
@@ -836,6 +846,17 @@
     });
     const timeoutMs = Number(options.timeoutMs) || 0;
     const { timeoutMs: _drop, ...fetchOpts } = options;
+    // Operator token (Settings → DATA SOURCES): bearer on write/ops endpoints.
+    const method = String(fetchOpts.method || "GET").toUpperCase();
+    if (method !== "GET") {
+      const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
+      if (adminToken) {
+        fetchOpts.headers = {
+          ...(fetchOpts.headers || {}),
+          Authorization: `Bearer ${adminToken}`,
+        };
+      }
+    }
     let res;
     if (timeoutMs > 0) {
       const controller = new AbortController();
@@ -854,6 +875,11 @@
       res = await fetch(url, fetchOpts);
     }
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(
+          `${res.status} — operator token required (Settings → DATA SOURCES)`,
+        );
+      }
       throw new Error(`${res.status} ${res.statusText}`);
     }
     if (res.status === 204) return null;
