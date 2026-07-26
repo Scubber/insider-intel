@@ -1,0 +1,52 @@
+name: itm-refresh
+
+# Keep the slim ITM index current with Forscie's upstream matrix.
+# Weekly + on demand: run refresh_itm; if the index changed, open a PR.
+# Merge IS operator approval (GitOps). CI on the PR runs the full suite,
+# including the evidence-crosswalk guard that catches detection-id
+# renumberings (e.g. DT067 → DT152 in ITM 2.9).
+on:
+  schedule:
+    - cron: "17 9 * * 1" # Mondays 09:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Refresh slim ITM index
+        run: |
+          set -euo pipefail
+          pip install -q -e .
+          python -m apps.aggregator refresh_itm
+      - name: Open PR if the matrix changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet shared/data/itm_index.json; then
+            echo "ITM index unchanged — nothing to do."
+            exit 0
+          fi
+          VERSION=$(python3 -c "import json; print(json.load(open('shared/data/itm_index.json')).get('itm_version'))")
+          COUNT=$(python3 -c "import json; print(len(json.load(open('shared/data/itm_index.json')).get('techniques', [])))")
+          BRANCH="itm-refresh/v${VERSION}"
+          git config user.email "noreply@anthropic.com"
+          git config user.name "itm-refresh bot"
+          git checkout -B "$BRANCH"
+          git add shared/data/itm_index.json
+          git commit -m "itm: refresh slim index to upstream v${VERSION} (${COUNT} techniques)"
+          git push -f origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "itm: refresh slim index to v${VERSION}" \
+            --body "Automated weekly ITM refresh: upstream matrix now v${VERSION} (${COUNT} techniques). CI runs the full suite including the evidence-crosswalk guard — a red check here means a technique/detection we depend on was renamed or removed and needs a manual fix before merge. Merging is operator approval." \
+            || echo "PR already open for this branch"
