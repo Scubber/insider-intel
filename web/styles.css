@@ -3075,6 +3075,19 @@ a.itm-chip:hover {
   .copy-actions {
     flex-wrap: wrap;
   }
+
+  /* Narrow phones: the one-line ellipsis meta clips the FILED/age tail behind
+     a long source name. Let it wrap instead — nothing is lost. */
+  .article-item .row-meta {
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
+  }
+
+  .case-meta {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 
 /* Technique dossier — single-column research view (mobile-first) */
