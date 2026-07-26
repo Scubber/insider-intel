@@ -20,7 +20,7 @@ Then follow: `.cursor/rules/project-rules.md` and `docs/architecture.md`.
 
 ## What this project is
 
-**Insider-threat OSINT aggregator** (Feedly-style articles) whose job is to map public reporting to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) and mint **operator search terms** (Teams/email/SIEM paste) plus ITM filter tags.
+**Insider-threat OSINT aggregator** (chronological article reader) whose job is to map public reporting to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) and mint **operator search terms** (Teams/email/SIEM paste) plus ITM filter tags.
 Articles join to **Detections (DT\*)** / **Preventions (PV\*)** via matched techniques (not by scanning news for Event IDs).
 **Workbench** = TTP extraction surface (operator terms + channel hunt cues).
 **Extraction board** = flag via Articles **+** or Workbench → **Extract TTPs**
@@ -30,7 +30,7 @@ slice — see architecture §5.
 **Layout (POC):** Hunt + Matrix refine + Articles + Workbench; secondary Insider Focus / Source.
 Brand / product title in UI: **insider-intel**. Goals: cheap, low-maintenance, serverless-friendly, LangGraph-based agents.
 
-Not a general cyber news Feedly. Sitemap archive backfill (`ingest_archive`)
+Not a general cyber news reader. Sitemap archive backfill (`ingest_archive`)
 covers keyword-filtered history where RSS cannot; follow the **New Source
 checklist** in [`docs/sourcing.md`](sourcing.md). **Native social ingest is
 live** (`channel=social`): Reddit via OAuth/public JSON and X via API v2,
@@ -47,7 +47,7 @@ CTI-style analyst brief assembled from **multiple flagged articles** + workbench
 1. Flag articles “for hunt”
 2. Export multi-article JSON/markdown bundle (AI-consumable)
 3. Fill Hunt Package markdown template (news seen → hunts / optional SIEM dialect / novel TTPs); AI polish later
-4. ~~Optional social/X or Feedly tip-account ingest~~ **done** — `ingest_social` emits the same `RawArticle` schema
+4. ~~Optional social/X tip-account ingest~~ **done** — `ingest_social` emits the same `RawArticle` schema
 
 Full write-up: `docs/architecture.md` § Hunt Package.
 
@@ -60,7 +60,6 @@ Full write-up: `docs/architecture.md` § Hunt Package.
 | RSS multi-source ingest (easy add) | ✅ | `DEFAULT_FEEDS` or `--feeds-file` (crypto feeds disabled by default) |
 | Tip / Reddit RSS (`channel=tips`) | ✅ | `reddit-*` feeds + `feeds.tips.example.json`; UI Channel pills |
 | Story clusters (`story_key`) | ✅ | `/articles` groups same-day multi-source within channel |
-| Feedly board / AI Feed ingest | ✅ | `FEEDLY_ACCESS_TOKEN` + `FEEDLY_STREAM_IDS` → `ingest_feedly` |
 | CourtListener RECAP | ✅ | `ingest_courtlistener` (optional `COURTLISTENER_API_TOKEN`) |
 | Web keyword alert RSS | ✅ | `WEB_KEYWORD_FEED_URLS` → `ingest_web_keywords` |
 | Full pipeline | ✅ | `python -m apps.aggregator all` (RSS + optional sources) |
@@ -123,7 +122,6 @@ python scripts/launch_local.py   # API :8000 + UI :5500, opens browser
 ```bash
 python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.example.json -v
 python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.insider_board.example.json
-python -m apps.aggregator ingest_feedly
 python -m apps.aggregator ingest_courtlistener
 python -m apps.aggregator ingest_courtlistener --max-pages 3
 python -m apps.aggregator ingest_web_keywords
@@ -134,7 +132,7 @@ python -m apps.aggregator refresh_itm
 python -m apps.search query "exfiltration" --mode hybrid --json
 ```
 
-**Feedly:** set `FEEDLY_ACCESS_TOKEN` and comma-separated `FEEDLY_STREAM_IDS` for boards
+**Board-reader ingest (optional):** see `shared/settings.py` for env vars
 like *Insider Threats x Top Stories* / *ITM-Hunt*. Without them, `all` still runs RSS.
 
 **CourtListener:** optional `COURTLISTENER_API_TOKEN`; defaults to built-in insider-legal RECAP queries.
@@ -228,7 +226,7 @@ No secrets in `web/`.
 
 - Run from `insider-intel/` after `pip install -e .`.
 - Empty UI: run `aggregator all`, then `POST /reload` if API already up.
-- **Sources sidebar:** after ingest/process, always `POST /reload` so `/sources` merges configured feeds with newly indexed `source_id`s (Feedly boards, new RSS). After editing `DEFAULT_FEEDS` / feeds JSON, **restart the API** too — Python won't reload the config module otherwise.
+- **Sources sidebar:** after ingest/process, always `POST /reload` so `/sources` merges configured feeds with newly indexed `source_id`s (new RSS/board sources). After editing `DEFAULT_FEEDS` / feeds JSON, **restart the API** too — Python won't reload the config module otherwise.
 - CORS: page origin must be in `CORS_ORIGINS` (default includes `:5500` and `null` for file://).
 - De-dupe by `link`. `process --force` **upserts** (rewrites) processed JSONL so each link appears once.
 - After `refresh_itm` or alias edits, always `process --force` so stored `itm_hits` update.

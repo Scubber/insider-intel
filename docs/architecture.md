@@ -11,7 +11,7 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 
 ### Scope
 - **Now (hosted):** Multi-domain RSS (infosec + HR/legal) + CourtListener RECAP +
-  DataTheftNews + optional Google Alerts (`WEB_KEYWORD_FEED_URLS`) / Feedly;
+  DataTheftNews + optional Google Alerts (`WEB_KEYWORD_FEED_URLS`);
   **social ingest** (Reddit OAuth/JSON + X API v2, user-picked subscriptions,
   `channel=social`); LangGraph processing (ITM match + score + **use-case /
   insider-type classification**, heuristic with optional LLM refiner); JSONL
@@ -38,7 +38,7 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
 | **Development** | Cursor + local Python 3.12+ | This repo |
 | **Agent Framework** | LangGraph | Article processor |
 | **Taxonomy** | Slim ITM index | Derived from forscie/insider-threat-matrix JSON |
-| **Ingestion** | feedparser + httpx | RSS, CourtListener Search API, optional Feedly / alert RSS |
+| **Ingestion** | feedparser + httpx | RSS, CourtListener Search API, optional alert RSS |
 | **Storage (MVP)** | JSONL | `data/raw`, `data/processed` |
 | **Storage (target)** | PostgreSQL + pgvector | Neon or Supabase |
 | **API** | FastAPI | `/articles`, `/itm`, `/sources`, `/search`, `/export/articles` |
@@ -76,7 +76,7 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   billed). Purchases land in the public RECAP archive (enriching the
   commons); the text backfill harvests them on a later refresh.
   `purchase_pacer --dry-run` previews what would be bought.
-- Optional Feedly boards and Google Alerts-style RSS (`WEB_KEYWORD_FEED_URLS`);
+- Optional Google Alerts-style RSS (`WEB_KEYWORD_FEED_URLS`);
   prefer Alerts for cross-domain discovery (see [`sourcing.md`](sourcing.md))
 - **Social lane (`channel=social`)**: Reddit subreddit listings (OAuth app auth
   when `REDDIT_CLIENT_ID/SECRET` set; public JSON fallback) and X handles

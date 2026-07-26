@@ -25,7 +25,7 @@ GCP project `insider-intel-502413`, region `us-east1`, $10/mo budget alert.
 ## Data & classification model
 
 Ingestion lanes (all emit `RawArticle` → `data/raw/articles.jsonl`): RSS
-(`config.py::DEFAULT_FEEDS`), Feedly, CourtListener, DataTheftNews, sitemap
+(`config.py::DEFAULT_FEEDS`), CourtListener, DataTheftNews, sitemap
 archive, web-keyword RSS, and **social** — Reddit (`reddit_pipeline.py`, OAuth
 app auth when `REDDIT_CLIENT_ID/SECRET` set, public JSON otherwise) and X
 (`x_pipeline.py`, needs `X_BEARER_TOKEN` or `X_CONSUMER_KEY`/`SECRET` — the

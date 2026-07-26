@@ -118,7 +118,7 @@ class StoryCluster(BaseModel):
 
 
 class ArticleListResponse(BaseModel):
-    """Chronological article stream for the Feedly-style reader."""
+    """Chronological article stream for the reader view."""
 
     total_indexed: int
     count: int

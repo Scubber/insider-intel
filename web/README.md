@@ -1,6 +1,6 @@
 # Web UI (local + future Pages)
 
-Static Feedly-style reader + ITM theme filters + keyword workbench for **insider-intel**.
+Static article reader + ITM theme filters + keyword workbench for **insider-intel**.
 
 Articles are tagged with Insider Threat Matrix™ technique IDs. Theme chips
 (Motive / Means / Preparation / Infringement / Anti-Forensics) call
@@ -31,9 +31,9 @@ Default API base: `http://127.0.0.1:8000` in [`config.js`](config.js).
 
 | Piece | Target |
 |-------|--------|
-| This `web/` folder | GitHub Pages @ `https://intel.thederpweb.com` (`td3.dev` redirects) |
+| This `web/` folder | GitHub Pages @ `https://intel.thederpweb.com` |
 | FastAPI (`apps.search serve`) | Google Cloud Run @ `https://api.intel.thederpweb.com` |
-| `CORS_ORIGINS` | Include `https://intel.thederpweb.com`, `https://td3.dev`, `https://scubber.github.io` |
+| `CORS_ORIGINS` | Include `https://intel.thederpweb.com`, `https://scubber.github.io` |
 | `INSIDER_INTEL_API_BASE` | Cloud Run URL (set in `config.js` or inject before `app.js`) |
 
 Never put API keys in this static UI.
@@ -46,7 +46,6 @@ Switcher is in the UI (top-right). Themes live in [`themes.css`](themes.css) as 
 |-------|------|
 | `cnn-lite` (default) | White page, CNN red, Georgia headlines (lite.cnn.com) |
 | `fox-news` | Red masthead stripe, Franklin/Arial condensed, uppercase brand |
-| `feedly` | Cool gray reader, leaf green, Segoe/Helvetica UI sans |
 | `yahoo-finance` | Yahoo purple bar, Helvetica Neue market-board sans |
 | `voya` | Navy masthead + tangerine, Palatino brand / Segoe body |
 | `dracula` | Classic palette; Cascadia/Consolas brand, Segoe body |
