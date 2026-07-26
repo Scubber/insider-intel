@@ -3,13 +3,17 @@
 **Evidence-based insider-threat research, built from what actually reaches
 court.**
 
-insider-intel is an open OSINT research instrument that ingests litigated
-insider cases (US federal dockets, opinions, international prosecutor and
-regulator feeds), insider-relevant news, first-person social confessions, and
-long-form publications — then forensically enriches each case with an LLM at
-ingest time and aggregates the corpus into corpus-level evidence: **how insider
-incidents actually happen, who commits them, and what record classes actually
-detect and convict them.**
+insider-intel is an open OSINT research instrument whose purpose is to
+**discover novel insider techniques** — tradecraft that shows up in real
+cases before it shows up in any framework. It ingests litigated insider cases
+(US federal dockets, opinions, international prosecutor and regulator feeds),
+insider-relevant news, first-person social confessions, and long-form
+publications; forensically enriches each case with an LLM at ingest time; and
+aggregates the corpus into corpus-level evidence: **how insider incidents
+actually happen, who commits them, what record classes actually detect and
+convict them — and which methods don't yet map to anything in the matrix.**
+Hunt terms and detection queries fall out of that as byproducts; the mission
+is the discovery.
 
 **Live:** [intel.thederpweb.com](https://intel.thederpweb.com) · API:
 [api.intel.thederpweb.com](https://api.intel.thederpweb.com)
@@ -60,6 +64,7 @@ stored forensic records — **no LLM runs at read time**.
 | **Case stream** | Chronological insider-case reader with signal scoring, use-case + insider-type classification, and analyst notes. Cases the enricher itself adjudicates as *not* insider render as muted CONTEXT, hidden by default. |
 | **Filings lane** | CourtListener RECAP dockets + opinions flagged by a hand-authored insider query lexicon; full-document bodies backfilled; targeted PACER purchasing (budget-capped) for high-signal stubs; CanLII and international prosecutor/regulator feeds. |
 | **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, per-case hunt queries), and an ITM adjudication. Every generation is stored append-only; the visible record is a select-best projection. |
+| **Novel-technique discovery** | A second LLM pass over each filing's forensic record flags methods that don't map cleanly to existing ITM techniques — candidate tradecraft the frameworks haven't named yet. |
 | **ITM matrix** | Five-theme technique browser; per-technique dossiers with related cases, detections/preventions, and corpus evidence tie-ins. |
 | **Workbench** | Flag cases, extract a MODUS OPERANDI report assembled from stored forensics (no LLM spend), export operator hunt terms and per-stack hunt queries for Teams/email/SIEM paste. |
 | **Social + tips** | Subscribed Reddit/X sources and one-off URL flagging surface first-person confessions (overemployment, data theft) the news never covers. |
