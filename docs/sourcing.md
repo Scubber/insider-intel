@@ -1,9 +1,9 @@
 # Sourcing: multi-domain insider risk
 
 Insider risk spans **HR, legal, business risk, infosec, and enterprise risk**.
-This product is not an infosec-only Feedly clone. **News budget for paid
+This product is not an infosec-only news reader. **News budget for paid
 sources: under $100/year total (prefer $0).** Law360-class seats are out of
-scope; Feedly is optional inspiration only.
+scope.
 
 Primary free stack:
 

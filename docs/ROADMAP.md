@@ -8,7 +8,7 @@ mapped to the Insider Threat Matrix™.
 
 **Foundation**
 - Multi-lane ingestion: RSS/legal/HR press, CourtListener (RECAP + opinions),
-  Feedly, DataTheftNews, web-keyword RSS, Reddit/X social subscriptions
+  DataTheftNews, web-keyword RSS, Reddit/X social subscriptions
 - LangGraph processing: ITM technique matching, scoring, use-case +
   insider-type classification, embeddings, story clustering
 - Dossier UI: case-file stream, observed-only ITM rail with case filtering,

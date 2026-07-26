@@ -2,10 +2,10 @@
 
 **Multi-domain insider-risk** OSINT aggregator (HR / legal / business / infosec)
 aligned to the [Insider Threat Matrix™](https://insiderthreatmatrix.org/) for
-minting hunt / detection keywords. Not an infosec-only Feedly clone — sourcing
+minting hunt / detection keywords. Not an infosec-only news reader — sourcing
 runbook: [`docs/sourcing.md`](docs/sourcing.md).
 
-Public UI: **https://intel.thederpweb.com** (alias **https://td3.dev**).
+Public UI: **https://intel.thederpweb.com**.
 Repo: **https://github.com/Scubber/insider-intel**. Brand hub: thederpweb.com.
 
 Insider Threat Matrix™ is owned by Forscie Limited. See [`NOTICE`](NOTICE).
@@ -36,7 +36,6 @@ scheduled ingest + keyless CD on merge to `main` — see [`docs/hosting.md`](doc
 | Multi-domain RSS (HR Dive, employment-law blogs) | ✅ |
 | Sitemap archive backfill (`ingest_archive`) | ✅ |
 | Google Alerts / web-keyword RSS (when configured) | ✅ |
-| Feedly boards (optional) | ✅ |
 | Social media (Reddit JSON + X, `channel=social`) with discovery catalog + subscriptions | ✅ |
 | Use-case + insider-type classification (heuristic; optional local/Anthropic LLM refiner) | ✅ |
 | LangGraph processing (ITM technique match + score) | ✅ |
@@ -80,7 +79,6 @@ python -m http.server 5500 --directory web
 
 ```bash
 python -m apps.aggregator ingest --feeds-file apps/aggregator/feeds.example.json -v
-python -m apps.aggregator ingest_feedly   # requires FEEDLY_* env
 python -m apps.aggregator ingest_courtlistener
 python -m apps.aggregator ingest_web_keywords  # requires WEB_KEYWORD_FEED_URLS
 python -m apps.aggregator social suggest       # curated subreddit / X catalog
@@ -144,29 +142,6 @@ Edit `apps/aggregator/config.py` or pass JSON like
 `apps/aggregator/feeds.example.json` /
 `apps/aggregator/feeds.insider_board.example.json`.
 
-### Feedly boards (Insider Threats x Top Stories / ITM-Hunt)
-
-1. Create a Feedly developer token (Teams / Pro).
-2. Copy each board’s **streamId** from Feedly.
-3. Put them in `.env`:
-
-```bash
-FEEDLY_ACCESS_TOKEN=your_token
-FEEDLY_STREAM_IDS=user/.../tag/...,enterprise/.../tag/...
-```
-
-4. Pull:
-
-```bash
-python -m apps.aggregator ingest_feedly
-# or as part of the full pipeline:
-python -m apps.aggregator all
-```
-
-Feedly labels (board names, keywords) are appended into the article summary so
-ITM matching and search can use them. Without a token, Feedly ingest is skipped
-and RSS sources still run.
-
 ## Configuration
 
 Copy `.env.example` → `.env`. For hosted UI later, set `CORS_ORIGINS` and
@@ -210,7 +185,7 @@ Exit code is non-zero if any check fails.
 
 ## Design notes
 
-- **Product:** ITM-aligned insider OSINT → hunt/detection keywords (not generic cyber Feedly).
+- **Product:** ITM-aligned insider OSINT → hunt/detection keywords (not a generic cyber news feed).
 - **Cheap by default:** no paid APIs required for MVP.
 - **Embeddings:** local hashing embedder — swap later.
 - **Storage:** JSONL MVP; `DATABASE_URL` reserved for Postgres/pgvector.

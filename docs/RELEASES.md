@@ -65,5 +65,5 @@ Tag target: `51bfec1` (merge of #61). Everything since `mvp-prototype-0.1`
 
 ## mvp-prototype-0.1 (2026-07-13)
 
-First tagged prototype: RSS/Feedly/CourtListener ingestion, ITM alias
+First tagged prototype: RSS/CourtListener ingestion, ITM alias
 matching, GitHub Pages UI, Cloud Run API, 6-hourly corpus refresh.

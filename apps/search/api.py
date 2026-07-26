@@ -204,7 +204,7 @@ def list_articles(
         description="Collapse multi-source same-day stories within a channel",
     ),
 ) -> ArticleListResponse:
-    """Chronological article stream (Feedly-style reader)."""
+    """Chronological article stream (reader view)."""
     return service.list_articles(
         limit=limit,
         min_score=min_score,

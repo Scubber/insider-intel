@@ -9,11 +9,10 @@ Brand hub and sibling apex aliases live in **https://github.com/Scubber/thederpw
 | Host | Role | Target |
 |------|------|--------|
 | `https://intel.thederpweb.com` | Public UI (canonical) | GitHub Pages → this repo `web/` |
-| `https://td3.dev` | Short alias | GitHub Pages → JS redirect to `intel.thederpweb.com` |
 | `https://api.intel.thederpweb.com` | FastAPI | Cloud Run |
 | `https://scubber.github.io/insider-intel/` | Same Pages site | GitHub Pages project URL |
 
-**DNS:** `intel` CNAME → `scubber.github.io`; `td3.dev` apex A/AAAA → GitHub Pages anycast (or CNAME flattening).
+**DNS:** `intel` CNAME → `scubber.github.io`.
 **UI primary:** `web/CNAME` = `intel.thederpweb.com`.
 **API:** map `api.intel.thederpweb.com` to the Cloud Run service (below).
 
@@ -24,7 +23,7 @@ DNS alone is not enough. After each primary-domain change:
 
 1. Open **Settings → Pages** on `Scubber/insider-intel`.
 2. Confirm **Primary** is `intel.thederpweb.com` (from `CNAME`).
-3. **Add domain** (additional) for `td3.dev` (and `www.td3.dev` if used).
+3. **Add domain** (additional) for any alias hostnames in use.
    GitHub’s REST `pages/domains` API may 404 for some accounts — use
    **Settings → Pages → Custom domains → Add a domain** in the UI if needed.
 4. Wait until each shows DNS check ✓ and **TLS certificate has been issued** (can take minutes–hours). Until then browsers show “insecure” / cert errors; GitHub may also 404 the Host.
