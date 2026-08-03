@@ -1,7 +1,7 @@
 {
-  "itm_version": "2.9.0",
+  "itm_version": "2.11.0",
   "mitre_version": "19.1",
-  "refreshed_at": "2026-07-26T19:54:32.287879+00:00",
+  "refreshed_at": "2026-08-03T10:31:04.622657+00:00",
   "source_url": "https://raw.githubusercontent.com/forscie/insider-threat-matrix/main/insider-threat-matrix.json",
   "articles": [
     {
@@ -4489,6 +4489,10 @@
       ],
       "preventions": [
         {
+          "id": "PV093",
+          "title": "Browser Print Restriction"
+        },
+        {
           "id": "PV020",
           "title": "Data Loss Prevention Solution"
         },
@@ -4531,6 +4535,10 @@
         }
       ],
       "preventions": [
+        {
+          "id": "PV093",
+          "title": "Browser Print Restriction"
+        },
         {
           "id": "PV020",
           "title": "Data Loss Prevention Solution"
@@ -6657,6 +6665,24 @@
         {
           "id": "PV011",
           "title": "Physical Access Controls"
+        }
+      ]
+    },
+    {
+      "id": "PR049",
+      "title": "Business Process Reconnaissance",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "A subject studies an organizational process to identify weaknesses, dependencies, timing conditions, approval paths, staffing patterns, exception routes, or control gaps that may enable a later infringement. The subject’s focus is not necessarily a technical system; it may be the way people, responsibilities, and busi…",
+      "aliases": [
+        "business process reconnaissance"
+      ],
+      "detections": [],
+      "preventions": [
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
         }
       ]
     },
@@ -12543,6 +12569,61 @@
       ]
     },
     {
+      "id": "PR050",
+      "title": "Trusted Relationship Cultivation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": null,
+      "description_text": "A subject deliberately develops a relationship of trust with a colleague, administrator, service provider, customer, or control owner to obtain future assistance, information, approval, or reduced scrutiny. The conduct may involve repeatedly offering help, volunteering for tasks, creating dependency, demonstrating app…",
+      "aliases": [
+        "trusted relationship cultivation"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT107",
+          "title": "Microsoft Teams Admin Center Meeting and Call History"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
       "id": "PR045",
       "title": "Unauthorized Hardware Introduction",
       "article_id": "AR3",
@@ -12649,6 +12730,435 @@
         {
           "id": "PV018",
           "title": "Network Intrusion Prevention Systems"
+        }
+      ]
+    },
+    {
+      "id": "IF044",
+      "title": "Abuse of Decision-Making Authority",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "A subject deliberately uses a decision-making authority granted through their organizational role to approve, deny, waive, prioritize, suppress, or otherwise determine an outcome for an unauthorized purpose. The subject may be technically and procedurally entitled to make the decision. The infringement arises because…",
+      "aliases": [
+        "abuse of decision-making authority"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT107",
+          "title": "Microsoft Teams Admin Center Meeting and Call History"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        }
+      ]
+    },
+    {
+      "id": "IF044.002",
+      "title": "Improper Denial",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject uses organizational authority to deny another person a service, benefit, request, opportunity, access right, payment, review, or other outcome without a legitimate organizational basis. Examples include:denying a legitimate customer request because of a personal disputerefusing an employee entitlement in ret…",
+      "aliases": [
+        "improper denial"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        }
+      ]
+    },
+    {
+      "id": "IF044.003",
+      "title": "Improper Preferential Treatment",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject uses decision-making authority to provide an unauthorized advantage to a person, organization, account, supplier, applicant, or other beneficiary. Examples include:prioritizing an associate’s application outside established criteriagranting favorable commercial terms without authorizationselecting a supplier…",
+      "aliases": [
+        "improper preferential treatment"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT107",
+          "title": "Microsoft Teams Admin Center Meeting and Call History"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        }
+      ]
+    },
+    {
+      "id": "IF044.004",
+      "title": "Suppression of Escalation or Review",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject uses their authority to prevent, terminate, delay, redirect, or improperly narrow a required organizational review, escalation, complaint, referral, or investigation. Examples include:preventing a security concern from being referred to the appropriate teamclosing a complaint without the required reviewdecli…",
+      "aliases": [
+        "suppression of escalation or review"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT107",
+          "title": "Microsoft Teams Admin Center Meeting and Call History"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV012",
+          "title": "End-User Security Awareness Training"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        }
+      ]
+    },
+    {
+      "id": "IF044.001",
+      "title": "Unauthorized Approval",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject uses delegated authority to approve a request, transaction, entitlement, exception, appointment, payment, access grant, or other organizational action without a legitimate basis. Examples include:approving access for a favored individual without business justificationapproving a supplier despite an undisclos…",
+      "aliases": [
+        "unauthorized approval"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "IF044.006",
+      "title": "Unauthorized Prioritization or Deprioritization",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject uses decision-making authority to improperly accelerate, delay, elevate, or deprioritize a request, case, transaction, task, customer, or other item within an organizational process. Examples include:moving an associate’s request ahead of others without justificationdeliberately delaying a complaint until a…",
+      "aliases": [
+        "unauthorized prioritization or deprioritization"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        }
+      ]
+    },
+    {
+      "id": "IF044.005",
+      "title": "Unauthorized Waiver or Control Exception",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF044",
+      "description_text": "A subject improperly waives, bypasses, suspends, or grants an exception to a mandatory organizational control using authority available through their role. Examples include:waiving identity-verification requirementsexempting a transaction from secondary reviewoverriding a mandatory security or compliance checkallowing…",
+      "aliases": [
+        "unauthorized waiver or control exception"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT107",
+          "title": "Microsoft Teams Admin Center Meeting and Call History"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
         }
       ]
     },
@@ -13767,6 +14277,36 @@
           "title": "Structured Request Channels for Operational Needs"
         }
       ]
+    },
+    {
+      "id": "IF042",
+      "title": "Deliberate Safety Control Defeat",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "A subject disables, bypasses, overrides, falsifies, or prevents the operation of a safety control, resulting in an unsafe condition, exposure, near miss, injury, environmental impact, or damage to equipment. Safety controls may be physical, procedural, mechanical, digital, or administrative. Examples include bypassing…",
+      "aliases": [
+        "deliberate safety control defeat"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        }
+      ],
+      "preventions": []
     },
     {
       "id": "IF026",
@@ -18910,6 +19450,100 @@
       ]
     },
     {
+      "id": "IF016.013",
+      "title": "Expense Reimbursement Fraud",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF016",
+      "description_text": "A subject submits, alters, duplicates, or knowingly misrepresents an expense claim to obtain reimbursement for costs that were not legitimately incurred for an authorized organizational purpose. This may include fabricated receipts, inflated amounts, duplicate submissions, personal purchases presented as business expe…",
+      "aliases": [
+        "expense reimbursement fraud"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT019",
+          "title": "Chrome Browser History"
+        },
+        {
+          "id": "DT018",
+          "title": "Edge Browser History"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        },
+        {
+          "id": "DT017",
+          "title": "Firefox Browser History"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV027",
+          "title": "Financial Approval Process"
+        },
+        {
+          "id": "PV073",
+          "title": "Merchant Category Code (MCC) Blocking"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV086",
+          "title": "System-Enforced Reviewer Assignment and Rotation"
+        }
+      ]
+    },
+    {
+      "id": "IF016.012",
+      "title": "Fraudulent Refund Issuance",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF016",
+      "description_text": "A subject abuses authorized access to create, approve, increase, duplicate, or redirect a refund without a legitimate business basis or required authorization. The subject may issue the refund to themselves, a friend, family member, associate, colluding customer, or another external party. This may involve refunding a…",
+      "aliases": [
+        "fraudulent refund issuance"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV027",
+          "title": "Financial Approval Process"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
       "id": "IF016.004",
       "title": "Insider Trading",
       "article_id": "AR4",
@@ -18992,6 +19626,49 @@
         {
           "id": "PV027",
           "title": "Financial Approval Process"
+        }
+      ]
+    },
+    {
+      "id": "IF016.011",
+      "title": "Misappropriation of Redeemable Value",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF016",
+      "description_text": "A subject abuses authorized access to create, issue, increase, transfer, or redeem value-bearing instruments or account-based benefits without a legitimate business purpose or required approval. Redeemable value may include gift cards, promotional codes, vouchers, account credits, loyalty balances, refund credits, ser…",
+      "aliases": [
+        "misappropriation of redeemable value"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV027",
+          "title": "Financial Approval Process"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
         }
       ]
     },
@@ -19429,6 +20106,292 @@
         {
           "id": "PV040",
           "title": "Network Access Control (NAC)"
+        },
+        {
+          "id": "PV009",
+          "title": "Prohibition of Devices On-site"
+        }
+      ]
+    },
+    {
+      "id": "IF043",
+      "title": "Organizational Resource Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "A subject deliberately redirects organizational resources toward an unauthorized purpose, activity, beneficiary, or destination. Affected resources may include personnel time, computing capacity, equipment, facilities, inventory, financial resources, software, or other organizational assets. The infringement occurs wh…",
+      "aliases": [
+        "organizational resource diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        }
+      ]
+    },
+    {
+      "id": "IF043.002",
+      "title": "Computing Resource Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF043",
+      "description_text": "A subject uses organizational computing resources for an unauthorized purpose. This may include servers, cloud infrastructure, storage, processing capacity, network bandwidth, development environments, or software subscriptions.",
+      "aliases": [
+        "computing resource diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "IF043.003",
+      "title": "Equipment or Facility Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF043",
+      "description_text": "A subject redirects organizational equipment, vehicles, facilities, laboratories, production capability, or other physical assets toward an unauthorized use. Harm may include reduced availability, damage, operating cost, or disruption to legitimate activity.",
+      "aliases": [
+        "equipment or facility diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
+      "id": "IF043.004",
+      "title": "Inventory Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF043",
+      "description_text": "A subject redirects organizational stock, materials, products, components, or consumable assets to an unauthorized recipient, destination, or purpose. Harm may include financial loss, stock discrepancies, supply shortages, or production delays.",
+      "aliases": [
+        "inventory diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
+      "id": "IF043.001",
+      "title": "Personnel Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF043",
+      "description_text": "A subject directs organizational personnel to perform work for an unauthorized purpose, beneficiary, or activity. Harm may include lost working time, delayed tasks, increased labour cost, or reduced operational capacity.",
+      "aliases": [
+        "personnel diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
+      "id": "IF043.005",
+      "title": "Working-Time Diversion",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF043",
+      "description_text": "A subject deliberately uses substantial paid working time for sustained activity unrelated to their organizational responsibilities. This should exclude minor personal use permitted under the Acceptable Use Policy.",
+      "aliases": [
+        "working-time diversion"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT019",
+          "title": "Chrome Browser History"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT018",
+          "title": "Edge Browser History"
+        },
+        {
+          "id": "DT017",
+          "title": "Firefox Browser History"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV006",
+          "title": "Install a Web Proxy Solution"
         },
         {
           "id": "PV009",
@@ -21120,6 +22083,49 @@
       "preventions": []
     },
     {
+      "id": "IF041",
+      "title": "Unauthorized Organizational Representation",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "A subject falsely or improperly represents that they possess authority to speak, decide, approve, negotiate, instruct, certify, or make commitments on behalf of the organization. The subject uses their genuine association with the organization, their role, access to internal communication channels, or knowledge of org…",
+      "aliases": [
+        "unauthorized organizational representation"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV012",
+          "title": "End-User Security Awareness Training"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        }
+      ]
+    },
+    {
       "id": "IF031",
       "title": "Unauthorized Presence in Restricted Physical Areas",
       "article_id": "AR4",
@@ -21131,11 +22137,361 @@
       ],
       "detections": [
         {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
           "id": "DT033",
           "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
         }
       ],
       "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "IF031.006",
+      "title": "Remaining in a Restricted Area Outside Authorized Hours",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject knowingly remains within a restricted physical area after their authorized access period has ended, or enters the area during a time when their role, assignment, escort approval, or access authorization does not permit their presence. The subject may have legitimate daytime or task-based access to the locati…",
+      "aliases": [
+        "remaining in a restricted area outside authorized hours"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "IF031.001",
+      "title": "Unauthorized Presence in Data Center or Communications Areas",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject deliberately enters or remains within a data center, server room, network operations area, telecommunications room, cable distribution area, or other restricted environment containing critical information technology or communications infrastructure without authorization to be present. The subject’s proximity…",
+      "aliases": [
+        "unauthorized presence in data center or communications areas"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT143",
+          "title": "Automated Visual and Thermal Baseline Scanning of Server Environments"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "IF031.003",
+      "title": "Unauthorized Presence in Executive or Board Areas",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject deliberately enters or remains within an executive office, boardroom, senior leadership meeting space, executive support area, or other restricted location used for confidential organizational decision-making without authorization. The subject’s presence may expose strategic discussions, merger or acquisitio…",
+      "aliases": [
+        "unauthorized presence in executive or board areas"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        }
+      ]
+    },
+    {
+      "id": "IF031.005",
+      "title": "Unauthorized Presence in Records or Evidence Storage Areas",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject deliberately enters or remains within an area used to store physical records, legal files, personnel documents, investigative material, evidential items, archived media, regulated records, or chain-of-custody material without authorization. Unauthorized presence may expose confidential information or provide…",
+      "aliases": [
+        "unauthorized presence in records or evidence storage areas"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        },
+        {
+          "id": "DT008",
+          "title": "Tamper Seal"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "IF031.004",
+      "title": "Unauthorized Presence in Research, Laboratory, or Production Areas",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject deliberately enters or remains within a restricted research facility, laboratory, prototype area, test environment, manufacturing floor, production line, formulation area, engineering workspace, or other location containing sensitive development or operational activity without authorization. The area may exp…",
+      "aliases": [
+        "unauthorized presence in research, laboratory, or production areas"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "IF031.002",
+      "title": "Unauthorized Presence in Security Operations Areas",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF031",
+      "description_text": "A subject deliberately enters or remains within a Security Operations Center, incident response room, insider threat investigation area, physical security control room, crisis-management room, or other restricted security operations environment without authorization. Presence in these areas may expose active alerts, i…",
+      "aliases": [
+        "unauthorized presence in security operations areas"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
         {
           "id": "PV011",
           "title": "Physical Access Controls"
@@ -21179,6 +22535,10 @@
       ],
       "preventions": [
         {
+          "id": "PV093",
+          "title": "Browser Print Restriction"
+        },
+        {
           "id": "PV014",
           "title": "Disable Printing, Windows"
         }
@@ -21195,6 +22555,18 @@
         "printing of documents with personal printer"
       ],
       "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
         {
           "id": "DT006",
           "title": "Installed Printers via Registry"
@@ -21213,6 +22585,14 @@
         }
       ],
       "preventions": [
+        {
+          "id": "PV093",
+          "title": "Browser Print Restriction"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
         {
           "id": "PV014",
           "title": "Disable Printing, Windows"
@@ -21248,6 +22628,14 @@
         }
       ],
       "preventions": [
+        {
+          "id": "PV093",
+          "title": "Browser Print Restriction"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
         {
           "id": "PV014",
           "title": "Disable Printing, Windows"
@@ -21995,6 +23383,37 @@
       ]
     },
     {
+      "id": "AF040",
+      "title": "Audit Trail Saturation",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "A subject deliberately generates excessive legitimate, repetitive, misleading, or low-value activity to reduce the visibility of significant events within organizational audit records. The relevant actions may remain recorded, but their identification is made more difficult because they are surrounded by a disproporti…",
+      "aliases": [
+        "audit trail saturation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
       "id": "AF004",
       "title": "Clear Browser Artifacts",
       "article_id": "AR5",
@@ -22287,6 +23706,19 @@
       "description_text": "A subject uses a description that inaccurately describes the nature, scope, or intent of code changes to reduce scrutiny or conceal harmful or unauthorized functionality. This may include minimizing the perceived impact of changes, omitting critical details, or framing modifications as routine fixes, refactoring, or m…",
       "aliases": [
         "misleading contribution description"
+      ],
+      "detections": [],
+      "preventions": []
+    },
+    {
+      "id": "AF041",
+      "title": "Cross-System Activity Fragmentation",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "A subject distributes related activity across multiple systems, applications, repositories, identities, devices, locations, or communication channels so that no individual source presents a complete account of the behavior. Each component may appear legitimate, low risk, or unrelated when reviewed independently, while…",
+      "aliases": [
+        "cross-system activity fragmentation"
       ],
       "detections": [],
       "preventions": []
@@ -22829,6 +24261,37 @@
       ],
       "detections": [],
       "preventions": []
+    },
+    {
+      "id": "AF038",
+      "title": "Incremental Data Collection",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "A subject deliberately collects organizational data in small quantities over an extended period to reduce the likelihood of detection. Rather than performing a single high-volume download or export, the subject retrieves individual files, records, messages, or other data elements across multiple sessions, systems, or…",
+      "aliases": [
+        "incremental data collection"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        }
+      ]
     },
     {
       "id": "AF002",
@@ -23720,6 +25183,37 @@
         }
       ],
       "preventions": []
+    },
+    {
+      "id": "AF039",
+      "title": "Retention Window Exploitation",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": null,
+      "description_text": "A subject deliberately times, delays, or distributes activity to exploit known or anticipated limitations in the retention of organizational telemetry. The subject acts with the expectation that relevant logs, records, or forensic artifacts will expire, be overwritten, or become unavailable before the activity is iden…",
+      "aliases": [
+        "retention window exploitation"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
     },
     {
       "id": "AF036",
