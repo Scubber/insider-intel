@@ -516,7 +516,7 @@
   function updateStatusLine() {
     if (!els.statusLine) return;
     const parts = [];
-    parts.push(state.dataState ? "LIVE" : "CONNECTING…");
+    parts.push(state.dataState ? "LIVE" : state.snapshotMode ? "CACHED" : "CONNECTING…");
     if (state.lastTotalIndexed) parts.push(`${state.lastTotalIndexed} INDEXED`);
     parts.push(`${state.shownCount} SHOWN`);
     const ts = state.dataState && state.dataState.updatedAt;
@@ -5361,21 +5361,55 @@
   });
 
   async function probeLiveApi() {
-    // Wait out a Cloud Run cold start on first load. Retries with a short
-    // timeout each; throws (surfacing the error state) if all fail.
-    const attempts = 3;
-    const perTryMs = 5000;
+    // Wait out a Cloud Run cold start on first load (~30s): backoff totaling
+    // ~75s, well past the worst observed wake. Throws only after the full
+    // ladder; with a boot snapshot painted the wait is invisible anyway.
+    const delaysMs = [2000, 4000, 8000, 15000, 15000, 15000];
     let lastErr = null;
-    for (let i = 1; i <= attempts; i += 1) {
+    let waited = 0;
+    for (let i = 0; i <= delaysMs.length; i += 1) {
       try {
-        await api("/health", {}, { timeoutMs: perTryMs, cache: "no-store" });
-        return;
+        return await api("/health", {}, { timeoutMs: 8000, cache: "no-store" });
       } catch (err) {
         lastErr = err;
-        if (i < attempts) setStatus(`Waking live API… (${i}/${attempts})`);
+        if (i === delaysMs.length) break;
+        waited += delaysMs[i] / 1000;
+        setStatus(`Waking live API… (${Math.round(waited)}s)`);
+        await new Promise((resolve) => setTimeout(resolve, delaysMs[i]));
       }
     }
     throw lastErr || new Error("live API unreachable");
+  }
+
+  /** First-paint cache: same-origin snapshot generated into the Pages
+   *  artifact (web/data/, never in git). Fail-soft — local dev or a
+   *  snapshot-less deploy just skips. NOT an offline mode: the stream
+   *  renders with a CACHED badge and live data replaces it on wake. */
+  async function paintFromSnapshot() {
+    try {
+      const [articlesRes, metaRes] = await Promise.all([
+        fetch("data/articles.json", { cache: "no-store" }),
+        fetch("data/meta.json", { cache: "no-store" }),
+      ]);
+      if (!articlesRes.ok) return false;
+      const data = await articlesRes.json();
+      const meta = metaRes.ok ? await metaRes.json() : {};
+      if (!data || !Array.isArray(data.results) || !data.results.length) return false;
+      state.snapshotMode = true;
+      state.snapshotGeneratedAt = meta.generated_at || null;
+      state.lastTotalIndexed = data.total_indexed || data.results.length;
+      renderArticles(data, streamTitle());
+      updateStatusLine();
+      if (els.liveStatus) {
+        const ts = state.snapshotGeneratedAt;
+        els.liveStatus.textContent = ts
+          ? `CACHED · ${formatDate(ts).toUpperCase()}`
+          : "CACHED";
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function socialSourceRow(info, { subscribed }) {
@@ -5724,11 +5758,14 @@
       syncBoardToggle();
       renderHuntUsecases();
 
-      // Cloud Run can be cold on first hit; probeLiveApi retries a few times
-      // before surfacing an error (no silent snapshot fallback).
-      await probeLiveApi();
+      // Paint instantly from the Pages boot snapshot (CACHED badge) while
+      // the Cloud Run instance wakes; live data replaces it below. The
+      // badge only ever says LIVE once /health has actually answered.
+      const painted = await paintFromSnapshot();
 
-      const health = await api("/health");
+      const health = await probeLiveApi();
+      state.snapshotMode = false;
+      if (painted) setStatus("Live API awake — refreshing…");
       setStatus(`API ok · ${health.indexed_articles} indexed`);
       state.lastTotalIndexed = health.indexed_articles || 0;
       state.dataState = {
@@ -5762,6 +5799,13 @@
       }
     } catch (err) {
       console.error(err);
+      // With a snapshot painted, keep the cached stream + CACHED badge and
+      // offer retry in the status line instead of nuking the list into the
+      // error state. The hard error is reserved for "no data at all".
+      if (state.snapshotMode) {
+        setStatus(`Live API unreachable — showing cached data. Reload to retry.`);
+        return;
+      }
       renderApiError(err);
     }
   }

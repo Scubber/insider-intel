@@ -1,12 +1,21 @@
 name: pages
 
+# Deploys web/ as the Pages artifact. A slim boot snapshot (web/data/) is
+# generated into the artifact — never committed to git — so the UI can paint
+# instantly from cache (CACHED badge) while the Cloud Run API cold-starts,
+# then swap to LIVE. The schedule keeps the snapshot ≤6h stale (fires ~40min
+# after each corpus refresh). Snapshot generation is best-effort: if the
+# corpus copy fails the site still deploys, just without a fresh cache.
 on:
   push:
     branches:
       - main
     paths:
       - "web/**"
+      - "scripts/export_boot_snapshot.py"
       - ".github/workflows/pages.yml"
+  schedule:
+    - cron: "40 4,10,16,22 * * *"
   workflow_dispatch:
 
 permissions:
@@ -18,6 +27,10 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  PROJECT_ID: insider-intel-502413
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+
 jobs:
   deploy:
     environment:
@@ -26,6 +39,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Build boot snapshot (best-effort)
+        run: |
+          set -uo pipefail
+          if gcloud storage cp "${OBJ}" /tmp/corpus.jsonl; then
+            pip install -q -e . \
+              && PROCESSED_ARTICLES_PATH=/tmp/corpus.jsonl \
+                 python -m scripts.export_boot_snapshot --out web/data \
+              || echo "snapshot build failed — deploying without boot cache"
+          else
+            echo "corpus copy failed — deploying without boot cache"
+          fi
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
@@ -35,3 +67,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify snapshot served
+        # Best-effort probe; Pages CDN can lag a moment, so warn-only.
+        run: |
+          sleep 20
+          curl -sf https://intel.thederpweb.com/data/meta.json \
+            && echo "boot snapshot live" \
+            || echo "snapshot not yet visible (CDN lag or build skipped)"

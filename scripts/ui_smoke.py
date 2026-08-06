@@ -22,6 +22,7 @@ import contextlib
 import functools
 import os
 import socket
+import subprocess
 import sys
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -78,8 +79,11 @@ class Checks:
 
 
 def _drift_guard(checks: Checks) -> None:
-    """The shipped site (web/) must carry no demo/offline code — the preview is
-    the only place that lives. Guard against re-introducing the entanglement."""
+    """The shipped site (web/) must carry no demo/OFFLINE-RESPONDER code — the
+    preview bundle is the only place that lives. The boot snapshot
+    (web/data/, generated into the Pages artifact, never committed) is a
+    different thing: a first-paint cache the UI renders with a CACHED badge
+    and replaces with live data — it must never answer API calls."""
     banned = ("demo-store", "INSIDER_INTEL_DEMO", "InsiderIntelDemo", "?demo")
     hits = []
     for name in ("index.html", "app.js", "config.js"):
@@ -89,6 +93,16 @@ def _drift_guard(checks: Checks) -> None:
                 hits.append(f"{name}:{tok}")
     checks.check("web/ has no demo code", not hits, ", ".join(hits))
     checks.check("web/demo/ is gone", not (WEB / "demo").exists())
+    # The boot snapshot arrives via the Pages artifact only — committing it
+    # would freeze stale data into git and every checkout.
+    tracked = subprocess.run(
+        ["git", "ls-files", "web/data"],
+        capture_output=True,
+        text=True,
+        cwd=WEB.parent,
+        check=False,
+    ).stdout.strip()
+    checks.check("web/data/ is not committed to git", not tracked, tracked)
 
 
 def run(base_url: str, headed: bool) -> int:
