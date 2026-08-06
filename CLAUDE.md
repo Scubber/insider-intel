@@ -242,12 +242,16 @@ legacy fallback.
 
 ## Hard-won gotchas
 
-- **The shipped UI has NO offline/demo code** (`web/demo/` is gone;
-  `scripts/ui_smoke.py` enforces the ban). If the API is unreachable the
-  stream shows a retryable error while the masthead may still say LIVE with
-  cached `/health` numbers — mixed state means "API was up at boot, dead
-  now", not a deploy failure. The only offline build is the separate
-  single-file preview (`scripts/export_preview.py`).
+- **The shipped UI has NO offline-responder/demo code** (`web/demo/` is gone;
+  `scripts/ui_smoke.py` enforces the ban) — but it DOES boot from a
+  **first-paint snapshot**: `pages.yml` generates `web/data/` into the Pages
+  artifact (scheduled ≈40min after each refresh; never committed — the smoke
+  guard asserts that) and `boot()` paints the stream from it with a **CACHED**
+  badge while `probeLiveApi()` backs off ~75s through the Cloud Run cold
+  start, then live data replaces it and the badge flips LIVE. CACHED never
+  claims LIVE; a hard error state appears only when there is no snapshot AND
+  no API. The only true offline build remains the separate single-file
+  preview (`scripts/export_preview.py`).
 - **Burst 503s across ALL endpoints at identical timestamps = instance
   OOM-kill, not an app bug** ("connection to the instance had an error" in
   Cloud Run logs; `/health` keeps working because it's tiny). `/reload` is

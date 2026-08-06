@@ -18,3 +18,4 @@ ds-bundle/
 .design-sync/node_modules
 design-system/node_modules/
 design-system/dist/
+web/data/
