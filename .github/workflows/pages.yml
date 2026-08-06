@@ -67,6 +67,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Pages backend was observed sitting in deployment_in_progress past
+          # the 10min default (2026-08-06, two clean runs); give it 20.
+          timeout: 1200000
       - name: Verify snapshot served
         # Best-effort probe; Pages CDN can lag a moment, so warn-only.
         run: |
