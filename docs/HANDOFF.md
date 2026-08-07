@@ -5,9 +5,10 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-07-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
-API on Cloud Run (`insider-intel-api`), UI on GitHub Pages
+**Last updated:** 2026-08-07 · **Repo:** `Scubber/insider-intel` · **Prod:**
+API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
+**Rollback checkpoint:** branch `checkpoint/v1.0-parked` (pre-August prod).
 
 ---
 
@@ -15,244 +16,132 @@ API on Cloud Run (`insider-intel-api`), UI on GitHub Pages
 
 | Area | State |
 |---|---|
-| **CourtListener API** | **Paid Tier-2** token (15/min · 150/hr · 600/day), mapped to the job as secret `COURTLISTENER_API_TOKEN`. Tier is account-level, so the same token now runs at Tier-2. |
-| **Ingest pacing/caps** | `COURTLISTENER_REQUEST_DELAY_SECONDS=5`, `COURTLISTENER_HISTORY_QUERIES_PER_WINDOW=0` (full-query rotation each run = history **drain mode**), `COURTLISTENER_BACKFILL_MAX_DOCKETS=50`. Budget ≈ 110 req/run × 4 runs ≈ 440/day (< 600). Set in `deploy-api.yml`. |
-| **History sweep** | Now rotates the **full** `DEFAULT_QUERIES` set (was a hand-picked 4), so social-engineering / sim-swap / device-identifier (Scattered-Spider class) cases finally get swept for old filings. Cursor holds until a window's rotation completes. |
-| **Enrichment** | **ON.** Haiku 4.5 (`SUMMARIZER_MODEL=claude-haiku-4-5-20251001`), `SUMMARIZER_MAX_ARTICLES_PER_RUN=100` + discoverer 15/run. Bills LLM every run. |
-| **PACER purchasing** | **ARMED** (2026-07-24) — account #9182404 cleared review, search privileges active. `PACER_PURCHASE_MAX_PER_RUN=5`, hard-capped by `PACER_QUARTERLY_BUDGET_CENTS=2700` ($27/quarter, under the $30 fee waiver — typical usage bills nothing). Buys only insider-qualifying cases after the free archive came up empty. |
-| **Corpus size** | ≈ **1,672 rows / 1,431 filings**; only **~295 filings carry a document body** (`clean_text ≥ 1500`). **~79% are metadata stubs** whose documents are PACER-only (not in the free RECAP archive). |
-| **Company watchlist** | `COURTLISTENER_COMPANY_WATCHLIST=Voya, Voya India` — each expands to a scoped insider query + a bare catch-all. |
-
-**The central constraint:** the operator wants full court-filing *text* for
-off-site LLM enrichment, but ~79% of flagged filings are stubs. The free-archive
-backfill (now at 50/run, Tier-2) fills what's free; the rest needs PACER, which
-is parked pending account review.
+| **Corpus** | ≈ **7,000 rows**, **1,477 enriched** (forensics present), **540 LLM-adjudicated insider cases**. Writes land 4×/day (~04:1x/10:1x/16:1x/22:1x UTC generations on `processed/articles.jsonl`). |
+| **Enrichment** | **ON, trickle mode** (2026-07-26): `SUMMARIZER_MAX_ARTICLES_PER_RUN=25`, `RESERVE=15`, `DISCOVERER=3`, `COURTLISTENER_BACKFILL_MAX_DOCKETS=10`. Haiku 4.5. Spend ≈ $1–2/day worst case. Spend gates live (see CLAUDE.md) — but see open thread #10: the filings gate leaks. |
+| **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
+| **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact on a 6h schedule; UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
+| **Service memory** | **2Gi asserted in `deploy-api.yml`** after the 2026-07-26 OOM burst-503 outage at legacy 1Gi. Must grow with the corpus. |
+| **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
+| **ITM** | **v2.9.0** (532 techniques). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). |
+| **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report; run artifacts (download on the run page) + `gs://…/export/traffic-{report.md,log.csv}`. ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
+| **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). |
+| **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
 
 ---
 
-## This session's changes (PRs on `main`)
+## Recent sessions' changes (PRs on `main`)
 
 | PR | What / why |
 |---|---|
-| [#92](https://github.com/Scubber/insider-intel/pull/92) | Enrich on Haiku 4.5 to fill the backlog at ~1/3 Sonnet cost |
-| [#93](https://github.com/Scubber/insider-intel/pull/93) | CourtListener **company watchlist** (Voya) → scoped + catch-all queries |
-| [#94](https://github.com/Scubber/insider-intel/pull/94) | Corpus **baseline** doc + point `corpus-count` at the Haiku target |
-| [#95](https://github.com/Scubber/insider-intel/pull/95) | Doc: how the CourtListener ingest finds court documents |
-| [#96](https://github.com/Scubber/insider-intel/pull/96) | `corpus-count`: report **body-text coverage** (full vs metadata stub) |
-| [#97](https://github.com/Scubber/insider-intel/pull/97) | Read-only `corpus-sample` workflow to inspect extracted observables |
-| [#98](https://github.com/Scubber/insider-intel/pull/98) | `corpus-sample`: body-regex filter to probe artifact coverage |
-| [#99](https://github.com/Scubber/insider-intel/pull/99) | `courtlistener-worklist`: topic fetch worklist (body vs stub) |
-| [#100](https://github.com/Scubber/insider-intel/pull/100) | **History sweep = full query set** via per-window rotation |
-| [#101](https://github.com/Scubber/insider-intel/pull/101) | **Tune ingest for Tier-2** token (pacing/caps) |
-| [#102](https://github.com/Scubber/insider-intel/pull/102) | **Park PACER** purchasing until the account clears review |
-| [#103](https://github.com/Scubber/insider-intel/pull/103) | **`export-llm`** workflow: pull LLM-ready docs for off-site enrichment |
+| #130 | Feedly/td3.dev doc scrub + mobile case-meta wrap fix |
+| #131 | `corpus-noninsider` diagnostic (spend-waste audit) |
+| #132 | **Spend gates** (filings in-body signal, news technique-hit) + CONTEXT stream filter |
+| #133 | `service-logs` diagnostic (Cloud Run API errors + 5xx) |
+| #134 | **2Gi memory** (OOM burst-503 outage fix) |
+| #135 | CLAUDE.md brought current (gates, EVIDENCE, diagnostics, gotchas) |
+| #136 | README rewrite (novel-technique-discovery mission) + **ADMIN_API_TOKEN gate** |
+| #137 | **ITM 2.9** (+31 techniques, DT067→DT152) + weekly auto-refresh |
+| #138 | Smoke accepts 401 on gated ingest_url probe |
+| #139 | **Trickle-mode caps** (park spend-safe) |
+| #140 | **Snapshot-first boot** (CACHED→LIVE, web/data via Pages artifact) |
+| #141 | deploy-pages 20min timeout |
+| #142–#145 | DIY traffic analytics: weekly→**daily**, forensic CSV + GeoIP (+ column fix) |
 
 ---
 
 ## Operational knobs & where they live
 
-- **Models / caps / pacing / PACER cap** → `.github/workflows/deploy-api.yml`
-  `--update-env-vars` block. **GitOps: edit + merge**, not `gcloud`. The deploy
-  re-stamps the job env on every merge to `main` (merge preserves secret
-  mappings).
-- **Secrets** (CL token, PACER `pacerinsider`/password, LLM keys) → **Secret
-  Manager**, mapped to the job with `--set-secrets` **once** (persists). Never in
-  the repo.
+- **Models / caps / pacing / PACER cap / memory / secret mappings** →
+  `.github/workflows/deploy-api.yml`. **GitOps: edit + merge**, never gcloud.
+  Every deploy re-stamps job env (`--update-env-vars`, merge semantics) and
+  re-asserts all six secret mappings (`--update-secrets`).
+- **Secret VALUES** → Secret Manager only (operator-manual, one-time; plus
+  per-secret `secretAccessor` grants to `api-runtime` and `ingest-job` SAs).
 - **Read-only diagnostic + export workflows** (Actions → Run workflow):
-  - `corpus-count` — totals + body-coverage + stale-vs-current split.
-  - `corpus-sample` — sample enriched filings' methods/observables (`match` regex,
-    `max_cases`).
-  - `courtlistener-worklist` — for a `topic` regex, which flagged filings have a
-    body vs are stubs.
-  - `export-llm` — writes `gs://insider-intel-502413-corpus/export/insider-<channel>-llm.ndjson`
-    (raw `clean_text` + metadata, body-bearing rows only). Inputs: `channel`,
-    `min_body`, `include_ours`. Pull with `gcloud storage cp <path> .`.
-  - `reenrich-drain`, `corpus-recover`, `corpus-status` — pre-existing job admin.
+  `corpus-status` (state + env audit), `corpus-count`, `corpus-sample`,
+  `corpus-noninsider` (spend-waste audit), `courtlistener-worklist`,
+  `evidence-ledger`, `export-llm`, `service-logs`, `probe-extract`,
+  `traffic-report`, `refresh-corpus`/`watch-refresh`, `reenrich-drain`,
+  `corpus-recover`. A dispatch workflow must exist on `main`; it then runs
+  the file from any ref (branch diagnostics without merging).
 
 ---
 
-## Open threads (decided but NOT yet built)
+## Open threads
 
-1. **In-repo settings + lexicon config** — chosen direction: a checked-in
-   `config/app_config.json` (edited via merge, no GCP) holding the search lexicon
-   (CourtListener queries / opinion queries / watchlist / feeds) with fallback to
-   `DEFAULT_QUERIES`/`DEFAULT_FEEDS`, plus an optional non-secret `settings`
-   override map (file > env). **Secrets stay in Secret Manager** (code allowlist).
-   Lexicon is the core; settings-override optional. Reuse the fail-soft-read idiom
-   from `apps/aggregator/social_subscriptions.py`; seam is
-   `courtlistener.py::parse_queries(defaults=)` + `courtlistener_pipeline.py::queries_for()`
-   / `history_rotation_queries()`. Explicitly NOT a GCS bucket store, API write
-   endpoint, or admin web page.
-2. **Collect-only vs enrich** — if enrichment is done off-site, set
-   `SUMMARIZER_MAX_ARTICLES_PER_RUN=0` (+ discoverer 0) to stop paying Haiku;
-   trade-off is the live app stops enriching new cases.
-3. **PACER activation** — DONE 2026-07-24: account cleared review and
-   `PACER_PURCHASE_MAX_PER_RUN` was flipped 0→5. Un-free affidavits (the
-   intrusion-case bodies) now land via RECAP Fetch, hard-capped at
-   `PACER_QUARTERLY_BUDGET_CENTS=2700` ($27, under the $30 fee waiver).
-4. **Discovery lanes** — (a) ingest the FLP tech-cases-bot feed
-   (`mastodon.social/@techcases.rss`) → extract CourtListener docket links (prod
-   egress can reach mastodon; the build sandbox cannot); (b) an ITM-derived query
-   generator to replace hand-authored `DEFAULT_QUERIES` (systematic coverage).
-5. **Off-site LLM enrichment is the operator's end goal.** `export-llm` is the
-   delivery mechanism; it grows as the backfill pulls more bodies.
-6. **UI feed auto-discovery** — the public Atom feed ships at
-   `GET /feed.xml` (facet-aware: `?use_case=`/`?channel=`/`?insider_type=`), but
-   the UI does NOT yet advertise it. Add a
-   `<link rel="alternate" type="application/atom+xml" href="…/feed.xml">` to
-   `web/index.html`'s `<head>` so browsers/readers auto-detect it. One-line
-   `web/**` change (separate `pages.yml` deploy). Deferred by the operator —
-   roadmap, not urgent.
-7. **Cold-start UX (~30s API wake)** — decided direction, parked by the
-   operator. Plan (two independent PRs, $0 added spend):
-   (a) **Snapshot-first UI + snapshot-on-refresh**: export the static snapshot
-   (`scripts/export_demo_snapshot.py` machinery) on every corpus refresh and
-   deploy to Pages; flip `web/app.js` to render from the snapshot immediately
-   (stale-while-revalidate) and hydrate to live data when the API wakes —
-   badge upgrades "Snapshot Nh ago" → "Live". Corpus changes only 4×/day, so a
-   ≤6h snapshot IS current for the reading path.
-   (b) **Faster wake**: `--cpu-boost` on the Cloud Run service + persist the
-   prebuilt search index to the bucket at refresh time so API boot reads the
-   index instead of rebuilding it through the FUSE mount (~30s → ~8-10s).
-   Explicitly NOT chosen: `min-instances=1` (~$3-6/mo — revisit only if
-   interactive search latency matters) and a keep-warm pinger (unreliable
-   hack).
-8. **International court-filings lanes** (maturity direction; phase 0 SHIPPED).
-   No CourtListener equivalent exists abroad; foreign courts publish
-   *judgments* (adjudicated facts) not *dockets/filings* (rich affidavits),
-   so these lanes yield cleaner claim_status but less raw hunt material and
-   nothing PACER-like to buy. Phasing:
-   - **Phase 0 — DONE 2026-07-24**: prosecution/regulator press feeds (AFP,
-     OAIC, CPS, NCA, ICO, Justice Canada) added to `DEFAULT_FEEDS` under
-     `insider-legal` — where AU/UK/CA insider criminal cases surface first.
-     Verify URLs in the next refresh log ([FAIL] = fix the path).
-   - **Phase 1 — UK Find Case Law** (The National Archives): free official
-     API + Atom feeds, full judgment text (E&W, 2001+), English. Build as a
-     second filings-channel pipeline module mirroring
-     `courtlistener_pipeline.py` (`channel="filings"`, provenance `fcl-uk-*`,
-     UK-localized query projection: add "breach of confidence", "misuse of
-     private information", restrictive-covenant terms).
-   - **Phase 2 — CanLII: DOWNGRADED after reading the API docs**
-     (github.com/canlii/API_documentation). The API is **metadata-only**: no
-     full-text search (so the insider lexicon cannot flag cases server-side —
-     only title matching, near-zero signal on "R. v. Smith" captions) and no
-     decision text (every hit a permanent stub with no PACER-like purchase
-     path). Do NOT build a pipeline module or request an API key for this.
-     Phase-2-lite instead: CanLII's per-court **RSS feeds of new decisions**
-     (e.g. ONSC, Federal Court) into the ordinary RSS lane, title-scored —
-     zero engineering, low yield, honest.
-   - **NOT chosen**: AU courts direct (no API; AustLII scraping-hostile —
-     AU coverage stays via phase-0 feeds) and EU national courts
-     (fragmented, non-English, weak APIs).
-9. **EVIDENCE flagship page — the ultimate product of the research.** Fully
-   designed with the operator (interactive mock iterated to sign-off; concept
-   at claude.ai/code/artifact/f97f1a20-b69b-431b-ac56-500fe9a1dfe3 — private
-   to the operator). Decision: a **fifth masthead tab** `EVIDENCE`
-   (route `#/evidence`, full-width takeover) owning the *corpus altitude*;
-   per-technique drill-down goes to the **existing dossier** (never a second
-   per-technique page); Workbench gets only a corpus footnote. Page design,
-   settled through operator review:
-   - **Theme-grouped technique table** (MOTIVE/MEANS/PREPARATION/
-     INFRINGEMENT/ANTI-FORENSICS — the matrix's own spine), each theme with
-     its evidence fingerprint + rollups; corroboration strip ("N of M ITM
-     detections corroborated by real-case evidence" — needs a hand-authored
-     ~30-line crosswalk: evidence record classes ↔ ITM DT ids).
-   - **WHERE THE EVIDENCE LIVES**: one question, one denominator — bar =
-     share of all method-bearing cases whose trail includes the record class;
-     green segment INSIDE the bar = adjudicated subset; mech/inferred demoted
-     to a chip+tooltip. Color law page-wide: green = court-proven,
-     red = observed/alleged. Explicit legend under the header (operator asked
-     "what's green vs red" — never ship a bar without the legend).
-   - **WHO band** (operator: "can we profile?"): actor_role/actor_profile
-     normalized on TWO axes — function (exec/manager/technical/sales/
-     contractor/temp) × employment state (current/departing/former-fired/
-     third-party). **Roles, never individuals** (the persona graph stays
-     scrapped). Ships with its own coverage denominator; FIRST STEP is a
-     read-only coverage count of actor_role over the corpus (if low, add a
-     one-line extractor-prompt nudge — rides the same enrichment call).
-   - **Report rigor** (operator: "does this read like real research?" —
-     gaps identified and folded in): (a) FINDINGS layer — 3-5 named claims
-     with implication+recommendation, drafted by the off-site LLM from the
-     ledger JSON via the export-llm lane, operator-approved, versioned;
-     (b) LIMITATIONS block stating **selection bias** first (court data =
-     caught + litigated, not insider behavior — reframe as "the evidence that
-     survives to court"); (c) small-n honesty: counts beside every %,
-     suppress % under n<10; (d) **dwell time** — act-to-detection interval
-     extracted from each case's stored forensics.timeline (median months to
-     discovery by technique × role — the most benchmarkable stat here);
-     (e) maturity crosswalk mapping coverage questions to CISA/NITTF program
-     elements (both guides already in the publications lane).
-   - Phasing: **P1 the instrument** (tab + theme table + crosswalk + WHO +
-     limitations + small-n + dossier section), **P2 the report** (findings
-     layer + maturity crosswalk + workbench footnote + sidebar
-     click-throughs), **P3 depth & reach** (dwell-time; static crawlable
-     export + meta/OG + snapshot-first — rides threads 6/7). All layers are
-     theme-token styled (site theme system applies; green/red semantics hold
-     in every theme).
-   - **P1 SHIPPED 2026-07-25** (#126/#127; live at intel.thederpweb.com
-     → EVIDENCE, route #/evidence). First real run: 491 method-bearing cases
-     (51 adjudicated); actor-role coverage 320/491 (65%) — WHO band ships
-     real denominators, no extractor-prompt nudge needed for function.
-     Known under-capture: employment state "departing" at only 7 (filings
-     put boundary language in the body, not the role string) — first P2
-     candidate, a one-line extractor-prompt nudge riding the same call.
-   - **OPERATOR FINDINGS SEED (verbatim thesis, captured 2026-07-25 — the
-     first draft input to the P2 findings layer, in the operator's voice):**
-     "We analyzed insider threats across many court cases. We found
-     executives to be the largest insider threat. So why are we so afraid of
-     investigating our executives? Well, because they sign our paychecks.
-     Our biggest threat are those above us, but we often don't wanna do
-     anything about it. So how do you respond? How do you send the signal
-     when it's to those you report to? This is the data. What do we do
-     about it?"
-     Data behind it (first ledger run): executive/officer = 230 of 320
-     role-known cases (47%), 26 adjudicated — the largest function class by
-     far. Honest framing for the published finding: partly selection (exec
-     misconduct is what gets LITIGATED — securities suits), and that is the
-     point, not a weakness: executive-class insider risk is the class that
-     internal programs structurally cannot touch, so it surfaces in court
-     instead of in a SOC. Supporting ledger fact: the evidence that makes
-     executive cases is largely EXTERNAL/public record (SEC Form 4s — 36
-     cases, 0% adjudicated overlap with internal telemetry; public
-     statements vs internal records — 83 cases; brokerage records) — i.e.
-     detecting upward does not require permission to surveil upward.
-     Program response direction for the finding's recommendation section:
-     pre-committed role-agnostic escalation triggers set by the BOARD before
-     any case exists; reporting line independent of the executive chain
-     (audit committee / external counsel); monitor the public record classes
-     (Form 4 timing vs disclosure calendars) that need no internal
-     authority; whistleblower/SEC channels as the documented relief valve
-     when internal signal-sending is structurally blocked.
+1. **In-repo settings + lexicon config** — decided direction unchanged
+   (checked-in `config/app_config.json`, fallback to defaults, secrets stay
+   in Secret Manager). Not built.
+2. **Collect-only vs enrich** — superseded by trickle mode (#139): enrichment
+   stays on at ~$1–2/day. `SUMMARIZER_MAX_ARTICLES_PER_RUN=0` remains the
+   off switch.
+3. **PACER activation** — DONE 2026-07-24.
+4. **Discovery lanes** — (a) FLP tech-cases-bot feed; (b) ITM-derived query
+   generator. Not built.
+5. **Off-site LLM enrichment** — `export-llm` remains the delivery lane.
+6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
+   still a one-line deferred change.
+7. **Cold-start UX** — **DONE 2026-08-06** (#140/#141): snapshot-first boot
+   shipped (variant (a) of the old plan). Variant (b) (cpu-boost + prebuilt
+   index) remains optional if wake time itself ever matters.
+8. **International court-filings lanes** — phase 0 (prosecutor/regulator
+   feeds) + phase-2-lite (CanLII RSS) SHIPPED; **phase 1 UK Find Case Law**
+   pipeline module still the real build. CanLII API stays a no-go
+   (metadata-only). AU direct / EU national courts not chosen.
+9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE,
+   `web/findings.json` publish-by-merge). Remaining: CISA/NITTF maturity
+   crosswalk (P2), dwell-time from forensics.timeline + static crawlable
+   export + OG meta (P3), "departing" employment-state extractor-prompt
+   nudge (known under-capture: 7 of 320).
+   **OPERATOR FINDINGS SEED (verbatim thesis, captured 2026-07-25):**
+   "We analyzed insider threats across many court cases. We found
+   executives to be the largest insider threat. So why are we so afraid of
+   investigating our executives? Well, because they sign our paychecks.
+   Our biggest threat are those above us, but we often don't wanna do
+   anything about it. So how do you respond? How do you send the signal
+   when it's to those you report to? This is the data. What do we do
+   about it?"
+   Published as finding F1 with the selection-bias-is-the-finding framing;
+   data: executive/officer 230/320 role-known (47%), 26 adjudicated;
+   external record classes (Form 4 ×36, public-vs-internal ×83, brokerage)
+   make the cases — detecting upward needs no permission to surveil upward.
+10. **Filings spend-gate leak (ACTIVE — next real work item).** 2026-08-04
+    audit: of 553 post-gate enrichments, **58% still adjudicated
+    non-insider** — the in-body ITM alias check passes company-v-company
+    IP/trade-secret litigation and CanLII judgments with zero methods
+    (news gate worked: only +18 in 9 days). Proposed fix: filings body must
+    also contain an `INSIDER_FRAMING_KEYWORDS` hit ("former employee" etc.),
+    with a dry-run replaying the gate over the 937 stored non-insider vs
+    540 insider rows to measure the false-negative cost first.
+11. **Admin page** — direction discussed, not decided: Cloudflare Access in
+    front of an `/admin` route (free, auth at edge) vs Google IAP (needs LB,
+    ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? A public
+    unauthenticated admin subdomain was rejected (adds scan surface).
+12. **Misc parked**: EXPORT CASES full-filing-text plan (unbuilt);
+    README byline + LICENSE (operator undecided); landscape-iPhone smoke
+    failure (pre-existing); themes.css stale "default" comment; one-off
+    04:00Z 2026-08-07 refresh miss (self-healed — watch for recurrence).
 
 ---
+
+## Conventions
+
+- **Docs ride the same PR.** If a change alters architecture, invariants,
+  ops knobs, or live state: update CLAUDE.md and/or this file in that PR —
+  never "later". This file's **Last updated** date is the freshness tripwire.
+- The PR template (`.github/pull_request_template.md`) carries the checklist.
 
 ## Environment note for the assistant
 
-The build/agent sandbox **cannot reach GCP** (network policy blocks all cloud
-egress — same on any provider, so a platform move does not help). Do infra
-changes through **GitOps (edit `deploy-api.yml` + merge)** or **read-only OIDC
-workflows** dispatched from the Actions tab. Truly manual, one-time steps that
-stay with the operator: creating Secret Manager secret *values* and account
-signups (e.g. PACER). Everything else can be a committed script/workflow.
-
----
-
-## Next steps
-
-1. Watch free-body coverage climb under Tier-2: re-run `corpus-count` /
-   `courtlistener-worklist` (topic = `scattered spider|sim.?swap|device identifier`)
-   in a day or two; confirm the history-rotation is pulling the intrusion cases.
-2. Decide **collect-only vs keep enrichment on** (thread #2).
-3. When PACER clears review, un-park purchasing (thread #3).
-4. Build the **in-repo lexicon/settings config** (thread #1) if routine, no-merge
-   tuning is wanted — or keep editing `deploy-api.yml`.
-5. Re-run `export-llm` whenever a fresh LLM-ready pull is needed.
+The build/agent sandbox **cannot reach GCP or the prod API**. Do infra changes
+through **GitOps (edit `deploy-api.yml` + merge)** or **read-only OIDC
+workflows** dispatched from the Actions tab (or the GitHub API). Secret
+*values* and IAM grants stay operator-manual.
 
 ## Verification (all local — no GCP)
 
 ```bash
 make test lint fmt          # same targets CI runs; green local == green CI
 # or: ruff check apps shared tests && pytest -q
+PYTHONPATH=. python scripts/ui_smoke.py   # 52/53 baseline (landscape fail pre-existing)
 ```
-Dispatch any workflow from **Actions → <name> → Run workflow**; read its log for
-results (the `export-llm` log prints the exact `gcloud storage cp` pull command).
