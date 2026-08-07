@@ -165,7 +165,9 @@ prod API directly.) Read-only `workflow_dispatch` diagnostics cover it —
 dispatch from the Actions tab or the GitHub API: `refresh-corpus` /
 `watch-refresh` (force + watch a refresh), `corpus-status` (state + job env
 audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
-`corpus-noninsider` (spend-waste audit), `evidence-ledger` (writes
+`corpus-noninsider` (spend-waste audit), `traffic-report` (daily DIY
+analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
+`evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
 A dispatch workflow must exist on `main` to be invokable; it then runs the
@@ -289,3 +291,7 @@ legacy fallback.
 
 Work on branches; `main` deploys. Commit messages explain *why*. CI must be
 green before merge (it runs the same Makefile targets you ran locally).
+**Docs ride the same PR**: a change that alters architecture, invariants,
+ops knobs, or live state updates CLAUDE.md and/or docs/HANDOFF.md in that
+same PR — never "later". HANDOFF's Last-updated date is the freshness
+tripwire; the PR template carries the checklist.
