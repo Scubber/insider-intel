@@ -1,10 +1,11 @@
 name: traffic-report
 
-# DIY analytics, tier 1 (zero client-side code): aggregate the API's Cloud Run
-# request logs into a weekly traffic report. Every page load fires GET /health
-# (the boot probe), so health hits ≈ page views — first-party, ad-block-proof,
-# no cookies, no third parties. Report prints in the run log and lands in the
-# bucket's export/ prefix. Read-only; no LLM spend.
+# DIY analytics from Cloud Run request logs — no client-side code. Every page
+# load fires GET /health (the boot probe), so health hits ≈ page views:
+# first-party, ad-block-proof, cookieless. Emits a summary report AND a
+# full per-request forensic CSV with offline GeoIP (source IP → country/city,
+# no third-party callouts with visitor IPs). Both land as run artifacts and
+# in the bucket's export/ prefix. Read-only; no LLM spend.
 on:
   schedule:
     - cron: "0 13 * * 1" # Mondays 13:00 UTC
@@ -33,10 +34,27 @@ jobs:
           service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
+      - name: Install GeoIP database
+        run: |
+          set -euo pipefail
+          # DB-IP Lite (CC-BY-4.0) city-level CSV: no signup, no rate limit,
+          # parsed with stdlib. Falls back gracefully if the CDN is
+          # unreachable — the CSV just carries empty geo columns.
+          MONTH=$(date -u +%Y-%m)
+          curl -fsSL "https://download.db-ip.com/free/dbip-city-lite-${MONTH}.csv.gz" \
+            -o dbip.csv.gz \
+            || curl -fsSL "https://download.db-ip.com/free/dbip-city-lite-$(date -u -d 'last month' +%Y-%m).csv.gz" \
+              -o dbip.csv.gz \
+            || true
+          [ -f dbip.csv.gz ] && gunzip dbip.csv.gz && echo "geoip db ready" \
+            || echo "geoip db unavailable — CSV geo columns will be blank"
+
       - name: Pull request logs
         run: |
           set -euo pipefail
           DAYS="${{ inputs.days || '7' }}"
+          # httpRequest carries remoteIp, serverIp, requestSize, responseSize,
+          # latency, protocol, userAgent, referer, requestUrl, status.
           gcloud logging read \
             'resource.type=cloud_run_revision AND resource.labels.service_name=insider-intel-api AND httpRequest.requestUrl:*' \
             --project "${PROJECT_ID}" \
@@ -45,77 +63,186 @@ jobs:
             --format json > requests.json
           python3 -c "import json; print(len(json.load(open('requests.json'))), 'log entries')"
 
-      - name: Aggregate
+      - name: Build forensic CSV + report
         run: |
           python3 - <<'PY'
-          import json, re
+          import csv, ipaddress, json, re
           from collections import Counter, defaultdict
           from urllib.parse import urlparse
 
           entries = json.load(open("requests.json"))
+
+          # --- offline GeoIP: load DB-IP lite city CSV into sorted ranges ---
+          geo_ranges = []  # (start_int, end_int, country, city) for IPv4
+          try:
+              with open("dbip.csv", newline="", encoding="utf-8", errors="replace") as fh:
+                  for row in csv.reader(fh):
+                      if len(row) < 4:
+                          continue
+                      lo, hi, cc = row[0], row[1], row[2]
+                      city = row[-1] if len(row) > 4 else ""
+                      try:
+                          a, b = ipaddress.ip_address(lo), ipaddress.ip_address(hi)
+                      except ValueError:
+                          continue
+                      if a.version != 4:
+                          continue
+                      geo_ranges.append((int(a), int(b), cc, city))
+              geo_ranges.sort()
+              print(f"geoip ranges: {len(geo_ranges)}")
+          except FileNotFoundError:
+              print("no geoip db — geo columns blank")
+
+          import bisect
+          starts = [r[0] for r in geo_ranges]
+
+          def geo(ip):
+              try:
+                  addr = ipaddress.ip_address(ip)
+              except ValueError:
+                  return ("", "")
+              if addr.version != 4 or not geo_ranges:
+                  return ("", "")
+              i = bisect.bisect_right(starts, int(addr)) - 1
+              if 0 <= i < len(geo_ranges):
+                  lo, hi, cc, city = geo_ranges[i]
+                  if lo <= int(addr) <= hi:
+                      return (cc, city)
+              return ("", "")
+
           BOT_RE = re.compile(
               r"bot|crawl|spider|scrape|curl|wget|python-requests|httpx|go-http|"
               r"feedparser|feedfetcher|rss|monitor|probe|uptime|headless",
               re.I,
           )
-          days = defaultdict(lambda: {"views": 0, "bot": 0})
-          paths, referers, uas = Counter(), Counter(), Counter()
-          statuses = Counter()
-          total = 0
-          for e in entries:
-              req = e.get("httpRequest") or {}
-              url = req.get("requestUrl") or ""
-              path = urlparse(url).path
-              ua = req.get("userAgent") or ""
-              ref = req.get("referer") or ""
-              day = (e.get("timestamp") or "")[:10]
-              is_bot = bool(BOT_RE.search(ua)) or not ua
-              total += 1
-              statuses[str(req.get("status"))] += 1
-              paths[path] += 1
-              if ref and "thederpweb" not in ref:
-                  referers[ref.split("?")[0][:80]] += 1
-              # /health from a browser UA ≈ one page load (the boot probe)
-              if path == "/health":
-                  if is_bot:
-                      days[day]["bot"] += 1
-                  else:
-                      days[day]["views"] += 1
-                      uas[ua.split("(")[0].strip()[:40]] += 1
 
-          lines = ["# insider-intel traffic report", ""]
-          lines.append(f"Window: last {len(days)} active day(s) · {total} API requests total")
-          lines.append("")
-          lines.append("## Page views per day (human-UA /health hits)")
+          # --- per-request forensic CSV (newest first) ---
+          rows = sorted(entries, key=lambda e: e.get("timestamp") or "", reverse=True)
+          countries, cities, ips = Counter(), Counter(), Counter()
+          ip_4xx = Counter()
+          paths, referers, uas, statuses = Counter(), Counter(), Counter(), Counter()
+          days = defaultdict(lambda: {"views": 0, "bot": 0})
+          suspicious_paths = Counter()
+          total = 0
+
+          with open("traffic-log.csv", "w", newline="", encoding="utf-8") as fh:
+              w = csv.writer(fh)
+              w.writerow([
+                  "timestamp", "src_ip", "country", "city", "method", "path",
+                  "query", "status", "latency", "resp_bytes", "protocol",
+                  "user_agent", "referer",
+              ])
+              for e in rows:
+                  req = e.get("httpRequest") or {}
+                  ip = req.get("remoteIp") or ""
+                  url = req.get("requestUrl") or ""
+                  parsed = urlparse(url)
+                  path, query = parsed.path, parsed.query
+                  ua = req.get("userAgent") or ""
+                  ref = req.get("referer") or ""
+                  status = str(req.get("status") or "")
+                  cc, city = geo(ip)
+                  w.writerow([
+                      e.get("timestamp") or "", ip, cc, city,
+                      req.get("requestMethod") or "", path, query, status,
+                      req.get("latency") or "", req.get("responseSize") or "",
+                      req.get("protocol") or "", ua, ref,
+                  ])
+                  total += 1
+                  statuses[status] += 1
+                  paths[path] += 1
+                  if ip:
+                      ips[ip] += 1
+                      if status.startswith("4"):
+                          ip_4xx[ip] += 1
+                  if cc:
+                      countries[cc] += 1
+                  if city:
+                      cities[f"{city}, {cc}"] += 1
+                  if ref and "thederpweb" not in ref:
+                      referers[ref.split("?")[0][:80]] += 1
+                  if path in ("/.env", "/wp-login.php", "/admin") or ".." in path:
+                      suspicious_paths[path] += 1
+                  if path == "/health":
+                      day = (e.get("timestamp") or "")[:10]
+                      is_bot = bool(BOT_RE.search(ua)) or not ua
+                      days[day]["bot" if is_bot else "views"] += 1
+                      if not is_bot:
+                          uas[ua.split("(")[0].strip()[:40]] += 1
+
+          # --- summary report ---
+          L = ["# insider-intel traffic report", ""]
+          L.append(f"Window: {len(days)} active day(s) · {total} API requests · full log in traffic-log.csv")
+          L.append("")
+          L.append("## Page views per day (human-UA /health hits)")
           for day in sorted(days):
               d = days[day]
-              lines.append(f"- {day}: {d['views']} views ({d['bot']} bot/script probes)")
-          lines.append("")
-          lines.append("## Top endpoints")
-          for p, n in paths.most_common(12):
-              lines.append(f"- {n:6d}  {p}")
-          lines.append("")
-          lines.append("## External referrers")
+              L.append(f"- {day}: {d['views']} views ({d['bot']} bot/script)")
+          L.append("")
+          L.append("## By country")
+          for cc, n in countries.most_common(20):
+              L.append(f"- {n:5d}  {cc}")
+          if cities:
+              L.append("")
+              L.append("## Top cities")
+              for c, n in cities.most_common(15):
+                  L.append(f"- {n:4d}  {c}")
+          L.append("")
+          L.append("## Top source IPs")
+          for ip, n in ips.most_common(20):
+              cc, city = geo(ip)
+              loc = f" [{city}, {cc}]" if cc else ""
+              L.append(f"- {n:5d}  {ip}{loc}")
+          L.append("")
+          L.append("## Suspicious clients (4xx-heavy / probe paths)")
+          flagged = [(ip, n) for ip, n in ip_4xx.most_common(15) if n >= 3]
+          if flagged:
+              for ip, n in flagged:
+                  cc, city = geo(ip)
+                  loc = f" [{city}, {cc}]" if cc else ""
+                  L.append(f"- {n:4d} 4xx  {ip}{loc}")
+          else:
+              L.append("- none (no IP with 3+ 4xx responses)")
+          if suspicious_paths:
+              L.append("")
+              L.append("## Probe paths hit")
+              for p, n in suspicious_paths.most_common():
+                  L.append(f"- {n:4d}  {p}")
+          L.append("")
+          L.append("## Top endpoints")
+          for p, n in paths.most_common(15):
+              L.append(f"- {n:6d}  {p}")
+          L.append("")
+          L.append("## External referrers")
           if referers:
               for r, n in referers.most_common(15):
-                  lines.append(f"- {n:4d}  {r}")
+                  L.append(f"- {n:4d}  {r}")
           else:
-              lines.append("- none recorded (direct visits / referrer stripped)")
-          lines.append("")
-          lines.append("## Browser families (page loads)")
-          for u, n in uas.most_common(10):
-              lines.append(f"- {n:4d}  {u}")
-          lines.append("")
-          lines.append("## Response status mix")
+              L.append("- none recorded (direct visits / referrer stripped)")
+          L.append("")
+          L.append("## Response status mix")
           for s, n in statuses.most_common():
-              lines.append(f"- {s}: {n}")
-          report = "\n".join(lines)
-          open("traffic-report.md", "w").write(report + "\n")
+              L.append(f"- {s}: {n}")
+
+          report = "\n".join(L) + "\n"
+          open("traffic-report.md", "w").write(report)
           print(report)
           PY
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: traffic
+          path: |
+            traffic-report.md
+            traffic-log.csv
+          retention-days: 30
 
       - name: Publish to bucket export/
         run: |
           gcloud storage cp traffic-report.md \
-            "gs://insider-intel-502413-corpus/export/traffic-report.md" \
-            && echo "report exported" || echo "export copy failed (report still in this log)"
+            "gs://insider-intel-502413-corpus/export/traffic-report.md" || true
+          gcloud storage cp traffic-log.csv \
+            "gs://insider-intel-502413-corpus/export/traffic-log.csv" \
+            && echo "report + forensic CSV exported" \
+            || echo "export copy failed (artifacts still attached to this run)"
