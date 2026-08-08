@@ -232,9 +232,17 @@ legacy fallback.
 
 ## Verification habits
 
+- **Every PR gets verified before merge, and the PR body says how** (the PR
+  template carries the checklist): a `web/**` change gets a **Playwright
+  drive/screenshot** — including the responsive widths it touches (phone ~390,
+  iPad portrait 768 / landscape 1024, desktop) — plus `scripts/ui_smoke.py`;
+  a code change gets `pytest`/`ruff`; a workflow change gets a dry-run or
+  dispatch. Skipping a check is fine, saying so is not optional.
 - `.mcp.json` provides **Playwright MCP** (official Docker image,
   `--network=host`) — use it to drive/screenshot local (:5500/:8000) or prod
-  UI. Physical-click testing catches what curl can't (see gotchas).
+  UI. Physical-click testing catches what curl can't (see gotchas). The
+  responsive rail collapses below **1024px** into the INSIGHTS tab, so test
+  tablet widths, not just desktop.
 - `deploy-api.yml` smoke-tests `/health`, `/articles`, `/social/catalog`,
   `/trending`, `/feed.xml`, `/evidence/ledger`, a subscription write
   round-trip, and `/extract/ttps` after every deploy. Extend it when adding
