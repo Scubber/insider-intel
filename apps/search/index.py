@@ -396,11 +396,13 @@ class ArticleSearchIndex:
         Pure counting over the in-memory corpus — no LLM, no extra I/O. Topics
         are classified use cases, ITM parent techniques, and hot matched terms;
         `count` is the number of unique stories (story_key) mapped to each topic
-        across the WHOLE corpus, and items are ranked by that volume (most-common
-        first). Each item also carries a secondary trend arrow (delta_pct /
-        direction) comparing the recent window vs the prior window, anchored on
-        the corpus's newest processed_at (not wall clock) for stable, testable
-        results. `window_days` sizes only the trend arrow, not the ranking.
+        across the WHOLE corpus; `recent_count` is the subset within the recent
+        window. Items are ranked by `recent_count` (most-active first), tie-broken
+        by all-time `count` — "trending" = active now, not historically large.
+        Each item also carries a trend arrow (delta_pct / direction) comparing the
+        recent window vs the prior window, anchored on the corpus's newest
+        processed_at (not wall clock) for stable, testable results. `window_days`
+        sizes both the recent count (and thus the ranking) and the arrow.
         """
         anchor = self.last_processed_at
         if anchor is None:
@@ -501,15 +503,19 @@ class ArticleSearchIndex:
                     "label": topic["label"],
                     "channel": channel,
                     "count": count,
+                    "recent_count": recent,
                     "prev_count": prev,
                     "delta_pct": delta_pct,
                     "direction": direction,
                 }
             )
 
-        # Most-common first: rank by total volume across the corpus, then label.
-        # The recent-vs-prior delta stays on each item as a secondary trend arrow.
-        items.sort(key=lambda item: (-item["count"], item["label"]))
+        # "Trending" means active NOW: rank by recent-window volume first, then
+        # by all-time volume as a tiebreaker, then label. (The old ranking used
+        # lifetime totals, so a historically-large but currently-quiet topic
+        # sat at the top showing a big count that read as inaccurate.) The
+        # recent-vs-prior delta stays on each item as the momentum arrow.
+        items.sort(key=lambda item: (-item["recent_count"], -item["count"], item["label"]))
         return items[: max(1, limit)]
 
     def list_articles(

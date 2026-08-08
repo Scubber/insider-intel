@@ -560,7 +560,8 @@ class TrendingItem(BaseModel):
     key: str
     label: str
     channel: str
-    count: int
+    count: int = Field(..., description="all-time stories mapped to this topic")
+    recent_count: int = Field(0, description="stories within the recent window")
     prev_count: int
     delta_pct: float | None = None
     direction: str = Field(..., description="up | down | flat | new")

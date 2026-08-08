@@ -4450,7 +4450,7 @@
           : item.kind === "technique"
             ? "Open this technique's dossier"
             : "Search the corpus for this term";
-      row.dataset.tip = `${item.count} stories total · ${trendingDeltaText(item)} vs prior — ${kindTip}`;
+      row.dataset.tip = `${item.recent_count} recent · ${item.count} all-time · ${trendingDeltaText(item)} vs prior — ${kindTip}`;
       const head = document.createElement("span");
       head.className = "trend-head";
       const src = document.createElement("span");
@@ -4458,7 +4458,9 @@
       src.textContent = `[${String(item.channel || "news").toUpperCase()}]`;
       const count = document.createElement("span");
       count.className = "trend-count";
-      count.textContent = `×${item.count}`;
+      // Recent-window volume — what "trending" means; all-time is in the tip.
+      const shown = item.recent_count != null ? item.recent_count : item.count;
+      count.textContent = `×${shown}`;
       const delta = document.createElement("span");
       delta.className = `trend-delta trend-${item.direction}`;
       delta.textContent = trendingDeltaText(item);
