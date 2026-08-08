@@ -26,15 +26,22 @@ DEFAULT_SOURCE_URL = (
     "insider-threat-matrix.json"
 )
 
-_DESC_MAX = 320
+_DESC_MAX = 900
 _WS_RE = re.compile(r"\s+")
 
 
 def _clean_text(value: str | None, *, max_len: int | None = None) -> str:
     text = _WS_RE.sub(" ", (value or "").strip())
-    if max_len is not None and len(text) > max_len:
-        return text[: max_len - 1].rstrip() + "…"
-    return text
+    if max_len is None or len(text) <= max_len:
+        return text
+    cut = text[:max_len]
+    # Prefer ending on a complete sentence; fall back to a word boundary so
+    # the dossier (and the LLM hunt prompt) never shows a mid-word "This tra…".
+    for sep in (". ", "! ", "? "):
+        idx = cut.rfind(sep)
+        if idx >= max_len // 2:
+            return cut[: idx + 1]
+    return cut[: cut.rfind(" ")].rstrip() + "…"
 
 
 def _aliases_for(tech_id: str, title: str) -> list[str]:
