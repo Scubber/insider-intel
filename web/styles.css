@@ -717,6 +717,30 @@ body {
   font: inherit;
   padding: 0;
 }
+/* Spelled-out technique cell: name reads first, ITM code trails small + dim. */
+.evp-tech-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.evp-tech-title {
+  color: var(--signal);
+  font-weight: 700;
+  border-bottom: 1px dotted color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.evp-tech-code {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
 .evp-adjn {
   color: var(--accent);
 }

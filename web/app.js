@@ -4710,7 +4710,7 @@
     if (table) {
       table.innerHTML = "";
       const headRow = evpEl("tr");
-      ["TECHNIQUE", "CASES", "ADJ.", "DETECTIONS CORROBORATED"].forEach((h, i) => {
+      ["HOW THEY DID IT", "CASES", "PROVEN IN COURT", "YOUR CONTROLS CATCH IT"].forEach((h, i) => {
         const th = evpEl("th", i === 1 || i === 2 ? "num" : "", h);
         headRow.appendChild(th);
       });
@@ -4739,13 +4739,17 @@
         techs.forEach((t) => {
           const row = evpEl("tr");
           const cell = evpEl("td");
-          const idBtn = evpEl("button", "evp-tech-id", t.id);
-          idBtn.type = "button";
-          idBtn.dataset.tip = (t.exemplars || []).join(" · ") || "Open dossier";
-          idBtn.addEventListener("click", () => {
+          // Spell out the technique name for a non-analyst reader; the ITM
+          // code rides along small and dim (still opens the dossier).
+          const btn = evpEl("button", "evp-tech-name");
+          btn.type = "button";
+          btn.appendChild(evpEl("span", "evp-tech-title", t.title || t.id));
+          btn.appendChild(evpEl("span", "evp-tech-code", t.id));
+          btn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
+          btn.addEventListener("click", () => {
             selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
           });
-          cell.appendChild(idBtn);
+          cell.appendChild(btn);
           row.appendChild(cell);
           row.appendChild(evpEl("td", "num", String(t.cases)));
           row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
@@ -4753,13 +4757,13 @@
           const corroborated = dets.filter((d) => d.corroborated).length;
           const dcell = evpEl(
             "td",
-            "",
-            dets.length ? `${corroborated}/${dets.length}` : "— none catalogued"
+            "num",
+            dets.length ? `${corroborated} of ${dets.length}` : "—"
           );
           if (dets.length) {
-            dcell.dataset.tip = dets
-              .map((d) => `${d.corroborated ? "✓" : "○"} ${d.id} ${d.title}`)
-              .join(" · ");
+            dcell.dataset.tip =
+              "ITM controls that real cases confirm can catch this: " +
+              dets.map((d) => `${d.corroborated ? "✓" : "○"} ${d.title}`).join(" · ");
           }
           row.appendChild(dcell);
           table.appendChild(row);

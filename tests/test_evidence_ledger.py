@@ -91,6 +91,8 @@ def test_ledger_endpoint_aggregates_corpus(tmp_path, monkeypatch) -> None:
         techs = {t["id"]: t for t in data["techniques"]}
         assert techs["IF002"]["cases"] == 2
         assert techs["IF002"]["adjudicated_admitted"] == 1
+        # Technique names are spelled out for the UI (joined from the catalog).
+        assert techs["IF002"].get("title") and techs["IF002"]["title"] != "IF002"
         # Detected-by normalizes the artifact into the USB family with mech count.
         arts = {a["artifact"]: a for a in data["detected_by"]}
         usb = arts["removable-media (USB) logs"]
