@@ -187,6 +187,9 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     families = ledger.pop("technique_families", {})
     ledger.pop("technique_counts", {})
     by_tech = _catalog_detections()
+    # Spell out technique names for a non-analyst reader (the core stays
+    # catalog-free, so the human title is joined in here).
+    titles = {t.id.upper(): t.title for t in load_itm_index().techniques}
 
     corroborated_ids: set[str] = set()
     all_ids: set[str] = set()
@@ -196,6 +199,7 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
             if det["corroborated"]:
                 corroborated_ids.add(det["id"])
     for tech in ledger["techniques"]:
+        tech["title"] = titles.get(str(tech["id"]).upper(), str(tech["id"]))
         tech["detections"] = corroborate_detections(
             by_tech.get(tech["id"], []), families.get(tech["id"], {})
         )
