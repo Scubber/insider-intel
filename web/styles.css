@@ -911,6 +911,12 @@ body {
   color: var(--muted, #8a8f98);
   margin: 0 0 0.5rem;
 }
+.ledger-key {
+  display: block;
+  font-size: 0.6rem;
+  opacity: 0.85;
+  margin-top: 0.15rem;
+}
 .ledger-section-head {
   font-size: 0.64rem;
   letter-spacing: 0.08em;
