@@ -3239,6 +3239,19 @@ button.chip.itm-chip {
   background: color-mix(in srgb, var(--side-bg) 70%, transparent);
 }
 
+/* Tool-agnostic hunt methods inside a dossier pattern card. */
+.dossier-method-list {
+  list-style: disc;
+  margin: 0.2rem 0 0.5rem;
+  padding-left: 1.6rem;
+}
+
+.dossier-method-list li {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0.18rem 0;
+}
+
 .query-stack-summary {
   display: flex;
   align-items: center;

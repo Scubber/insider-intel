@@ -490,6 +490,34 @@ class Settings(BaseSettings):
         le=500,
     )
 
+    # Corpus-level hunt synthesis (one call per observed technique, cached by
+    # input signature — near-zero steady-state spend after the first sweep)
+    hunt_synth_llm_provider: str = Field(
+        default="",
+        alias="HUNT_SYNTH_LLM_PROVIDER",
+        description=(
+            "Ordered fallback chain for technique hunt synthesis (same syntax as "
+            "SUMMARIZER_LLM_PROVIDER). Empty inherits the summarizer chain."
+        ),
+    )
+    hunt_synth_model: str | None = Field(
+        default=None,
+        alias="HUNT_SYNTH_MODEL",
+        description="Hunt-synthesis model; falls back to SUMMARIZER_MODEL / provider default",
+    )
+    hunt_synth_max_per_run: int = Field(
+        default=10,
+        alias="HUNT_SYNTH_MAX_PER_RUN",
+        description="Per-run cap on hunt-synthesis LLM calls (0 disables the pass)",
+        ge=0,
+        le=500,
+    )
+    technique_hunts_path: str = Field(
+        default="data/state/technique_hunts.json",
+        alias="TECHNIQUE_HUNTS_PATH",
+        description="Synthesized hunt patterns (job-written under state/, API reads it)",
+    )
+
     def cors_origin_list(self) -> list[str]:
         return [part.strip() for part in self.cors_origins.split(",") if part.strip()]
 
@@ -509,6 +537,11 @@ class Settings(BaseSettings):
     def discoverer_provider_chain(self) -> list[str]:
         """Discovery chain; inherits the summarizer chain when unset."""
         chain = self._provider_chain(self.discoverer_llm_provider)
+        return chain or self.summarizer_provider_chain()
+
+    def synthesizer_provider_chain(self) -> list[str]:
+        """Hunt-synthesis chain; inherits the summarizer chain when unset."""
+        chain = self._provider_chain(self.hunt_synth_llm_provider)
         return chain or self.summarizer_provider_chain()
 
     def custom_llm_provider_map(self) -> dict[str, dict]:

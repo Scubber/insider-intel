@@ -4900,35 +4900,69 @@
      fail-soft — a sleeping API or unobserved technique just hides the block. */
   function buildHuntPrompt(tech, d) {
     const lines = [
-      "You are a threat-hunting assistant. Help me hunt for this insider technique in my environment.",
+      "You are an insider-risk advisor. Help me apply these hunt patterns in MY organization.",
       "",
-      `Technique: ${tech ? `${tech.id} · ${tech.title}` : d.id} (Insider Threat Matrix)`,
+      `Technique: ${tech ? `${tech.id} \u00b7 ${tech.title}` : d.id} (Insider Threat Matrix)`,
     ];
     const desc = tech && String(tech.description || "").trim();
     if (desc) lines.push(`Description: ${desc}`);
-    if ((d.terms || []).length) {
-      lines.push("", `Search terms observed across ${d.cases} real insider case(s):`);
-      d.terms.forEach((t) => lines.push(`- ${t}`));
-    }
-    if ((d.evidence || []).length) {
-      lines.push("", "Evidence artifacts these cases left behind:");
-      d.evidence.forEach((e) => lines.push(`- ${e.artifact} (seen in ${e.cases} case(s))`));
-    }
-    if ((d.hunts || []).length) {
-      lines.push("", "Query logic derived from the cases:");
-      d.hunts.forEach((h) => {
-        const strength = h.strength === "adjudicated/admitted" ? "proven in court" : h.strength;
-        lines.push(`- [${h.stack}] ${h.logic}${h.rationale ? ` — ${h.rationale}` : ""} (${strength})`);
+    if ((d.patterns || []).length) {
+      lines.push(
+        "",
+        `Tool-agnostic hunt patterns distilled from ${d.cases} real insider case(s):`
+      );
+      d.patterns.forEach((p, i) => {
+        lines.push("", `Pattern ${i + 1}: ${p.name}`);
+        if (p.who_class) lines.push(`- Who: ${p.who_class}`);
+        if (p.behavior) lines.push(`- Behavior: ${p.behavior}`);
+        (p.detect || []).forEach((m) => lines.push(`- How to spot it: ${m}`));
+        (p.prevent || []).forEach((m) => lines.push(`- How to counter it: ${m}`));
+        if (p.noise) lines.push(`- Legitimate look-alikes: ${p.noise}`);
       });
+      lines.push(
+        "",
+        "My organization: <describe your telemetry, team, and processes here>",
+        "",
+        "Task: tailor each pattern to my organization \u2014 which of my logs,",
+        "reviews, or people processes cover each detection method, what to",
+        "build or train where nothing covers it, and how to keep the noise",
+        "manageable. These methods are deliberately tool-agnostic; map them to",
+        "whatever I actually run."
+      );
+      return lines.join("\n");
     }
     lines.push(
       "",
-      "My stack: <name your SIEM / EDR / DLP / identity tools here>",
+      "IMPORTANT: everything below comes from OTHER organizations' court cases.",
+      "None of the specifics (people, companies, repos, dates) exist in my",
+      "environment. Do NOT build searches for any literal below. Instead,",
+      "extract the underlying BEHAVIOR each item describes and suggest",
+      "tool-agnostic ways \u2014 technical, process, or people (training, HR,",
+      "offboarding) \u2014 to detect and counter that behavior in my environment."
+    );
+    if ((d.behaviors || []).length) {
+      lines.push("", `Behaviors observed across ${d.cases} real insider case(s):`);
+      d.behaviors.forEach((b) => {
+        const s = b.strength === "adjudicated/admitted" ? "proven in court" : b.strength;
+        lines.push(`- ${b.action} (${s})`);
+      });
+    }
+    if ((d.terms || []).length) {
+      lines.push("", "Generic indicators that recurred in the cases:");
+      d.terms.forEach((t) => lines.push(`- ${t}`));
+    }
+    if ((d.evidence || []).length) {
+      lines.push("", "Evidence sources where these cases left traces:");
+      d.evidence.forEach((e) => lines.push(`- ${e.artifact} (seen in ${e.cases} case(s))`));
+    }
+    lines.push(
       "",
-      "Task: translate the above into concrete, runnable queries for my stack,",
-      "note the expected noise and false positives for each, and suggest",
-      "thresholds or scoping (e.g. departing employees, after-hours) to make",
-      "them practical."
+      "My organization: <describe your telemetry, team, and processes here>",
+      "",
+      "Task: for each behavior, suggest how I would spot it (any telemetry or",
+      "human/process signal) and how I would counter it (controls, training,",
+      "offboarding discipline), scoped by risk population and noting expected",
+      "noise."
     );
     return lines.join("\n");
   }
@@ -4938,9 +4972,10 @@
     const list = document.getElementById("dossier-hunt-list");
     if (!box || !list) return;
     list.innerHTML = "";
-    const hunts = (d && d.hunts) || [];
     const terms = (d && d.terms) || [];
-    box.hidden = !hunts.length && !terms.length;
+    const behaviors = (d && d.behaviors) || [];
+    const patterns = (d && d.patterns) || [];
+    box.hidden = !terms.length && !behaviors.length && !patterns.length;
     if (box.hidden) return;
     const caseTotal = d.cases || 0;
     const countEl = document.getElementById("dossier-hunt-count");
@@ -4949,13 +4984,74 @@
     }
     const tech = selectedTechnique();
 
-    // Lead with the LLM prompt: the case-derived terms + logic are raw
-    // material an assistant can translate into the reader's own stack.
-    if (terms.length) {
-      const termLine = document.createElement("p");
-      termLine.className = "kw-hint dossier-hunt-terms";
-      termLine.textContent = `Search terms from the cases: ${terms.join(" · ")}`;
-      list.appendChild(termLine);
+    // Synthesized, tool-agnostic patterns: plain methods \u2014 technical,
+    // process, or people \u2014 never query syntax or case-specific names.
+    patterns.forEach((p) => {
+      const card = document.createElement("details");
+      card.className = "query-stack";
+      card.open = true;
+      const summary = document.createElement("summary");
+      summary.className = "query-stack-summary";
+      const label = document.createElement("span");
+      label.textContent = p.name;
+      summary.appendChild(label);
+      if (p.who_class) {
+        const who = document.createElement("span");
+        who.className = "query-stack-lang";
+        who.textContent = p.who_class;
+        summary.appendChild(who);
+      }
+      card.appendChild(summary);
+      if (p.behavior) {
+        const beh = document.createElement("p");
+        beh.className = "kw-hint";
+        beh.textContent = p.behavior;
+        card.appendChild(beh);
+      }
+      const addMethods = (title, items) => {
+        if (!(items || []).length) return;
+        const h = document.createElement("p");
+        h.className = "kw-hint dossier-hunt-terms";
+        h.textContent = title;
+        card.appendChild(h);
+        const ul = document.createElement("ul");
+        ul.className = "dossier-method-list";
+        items.forEach((m) => {
+          const li = document.createElement("li");
+          li.textContent = m;
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+      };
+      addMethods("How to spot it", p.detect);
+      addMethods("How to counter it", p.prevent);
+      if (p.noise) {
+        const noise = document.createElement("p");
+        noise.className = "kw-hint";
+        noise.textContent = `Legitimate look-alikes: ${p.noise}`;
+        card.appendChild(noise);
+      }
+      list.appendChild(card);
+    });
+
+    // Fallback before a technique's synthesis lands: the entity-filtered
+    // case material, plain text only \u2014 no query blocks.
+    if (!patterns.length) {
+      if (behaviors.length) {
+        const behaviorLine = document.createElement("p");
+        behaviorLine.className = "kw-hint dossier-hunt-terms";
+        behaviorLine.textContent = `Behaviors from the cases: ${behaviors
+          .slice(0, 5)
+          .map((b) => b.action)
+          .join(" \u00b7 ")}`;
+        list.appendChild(behaviorLine);
+      }
+      if (terms.length) {
+        const termLine = document.createElement("p");
+        termLine.className = "kw-hint dossier-hunt-terms";
+        termLine.textContent = `Recurring indicators: ${terms.join(" \u00b7 ")}`;
+        list.appendChild(termLine);
+      }
     }
     const actions = document.createElement("p");
     actions.className = "panel-actions query-stack-actions";
@@ -4964,44 +5060,12 @@
     promptBtn.className = "copy-btn";
     promptBtn.textContent = "Copy LLM hunt prompt";
     promptBtn.addEventListener("click", () => {
-      copyText(buildHuntPrompt(tech, d), "Copied hunt prompt — paste into your AI assistant");
+      copyText(buildHuntPrompt(tech, d), "Copied hunt prompt \u2014 paste into your AI assistant");
     });
     actions.appendChild(promptBtn);
     list.appendChild(actions);
-
-    hunts.forEach((h) => {
-      const details = document.createElement("details");
-      details.className = "query-stack";
-      const summary = document.createElement("summary");
-      summary.className = "query-stack-summary";
-      const label = document.createElement("span");
-      label.textContent = h.rationale || h.logic.slice(0, 80);
-      const lang = document.createElement("span");
-      lang.className = "query-stack-lang";
-      lang.textContent = h.stack;
-      summary.append(label, lang);
-      const pre = document.createElement("pre");
-      pre.className = "query-block";
-      pre.textContent = h.logic;
-      const src = document.createElement("p");
-      src.className = "kw-hint";
-      const strength =
-        h.strength === "adjudicated/admitted" ? "proven in court" : h.strength;
-      src.textContent = `From: ${h.case} (${strength})`;
-      const actions = document.createElement("p");
-      actions.className = "panel-actions query-stack-actions";
-      const copy = document.createElement("button");
-      copy.type = "button";
-      copy.className = "copy-btn";
-      copy.textContent = "Copy logic";
-      copy.addEventListener("click", () => {
-        copyText(h.logic, `Copied ${h.stack} hunt logic`);
-      });
-      actions.appendChild(copy);
-      details.append(summary, pre, src, actions);
-      list.appendChild(details);
-    });
   }
+
 
   async function loadDossierEvidence(techId) {
     const box = document.getElementById("dossier-evidence");

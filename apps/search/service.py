@@ -188,6 +188,7 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     ledger.pop("technique_counts", {})
     ledger.pop("technique_hunts", {})  # served per-technique, not corpus-wide
     ledger.pop("technique_terms", {})
+    ledger.pop("technique_behaviors", {})
     by_tech = _catalog_detections()
     # Spell out technique names for a non-analyst reader (the core stays
     # catalog-free, so the human title is joined in here).
@@ -240,6 +241,21 @@ def evidence_technique(tech_id: str, path: str | Path | None = None) -> dict | N
         "evidence": [{"artifact": fam, "cases": n} for fam, n in ranked[:8]],
         "hunts": ledger.get("technique_hunts", {}).get(tech_id, []),
         "terms": ledger.get("technique_terms", {}).get(tech_id, []),
+        "behaviors": ledger.get("technique_behaviors", {}).get(tech_id, []),
+        **_synthesized_hunts(tech_id),
+    }
+
+
+def _synthesized_hunts(tech_id: str) -> dict:
+    """Job-synthesized generalized patterns for the dossier (empty until swept)."""
+    from apps.aggregator.hunt_synthesis import TechniqueHuntStore
+
+    entry = TechniqueHuntStore(get_settings().technique_hunts_path).read().get(tech_id)
+    if entry is None:
+        return {"patterns": [], "patterns_generated_at": None}
+    return {
+        "patterns": [p.model_dump(mode="json") for p in entry.patterns],
+        "patterns_generated_at": entry.generated_at,
     }
 
 

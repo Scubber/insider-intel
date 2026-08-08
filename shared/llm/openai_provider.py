@@ -12,9 +12,11 @@ from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
     DISCOVER_SYSTEM_PROMPT,
     ENRICH_SYSTEM_PROMPT,
+    SYNTH_SYSTEM_PROMPT,
     ClassificationResult,
     build_discover_prompt,
     build_enrich_prompt,
+    build_synth_prompt,
     build_user_prompt,
 )
 
@@ -27,6 +29,8 @@ from shared.llm.base import (
 ENRICH_MAX_TOKENS = 12000
 # Discovery output is just per-method assessments — far smaller than enrich.
 DISCOVER_MAX_TOKENS = 2000
+# Hunt synthesis returns 2-4 compact patterns per technique.
+SYNTH_MAX_TOKENS = 3000
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +180,38 @@ class OpenAICompatDiscoverer:
         if content is None:
             return None
         return _parse_json_object(content, label="Discoverer")
+
+
+class OpenAICompatSynthesizer:
+    """Corpus-level hunt-pattern synthesis for one technique's case material."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        timeout: float = 90.0,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._timeout = timeout
+        self.model_name = model
+
+    def synthesize_hunts(self, *, technique_json: str) -> dict | None:
+        content = _chat_completion(
+            base_url=self._base_url,
+            model=self._model,
+            api_key=self._api_key,
+            timeout=self._timeout,
+            system=SYNTH_SYSTEM_PROMPT,
+            user=build_synth_prompt(technique_json=technique_json),
+            max_tokens=SYNTH_MAX_TOKENS,
+        )
+        if content is None:
+            return None
+        return _parse_json_object(content, label="Synthesizer")
 
 
 def _parse_json_object(content: str, *, label: str) -> dict | None:

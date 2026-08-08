@@ -17,6 +17,7 @@ from shared.llm.base import (
     DiscovererProvider,
     ItmRef,
     SummarizerProvider,
+    SynthesizerProvider,
 )
 
 if TYPE_CHECKING:
@@ -30,11 +31,13 @@ __all__ = [
     "DiscovererProvider",
     "ItmRef",
     "SummarizerProvider",
+    "SynthesizerProvider",
     "get_classifier_provider",
     "get_discoverer_chain",
     "get_discoverer_provider",
     "get_summarizer_chain",
     "get_summarizer_provider",
+    "get_synthesizer_chain",
 ]
 
 _PROVIDER_CACHE: dict[str, ClassifierProvider | None] = {}
@@ -42,6 +45,7 @@ _SUMMARIZER_CACHE: dict[str, SummarizerProvider | None] = {}
 _DISCOVERER_CACHE: dict[str, DiscovererProvider | None] = {}
 _SUMMARIZER_CHAIN_CACHE: dict[str, list] = {}
 _DISCOVERER_CHAIN_CACHE: dict[str, list] = {}
+_SYNTHESIZER_CHAIN_CACHE: dict[str, list] = {}
 
 _OPENAI_COMPAT_DEFAULT_BASE = "http://localhost:11434/v1"
 _OPENAI_COMPAT_DEFAULT_MODEL = "llama3.1:8b"
@@ -169,6 +173,42 @@ def _build_discoverer(
     return OpenAICompatDiscoverer(base_url=base_url, model=model, api_key=api_key)
 
 
+def _build_synthesizer(
+    name: str, settings: Settings, model_override: str | None
+) -> SynthesizerProvider | None:
+    resolved = _resolve_provider(name, settings, model_override)
+    if resolved is None:
+        return None
+    kind, base_url, model, api_key = resolved
+    if kind == "anthropic":
+        try:
+            from shared.llm.anthropic_provider import AnthropicSynthesizer
+        except ImportError:
+            logger.warning("anthropic package not installed; run: uv add anthropic")
+            return None
+        return AnthropicSynthesizer(api_key=api_key, model=model)
+    from shared.llm.openai_provider import OpenAICompatSynthesizer
+
+    return OpenAICompatSynthesizer(base_url=base_url, model=model, api_key=api_key)
+
+
+def get_synthesizer_chain(settings: Settings) -> list[SynthesizerProvider]:
+    """Ordered hunt-synthesis providers (inherits the summarizer chain when unset)."""
+    chain = settings.synthesizer_provider_chain()
+    model_override = settings.hunt_synth_model or settings.summarizer_model
+    cache_key = "|".join(chain) + "::" + (model_override or "")
+    if cache_key in _SYNTHESIZER_CHAIN_CACHE:
+        return _SYNTHESIZER_CHAIN_CACHE[cache_key]
+    providers: list[SynthesizerProvider] = []
+    for i, name in enumerate(chain):
+        override = model_override if i == 0 else None
+        provider = _build_synthesizer(name, settings, override)
+        if provider is not None:
+            providers.append(provider)
+    _SYNTHESIZER_CHAIN_CACHE[cache_key] = providers
+    return providers
+
+
 def get_summarizer_chain(settings: Settings) -> list[SummarizerProvider]:
     """Ordered enrichment providers, tried until one succeeds.
 
@@ -283,3 +323,4 @@ def reset_provider_cache() -> None:
     _DISCOVERER_CACHE.clear()
     _SUMMARIZER_CHAIN_CACHE.clear()
     _DISCOVERER_CHAIN_CACHE.clear()
+    _SYNTHESIZER_CHAIN_CACHE.clear()

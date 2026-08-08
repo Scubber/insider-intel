@@ -37,7 +37,15 @@ def _forensics(link: str, *, status: str) -> PerCaseForensics:
                 ],
             )
         ],
-        hunt_terms=["removable media", "mass file copy", "resignation window"],
+        hunt_terms=[
+            "removable media",
+            "mass file copy",
+            "resignation window",
+            # Case-specific entities — must be filtered out of the aggregation.
+            "Holly Hill Logistics",
+            "Robert Dawson",
+            "@holcim.com",
+        ],
         hunt_queries=[
             HuntQuerySeed(
                 stack="EDR",
@@ -77,6 +85,7 @@ def _client(tmp_path, monkeypatch) -> TestClient:
         PROCESSED_ARTICLES_PATH=str(path),
         RAW_ARTICLES_PATH=str(tmp_path / "raw.jsonl"),
         SOCIAL_SUBSCRIPTIONS_PATH=str(tmp_path / "subs.json"),
+        TECHNIQUE_HUNTS_PATH=str(tmp_path / "hunts.json"),
         CORS_ORIGINS="http://127.0.0.1:5500",
     )
     monkeypatch.setattr("apps.search.service.get_settings", lambda: settings)
@@ -170,10 +179,74 @@ def test_evidence_technique_endpoint(tmp_path, monkeypatch) -> None:
         assert hunt["stack"] == "EDR" and "removable_media_write" in hunt["logic"]
         assert hunt["case"] and hunt["strength"] == "adjudicated/admitted"
         # Case-found search terms ride along (deduped across cases) so the UI
-        # can compose an LLM hunt prompt from them.
+        # can compose an LLM hunt prompt — with case-specific entities
+        # (companies, people, domains) filtered out.
         assert d["terms"] == ["removable media", "mass file copy", "resignation window"]
+        # Observed behaviors (method actions) ride along for the prompt too.
+        assert d["behaviors"][0]["action"] == "USB copy of design files"
+        assert d["behaviors"][0]["strength"] == "adjudicated/admitted"
+        # Synthesized patterns absent until the refresh job writes the view.
+        assert d["patterns"] == [] and d["patterns_generated_at"] is None
         # Unobserved technique → 404, not an empty body.
         assert client.get("/evidence/technique/ZZ999").status_code == 404
+
+
+def test_technique_endpoint_serves_synthesized_patterns(tmp_path, monkeypatch) -> None:
+    from apps.aggregator.hunt_synthesis import TechniqueHuntStore
+    from shared.schemas.hunt_patterns import HuntPattern, TechniqueHuntEntry
+
+    with _client(tmp_path, monkeypatch) as client:
+        TechniqueHuntStore(tmp_path / "hunts.json").write(
+            {
+                "IF002": TechniqueHuntEntry(
+                    technique_id="IF002",
+                    signature="abc",
+                    generated_at="2026-08-08T00:00:00+00:00",
+                    model="test-model",
+                    case_count=2,
+                    patterns=[
+                        HuntPattern(
+                            name="Departure-window bulk copy",
+                            who_class="departing employees",
+                            detect=["Review departing employees' file transfers"],
+                            prevent=["Revoke access at resignation notice"],
+                        )
+                    ],
+                )
+            }
+        )
+        d = client.get("/evidence/technique/IF002").json()
+        assert d["patterns"][0]["name"] == "Departure-window bulk copy"
+        assert d["patterns_generated_at"] == "2026-08-08T00:00:00+00:00"
+
+
+def test_entity_term_filter() -> None:
+    from shared.utils.evidence import is_entity_term
+
+    # Case-specific entities → dropped.
+    for t in [
+        "Holly Hill Logistics",
+        "Cornerstone Resources Group",
+        "@holcim.com",
+        "Robert Dawson",
+        "TFE Games Holdings LLC",
+        "Intrepid Studios Inc",
+        "Ashes of Creation",
+        "Settlement Agreement May 2024",
+    ]:
+        assert is_entity_term(t), t
+    # Behavior indicators → kept.
+    for t in [
+        "personal email account",
+        "WhatsApp",
+        "Git repository access",
+        "P4 repository access",
+        "backend credentials",
+        "Visa Business credit card",
+        "Article 9 foreclosure",
+        "removable media",
+    ]:
+        assert not is_entity_term(t), t
 
 
 def test_crosswalk_ids_exist_in_catalog() -> None:

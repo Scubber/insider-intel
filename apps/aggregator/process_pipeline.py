@@ -238,6 +238,15 @@ def run_processing(
         )
     except OSError as exc:
         logger.warning("Could not write technique-seeds view: %s", exc)
+    # Synthesize generalized hunt patterns for techniques whose case material
+    # changed (signature-cached; bounded by HUNT_SYNTH_MAX_PER_RUN). Best-effort
+    # like the seeds view — a failure degrades to a stale hunts view.
+    try:
+        from apps.aggregator.hunt_synthesis import run_hunt_synthesis
+
+        run_hunt_synthesis(processed_path, settings=settings)
+    except Exception as exc:  # noqa: BLE001 — derived view must not sink ingest
+        logger.warning("Hunt synthesis pass failed: %s", exc)
     result.finished_at = datetime.now(UTC)
     logger.info(
         "Processing complete: read=%d processed=%d saved=%d skipped=%d errors=%d",

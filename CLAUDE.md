@@ -83,6 +83,24 @@ corpus-refresh backfill sweep converts the existing corpus gradually
 with `SUMMARIZER_BACKFILL_RESERVE` guaranteed to the sweep. The hunt report
 reads these stored records — no LLM at read time.
 
+**Hunt synthesis** (`apps/aggregator/hunt_synthesis.py`, runs at the end of
+each processing pass): one LLM call per observed technique distills its case
+material (entity-filtered `hunt_terms`, method actions, artifact families,
+query seeds — see `shared/utils/evidence.py::is_entity_term`) into 2–4
+generalized, **tool-agnostic** hunt patterns
+(`shared/schemas/hunt_patterns.py`): plain-language detect/prevent methods
+spanning telemetry, process, and people (training, HR, offboarding) — never
+query syntax or product names. Cached by input signature in
+`data/state/technique_hunts.json` (job writes `state/`, API reads — same
+contract as `technique_seeds.json`), so a technique re-synthesizes only when
+its case set changes; bounded by `HUNT_SYNTH_MAX_PER_RUN` (10 in prod, chain
+inherits `SUMMARIZER_LLM_PROVIDER`). Served on `/evidence/technique/{id}` as
+`patterns`; the dossier renders them as "How to spot it / How to counter it"
+cards (raw SIEM-style seeds stay in the stored forensics but no longer
+render), and the "Copy LLM hunt prompt" feeds the patterns. Case-specific
+literals (people, companies, domains) must never reach the dossier or
+prompt — that's the point.
+
 **Enrichments are append-only, never rewritten** (operator mandate):
 every generation lands in `ProcessedArticle.enrichment_history`
 (`shared/schemas/forensics.py::EnrichmentRecord`, deduped by signature); the
