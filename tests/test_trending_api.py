@@ -83,18 +83,25 @@ def test_trending_shape_and_directions(tmp_path, monkeypatch) -> None:
             assert item["kind"] in {"use_case", "technique", "term"}
             assert item["direction"] in {"up", "down", "flat", "new"}
             assert item["count"] >= 2
+            assert item["recent_count"] >= 0
 
-        # Ranked by total volume across the whole corpus, most-common first.
-        counts = [i["count"] for i in items]
-        assert counts == sorted(counts, reverse=True)
-        assert items[0]["count"] == 5  # overemployment appears in 5 stories total
+        # "Trending" ranks by RECENT-window volume, most-active first, with
+        # all-time count as the tiebreaker.
+        keys = [(i["recent_count"], i["count"]) for i in items]
+        assert keys == sorted(keys, key=lambda k: (-k[0], -k[1]))
+        assert items[0]["recent_count"] == 3  # top topic has 3 recent stories
 
-        # Overemployment: 5 total, 3 recent vs 1 prior → secondary arrow 'up'.
+        # Overemployment: 5 all-time, 3 recent vs 1 prior → arrow 'up'.
         assert any(
-            i["count"] == 5 and i["prev_count"] == 1 and i["direction"] == "up" for i in items
+            i["count"] == 5 and i["recent_count"] == 3 and i["prev_count"] == 1
+            and i["direction"] == "up"
+            for i in items
         )
-        # Sabotage: 3 total, recent-only → arrow 'new'.
-        assert any(i["count"] == 3 and i["direction"] == "new" for i in items)
+        # Sabotage: 3 all-time, all recent → arrow 'new'.
+        assert any(
+            i["count"] == 3 and i["recent_count"] == 3 and i["direction"] == "new"
+            for i in items
+        )
 
 
 def test_trending_limit_and_window_params(tmp_path, monkeypatch) -> None:
@@ -103,11 +110,10 @@ def test_trending_limit_and_window_params(tmp_path, monkeypatch) -> None:
         assert resp.status_code == 200
         assert len(resp.json()["items"]) <= 2
 
-        # window_days sizes only the trend arrow, not the volume ranking. A
-        # 3-day window puts the day-4 sabotage story in the prior window
-        # (sabotage arrow 'up', prev 1) and pushes the day-10 overemployment
-        # story out of both windows (overemployment recent-only → 'new'); the
-        # totals are unchanged (overemployment 5, sabotage 3).
+        # window_days sizes the recent count (and thus the ranking) and the
+        # arrow. A 3-day window puts the day-4 sabotage story in the prior
+        # window (sabotage arrow 'up', prev 1); all-time totals are unchanged
+        # (overemployment 5, sabotage 3).
         resp = client.get("/trending", params={"window_days": 3, "limit": 20})
         assert resp.status_code == 200
         items = resp.json()["items"]

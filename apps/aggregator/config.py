@@ -135,6 +135,17 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.justice.gov/news/rss?type=press_release&subtype=press_release",
         category="insider-legal",
     ),
+    # Courthouse News — general legal-news wire that reliably covers the
+    # insider beat (trade-secret theft, employee-exfil convictions, e.g.
+    # US v. Ding). Higher volume than the targeted regulator feeds, but the
+    # insider lexicon + min-score gate filter non-insider items, so noise
+    # drops out; only insider-adjacent stories qualify for enrichment.
+    FeedSource(
+        id="courthousenews",
+        name="Courthouse News Service",
+        url="https://www.courthousenews.com/feed/",
+        category="insider-legal",
+    ),
     # International prosecution/regulator lanes (maturity phase 0): foreign
     # courts have no CourtListener equivalent, but insider CRIMINAL cases in
     # AU/UK/CA surface first through prosecutor and privacy-regulator press
