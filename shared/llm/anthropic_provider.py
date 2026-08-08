@@ -8,14 +8,17 @@ from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
     DISCOVER_SYSTEM_PROMPT,
     ENRICH_SYSTEM_PROMPT,
+    SYNTH_SYSTEM_PROMPT,
     ClassificationResult,
     build_discover_prompt,
     build_enrich_prompt,
+    build_synth_prompt,
     build_user_prompt,
 )
 from shared.llm.openai_provider import (
     DISCOVER_MAX_TOKENS,
     ENRICH_MAX_TOKENS,
+    SYNTH_MAX_TOKENS,
     _parse_json_object,
     _parse_result,
 )
@@ -108,3 +111,30 @@ class AnthropicDiscoverer:
             return None
         parts = [block.text for block in message.content if getattr(block, "text", None)]
         return _parse_json_object("".join(parts), label="Discoverer")
+
+
+class AnthropicSynthesizer:
+    """Corpus-level hunt-pattern synthesis for one technique's case material."""
+
+    def __init__(self, *, api_key: str, model: str, timeout: float = 90.0) -> None:
+        import anthropic
+
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+        self._model = model
+        self.model_name = model
+
+    def synthesize_hunts(self, *, technique_json: str) -> dict | None:
+        try:
+            message = self._client.messages.create(
+                model=self._model,
+                max_tokens=SYNTH_MAX_TOKENS,
+                system=SYNTH_SYSTEM_PROMPT,
+                messages=[
+                    {"role": "user", "content": build_synth_prompt(technique_json=technique_json)}
+                ],
+            )
+        except Exception as exc:
+            logger.warning("Anthropic synth call failed: %s", exc)
+            return None
+        parts = [block.text for block in message.content if getattr(block, "text", None)]
+        return _parse_json_object("".join(parts), label="Synthesizer")

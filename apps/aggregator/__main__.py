@@ -430,6 +430,17 @@ def _build_parser() -> argparse.ArgumentParser:
     itm_p.add_argument("--output", type=str, default=str(DEFAULT_INDEX_PATH))
     _add_verbose(itm_p)
 
+    synth_p = sub.add_parser(
+        "synth_hunts",
+        help="Synthesize generalized hunt patterns per technique (signature-cached LLM pass).",
+    )
+    synth_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Count stale techniques without spending LLM calls.",
+    )
+    _add_verbose(synth_p)
+
     # Backward compatible: bare flags default to ingest
     parser.set_defaults(command="ingest")
     _add_verbose(parser)
@@ -860,6 +871,20 @@ def _cmd_refresh_itm(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_synth_hunts(args: argparse.Namespace) -> int:
+    from apps.aggregator.hunt_synthesis import run_hunt_synthesis
+
+    result = run_hunt_synthesis(dry_run=args.dry_run)
+    mode = "dry-run: " if args.dry_run else ""
+    print(
+        f"{mode}eligible={result.eligible} stale={result.stale} "
+        f"generated={result.generated} cached={result.cached} failed={result.failed}"
+    )
+    if args.dry_run and result.stale_ids:
+        print("stale techniques: " + ", ".join(result.stale_ids[:20]))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -871,6 +896,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_all(args)
     if args.command == "refresh_itm":
         return _cmd_refresh_itm(args)
+    if args.command == "synth_hunts":
+        return _cmd_synth_hunts(args)
     if args.command == "ingest_feedly":
         return _cmd_ingest_feedly(args)
     if args.command == "ingest_courtlistener":

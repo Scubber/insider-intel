@@ -95,6 +95,48 @@ SMALL_N_FLOOR = 10
 # Caps on stored per-technique hunt material (deduped by normalized text).
 HUNTS_PER_TECHNIQUE = 12
 TERMS_PER_TECHNIQUE = 20
+BEHAVIORS_PER_TECHNIQUE = 15
+
+_ENTITY_SUFFIXES = (
+    " llc",
+    " inc",
+    " ltd",
+    " corp",
+    " corporation",
+    " company",
+    " group",
+    " holdings",
+    " partners",
+    " studios",
+    " logistics",
+    " resources",
+)
+
+
+def is_entity_term(term: str) -> bool:
+    """True for case-specific proper nouns (people, companies, domains, dates).
+
+    Hunt terms extracted from a case mix generic behavior indicators
+    ("personal email account") with entities specific to that case
+    ("Holly Hill Logistics", "Robert Dawson", "@holcim.com") — the latter
+    will never appear in another environment and only pollute a hunt.
+    """
+    t = term.strip()
+    if not t:
+        return True
+    tl = t.lower()
+    if "@" in t:
+        return True
+    if any(tl.endswith(s) or f"{s} " in f" {tl} " for s in _ENTITY_SUFFIXES):
+        return True
+    words = t.split()
+    if len(words) >= 2:
+        alpha = [w for w in words if w[:1].isalpha()]
+        capped = [w for w in alpha if w[:1].isupper()]
+        # Mostly-capitalized multi-word phrases are names, not indicators.
+        if alpha and len(capped) / len(alpha) >= 0.6:
+            return True
+    return False
 
 # WHO — roles, never individuals. Two independent axes normalized from the
 # free-text actor_role/actor_profile the enricher extracts per case.
@@ -286,6 +328,8 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
     hunt_seen: dict[str, set] = defaultdict(set)
     tech_terms: dict[str, list[str]] = defaultdict(list)  # technique -> case hunt terms
     term_seen: dict[str, set] = defaultdict(set)
+    tech_behaviors: dict[str, list[dict]] = defaultdict(list)  # technique -> observed actions
+    behavior_seen: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
     strength_totals: Counter = Counter()
 
@@ -325,8 +369,15 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for hq in (f.get("hunt_queries") or [])
             if isinstance(hq, dict) and str(hq.get("logic") or "").strip()
         ]
+        # Keep only behavior indicators — case-specific entities (defendant
+        # names, vendor companies) won't appear in any other environment.
         case_terms = [
-            t for t in (str(x).strip() for x in (f.get("hunt_terms") or [])) if t
+            t
+            for t in (str(x).strip() for x in (f.get("hunt_terms") or []))
+            if t and not is_entity_term(t)
+        ]
+        case_actions = [
+            a for a in (str(m.get("action") or "").strip() for m in methods) if a
         ]
 
         for tech in f.get("candidate_technique_ids") or []:
@@ -360,6 +411,13 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                     continue
                 term_seen[tech].add(key)
                 tech_terms[tech].append(term[:80])
+            for action in case_actions:
+                key = " ".join(action.lower().split())[:120]
+                full = len(tech_behaviors[tech]) >= BEHAVIORS_PER_TECHNIQUE
+                if key in behavior_seen[tech] or full:
+                    continue
+                behavior_seen[tech].add(key)
+                tech_behaviors[tech].append({"action": action[:160], "strength": strength})
 
         for m in methods:
             m_strong = str(m.get("claim_status") or "").lower() in STRONG_STATUSES
@@ -469,6 +527,10 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for t, hunts in tech_hunts.items()
         },
         "technique_terms": {t: terms for t, terms in tech_terms.items()},
+        "technique_behaviors": {
+            t: sorted(b, key=lambda x: x["strength"] != "adjudicated/admitted")
+            for t, b in tech_behaviors.items()
+        },
         "detected_by": [
             {
                 "artifact": fam,
