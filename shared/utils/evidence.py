@@ -92,6 +92,9 @@ THEMES = ("motive", "means", "preparation", "infringement", "anti-forensics")
 # report its credibility.
 SMALL_N_FLOOR = 10
 
+# Cap on stored hunt seeds per technique (deduped by normalized logic).
+HUNTS_PER_TECHNIQUE = 12
+
 # WHO — roles, never individuals. Two independent axes normalized from the
 # free-text actor_role/actor_profile the enricher extracts per case.
 _ROLE_FUNCTIONS: list[tuple[str, str]] = [
@@ -278,6 +281,8 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
     artifact_examples: dict[str, list[str]] = defaultdict(list)
     artifact_channels: dict[str, Counter] = defaultdict(Counter)
     channel_cases: dict[str, set] = defaultdict(set)
+    tech_hunts: dict[str, list[dict]] = defaultdict(list)  # technique -> hunt seeds
+    hunt_seen: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
     strength_totals: Counter = Counter()
 
@@ -310,6 +315,14 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                 if isinstance(obs, dict):
                     case_families.add(artifact_family(str(obs.get("artifact") or "")))
 
+        # Case-grounded hunt seeds from the enricher — actual query logic
+        # derived from what this insider did, not catalog keywords.
+        case_hunts = [
+            hq
+            for hq in (f.get("hunt_queries") or [])
+            if isinstance(hq, dict) and str(hq.get("logic") or "").strip()
+        ]
+
         for tech in f.get("candidate_technique_ids") or []:
             tech = str(tech).upper().strip()
             if not tech:
@@ -320,6 +333,21 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             year_tech[year][tech] += 1
             for fam in case_families:
                 tech_families[tech][fam] += 1
+            for hq in case_hunts:
+                logic = str(hq.get("logic")).strip()
+                key = " ".join(logic.lower().split())
+                if key in hunt_seen[tech] or len(tech_hunts[tech]) >= HUNTS_PER_TECHNIQUE:
+                    continue
+                hunt_seen[tech].add(key)
+                tech_hunts[tech].append(
+                    {
+                        "stack": str(hq.get("stack") or "SIEM").strip()[:40] or "SIEM",
+                        "logic": logic[:300],
+                        "rationale": str(hq.get("rationale") or "").strip()[:200],
+                        "case": title,
+                        "strength": strength,
+                    }
+                )
 
         for m in methods:
             m_strong = str(m.get("claim_status") or "").lower() in STRONG_STATUSES
@@ -421,6 +449,12 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                 "alleged": c["alleged"],
             }
             for t, c in tech_cases.items()
+        },
+        # Per-technique case-derived hunt seeds (deduped by logic, adjudicated
+        # cases first) so the dossier can show how real cases were huntable.
+        "technique_hunts": {
+            t: sorted(hunts, key=lambda h: h["strength"] != "adjudicated/admitted")
+            for t, hunts in tech_hunts.items()
         },
         "detected_by": [
             {

@@ -4898,10 +4898,57 @@
 
   /* Dossier OBSERVED EVIDENCE section: per-technique detail (case-scoped),
      fail-soft — a sleeping API or unobserved technique just hides the block. */
+  function renderDossierHunts(hunts, caseTotal) {
+    const box = document.getElementById("dossier-hunts");
+    const list = document.getElementById("dossier-hunt-list");
+    if (!box || !list) return;
+    list.innerHTML = "";
+    box.hidden = !(hunts || []).length;
+    const countEl = document.getElementById("dossier-hunt-count");
+    if (countEl) {
+      countEl.textContent = (hunts || []).length
+        ? `(from ${caseTotal} case${caseTotal === 1 ? "" : "s"})`
+        : "";
+    }
+    (hunts || []).forEach((h) => {
+      const details = document.createElement("details");
+      details.className = "query-stack";
+      const summary = document.createElement("summary");
+      summary.className = "query-stack-summary";
+      const label = document.createElement("span");
+      label.textContent = h.rationale || h.logic.slice(0, 80);
+      const lang = document.createElement("span");
+      lang.className = "query-stack-lang";
+      lang.textContent = h.stack;
+      summary.append(label, lang);
+      const pre = document.createElement("pre");
+      pre.className = "query-block";
+      pre.textContent = h.logic;
+      const src = document.createElement("p");
+      src.className = "kw-hint";
+      const strength =
+        h.strength === "adjudicated/admitted" ? "proven in court" : h.strength;
+      src.textContent = `From: ${h.case} (${strength})`;
+      const actions = document.createElement("p");
+      actions.className = "panel-actions query-stack-actions";
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "copy-btn";
+      copy.textContent = "Copy logic";
+      copy.addEventListener("click", () => {
+        copyText(h.logic, `Copied ${h.stack} hunt logic`);
+      });
+      actions.appendChild(copy);
+      details.append(summary, pre, src, actions);
+      list.appendChild(details);
+    });
+  }
+
   async function loadDossierEvidence(techId) {
     const box = document.getElementById("dossier-evidence");
     if (!box) return;
     box.hidden = true;
+    renderDossierHunts([], 0);
     try {
       const d = await api(`/evidence/technique/${encodeURIComponent(techId)}`, {}, { timeoutMs: 10000 });
       if (!d || !d.cases) return;
@@ -4943,6 +4990,7 @@
           trail.appendChild(row);
         });
       }
+      renderDossierHunts(d.hunts, d.cases);
       box.hidden = false;
     } catch (err) {
       console.warn("Dossier evidence unavailable", err);
