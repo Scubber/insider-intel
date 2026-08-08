@@ -784,52 +784,64 @@ body {
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: baseline;
-  margin-bottom: 0.35rem;
-}
-.evp-finding-id {
-  color: var(--signal);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
 }
 .evp-finding-title {
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: 1rem;
+  line-height: 1.25;
 }
-.evp-finding-meta {
-  color: var(--muted);
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+.evp-finding-tag {
   margin-left: auto;
-}
-.evp-finding-claim {
-  font-size: 0.78rem;
-  max-width: 80ch;
-  margin: 0 0 0.5rem;
-}
-.evp-finding h5 {
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
   color: var(--muted);
-  margin: 0.55rem 0 0.25rem;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0.05rem 0.35rem;
+  align-self: center;
 }
-.evp-finding ul {
-  margin: 0;
-  padding-left: 1.1rem;
-  font-size: 0.74rem;
+/* The number carries the finding — big, scannable, the point in one glance. */
+.evp-finding-stat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0.2rem 0 0.5rem;
 }
-.evp-finding li {
-  margin-bottom: 0.25rem;
+.evp-finding-stat-num {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--signal);
+  letter-spacing: -0.01em;
 }
-.evp-finding-caveat {
-  font-size: 0.72rem;
-  color: var(--muted);
-  border-left: 2px solid var(--line);
-  padding-left: 0.6rem;
-  max-width: 78ch;
-  margin: 0.45rem 0 0;
-}
-.evp-finding-caveat b {
+.evp-finding-stat-label {
+  font-size: 0.76rem;
   color: var(--ink);
+  max-width: 46ch;
+}
+.evp-finding-takeaway {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  max-width: 68ch;
+  margin: 0 0 0.55rem;
+}
+.evp-finding-actions {
+  margin: 0 0 0.55rem;
+  padding-left: 1.05rem;
+  font-size: 0.76rem;
+}
+.evp-finding-actions li {
+  margin-bottom: 0.2rem;
+}
+.evp-finding-method {
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--muted);
+  max-width: 72ch;
+  margin: 0;
 }
 .evp-more-link {
   display: inline-block;
