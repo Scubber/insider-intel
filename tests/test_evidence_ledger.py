@@ -37,6 +37,7 @@ def _forensics(link: str, *, status: str) -> PerCaseForensics:
                 ],
             )
         ],
+        hunt_terms=["removable media", "mass file copy", "resignation window"],
         hunt_queries=[
             HuntQuerySeed(
                 stack="EDR",
@@ -168,6 +169,9 @@ def test_evidence_technique_endpoint(tmp_path, monkeypatch) -> None:
         hunt = d["hunts"][0]
         assert hunt["stack"] == "EDR" and "removable_media_write" in hunt["logic"]
         assert hunt["case"] and hunt["strength"] == "adjudicated/admitted"
+        # Case-found search terms ride along (deduped across cases) so the UI
+        # can compose an LLM hunt prompt from them.
+        assert d["terms"] == ["removable media", "mass file copy", "resignation window"]
         # Unobserved technique → 404, not an empty body.
         assert client.get("/evidence/technique/ZZ999").status_code == 404
 

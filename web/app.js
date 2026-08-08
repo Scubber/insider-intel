@@ -4898,19 +4898,78 @@
 
   /* Dossier OBSERVED EVIDENCE section: per-technique detail (case-scoped),
      fail-soft — a sleeping API or unobserved technique just hides the block. */
-  function renderDossierHunts(hunts, caseTotal) {
+  function buildHuntPrompt(tech, d) {
+    const lines = [
+      "You are a threat-hunting assistant. Help me hunt for this insider technique in my environment.",
+      "",
+      `Technique: ${tech ? `${tech.id} · ${tech.title}` : d.id} (Insider Threat Matrix)`,
+    ];
+    const desc = tech && String(tech.description || "").trim();
+    if (desc) lines.push(`Description: ${desc}`);
+    if ((d.terms || []).length) {
+      lines.push("", `Search terms observed across ${d.cases} real insider case(s):`);
+      d.terms.forEach((t) => lines.push(`- ${t}`));
+    }
+    if ((d.evidence || []).length) {
+      lines.push("", "Evidence artifacts these cases left behind:");
+      d.evidence.forEach((e) => lines.push(`- ${e.artifact} (seen in ${e.cases} case(s))`));
+    }
+    if ((d.hunts || []).length) {
+      lines.push("", "Query logic derived from the cases:");
+      d.hunts.forEach((h) => {
+        const strength = h.strength === "adjudicated/admitted" ? "proven in court" : h.strength;
+        lines.push(`- [${h.stack}] ${h.logic}${h.rationale ? ` — ${h.rationale}` : ""} (${strength})`);
+      });
+    }
+    lines.push(
+      "",
+      "My stack: <name your SIEM / EDR / DLP / identity tools here>",
+      "",
+      "Task: translate the above into concrete, runnable queries for my stack,",
+      "note the expected noise and false positives for each, and suggest",
+      "thresholds or scoping (e.g. departing employees, after-hours) to make",
+      "them practical."
+    );
+    return lines.join("\n");
+  }
+
+  function renderDossierHunts(d) {
     const box = document.getElementById("dossier-hunts");
     const list = document.getElementById("dossier-hunt-list");
     if (!box || !list) return;
     list.innerHTML = "";
-    box.hidden = !(hunts || []).length;
+    const hunts = (d && d.hunts) || [];
+    const terms = (d && d.terms) || [];
+    box.hidden = !hunts.length && !terms.length;
+    if (box.hidden) return;
+    const caseTotal = d.cases || 0;
     const countEl = document.getElementById("dossier-hunt-count");
     if (countEl) {
-      countEl.textContent = (hunts || []).length
-        ? `(from ${caseTotal} case${caseTotal === 1 ? "" : "s"})`
-        : "";
+      countEl.textContent = `(from ${caseTotal} case${caseTotal === 1 ? "" : "s"})`;
     }
-    (hunts || []).forEach((h) => {
+    const tech = selectedTechnique();
+
+    // Lead with the LLM prompt: the case-derived terms + logic are raw
+    // material an assistant can translate into the reader's own stack.
+    if (terms.length) {
+      const termLine = document.createElement("p");
+      termLine.className = "kw-hint dossier-hunt-terms";
+      termLine.textContent = `Search terms from the cases: ${terms.join(" · ")}`;
+      list.appendChild(termLine);
+    }
+    const actions = document.createElement("p");
+    actions.className = "panel-actions query-stack-actions";
+    const promptBtn = document.createElement("button");
+    promptBtn.type = "button";
+    promptBtn.className = "copy-btn";
+    promptBtn.textContent = "Copy LLM hunt prompt";
+    promptBtn.addEventListener("click", () => {
+      copyText(buildHuntPrompt(tech, d), "Copied hunt prompt — paste into your AI assistant");
+    });
+    actions.appendChild(promptBtn);
+    list.appendChild(actions);
+
+    hunts.forEach((h) => {
       const details = document.createElement("details");
       details.className = "query-stack";
       const summary = document.createElement("summary");
@@ -4948,7 +5007,7 @@
     const box = document.getElementById("dossier-evidence");
     if (!box) return;
     box.hidden = true;
-    renderDossierHunts([], 0);
+    renderDossierHunts(null);
     try {
       const d = await api(`/evidence/technique/${encodeURIComponent(techId)}`, {}, { timeoutMs: 10000 });
       if (!d || !d.cases) return;
@@ -4990,7 +5049,7 @@
           trail.appendChild(row);
         });
       }
-      renderDossierHunts(d.hunts, d.cases);
+      renderDossierHunts(d);
       box.hidden = false;
     } catch (err) {
       console.warn("Dossier evidence unavailable", err);

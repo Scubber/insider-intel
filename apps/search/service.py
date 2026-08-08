@@ -187,6 +187,7 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     families = ledger.pop("technique_families", {})
     ledger.pop("technique_counts", {})
     ledger.pop("technique_hunts", {})  # served per-technique, not corpus-wide
+    ledger.pop("technique_terms", {})
     by_tech = _catalog_detections()
     # Spell out technique names for a non-analyst reader (the core stays
     # catalog-free, so the human title is joined in here).
@@ -238,6 +239,7 @@ def evidence_technique(tech_id: str, path: str | Path | None = None) -> dict | N
         "detections": detections,
         "evidence": [{"artifact": fam, "cases": n} for fam, n in ranked[:8]],
         "hunts": ledger.get("technique_hunts", {}).get(tech_id, []),
+        "terms": ledger.get("technique_terms", {}).get(tech_id, []),
     }
 
 

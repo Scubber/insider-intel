@@ -92,8 +92,9 @@ THEMES = ("motive", "means", "preparation", "infringement", "anti-forensics")
 # report its credibility.
 SMALL_N_FLOOR = 10
 
-# Cap on stored hunt seeds per technique (deduped by normalized logic).
+# Caps on stored per-technique hunt material (deduped by normalized text).
 HUNTS_PER_TECHNIQUE = 12
+TERMS_PER_TECHNIQUE = 20
 
 # WHO — roles, never individuals. Two independent axes normalized from the
 # free-text actor_role/actor_profile the enricher extracts per case.
@@ -283,6 +284,8 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
     channel_cases: dict[str, set] = defaultdict(set)
     tech_hunts: dict[str, list[dict]] = defaultdict(list)  # technique -> hunt seeds
     hunt_seen: dict[str, set] = defaultdict(set)
+    tech_terms: dict[str, list[str]] = defaultdict(list)  # technique -> case hunt terms
+    term_seen: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
     strength_totals: Counter = Counter()
 
@@ -322,6 +325,9 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for hq in (f.get("hunt_queries") or [])
             if isinstance(hq, dict) and str(hq.get("logic") or "").strip()
         ]
+        case_terms = [
+            t for t in (str(x).strip() for x in (f.get("hunt_terms") or [])) if t
+        ]
 
         for tech in f.get("candidate_technique_ids") or []:
             tech = str(tech).upper().strip()
@@ -348,6 +354,12 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                         "strength": strength,
                     }
                 )
+            for term in case_terms:
+                key = " ".join(term.lower().split())
+                if key in term_seen[tech] or len(tech_terms[tech]) >= TERMS_PER_TECHNIQUE:
+                    continue
+                term_seen[tech].add(key)
+                tech_terms[tech].append(term[:80])
 
         for m in methods:
             m_strong = str(m.get("claim_status") or "").lower() in STRONG_STATUSES
@@ -456,6 +468,7 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             t: sorted(hunts, key=lambda h: h["strength"] != "adjudicated/admitted")
             for t, hunts in tech_hunts.items()
         },
+        "technique_terms": {t: terms for t, terms in tech_terms.items()},
         "detected_by": [
             {
                 "artifact": fam,
