@@ -11,7 +11,7 @@ from apps.search import service
 from apps.search.api import app
 from shared.agents import process_article
 from shared.schemas import RawArticle
-from shared.schemas.forensics import CaseMethod, CaseObservable, PerCaseForensics
+from shared.schemas.forensics import CaseMethod, CaseObservable, HuntQuerySeed, PerCaseForensics
 from shared.settings import Settings
 from shared.utils.evidence import build_evidence_ledger
 
@@ -35,6 +35,14 @@ def _forensics(link: str, *, status: str) -> PerCaseForensics:
                         basis="mechanically_implied",
                     )
                 ],
+            )
+        ],
+        hunt_terms=["removable media", "mass file copy", "resignation window"],
+        hunt_queries=[
+            HuntQuerySeed(
+                stack="EDR",
+                logic="removable_media_write AND file_count > 100 within 24h of resignation",
+                rationale="Mass USB copy in the departure window",
             )
         ],
         is_insider_case=True,
@@ -101,6 +109,8 @@ def test_ledger_endpoint_aggregates_corpus(tmp_path, monkeypatch) -> None:
         # Real artifact strings ride along so the UI can show what the family holds.
         assert usb["examples"] == ["EDR removable-media events"]
         assert data["channels"]["endpoint"] == 2
+        # Internal per-technique maps stay off the corpus-wide payload.
+        assert "technique_hunts" not in data
 
         # Bounds validated.
         assert client.get("/evidence/ledger", params={"top": 0}).status_code == 422
@@ -153,6 +163,15 @@ def test_evidence_technique_endpoint(tmp_path, monkeypatch) -> None:
         assert d["cases"] == 2 and d["adjudicated_admitted"] == 1
         assert d["evidence"][0]["artifact"] == "removable-media (USB) logs"
         assert isinstance(d["detections"], list)
+        # Case-derived hunt seeds: deduped by logic (both cases share one),
+        # attributed to a case, adjudicated first.
+        assert len(d["hunts"]) == 1
+        hunt = d["hunts"][0]
+        assert hunt["stack"] == "EDR" and "removable_media_write" in hunt["logic"]
+        assert hunt["case"] and hunt["strength"] == "adjudicated/admitted"
+        # Case-found search terms ride along (deduped across cases) so the UI
+        # can compose an LLM hunt prompt from them.
+        assert d["terms"] == ["removable media", "mass file copy", "resignation window"]
         # Unobserved technique → 404, not an empty body.
         assert client.get("/evidence/technique/ZZ999").status_code == 404
 
