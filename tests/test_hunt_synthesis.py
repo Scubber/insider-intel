@@ -25,16 +25,18 @@ GOOD_REPLY = {
         {
             "name": "Departure-window bulk copy",
             "who_class": "departing employees",
-            "action": "bulk copy of sensitive files to removable media before exit",
-            "target_class": "source code / design files",
-            "channel": "endpoint",
-            "logic": "FROM <edr_removable_media_log> WHERE user IN <departing_users> "
-            "AND file_count > <threshold>",
-            "log_sources": ["EDR removable-media events"],
-            "thresholds": "scope to 30 days around resignation",
-            "false_positives": "IT asset-migration jobs",
+            "behavior": "bulk copy of sensitive files to removable media before exit",
+            "detect": [
+                "Review file-transfer activity for departing employees in their final 30 days",
+                "Ask managers to flag unusual data-gathering behavior during notice periods",
+            ],
+            "prevent": [
+                "Revoke repository and share access on resignation notice, not the last day",
+                "Add a data-handling attestation to the offboarding checklist",
+            ],
+            "noise": "IT asset-migration jobs look similar; check for a ticket",
         },
-        {"name": "no logic — dropped"},
+        {"name": "no detect methods — dropped"},
         "not-a-dict",
     ]
 }
@@ -94,7 +96,11 @@ def _settings(tmp_path, **kw) -> Settings:
 def test_parse_patterns_tolerant() -> None:
     patterns = parse_patterns(GOOD_REPLY)
     assert len(patterns) == 1
-    assert patterns[0].channel == "endpoint" and patterns[0].who_class == "departing employees"
+    assert patterns[0].who_class == "departing employees"
+    assert len(patterns[0].detect) == 2 and len(patterns[0].prevent) == 2
+    # People/process methods are first-class, not just telemetry.
+    assert any("managers" in m for m in patterns[0].detect)
+    assert any("offboarding" in m for m in patterns[0].prevent)
     assert parse_patterns({"patterns": "nope"}) == []
     assert parse_patterns(None) == []
 

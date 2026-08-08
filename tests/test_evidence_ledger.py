@@ -208,7 +208,8 @@ def test_technique_endpoint_serves_synthesized_patterns(tmp_path, monkeypatch) -
                         HuntPattern(
                             name="Departure-window bulk copy",
                             who_class="departing employees",
-                            logic="FROM <edr_log> WHERE <scoped>",
+                            detect=["Review departing employees' file transfers"],
+                            prevent=["Revoke access at resignation notice"],
                         )
                     ],
                 )

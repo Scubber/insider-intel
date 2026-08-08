@@ -11,30 +11,28 @@ re-synthesized when its case material changes.
 from __future__ import annotations
 
 import logging
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-CHANNELS = ("email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human")
-Channel = Literal["email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human"]
-
 MAX_PATTERNS_PER_TECHNIQUE = 4
 
 
 class HuntPattern(BaseModel):
-    """One generalized, environment-portable hunt for a technique."""
+    """One generalized, tool-agnostic hunt pattern for a technique.
+
+    ``detect``/``prevent`` are plain-language methods — technical, people, or
+    process (training, offboarding, HR partnership) — never query syntax or
+    product names.
+    """
 
     name: str
     who_class: str = ""
-    action: str = ""
-    target_class: str = ""
-    channel: Channel | None = None
-    logic: str
-    log_sources: list[str] = Field(default_factory=list)
-    thresholds: str = ""
-    false_positives: str = ""
+    behavior: str = ""
+    detect: list[str] = Field(default_factory=list)
+    prevent: list[str] = Field(default_factory=list)
+    noise: str = ""
 
 
 class TechniqueHuntEntry(BaseModel):
@@ -62,24 +60,18 @@ def parse_patterns(raw: object) -> list[HuntPattern]:
         if not isinstance(item, dict):
             continue
         name = _clean(item.get("name"), 80)
-        logic = _clean(item.get("logic"), 500)
-        if not name or not logic:
+        detect = [d for d in (_clean(x, 300) for x in (item.get("detect") or [])[:4]) if d]
+        if not name or not detect:
             continue
-        channel = str(item.get("channel") or "").strip().lower()
-        sources = [
-            s for s in (_clean(x, 80) for x in (item.get("log_sources") or [])[:6]) if s
-        ]
+        prevent = [p for p in (_clean(x, 300) for x in (item.get("prevent") or [])[:4]) if p]
         out.append(
             HuntPattern(
                 name=name,
                 who_class=_clean(item.get("who_class"), 80),
-                action=_clean(item.get("action"), 240),
-                target_class=_clean(item.get("target_class"), 80),
-                channel=channel if channel in CHANNELS else None,
-                logic=logic,
-                log_sources=sources,
-                thresholds=_clean(item.get("thresholds"), 300),
-                false_positives=_clean(item.get("false_positives"), 300),
+                behavior=_clean(item.get("behavior"), 300),
+                detect=detect,
+                prevent=prevent,
+                noise=_clean(item.get("noise"), 300),
             )
         )
         if len(out) >= MAX_PATTERNS_PER_TECHNIQUE:
