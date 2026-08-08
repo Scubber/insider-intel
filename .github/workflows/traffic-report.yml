@@ -87,65 +87,65 @@ jobs:
           entries = json.load(open("requests.json"))
 
           # --- offline GeoIP: load DB-IP lite city CSV into sorted ranges ---
-          geo_ranges = []  # (start_int, end_int, country, city) for IPv4
-          try:
-              with open("dbip.csv", newline="", encoding="utf-8", errors="replace") as fh:
-                  for row in csv.reader(fh):
-                      if len(row) < 4:
-                          continue
-                      # DB-IP city-lite layout: ip_start, ip_end, continent,
-                      # country, state, city, lat, lng
-                      lo, hi = row[0], row[1]
-                      cc = row[3] if len(row) > 3 else row[2]
-                      city = row[5] if len(row) > 5 else ""
-                      try:
-                          a, b = ipaddress.ip_address(lo), ipaddress.ip_address(hi)
-                      except ValueError:
-                          continue
-                      if a.version != 4:
-                          continue
-                      geo_ranges.append((int(a), int(b), cc, city))
-              geo_ranges.sort()
-              print(f"geoip ranges: {len(geo_ranges)}")
-          except FileNotFoundError:
-              print("no geoip db — geo columns blank")
-
           import bisect
-          starts = [r[0] for r in geo_ranges]
 
-          def geo(ip):
+          # DB-IP lite CSVs carry BOTH IPv4 and IPv6 ranges. Keep them in
+          # separate version-split sorted lists (v4 ints and v6 ints share a
+          # number line but never overlap in practice; splitting is exact and
+          # avoids any theoretical collision). Modern home/mobile traffic is
+          # heavily IPv6 — dropping it blanked ~20% of visitors.
+          def _load_ranges(path, extract):
+              v4, v6 = [], []
+              try:
+                  with open(path, newline="", encoding="utf-8", errors="replace") as fh:
+                      for row in csv.reader(fh):
+                          if len(row) < 4:
+                              continue
+                          try:
+                              a = ipaddress.ip_address(row[0])
+                              b = ipaddress.ip_address(row[1])
+                          except ValueError:
+                              continue
+                          rec = (int(a), int(b)) + tuple(extract(row))
+                          (v4 if a.version == 4 else v6).append(rec)
+                  v4.sort()
+                  v6.sort()
+              except FileNotFoundError:
+                  pass
+              return v4, v6
+
+          def _lookup(v4, v6, s4, s6, ip, blank):
               try:
                   addr = ipaddress.ip_address(ip)
               except ValueError:
-                  return ("", "")
-              if addr.version != 4 or not geo_ranges:
-                  return ("", "")
-              i = bisect.bisect_right(starts, int(addr)) - 1
-              if 0 <= i < len(geo_ranges):
-                  lo, hi, cc, city = geo_ranges[i]
-                  if lo <= int(addr) <= hi:
-                      return (cc, city)
-              return ("", "")
+                  return blank
+              ranges, starts = (v4, s4) if addr.version == 4 else (v6, s6)
+              if not ranges:
+                  return blank
+              n = int(addr)
+              i = bisect.bisect_right(starts, n) - 1
+              if 0 <= i < len(ranges) and ranges[i][0] <= n <= ranges[i][1]:
+                  return ranges[i][2:]
+              return blank
+
+          # DB-IP city-lite layout: ip_start, ip_end, continent, country,
+          # state, city, lat, lng.
+          geo4, geo6 = _load_ranges(
+              "dbip.csv",
+              lambda r: (r[3] if len(r) > 3 else r[2], r[5] if len(r) > 5 else ""),
+          )
+          gs4, gs6 = [r[0] for r in geo4], [r[0] for r in geo6]
+          print(f"geoip ranges: v4={len(geo4)} v6={len(geo6)}")
+
+          def geo(ip):
+              return _lookup(geo4, geo6, gs4, gs6, ip, ("", ""))
 
           # --- offline ASN: IP -> network org, and a coarse network class ---
-          asn_ranges = []  # (start_int, end_int, org)
-          try:
-              with open("dbip-asn.csv", newline="", encoding="utf-8", errors="replace") as fh:
-                  for row in csv.reader(fh):
-                      if len(row) < 4:
-                          continue
-                      try:
-                          a, b = ipaddress.ip_address(row[0]), ipaddress.ip_address(row[1])
-                      except ValueError:
-                          continue
-                      if a.version != 4:
-                          continue
-                      asn_ranges.append((int(a), int(b), row[3]))
-              asn_ranges.sort()
-              print(f"asn ranges: {len(asn_ranges)}")
-          except FileNotFoundError:
-              print("no asn db — org/class columns blank")
-          asn_starts = [r[0] for r in asn_ranges]
+          # DB-IP ASN-lite: ip_start, ip_end, as_number, as_organization
+          # (both v4 and v6 rows).
+          asn4, asn6 = _load_ranges("dbip-asn.csv", lambda r: (r[3],))
+          as4, as6 = [r[0] for r in asn4], [r[0] for r in asn6]
+          print(f"asn ranges: v4={len(asn4)} v6={len(asn6)}")
 
           # Org-name heuristics. A network reveals TYPE, not employer — a
           # corporate visitor on mobile lands in ISP. "business" = registered
@@ -169,18 +169,8 @@ jobs:
           )
 
           def asn(ip):
-              try:
-                  addr = ipaddress.ip_address(ip)
-              except ValueError:
-                  return ("", "")
-              if addr.version != 4 or not asn_ranges:
-                  return ("", "")
-              i = bisect.bisect_right(asn_starts, int(addr)) - 1
-              if 0 <= i < len(asn_ranges):
-                  lo, hi, org = asn_ranges[i]
-                  if lo <= int(addr) <= hi:
-                      return (org, "")
-              return ("", "")
+              (org,) = _lookup(asn4, asn6, as4, as6, ip, ("",))
+              return (org, "")
 
           def net_class(org):
               if not org:
