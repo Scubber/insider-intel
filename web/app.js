@@ -4818,30 +4818,34 @@
     list.innerHTML = "";
     findings.forEach((f) => {
       const card = evpEl("article", "evp-finding");
+
+      // Scannable card: a headline, one big number, one line of consequence,
+      // terse actions, one dim footnote. No walls of prose.
       const head = evpEl("div", "evp-finding-head");
-      head.appendChild(evpEl("span", "evp-finding-id", f.id));
       head.appendChild(evpEl("span", "evp-finding-title", f.title));
-      head.appendChild(evpEl("span", "evp-finding-meta", `${f.date} · ${f.ledger_run || ""}`));
+      head.appendChild(evpEl("span", "evp-finding-tag", "AI-ASSISTED"));
       card.appendChild(head);
-      card.appendChild(evpEl("p", "evp-finding-claim", f.claim));
-      if ((f.data || []).length) {
-        card.appendChild(evpEl("h5", "", "THE DATA"));
-        const ul = evpEl("ul");
-        f.data.forEach((d) => ul.appendChild(evpEl("li", "", d)));
-        card.appendChild(ul);
+
+      if (f.stat) {
+        const stat = evpEl("div", "evp-finding-stat");
+        stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
+        if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
+        card.appendChild(stat);
       }
-      if (f.caveat) {
-        const cav = evpEl("p", "evp-finding-caveat");
-        cav.appendChild(evpEl("b", "", "Honest caveat: "));
-        cav.appendChild(document.createTextNode(f.caveat));
-        card.appendChild(cav);
-      }
+
+      // Backward-compatible: takeaway (new) or claim (old).
+      const takeaway = f.takeaway || f.claim;
+      if (takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", takeaway));
+
       if ((f.recommendations || []).length) {
-        card.appendChild(evpEl("h5", "", "WHAT TO DO ABOUT IT"));
-        const ul = evpEl("ul");
+        const ul = evpEl("ul", "evp-finding-actions");
         f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
         card.appendChild(ul);
       }
+
+      const foot = f.method || f.caveat;
+      if (foot) card.appendChild(evpEl("p", "evp-finding-method", foot));
+
       list.appendChild(card);
     });
     box.hidden = false;
