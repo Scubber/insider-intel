@@ -249,12 +249,10 @@
     dossierMeta: document.getElementById("dossier-meta"),
     dossierDesc: document.getElementById("dossier-desc"),
     dossierItmLink: document.getElementById("dossier-itm-link"),
-    dossierTermList: document.getElementById("dossier-term-list"),
     dossierDetectionList: document.getElementById("dossier-detection-list"),
     dossierPreventionList: document.getElementById("dossier-prevention-list"),
     dossierArticleList: document.getElementById("dossier-article-list"),
     dossierCaseCount: document.getElementById("dossier-case-count"),
-    dossierQueries: document.getElementById("dossier-queries"),
     ttpQueries: document.getElementById("ttp-queries"),
   };
 
@@ -3304,11 +3302,6 @@
       els.dossierDesc.hidden = !desc;
     }
     if (els.dossierItmLink) els.dossierItmLink.href = itmUrl(tech);
-    fillCopyableChips(els.dossierTermList, techniqueAliases(tech), true);
-    renderQueryBlocks(
-      els.dossierQueries,
-      buildHuntQueries({ terms: techniqueAliases(tech) }),
-    );
     fillControlChips(els.dossierDetectionList, tech.detections, "detection");
     fillControlChips(els.dossierPreventionList, tech.preventions, "prevention");
     if (els.dossierArticleList) els.dossierArticleList.innerHTML = "";
@@ -3370,6 +3363,14 @@
     if (els.streamTitle) els.streamTitle.textContent = `${tech.id} dossier`;
     if (els.streamCount) els.streamCount.textContent = "";
     renderDossierShell(tech);
+    // Bring the technique heading + description to the top of the viewport.
+    // Clicking a technique from the (tall, scrolled) EVIDENCE page used to
+    // keep the old scroll position and drop the reader below the description.
+    if (els.dossierTitle) {
+      els.dossierTitle.scrollIntoView({ block: "start" });
+    } else {
+      window.scrollTo({ top: 0 });
+    }
     loadDossierEvidence(tech.id);
     const data = await api("/articles", {
       limit: 50,
