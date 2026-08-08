@@ -3,9 +3,15 @@ name: traffic-report
 # DIY analytics from Cloud Run request logs — no client-side code. Every page
 # load fires GET /health (the boot probe), so health hits ≈ page views:
 # first-party, ad-block-proof, cookieless. Emits a summary report AND a
-# full per-request forensic CSV with offline GeoIP (source IP → country/city,
-# no third-party callouts with visitor IPs). Both land as run artifacts and
+# full per-request forensic CSV with offline GeoIP (source IP → country/city)
+# and offline ASN lookup (IP → network org + hosting/ISP/business class) —
+# no third-party callouts with visitor IPs. Both land as run artifacts and
 # in the bucket's export/ prefix. Read-only; no LLM spend.
+#
+# Network class caveat: an IP reveals network TYPE (datacenter vs consumer ISP
+# vs registered business range), never "which employer". A corporate visitor on
+# mobile reads as ISP; a WFH researcher reads as ISP. Treat "business" as
+# "traffic from a range registered to an org", which is suggestive, not proof.
 on:
   schedule:
     - cron: "0 13 * * *" # daily 13:00 UTC
@@ -48,6 +54,14 @@ jobs:
             || true
           [ -f dbip.csv.gz ] && gunzip dbip.csv.gz && echo "geoip db ready" \
             || echo "geoip db unavailable — CSV geo columns will be blank"
+          # DB-IP ASN Lite: ip_start, ip_end, as_number, as_organization.
+          curl -fsSL "https://download.db-ip.com/free/dbip-asn-lite-${MONTH}.csv.gz" \
+            -o dbip-asn.csv.gz \
+            || curl -fsSL "https://download.db-ip.com/free/dbip-asn-lite-$(date -u -d 'last month' +%Y-%m).csv.gz" \
+              -o dbip-asn.csv.gz \
+            || true
+          [ -f dbip-asn.csv.gz ] && gunzip dbip-asn.csv.gz && echo "asn db ready" \
+            || echo "asn db unavailable — CSV org/class columns will be blank"
 
       - name: Pull request logs
         run: |
@@ -113,6 +127,70 @@ jobs:
                       return (cc, city)
               return ("", "")
 
+          # --- offline ASN: IP -> network org, and a coarse network class ---
+          asn_ranges = []  # (start_int, end_int, org)
+          try:
+              with open("dbip-asn.csv", newline="", encoding="utf-8", errors="replace") as fh:
+                  for row in csv.reader(fh):
+                      if len(row) < 4:
+                          continue
+                      try:
+                          a, b = ipaddress.ip_address(row[0]), ipaddress.ip_address(row[1])
+                      except ValueError:
+                          continue
+                      if a.version != 4:
+                          continue
+                      asn_ranges.append((int(a), int(b), row[3]))
+              asn_ranges.sort()
+              print(f"asn ranges: {len(asn_ranges)}")
+          except FileNotFoundError:
+              print("no asn db — org/class columns blank")
+          asn_starts = [r[0] for r in asn_ranges]
+
+          # Org-name heuristics. A network reveals TYPE, not employer — a
+          # corporate visitor on mobile lands in ISP. "business" = registered
+          # to an org that is neither a cloud host nor a consumer ISP.
+          HOSTING = re.compile(
+              r"amazon|aws|google|goog|azure|microsoft|digitalocean|linode|akamai|"
+              r"cloudflare|ovh|hetzner|vultr|oracle|leaseweb|contabo|scaleway|"
+              r"hosting|datacenter|data center|server|vps|colo|cloud|fastly|"
+              r"m247|choopa|hostwinds|godaddy|namecheap|censys|shodan|palo alto|"
+              r"digital ocean|tencent|alibaba|huawei cloud",
+              re.I,
+          )
+          ISP = re.compile(
+              r"comcast|verizon|at&t|at t|spectrum|charter|cox\b|centurylink|lumen|"
+              r"t-mobile|sprint|frontier|windstream|mediacom|optimum|altice|"
+              r"vodafone|telefonica|deutsche telekom|orange|telecom italia|"
+              r"\bbt\b|sky\b|virgin media|telus|rogers|bell canada|shaw|videotron|"
+              r"broadband|cable|\bdsl\b|fiber|fibre|wireless|cellular|mobile|"
+              r"communications|telecom|telekom|internet services|isp\b",
+              re.I,
+          )
+
+          def asn(ip):
+              try:
+                  addr = ipaddress.ip_address(ip)
+              except ValueError:
+                  return ("", "")
+              if addr.version != 4 or not asn_ranges:
+                  return ("", "")
+              i = bisect.bisect_right(asn_starts, int(addr)) - 1
+              if 0 <= i < len(asn_ranges):
+                  lo, hi, org = asn_ranges[i]
+                  if lo <= int(addr) <= hi:
+                      return (org, "")
+              return ("", "")
+
+          def net_class(org):
+              if not org:
+                  return ""
+              if HOSTING.search(org):
+                  return "hosting"
+              if ISP.search(org):
+                  return "isp"
+              return "business"
+
           BOT_RE = re.compile(
               r"bot|crawl|spider|scrape|curl|wget|python-requests|httpx|go-http|"
               r"feedparser|feedfetcher|rss|monitor|probe|uptime|headless",
@@ -126,14 +204,18 @@ jobs:
           paths, referers, uas, statuses = Counter(), Counter(), Counter(), Counter()
           days = defaultdict(lambda: {"views": 0, "bot": 0})
           suspicious_paths = Counter()
+          ip_org, ip_class = {}, {}
+          # Network class of human page loads (bot/script UAs excluded).
+          human_class = Counter()
+          human_orgs = Counter()
           total = 0
 
           with open("traffic-log.csv", "w", newline="", encoding="utf-8") as fh:
               w = csv.writer(fh)
               w.writerow([
-                  "timestamp", "src_ip", "country", "city", "method", "path",
-                  "query", "status", "latency", "resp_bytes", "protocol",
-                  "user_agent", "referer",
+                  "timestamp", "src_ip", "country", "city", "net_org",
+                  "net_class", "method", "path", "query", "status", "latency",
+                  "resp_bytes", "protocol", "user_agent", "referer",
               ])
               for e in rows:
                   req = e.get("httpRequest") or {}
@@ -145,8 +227,13 @@ jobs:
                   ref = req.get("referer") or ""
                   status = str(req.get("status") or "")
                   cc, city = geo(ip)
+                  org, _ = asn(ip)
+                  klass = net_class(org)
+                  if ip:
+                      ip_org[ip] = org
+                      ip_class[ip] = klass
                   w.writerow([
-                      e.get("timestamp") or "", ip, cc, city,
+                      e.get("timestamp") or "", ip, cc, city, org, klass,
                       req.get("requestMethod") or "", path, query, status,
                       req.get("latency") or "", req.get("responseSize") or "",
                       req.get("protocol") or "", ua, ref,
@@ -172,6 +259,9 @@ jobs:
                       days[day]["bot" if is_bot else "views"] += 1
                       if not is_bot:
                           uas[ua.split("(")[0].strip()[:40]] += 1
+                          human_class[klass or "unknown"] += 1
+                          if klass == "business" and org:
+                              human_orgs[org[:48]] += 1
 
           # --- summary report ---
           L = ["# insider-intel traffic report", ""]
@@ -191,11 +281,31 @@ jobs:
               for c, n in cities.most_common(15):
                   L.append(f"- {n:4d}  {c}")
           L.append("")
+          L.append("## Human page loads by network type")
+          L.append("(bot/script UAs excluded; network type ≈ datacenter vs consumer ISP")
+          L.append(" vs org-registered range — suggestive of visitor kind, never employer)")
+          CLASS_LABEL = {
+              "hosting": "hosting/datacenter (bots, VPNs, scanners)",
+              "isp": "consumer ISP (home / mobile / small office)",
+              "business": "business/org-registered range",
+              "unknown": "unclassified (no ASN match)",
+          }
+          for k in ("business", "isp", "hosting", "unknown"):
+              if human_class.get(k):
+                  L.append(f"- {human_class[k]:4d}  {CLASS_LABEL[k]}")
+          if human_orgs:
+              L.append("")
+              L.append("## Business/org networks among human visitors")
+              for org, n in human_orgs.most_common(15):
+                  L.append(f"- {n:3d}  {org}")
+          L.append("")
           L.append("## Top source IPs")
           for ip, n in ips.most_common(20):
               cc, city = geo(ip)
               loc = f" [{city}, {cc}]" if cc else ""
-              L.append(f"- {n:5d}  {ip}{loc}")
+              org = ip_org.get(ip, "")
+              tag = f" — {ip_class.get(ip,'')}: {org[:40]}" if org else ""
+              L.append(f"- {n:5d}  {ip}{loc}{tag}")
           L.append("")
           L.append("## Suspicious clients (4xx-heavy / probe paths)")
           flagged = [(ip, n) for ip, n in ip_4xx.most_common(15) if n >= 3]
@@ -203,7 +313,9 @@ jobs:
               for ip, n in flagged:
                   cc, city = geo(ip)
                   loc = f" [{city}, {cc}]" if cc else ""
-                  L.append(f"- {n:4d} 4xx  {ip}{loc}")
+                  org = ip_org.get(ip, "")
+                  tag = f" — {ip_class.get(ip,'')}: {org[:40]}" if org else ""
+                  L.append(f"- {n:4d} 4xx  {ip}{loc}{tag}")
           else:
               L.append("- none (no IP with 3+ 4xx responses)")
           if suspicious_paths:
