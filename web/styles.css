@@ -479,7 +479,9 @@ body {
 
 /* Side rails stick while the case stream scrolls. Their own overflow appears
    only when a rail is taller than the viewport. */
-@media (min-width: 1200px) {
+/* 1024px catches iPad landscape (Air 1180, Pro 11" 1194, base ~1080) and
+   12.9" Pro portrait — below the old 1200 they all lost the side rail. */
+@media (min-width: 1024px) {
   .pane-grid {
     grid-template-columns: 250px minmax(0, 1fr) 300px;
   }
@@ -501,8 +503,8 @@ body {
   }
 }
 
-/* Below the wide breakpoint the Matrix is a tab that takes over the grid. */
-@media (max-width: 1199px) {
+/* Below the wide breakpoint the panels tab takes over the grid. */
+@media (max-width: 1023px) {
   .app-shell[data-pane="matrix"] .pane-grid {
     grid-template-columns: 1fr;
   }
@@ -972,7 +974,7 @@ body {
   color: var(--muted, #8a8f98);
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1024px) {
   .app-shell.hide-core.hide-itm.hide-evidence:not([data-pane="workbench"]):not(
       [data-pane="settings"]
     )
