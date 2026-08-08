@@ -264,7 +264,8 @@ def run(base_url: str, headed: bool) -> int:
             "technique opens dossier", bool((page.text_content("#dossier-title") or "").strip())
         )
         checks.check(
-            "dossier has query blocks", page.locator("#dossier-queries .query-stack").count() > 0
+            "dossier shows the technique description",
+            bool((page.text_content("#dossier-desc") or "").strip()),
         )
 
         # Hunt -> crumb
