@@ -188,11 +188,6 @@
     ttpTechniqueGroup: document.getElementById("ttp-technique-group"),
     ttpTechniqueSections: document.getElementById("ttp-technique-sections"),
     ttpBehaviorList: document.getElementById("ttp-behavior-list"),
-    ttpEmailList: document.getElementById("ttp-email-list"),
-    ttpChatList: document.getElementById("ttp-chat-list"),
-    ttpNetworkList: document.getElementById("ttp-network-list"),
-    ttpHumanList: document.getElementById("ttp-human-list"),
-    ttpSeedList: document.getElementById("ttp-seed-list"),
     copyTtpReport: document.getElementById("copy-ttp-report"),
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
     alignFilters: document.getElementById("align-filters"),
@@ -253,7 +248,6 @@
     dossierPreventionList: document.getElementById("dossier-prevention-list"),
     dossierArticleList: document.getElementById("dossier-article-list"),
     dossierCaseCount: document.getElementById("dossier-case-count"),
-    ttpQueries: document.getElementById("ttp-queries"),
   };
 
   const state = {
@@ -1489,26 +1483,12 @@
 
   function buildTtpReport(entries) {
     const behaviors = [];
-    const email = [];
-    const chat = [];
-    const network = [];
-    const human = [];
-    const seeds = [];
-    const seen = {
-      email: new Set(),
-      chat: new Set(),
-      network: new Set(),
-      human: new Set(),
-      seeds: new Set(),
-    };
 
     // Evidence first: behavior lines from the board's own ITM techniques and
-    // case-record methods, seeds/cues from what the articles actually carry.
+    // case-record methods — a forensic readout, not a hunt seed pack.
     const seenBehavior = new Set();
     const sections = new Map();
     entries.forEach((item) => {
-      (item.operator_terms || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
-      (item.matched_aliases || []).forEach((t) => uniqPush(seeds, seen.seeds, t));
       const caseBullets = [
         ...(item.case_methods || []),
         ...(item.case_exfil || []).map((c) => `Exfil channel: ${c}`),
@@ -1536,12 +1516,6 @@
           section.cases.push({ title: item.title, link: item.link, bullets: caseBullets });
         }
       });
-      (item.case_methods || []).forEach((m) => uniqPush(seeds, seen.seeds, m));
-      (item.case_exfil || []).forEach((c) => {
-        uniqPush(network, seen.network, c);
-        uniqPush(seeds, seen.seeds, c);
-      });
-      if (item.case_detection) uniqPush(human, seen.human, item.case_detection);
     });
     [...new Set(entries.flatMap((e) => e.case_methods || []).filter(Boolean))].forEach(
       (method, i) => {
@@ -1552,20 +1526,14 @@
       },
     );
 
-    // Curated packs only when the board's content actually matches one; the
-    // IF038 default is a last-resort floor for evidence-free boards, labeled
-    // honestly below.
+    // Curated behavior packs only when the board's content actually matches
+    // one; the IF038 default is a last-resort floor for evidence-free boards.
     const { packs, matched } = selectTtpPacks(entries);
     const useCurated = matched || behaviors.length === 0;
     if (useCurated) {
       packs.forEach((pack) => {
         pack.seeds.forEach((ttp) => {
           behaviors.push({ id: ttp.id, text: ttp.behavior });
-          ttp.email.forEach((t) => uniqPush(email, seen.email, t));
-          ttp.chat.forEach((t) => uniqPush(chat, seen.chat, t));
-          ttp.network.forEach((t) => uniqPush(network, seen.network, t));
-          ttp.human.forEach((t) => uniqPush(human, seen.human, t));
-          ttp.seeds.forEach((t) => uniqPush(seeds, seen.seeds, t));
         });
       });
     }
@@ -1593,11 +1561,6 @@
       summary,
       techniques,
       behaviors,
-      email,
-      chat,
-      network,
-      human,
-      seeds,
       usedIf038Seeds: useCurated,
       matchedIf038: packs.some((p) => p.id === "IF038") && matched,
       mode: "seeds",
@@ -1704,6 +1667,21 @@
       renderTtpDetection(wrap, section.detection);
       appendCorpusFootnote(wrap, section.id);
 
+      // Hunting guidance lives in the dossier's generalized patterns.
+      if (section.id) {
+        const huntLink = document.createElement("p");
+        huntLink.className = "kw-hint";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost ttp-dossier-link";
+        btn.textContent = `Hunting this behavior? Open the ${section.id} dossier →`;
+        btn.addEventListener("click", () => {
+          showDossier(section.id);
+        });
+        huntLink.appendChild(btn);
+        wrap.appendChild(huntLink);
+      }
+
       container.appendChild(wrap);
     });
   }
@@ -1788,72 +1766,35 @@
     });
   }
 
-  // Detect & hunt: ITM DT*/PV* control chips (linked to the public matrix)
-  // plus the case-grounded hunt queries as copyable blocks.
+  // ITM DT*/PV* catalog control chips (linked to the public matrix) — the
+  // tool-agnostic guidance layer; hunting methods live in the dossier.
   function renderTtpDetection(wrap, detection) {
     if (!detection) return;
     const detections = detection.detections || [];
     const preventions = detection.preventions || [];
-    const queries = detection.hunt_queries || [];
-    if (!detections.length && !preventions.length && !queries.length) return;
+    if (!detections.length && !preventions.length) return;
 
     const head = document.createElement("p");
     head.className = "ttp-subhead";
-    head.textContent = "Detect & hunt";
+    head.textContent = "ITM controls";
     wrap.appendChild(head);
 
-    if (detections.length || preventions.length) {
-      const chips = document.createElement("p");
-      chips.className = "ttp-control-chips";
-      const addChip = (ref, base) => {
-        const a = document.createElement("a");
-        a.className = "ttp-control-chip";
-        a.href = `${base}/${encodeURIComponent(ref.id)}`;
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.title = ref.title || ref.id;
-        a.textContent = ref.id;
-        chips.appendChild(a);
-        chips.appendChild(document.createTextNode(" "));
-      };
-      detections.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/detections"));
-      preventions.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/preventions"));
-      wrap.appendChild(chips);
-    }
-
-    queries.forEach((q) => {
-      if (!q || !q.logic) return;
-      const details = document.createElement("details");
-      details.className = "query-stack";
-      details.open = true;
-      const summary = document.createElement("summary");
-      summary.className = "query-stack-summary";
-      const label = document.createElement("span");
-      label.textContent = q.stack || "SIEM";
-      summary.appendChild(label);
-      const pre = document.createElement("pre");
-      pre.className = "query-block";
-      pre.textContent = q.logic;
-      details.append(summary, pre);
-      if (q.rationale) {
-        const why = document.createElement("p");
-        why.className = "kw-hint";
-        why.textContent = q.rationale;
-        details.appendChild(why);
-      }
-      const actions = document.createElement("p");
-      actions.className = "panel-actions query-stack-actions";
-      const copy = document.createElement("button");
-      copy.type = "button";
-      copy.className = "copy-btn";
-      copy.textContent = "Copy query";
-      copy.addEventListener("click", () => {
-        copyText(q.logic, `Copied ${q.stack || "hunt"} query`);
-      });
-      actions.appendChild(copy);
-      details.appendChild(actions);
-      wrap.appendChild(details);
-    });
+    const chips = document.createElement("p");
+    chips.className = "ttp-control-chips";
+    const addChip = (ref, base) => {
+      const a = document.createElement("a");
+      a.className = "ttp-control-chip";
+      a.href = `${base}/${encodeURIComponent(ref.id)}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.title = ref.title || ref.id;
+      a.textContent = ref.id;
+      chips.appendChild(a);
+      chips.appendChild(document.createTextNode(" "));
+    };
+    detections.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/detections"));
+    preventions.forEach((ref) => addChip(ref, "https://insiderthreatmatrix.org/preventions"));
+    wrap.appendChild(chips);
   }
 
   function renderTtpReport(report) {
@@ -1880,12 +1821,6 @@
     if (els.ttpTechniqueGroup) els.ttpTechniqueGroup.hidden = !techniques.length;
     renderTtpTechniques(els.ttpTechniqueSections, techniques);
     fillPlainList(els.ttpBehaviorList, report.behaviors, true);
-    fillCopyableChips(els.ttpEmailList, report.email, true);
-    fillCopyableChips(els.ttpChatList, report.chat, true);
-    fillCopyableChips(els.ttpNetworkList, report.network, true);
-    fillCopyableChips(els.ttpHumanList, report.human, true);
-    fillCopyableChips(els.ttpSeedList, report.seeds, true);
-    renderQueryBlocks(els.ttpQueries, huntQueriesForReport(report));
     // The report renders in the articles pane's center canvas — leave any
     // workbench takeover so it is actually on screen.
     setActivePane("articles");
@@ -1896,26 +1831,8 @@
     }
   }
 
-  function huntQueriesForReport(report) {
-    if (!report) return [];
-    return buildHuntQueries({
-      terms: report.seeds || [],
-      emailCues: report.email || [],
-      chatCues: report.chat || [],
-      networkCues: report.network || [],
-    });
-  }
-
   function ttpReportPlaintext(report) {
     if (!report) return "";
-    const queries = huntQueriesForReport(report);
-    const queryLines = queries.length
-      ? [
-          "",
-          "Run it:",
-          ...queries.flatMap((q) => [``, `## ${q.stack} (${q.lang})`, q.query]),
-        ]
-      : [];
     const techniqueLines = (report.techniques || []).flatMap((section) => {
       const detection = section.detection || {};
       const controls = [...(detection.detections || []), ...(detection.preventions || [])];
@@ -1925,6 +1842,7 @@
         ...(section.tradecraft_summary ? [`  Tradecraft: ${section.tradecraft_summary}`] : []),
         ...(section.cases || []).flatMap((c) => [
           `  ${c.title}`,
+          ...(c.legal_posture ? [`  Posture: ${c.legal_posture}`] : []),
           ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
           ...(c.bullets || []).map((b) => `  - ${b}`),
         ]),
@@ -1939,14 +1857,10 @@
         ...(controls.length
           ? [`  ITM controls: ${controls.map((c) => c.id).join(", ")}`]
           : []),
-        ...((detection.hunt_queries || []).flatMap((q) => [
-          `  Hunt (${q.stack || "SIEM"}): ${q.logic}`,
-          ...(q.rationale ? [`    why: ${q.rationale}`] : []),
-        ])),
       ];
     });
     const lines = [
-      "insider-intel hunt report (extraction board)",
+      "insider-intel modus operandi (forensic case study)",
       `Mode: ${report.mode || "seeds"}`,
       `Articles (${report.articleCount}):`,
       ...report.titles.map((t) => `- ${t}`),
@@ -1958,21 +1872,8 @@
         ? report.behaviors.map((b) => `- ${b.id}: ${b.text}`)
         : ["- (none)"]),
       "",
-      "Email:",
-      ...report.email.map((t) => `- ${t}`),
-      "",
-      "Chat:",
-      ...report.chat.map((t) => `- ${t}`),
-      "",
-      "Network:",
-      ...report.network.map((t) => `- ${t}`),
-      "",
-      "Human / HR:",
-      ...report.human.map((t) => `- ${t}`),
-      "",
-      "Paste / search seeds:",
-      ...report.seeds.map((t) => `- ${t}`),
-      ...queryLines,
+      "Hunting guidance: open each technique's dossier for generalized",
+      "detect/counter methods distilled from the whole corpus.",
     ];
     return lines.join("\n");
   }
@@ -1982,27 +1883,18 @@
     const behaviorLines = (report.behaviors || []).length
       ? report.behaviors.map((b) => `- ${b.id}: ${b.text}`)
       : ["- (none)"];
-    const list = (items) =>
-      (items || []).length ? items.map((t) => `- ${t}`) : ["- (none)"];
     return [
-      "You are helping an insider-risk investigator turn an OSINT hunt report into",
-      "actionable internal searches. Do NOT invent case facts. Prefer short, realistic",
-      "query strings the analyst can paste into each stack.",
+      "You are an insider-risk advisor. Below is a forensic case study of real",
+      "insider incidents (court cases and reports). None of the specific people,",
+      "companies, or systems exist in my environment — do NOT build searches for",
+      "any literal. Extract the underlying behaviors instead.",
       "",
-      "Produce four sections with concrete searches / review steps:",
-      "1) Email / eDiscovery (Exchange, Gmail, Purview, similar)",
-      "2) Chat / collab (Teams, Slack, Discord, similar)",
-      "3) Network / identity / SaaS (SIEM, IdP, VPN, MDM, cloud apps)",
-      "4) Human / HR / legal (HRIS, COI/outside-employment forms, LinkedIn vs role,",
-      "   manager interview prompts — not SIEM-only)",
+      "Task: for each observed behavior, suggest tool-agnostic ways my",
+      "organization could (1) spot it — any telemetry, review, or human/process",
+      "signal — and (2) counter it — controls, training, offboarding discipline,",
+      "separation of duties. Scope by risk population and note expected noise.",
       "",
-      "For each section return:",
-      "- Paste-ready search strings (one per line)",
-      "- 1–3 review steps if a query alone is not enough",
-      "Avoid bare taxonomy IDs unless useful as keywords.",
-      "",
-      "=== Hunt report context ===",
-      `Mode: ${report.mode || "seeds"}`,
+      "=== Case study ===",
       `Source articles (${report.articleCount || 0}):`,
       ...(report.titles || []).map((t) => `- ${t}`),
       ...(report.summary ? ["", `Summary: ${report.summary}`] : []),
@@ -2012,37 +1904,20 @@
         ...(s.tradecraft_summary ? [`Tradecraft: ${s.tradecraft_summary}`] : []),
         ...(s.cases || []).flatMap((c) => [
           `  Case: ${c.title}`,
+          ...(c.legal_posture ? [`  Posture: ${c.legal_posture}`] : []),
           ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
           ...(c.bullets || []).map((b) => `  - ${b}`),
         ]),
         ...((s.observables || []).map(
           (o) => `  Observable [${o.channel || "network"}]: ${o.description}${o.artifact ? ` (${o.artifact})` : ""}`,
         )),
-        ...(((s.detection || {}).hunt_queries || []).map(
-          (q) => `  Existing hunt query (${q.stack || "SIEM"}): ${q.logic}`,
-        )),
       ]),
       "",
       "Behaviors:",
       ...behaviorLines,
       "",
-      "Email cues:",
-      ...list(report.email),
-      "",
-      "Chat cues:",
-      ...list(report.chat),
-      "",
-      "Network cues:",
-      ...list(report.network),
-      "",
-      "Human / HR cues:",
-      ...list(report.human),
-      "",
-      "Seeds:",
-      ...list(report.seeds),
-      "",
-      "=== End context ===",
-      "Return only the four sections above with searches and steps.",
+      "=== End case study ===",
+      "My organization: <describe your telemetry, team, and processes here>",
     ].join("\n");
   }
 
@@ -2062,11 +1937,6 @@
       summary: data.summary || "",
       techniques: data.techniques || [],
       behaviors,
-      email: data.email || [],
-      chat: data.chat || [],
-      network: data.network || [],
-      human: data.human || [],
-      seeds: data.seeds || [],
       matchedIf038: Boolean(data.matched_if038),
       detail: data.detail || "",
       reportVersion: data.report_version || 1,
@@ -2079,9 +1949,8 @@
       "insider-intel extraction board — agent brief",
       "",
       "Use CourtListener MCP (https://mcp.courtlistener.com) to open dockets/opinions",
-      "for filings below. Return JSON with keys:",
-      'behaviors[{id,text}], email[], chat[], network[], human[], seeds[].',
-      "Ground cues in the documents — do not invent case facts.",
+      "for filings below. Return JSON with keys: behaviors[{id,text}].",
+      "Ground behaviors in the documents — do not invent case facts.",
       "",
       `Board articles (${entries.length}):`,
     ];
@@ -2237,54 +2106,6 @@
       li.textContent = "—";
       listEl.appendChild(li);
     }
-  }
-
-  function buildHuntQueries(input) {
-    if (!window.InsiderIntelTemplates) return [];
-    try {
-      return window.InsiderIntelTemplates.buildQueries(input) || [];
-    } catch {
-      return [];
-    }
-  }
-
-  function renderQueryBlocks(container, queries) {
-    if (!container) return;
-    container.innerHTML = "";
-    if (!(queries || []).length) {
-      const p = document.createElement("p");
-      p.className = "kw-hint";
-      p.textContent = "No hunt terms to build queries from yet.";
-      container.appendChild(p);
-      return;
-    }
-    queries.forEach((q) => {
-      const details = document.createElement("details");
-      details.className = "query-stack";
-      const summary = document.createElement("summary");
-      summary.className = "query-stack-summary";
-      const label = document.createElement("span");
-      label.textContent = q.label;
-      const lang = document.createElement("span");
-      lang.className = "query-stack-lang";
-      lang.textContent = q.lang;
-      summary.append(label, lang);
-      const pre = document.createElement("pre");
-      pre.className = "query-block";
-      pre.textContent = q.query;
-      const actions = document.createElement("p");
-      actions.className = "panel-actions query-stack-actions";
-      const copy = document.createElement("button");
-      copy.type = "button";
-      copy.className = "copy-btn";
-      copy.textContent = "Copy query";
-      copy.addEventListener("click", () => {
-        copyText(q.query, `Copied ${q.stack} query`);
-      });
-      actions.appendChild(copy);
-      details.append(summary, pre, actions);
-      container.appendChild(details);
-    });
   }
 
   function fillItmChips(listEl, hits) {
@@ -5770,13 +5591,6 @@
       summary: report.summary || "",
       techniques: report.techniques || [],
       behaviors: report.behaviors || [],
-      cues: {
-        email: report.email || [],
-        chat: report.chat || [],
-        network: report.network || [],
-        human: report.human || [],
-        seeds: report.seeds || [],
-      },
       cases,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {

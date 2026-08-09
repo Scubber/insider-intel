@@ -129,7 +129,6 @@ def build(article_cap: int, blob_cap: int) -> tuple[str, int, int]:
         _inline(WEB / "config.js"),
         _inline(WEB / "ttp-packs.js"),
         _inline(PREVIEW / "offline-store.js"),
-        _inline(WEB / "hunt-templates.js"),
         _inline(WEB / "board-share.js"),
         _inline(WEB / "app.js"),
         "</body>",

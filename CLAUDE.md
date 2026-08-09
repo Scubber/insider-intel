@@ -217,14 +217,16 @@ legacy fallback.
 - **`POST /extract/ttps` spends NO LLM credits** — it assembles each boarded
   article's stored ingest-time `forensics` record (or a floor-derived one for
   not-yet-enriched articles) into technique sections in code
-  (`apps/search/ttp_extract.py`: `_mechanical_sections` + `_attach_controls` +
-  `_aggregate_hunt_queries` + `_derive_legacy_fields`). All LLM spend lives on
-  the **corpus-refresh job** (the enrich node), never the API service — keep
+  (`apps/search/ttp_extract.py`: `_mechanical_sections` + `_attach_controls`).
+  Since 2026-08 it is a **forensic case study** (MODUS OPERANDI): per-case
+  methods, observables, legal posture, ITM catalog controls — no hunt-query
+  or seed-term surfaces (hunting guidance lives in the dossier's synthesized
+  patterns; the report cross-links there). All LLM spend lives on the
+  **corpus-refresh job** (the enrich node), never the API service — keep
   extract-time keys off the service. The rate limiter
   (`apps/search/ratelimit.py`) stays as a CPU/abuse guard only; don't remove
   it. Rollout: enrichment backfills over refreshes, so reports get richer over
-  time and are never empty (floor fallback). The client-side "copy LLM prompt"
-  is the escape hatch for cross-case narrative synthesis.
+  time and are never empty (floor fallback).
 - **Match-signal text goes in `RawArticle.content`, never `summary`** —
   summaries render in the UI; `content` is scored but hidden (see the
   CourtListener query-tag fix).

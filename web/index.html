@@ -134,8 +134,8 @@
             <div class="intro-step">
               <p class="intro-step-title">03 — HUNT</p>
               <p>
-                <strong>MODUS OPERANDI</strong> shows exactly how those insiders did it — as
-                techniques and search terms you can run against your own logs.
+                <strong>MODUS OPERANDI</strong> shows exactly how those insiders did it,
+                step by step — and each technique's dossier shows how to hunt it.
               </p>
             </div>
           </div>
@@ -509,7 +509,7 @@
             <div class="report-head">
               <button type="button" id="report-back" class="ghost dossier-back">← Stream</button>
             </div>
-            <section class="ttp-report" id="ttp-report" aria-label="TTP hunt report">
+            <section class="ttp-report" id="ttp-report" aria-label="Modus operandi case study">
               <div class="workbench-header">
                 <h3>MODUS OPERANDI</h3>
                 <p class="kw-hint" id="ttp-report-meta"></p>
@@ -536,7 +536,7 @@
                     type="button"
                     id="copy-ttp-llm"
                     class="copy-btn"
-                    data-tip="Copy an LLM-ready prompt built from this report"
+                    data-tip="Copy an LLM-ready prompt built from this case study"
                     data-tip-pos="bottom-start"
                   >
                     Copy LLM query
@@ -551,34 +551,6 @@
               <div class="kw-group">
                 <h4>Behaviors</h4>
                 <ul id="ttp-behavior-list" class="ttp-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Email</h4>
-                <ul id="ttp-email-list" class="chip-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Chat</h4>
-                <ul id="ttp-chat-list" class="chip-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Network</h4>
-                <ul id="ttp-network-list" class="chip-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Human / HR</h4>
-                <ul id="ttp-human-list" class="chip-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Paste / search seeds</h4>
-                <ul id="ttp-seed-list" class="chip-list"></ul>
-              </div>
-              <div class="kw-group">
-                <h4>Generic sweeps</h4>
-                <p class="kw-hint">
-                  Template queries seeded with this report's terms. Case-grounded hunt
-                  queries live inside each technique section above.
-                </p>
-                <div id="ttp-queries" class="query-stacks"></div>
               </div>
             </section>
           </div>
@@ -635,12 +607,12 @@
               class="info-tip"
               aria-label="About the Workbench"
               aria-describedby="workbench-tip-text"
-              data-tip="The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Use ⋯ to share, export, or import a board."
+              data-tip="The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI assembles them into a forensic case study — what each insider actually did, from stored court/report forensics. Use ⋯ to share, export, or import a board."
               data-tip-pos="bottom-end"
             >
               ?
             </button>
-            <span id="workbench-tip-text" class="sr-only">The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI turns them into a hunt report with paste-ready search terms for email, chat, and SIEM tools. Use ⋯ to share, export, or import a board.</span>
+            <span id="workbench-tip-text" class="sr-only">The Workbench collects cases you flag with + FLAG from the stream. MODUS OPERANDI assembles them into a forensic case study — what each insider actually did, from stored court/report forensics. Use ⋯ to share, export, or import a board.</span>
             <span class="pane-head-actions">
               <button
                 type="button"
@@ -666,9 +638,9 @@
               <p class="wb-intro-copy">
                 Flag cases from the stream with <strong>+ FLAG</strong> and they land on the
                 evidence board here. <strong>MODUS OPERANDI</strong> then shows the ITM
-                techniques those insiders used — with per-case evidence — ready to turn into
-                hunts in your own environment. Use ⋯ to share or export a board to a
-                teammate.
+                techniques those insiders used, with per-case evidence and the traces each
+                behavior leaves. For hunting guidance, open a technique's dossier. Use ⋯ to
+                share or export a board to a teammate.
               </p>
             </div>
             <section class="extraction-board" id="extraction-board" aria-label="Extraction board">
@@ -1106,7 +1078,6 @@
 
     <script src="./config.js"></script>
     <script src="./ttp-packs.js"></script>
-    <script src="./hunt-templates.js"></script>
     <script src="./board-share.js"></script>
     <script src="./app.js"></script>
   </body>

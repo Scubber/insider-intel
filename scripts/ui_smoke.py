@@ -277,8 +277,8 @@ def run(base_url: str, headed: bool) -> int:
         crumbs = page.locator("#filter-crumbs .crumb").all_text_contents()
         checks.check("hunt shows a filter crumb", any("Hunt:" in c for c in crumbs))
 
-        # Board -> extract -> report with query blocks. Board a row that carries
-        # ITM evidence so the v2 per-technique sections have something to show.
+        # Board -> extract -> forensic case study. Board a row that carries
+        # ITM evidence so the per-technique sections have something to show.
         itm_row_btn = page.locator(
             "#article-list .article-row:has(.itm-id-chip) .article-board-btn"
         )
@@ -289,10 +289,12 @@ def run(base_url: str, headed: bool) -> int:
         page.click("#board-extract")
         page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
         checks.check(
-            "extract renders hunt report", page.locator("#ttp-behavior-list li").count() > 0
+            "extract renders case study", page.locator("#ttp-behavior-list li").count() > 0
         )
+        # The SIEM seed surfaces are gone: hunting lives in the dossier now.
         checks.check(
-            "report has run-it query blocks", page.locator("#ttp-queries .query-stack").count() > 0
+            "report has no query blocks",
+            page.locator("#ttp-report .query-stack, #ttp-report .query-block").count() == 0,
         )
         # Report v2: boards with ITM evidence get per-technique case sections.
         checks.check(
