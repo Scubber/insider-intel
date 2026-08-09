@@ -90,7 +90,11 @@ API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
    pipeline module still the real build. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
 9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE,
-   `web/findings.json` publish-by-merge). Remaining: CISA/NITTF maturity
+   `web/findings.json` publish-by-merge). Findings F2–F4 added 2026-08-09
+   (proven-vs-alleged split, email-as-winning-evidence, third-party proven
+   share), written for business decision makers; F1 restated to the same
+   ledger run; findings block now renders at the top of the EVIDENCE page.
+   Remaining: CISA/NITTF maturity
    crosswalk (P2), dwell-time from forensics.timeline + static crawlable
    export + OG meta (P3), "departing" employment-state extractor-prompt
    nudge (known under-capture: 7 of 320).
