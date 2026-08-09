@@ -48,8 +48,8 @@ def test_extract_ttps_seed_floor_overemployment(tmp_path, monkeypatch) -> None:
     assert body["article_count"] == 1
     assert body["titles"] == ["Employee moonlighting and undisclosed concurrent employment dispute"]
     assert any(b["id"] == "TTP-OE-01" for b in body["behaviors"])
-    assert body["email"]
-    assert body["human"]
+    # Hunt-cue buckets are gone: the report is a case study, not a seed pack.
+    assert "email" not in body and "seeds" not in body
     assert body["matched_if038"] is True
 
 
@@ -85,7 +85,7 @@ def test_seed_floor_without_if038_reports_actual_techniques() -> None:
     assert {h.id for h in article.entities.itm_hits} & ids
 
 
-def test_seed_floor_case_record_feeds_behaviors_and_seeds() -> None:
+def test_seed_floor_case_record_feeds_behaviors() -> None:
     from apps.search.ttp_extract import seed_floor_report
     from shared.schemas import CaseRecord
 
@@ -106,10 +106,7 @@ def test_seed_floor_case_record_feeds_behaviors_and_seeds() -> None:
     )
     report = seed_floor_report([article])
     assert any(b.id.startswith("CASE-") for b in report.behaviors)
-    assert "rclone sync to personal cloud" in report.seeds
-    assert "personal Gmailil" not in report.seeds  # sanity: exact strings only
-    assert "personal Gmail" in report.network
-    assert "DLP alert on outbound mail" in report.human
+    assert any("rclone sync to personal cloud" in b.text for b in report.behaviors)
 
 
 def test_articles_text_endpoint_returns_filing_body(tmp_path, monkeypatch) -> None:

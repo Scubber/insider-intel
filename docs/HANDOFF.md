@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-08 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-09 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
 **Rollback checkpoint:** branch `checkpoint/v1.0-parked` (pre-August prod).
@@ -24,7 +24,7 @@ API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
 | **ITM** | **v2.11.0** (562 techniques; picked up with the description-clamp fix, 2026-08-08). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). Technique descriptions now clamp at 900 chars on sentence boundaries (was 320, mid-word). |
 | **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report; run artifacts (download on the run page) + `gs://…/export/traffic-{report.md,log.csv}`. ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
-| **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. |
+| **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
 
@@ -90,7 +90,11 @@ API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
    pipeline module still the real build. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
 9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE,
-   `web/findings.json` publish-by-merge). Remaining: CISA/NITTF maturity
+   `web/findings.json` publish-by-merge). Findings F2–F4 added 2026-08-09
+   (proven-vs-alleged split, email-as-winning-evidence, third-party proven
+   share), written for business decision makers; F1 restated to the same
+   ledger run; findings block now renders at the top of the EVIDENCE page.
+   Remaining: CISA/NITTF maturity
    crosswalk (P2), dwell-time from forensics.timeline + static crawlable
    export + OG meta (P3), "departing" employment-state extractor-prompt
    nudge (known under-capture: 7 of 320).

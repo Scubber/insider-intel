@@ -92,7 +92,7 @@ def test_report_assembles_from_stored_forensics(tmp_path) -> None:
 
     report = ttp_extract.extract_ttps_for_links(index, [article.link], settings=_cfg())
     assert report.mode == "llm"  # an enriched record contributed
-    assert report.report_version == 3
+    assert report.report_version == 4
     assert "Assembled from stored forensics · 1 enriched / 0 floor" in report.detail
 
     section = next(s for s in report.techniques if s.id == "IF002")
@@ -104,7 +104,7 @@ def test_report_assembles_from_stored_forensics(tmp_path) -> None:
     # The analyst-inference basis survives assembly into the section.
     assert section.observables[0].basis == "analyst_inference"
     # Hunt queries precomputed at ingest surface on the section.
-    assert section.detection.hunt_queries[0].logic.startswith("index=proxy")
+
 
     # DT*/PV* controls attach from the catalog in code.
     from shared.itm.index import load_itm_index
@@ -113,9 +113,8 @@ def test_report_assembles_from_stored_forensics(tmp_path) -> None:
     assert [c.id for c in section.detection.detections] == sorted({r.id for r in tech.detections})
     assert section.theme == tech.theme
 
-    # Legacy cue fields derive from the new structure (cloud → network bucket).
-    assert any("Bulk uploads" in cue for cue in report.network)
-    assert "dropbox.com/home" in report.seeds
+    # Hunt-cue buckets no longer exist on the report (case study only).
+    assert not hasattr(report, "network") and not hasattr(report, "seeds")
 
 
 def test_report_falls_back_to_floor_for_unenriched(tmp_path) -> None:

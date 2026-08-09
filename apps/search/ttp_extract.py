@@ -1,14 +1,18 @@
-"""Extraction-board hunt report: assembled from stored ingest-time forensics.
+"""Extraction-board case study: assembled from stored ingest-time forensics.
 
 Every qualifying article is enriched once at ingest
 (``shared/agents/summarize.py``) into a ``PerCaseForensics`` record; this
-module assembles the boarded records into a technique-centric report in
-code — no LLM at read time. Per technique: how each case did it (from the
-stored method actions), the forensic observables that behavior leaves in a
-defender's environment, ITM detections/preventions attached from the catalog,
-and the case-grounded hunt queries precomputed at ingest. Articles not yet
-enriched fall back to ``forensics_from_floor`` (their ITM/case-record data),
-so a report is never empty — it just gets richer as the corpus is enriched.
+module assembles the boarded records into a technique-centric forensic
+readout in code — no LLM at read time. Per technique: how each case did it
+(from the stored method actions), the forensic observables that behavior
+leaves in a defender's environment, and ITM detections/preventions attached
+from the catalog. Articles not yet enriched fall back to
+``forensics_from_floor`` (their ITM/case-record data), so a report is never
+empty — it just gets richer as the corpus is enriched.
+
+Hunting guidance deliberately does NOT live here: the case-literal query
+seeds this report used to carry moved to the technique dossier's synthesized,
+tool-agnostic patterns (``apps/aggregator/hunt_synthesis.py``).
 """
 
 from __future__ import annotations
@@ -31,124 +35,22 @@ IF038_TTP_SEEDS: list[dict[str, Any]] = [
     {
         "id": "TTP-OE-01",
         "behavior": "Undisclosed second full-time remote job (dual employment / overemployment).",
-        "email": [
-            "personal-domain mail during work hours",
-            "Job B recruiter/HR threads",
-            "personal calendar invites for Job B standups",
-        ],
-        "chat": [
-            "second Slack/Teams identity",
-            "J2 / OE / overemployed language",
-            "status always Busy/BRB",
-        ],
-        "network": [
-            "concurrent SaaS sessions for different orgs",
-            "personal VPN + corp VPN patterns",
-            "after-hours bursty productivity tools",
-        ],
-        "human": [
-            "missing/false outside-employment or COI disclosure",
-            "dual W-2 / multiple employers on tax or benefits",
-            "LinkedIn current roles vs HRIS title mismatch",
-        ],
-        "seeds": [
-            "outside employment",
-            "moonlighting",
-            "J2",
-            "overemployed",
-            "second job",
-            "dual employment",
-            "conflict of interest disclosure",
-        ],
     },
     {
         "id": "TTP-OE-02",
         "behavior": "Competitor / customer side work (trade-secret adjacent concurrent role).",
-        "email": [
-            "competitor-domain threads",
-            "side project share of internal decks",
-            "personal Dropbox/Drive links in corp mail",
-        ],
-        "chat": [
-            "screenshots of internal tools",
-            "my other company",
-            "recruiting coworkers",
-        ],
-        "network": [
-            "large personal-cloud uploads",
-            "USB/email exfil near resignation",
-            "repos unused in day job",
-        ],
-        "human": [
-            "undisclosed advisory/contractor role",
-            "COI form none",
-            "resignation timed with competitor start",
-        ],
-        "seeds": [
-            "competitor",
-            "side project",
-            "advisory",
-            "consulting agreement",
-            "DTSA",
-            "trade secret",
-            "customer list",
-        ],
     },
     {
         "id": "TTP-OE-03",
-        "behavior": "Using Employer A time/tools for Employer B.",
-        "email": [
-            "drafts to Job B from corp mailbox",
-            "vague calendar blocks with no corp attendees",
-        ],
-        "chat": [
-            "Job B tickets pasted into corp chat",
-            "second browser profile language",
-        ],
-        "network": [
-            "Job B IdP on corp device",
-            "RDP/VDI to personal systems",
-            "clipboard/file activity to personal cloud",
-        ],
-        "human": [
-            "timekeeping anomalies",
-            "always in meetings without corp artifacts",
-            "PIP for availability",
-        ],
-        "seeds": ["personal laptop", "my other job", "client call"],
+        "behavior": "Time fraud: overlapping billable hours across employers.",
     },
     {
         "id": "TTP-OE-04",
-        "behavior": "Identity split — personal stack for Job B, corp stack for Job A.",
-        "email": ["auto-forward corp to personal", "Job B never on corp systems"],
-        "chat": ["text me on my personal", "Signal/WhatsApp for work topics"],
-        "network": ["MDM gaps", "personal hotspot only", "corp VPN idle while claiming hours"],
-        "human": [
-            "unreachable on corp mobile",
-            "refuses MDM on personal devices used for work",
-        ],
-        "seeds": ["personal phone", "text me", "Signal", "WhatsApp", "forward to Gmail"],
+        "behavior": "Comms diversion to personal channels to hide the second role.",
     },
     {
         "id": "TTP-OE-05",
-        "behavior": "False or incomplete outside-employment / COI disclosure.",
-        "email": [
-            "outside employment policy signature threads unanswered",
-            "policy reminders ignored",
-        ],
-        "chat": ["don't tell HR", "policy screenshot shares"],
-        "network": ["pair with HRIS — low network signal alone"],
-        "human": [
-            "form answers vs LinkedIn/tax/benefits",
-            "AP payments to employee LLC",
-            "1099s",
-        ],
-        "seeds": [
-            "outside employment policy",
-            "conflict of interest form",
-            "disclosure form",
-            "moonlighting policy",
-        ],
+        "behavior": "Policy evasion: concealed conflict-of-interest / outside-work disclosure.",
     },
 ]
 
@@ -162,20 +64,11 @@ class TtpBehavior(BaseModel):
     text: str
 
 
-class HuntQuery(BaseModel):
-    """Case-grounded hunt logic an analyst can adapt — not a keyword chip."""
-
-    stack: str
-    logic: str
-    rationale: str = ""
-
-
 class TechniqueDetectionGuidance(BaseModel):
-    """How to detect this technique: ITM controls + LLM-written hunt logic."""
+    """How to detect this technique: ITM catalog controls (tool-agnostic)."""
 
     detections: list[ControlRef] = Field(default_factory=list)
     preventions: list[ControlRef] = Field(default_factory=list)
-    hunt_queries: list[HuntQuery] = Field(default_factory=list)
 
 
 class TtpCaseEvidence(BaseModel):
@@ -208,11 +101,6 @@ class ExtractTtpsResponse(BaseModel):
     summary: str = ""
     techniques: list[TtpTechniqueSection] = Field(default_factory=list)
     behaviors: list[TtpBehavior] = Field(default_factory=list)
-    email: list[str] = Field(default_factory=list)
-    chat: list[str] = Field(default_factory=list)
-    network: list[str] = Field(default_factory=list)
-    human: list[str] = Field(default_factory=list)
-    seeds: list[str] = Field(default_factory=list)
     matched_if038: bool = False
     detail: str = ""
     report_version: int = 1
@@ -293,17 +181,11 @@ def seed_floor_report(
     fallback when the selection carries no evidence at all.
     """
     behaviors: list[TtpBehavior] = []
-    email: list[str] = []
-    chat: list[str] = []
-    network: list[str] = []
-    human: list[str] = []
-    seeds: list[str] = []
     sections: dict[str, TtpTechniqueSection] = {}
 
     seen_tech: set[str] = set()
     case_methods: list[str] = []
     for article in articles:
-        seeds.extend(article.entities.operator_terms or [])
         record = getattr(article, "case_record", None)
         case_bullets: list[str] = []
         if record is not None:
@@ -312,7 +194,6 @@ def seed_floor_report(
             if record.detection_trigger:
                 case_bullets.append(f"Detected via: {record.detection_trigger}")
         for hit in article.entities.itm_hits or []:
-            seeds.extend(hit.matched_aliases or [])
             tid = str(hit.id).upper()
             if tid not in seen_tech:
                 seen_tech.add(tid)
@@ -337,11 +218,6 @@ def seed_floor_report(
                 )
         if record is not None:
             case_methods.extend(record.methods)
-            seeds.extend(record.methods)
-            seeds.extend(record.exfil_channels)
-            network.extend(record.exfil_channels)
-            if record.detection_trigger:
-                human.append(record.detection_trigger)
 
     unique_methods = _uniq(case_methods)
     for n, method in enumerate(unique_methods, start=1):
@@ -362,11 +238,6 @@ def seed_floor_report(
         # the pack is a last-resort floor, labeled honestly below.
         for ttp in IF038_TTP_SEEDS:
             behaviors.append(TtpBehavior(id=ttp["id"], text=ttp["behavior"]))
-            email.extend(ttp["email"])
-            chat.extend(ttp["chat"])
-            network.extend(ttp["network"])
-            human.extend(ttp["human"])
-            seeds.extend(ttp["seeds"])
         if not matched and not detail:
             detail = "Generic overemployment pack — no matched evidence in selection"
 
@@ -383,11 +254,6 @@ def seed_floor_report(
         summary=summary,
         techniques=list(sections.values()),
         behaviors=behaviors,
-        email=_uniq(email),
-        chat=_uniq(chat),
-        network=_uniq(network),
-        human=_uniq(human),
-        seeds=_uniq(seeds),
         matched_if038=matched,
         detail=detail,
     )
@@ -437,48 +303,6 @@ def forensics_from_floor(article: ProcessedArticle) -> PerCaseForensics:
     )
 
 
-_LEGACY_CHANNEL_FIELD = {
-    "email": "email",
-    "chat": "chat",
-    "network": "network",
-    "cloud": "network",
-    "identity": "network",
-    "endpoint": "network",
-    "human": "human",
-    "physical": "human",
-}
-
-
-def _aggregate_hunt_queries(report: ExtractTtpsResponse, forensics: list[PerCaseForensics]) -> None:
-    """Fold per-case hunt queries (precomputed at ingest) into their sections.
-
-    Each forensic record carries 1-2 case-grounded queries; a technique section
-    gets the union of the queries from its member cases, deduped by logic.
-    """
-    by_link = {r.link: r for r in forensics}
-    for section in report.techniques:
-        seen: set[str] = set()
-        queries: list[HuntQuery] = []
-        for case in section.cases:
-            record = by_link.get(case.link)
-            if record is None:
-                continue
-            for seed in record.hunt_queries:
-                key = seed.logic.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                queries.append(
-                    HuntQuery(stack=seed.stack, logic=seed.logic, rationale=seed.rationale)
-                )
-                if len(queries) >= 5:
-                    break
-            if len(queries) >= 5:
-                break
-        if queries:
-            section.detection.hunt_queries = queries
-
-
 def _mechanical_sections(
     floor: ExtractTtpsResponse, forensics: list[PerCaseForensics]
 ) -> ExtractTtpsResponse:
@@ -525,39 +349,19 @@ def _mechanical_sections(
     return report
 
 
-def _derive_legacy_fields(report: ExtractTtpsResponse, forensics: list[PerCaseForensics]) -> None:
-    """Fill email/chat/network/human/seeds from the new structure.
-
-    Keeps the plaintext export, the copy-LLM-prompt, the generic hunt-query
-    templates, and the offline seed-pack path working with zero shape change.
-    """
-    buckets: dict[str, list[str]] = {"email": [], "chat": [], "network": [], "human": []}
-    observables = [o for s in report.techniques for o in s.observables]
-    observables.extend(o for r in forensics for m in r.methods for o in m.observables)
-    for obs in observables:
-        field = _LEGACY_CHANNEL_FIELD.get(obs.channel, "network")
-        cue = f"{obs.description} ({obs.artifact})" if obs.artifact else obs.description
-        buckets[field].append(cue)
-    report.email = _uniq(report.email + buckets["email"])
-    report.chat = _uniq(report.chat + buckets["chat"])
-    report.network = _uniq(report.network + buckets["network"])
-    report.human = _uniq(report.human + buckets["human"])
-    report.seeds = _uniq(report.seeds + [t for r in forensics for t in r.hunt_terms])
-
-
 def extract_ttps_for_links(
     index: ArticleSearchIndex,
     links: list[str],
     *,
     settings: Settings | None = None,
 ) -> ExtractTtpsResponse:
-    """Assemble a hunt report from stored ingest-time forensic records.
+    """Assemble a forensic case study from stored ingest-time forensic records.
 
     No LLM at read time: each boarded article contributes its stored
     ``forensics`` record (or a floor-derived one if not yet enriched), and the
     report is built in code — technique sections with per-case tradecraft and
-    observables, ITM detections/preventions from the catalog, and the
-    case-grounded hunt queries precomputed at ingest.
+    observables, plus ITM detections/preventions from the catalog. Hunting
+    guidance lives in the technique dossier's synthesized patterns, not here.
     """
     _ = settings or get_settings()  # reserved for future knobs; kept for signature parity
     articles: list[ProcessedArticle] = []
@@ -593,13 +397,11 @@ def extract_ttps_for_links(
     floor_count = len(forensics) - enriched
 
     report = _mechanical_sections(floor, forensics)
-    _aggregate_hunt_queries(report, forensics)
     for section in report.techniques:
         _attach_controls(section)
-    _derive_legacy_fields(report, forensics)
 
     report.mode = "llm" if enriched else "seeds"
-    report.report_version = 3
+    report.report_version = 4
     report.detail = (
         f"Assembled from stored forensics · {enriched} enriched / {floor_count} floor source(s)"
     )

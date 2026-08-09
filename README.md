@@ -66,7 +66,7 @@ stored forensic records — **no LLM runs at read time**.
 | **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, per-case hunt queries), and an ITM adjudication. Every generation is stored append-only; the visible record is a select-best projection. |
 | **Novel-technique discovery** | A second LLM pass over each filing's forensic record flags methods that don't map cleanly to existing ITM techniques — candidate tradecraft the frameworks haven't named yet. |
 | **ITM matrix** | Five-theme technique browser; per-technique dossiers with related cases, detections/preventions, and corpus evidence tie-ins. |
-| **Workbench** | Flag cases, extract a MODUS OPERANDI report assembled from stored forensics (no LLM spend), export operator hunt terms and per-stack hunt queries for Teams/email/SIEM paste. |
+| **Workbench** | Flag cases, extract a MODUS OPERANDI forensic case study assembled from stored forensics (no LLM spend) — per-case methods, observables, legal posture — with links into each technique dossier for hunting guidance. |
 | **Social + tips** | Subscribed Reddit/X sources and one-off URL flagging surface first-person confessions (overemployment, data theft) the news never covers. |
 | **Syndication** | Atom feed (`/feed.xml`), one-way corporate export (`GET /export/articles`, NDJSON + bearer token). |
 
