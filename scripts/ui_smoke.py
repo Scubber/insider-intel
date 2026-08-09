@@ -356,6 +356,13 @@ def run(base_url: str, headed: bool) -> int:
             "stream": ".pane-articles",
             "wb": ".pane-workbench",
         }
+        # Panel toggles live in Settings → Display; flipping one means a
+        # settings round-trip back to the stream.
+        def flip_panel_toggle(key: str) -> None:
+            page.click(".masthead-nav-item[data-pane='settings']")
+            page.click(f".panel-toggle[data-panel-toggle='{key}']")
+            page.click(".masthead-nav-item[data-pane='articles']")
+
         for key, sel in panel_sel.items():
             page.click(f"{sel} .panel-collapse[data-panel='{key}']")
             collapsed = page.evaluate(
@@ -367,17 +374,17 @@ def run(base_url: str, headed: bool) -> int:
             )
             checks.check(f"panel {key} collapses and re-expands", collapsed and restored)
 
-            page.click(f".panel-toggle[data-panel-toggle='{key}']")
+            flip_panel_toggle(key)
             hidden = page.evaluate(
                 f"() => document.querySelector('.app-shell').classList.contains('hide-{key}')"
             ) and not page.is_visible(sel)
-            page.click(f".panel-toggle[data-panel-toggle='{key}']")
+            flip_panel_toggle(key)
             shown = page.is_visible(sel)
-            checks.check(f"PANELS row hides and restores {key}", hidden and shown)
+            checks.check(f"settings panel toggle hides and restores {key}", hidden and shown)
 
         # Collapse + hide state persists across reloads (returning profile).
         page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        page.click(".panel-toggle[data-panel-toggle='core']")
+        flip_panel_toggle("core")
         page.reload()
         page.wait_for_selector(".article-item", timeout=20000)
         persisted = page.evaluate(
@@ -386,7 +393,7 @@ def run(base_url: str, headed: bool) -> int:
         )
         checks.check("panel collapse/hide state persists across reload", bool(persisted))
         page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        page.click(".panel-toggle[data-panel-toggle='core']")
+        flip_panel_toggle("core")
 
         # Signal slider filters the stream: SIG ≥ 100 should clear (or shrink)
         # it and update the refine summary; sliding back restores it. Start

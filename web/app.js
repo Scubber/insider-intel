@@ -309,7 +309,7 @@
       els.appWorkbench.dataset.pane = next;
     }
     // Mirror on <body> so the header (outside the app shell) can hide its
-    // stream-only chrome (refine bar, PANELS row) on takeover panes.
+    // stream-only chrome (refine bar, status row) on takeover panes.
     document.body.dataset.pane = next;
     if (els.mobileTabs) {
       els.mobileTabs.querySelectorAll(".mobile-tab").forEach((btn) => {
@@ -386,7 +386,7 @@
   state.itmAlignment = uiState.defScope;
 
   /* Panel chrome: every keyed panel/section collapses to its header; the four
-     stream panes can also be hidden and restored from the PANELS row. */
+     stream panes can also be hidden and restored from Settings → Display. */
   const PANEL_TOGGLES = [
     ["core", "TRENDING"],
     ["itm", "ITM INDEX"],
