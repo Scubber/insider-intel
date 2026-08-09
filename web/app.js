@@ -3185,14 +3185,40 @@
     if (els.streamCount) els.streamCount.textContent = "";
     renderDossierShell(tech);
     // Bring the technique heading + description to the top of the viewport.
-    // Clicking a technique from the (tall, scrolled) EVIDENCE page used to
-    // keep the old scroll position and drop the reader below the description.
-    if (els.dossierTitle) {
-      els.dossierTitle.scrollIntoView({ block: "start" });
-    } else {
-      window.scrollTo({ top: 0 });
-    }
-    loadDossierEvidence(tech.id);
+    // Clicking a technique from a tall, scrolled pane (ITM rail, EVIDENCE
+    // page) used to keep the old scroll position and drop the reader below
+    // the description. The evidence/patterns/case-list renders land async and
+    // shift layout after the first anchor, so re-anchor after each — but only
+    // while the reader hasn't scrolled away themselves.
+    const anchorDossier = () => {
+      if (els.dossierTitle) {
+        els.dossierTitle.scrollIntoView({ block: "start" });
+      } else {
+        window.scrollTo({ top: 0 });
+      }
+    };
+    anchorDossier();
+    // Scroll anchoring moves scrollY on its own as async content lands, so
+    // "did the reader scroll?" must key off real input, not scroll position.
+    const inputWatch = new AbortController();
+    let readerTookOver = false;
+    ["wheel", "touchstart", "keydown"].forEach((evt) =>
+      window.addEventListener(
+        evt,
+        () => {
+          readerTookOver = true;
+          inputWatch.abort();
+        },
+        { signal: inputWatch.signal, passive: true },
+      ),
+    );
+    const reanchor = () => {
+      if (state.dossierTechniqueId !== tech.id) return; // moved on
+      if (readerTookOver) return;
+      anchorDossier();
+    };
+    const evidenceLoad = loadDossierEvidence(tech.id);
+    evidenceLoad.finally(reanchor);
     const data = await api("/articles", {
       limit: 50,
       min_score: 0,
@@ -3207,6 +3233,10 @@
     state.lastTotalIndexed = data.total_indexed || state.lastTotalIndexed;
     clearWorkbench();
     renderDossierArticles(data);
+    reanchor();
+    // Stop watching for reader input once the last async render has had its
+    // re-anchor — whichever of the two loads finishes later.
+    evidenceLoad.finally(() => inputWatch.abort());
     setStatus(`${tech.id} · ${(data.clusters || data.results || []).length} related stories`);
   }
 
