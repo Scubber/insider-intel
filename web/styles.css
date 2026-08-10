@@ -4858,3 +4858,74 @@ body[data-pane="evidence"] .panels-row {
   font-size: 0.85rem;
   line-height: 1.5;
 }
+
+/* --- Redesign fidelity pass (2026-08-10): match the prototype's chrome --- */
+
+/* Masthead: bigger serif brand, dark active nav pill, subdued LIVE chip. */
+.product {
+  font-size: 1.9rem;
+}
+.masthead-nav-item.active {
+  background: var(--ink);
+  color: var(--btn-fg);
+  border-radius: var(--radius, 2px);
+}
+.live-status {
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
+/* Search: one bordered query line, no big SEARCH button. Enter submits. */
+.search-bar {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: var(--radius, 2px);
+  padding: 0.55rem 0.75rem;
+}
+.search-bar:focus-within {
+  border-color: var(--focus);
+}
+.search-bar input {
+  border: 0;
+  background: none;
+  outline: none;
+}
+.search-bar .hunt-submit {
+  display: none;
+}
+
+/* Stream rail (redesign): no per-panel window chrome, no TRENDING pane —
+   the rail is the techniques tally + the evidence ledger only. */
+@media (min-width: 1024px) {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .left-rail .pane-trending {
+    display: none;
+  }
+  .left-rail .panel-collapse,
+  .left-rail .panel-hide {
+    display: none;
+  }
+}
+
+/* Rail rows: dark id chip, name, thin bar, count — prototype treatment. */
+.matrix-tech-id {
+  background: var(--ink);
+  color: var(--btn-fg);
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius, 2px);
+  font-weight: 700;
+}
+.itm-rail-btn:hover .matrix-tech-title {
+  color: var(--accent);
+}
+
+/* Chips: technique ids dark, operator terms tinted with signal. */
+.itm-id-chip {
+  background: var(--ink);
+  color: var(--btn-fg);
+  border-color: var(--ink);
+}
+.term-chip {
+  background: var(--signal-soft);
+  border-color: transparent;
+  color: var(--ink);
+}

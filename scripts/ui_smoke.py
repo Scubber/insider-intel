@@ -383,44 +383,16 @@ def run(base_url: str, headed: bool) -> int:
             "itm": ".pane-matrix",
             "stream": ".pane-articles",
         }
-        # Panel toggles live in Settings → Display; flipping one means a
-        # settings round-trip back to the stream.
-        def flip_panel_toggle(key: str) -> None:
-            page.click(".masthead-nav-item[data-pane='settings']")
-            page.click(f".panel-toggle[data-panel-toggle='{key}']")
-            page.click(".masthead-nav-item[data-pane='articles']")
-
-        for key, sel in panel_sel.items():
-            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
-            collapsed = page.evaluate(
-                f"() => document.querySelector(\"{sel}\").classList.contains('collapsed')"
-            )
-            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
-            restored = page.evaluate(
-                f"() => !document.querySelector(\"{sel}\").classList.contains('collapsed')"
-            )
-            checks.check(f"panel {key} collapses and re-expands", collapsed and restored)
-
-            flip_panel_toggle(key)
-            hidden = page.evaluate(
-                f"() => document.querySelector('.app-shell').classList.contains('hide-{key}')"
-            ) and not page.is_visible(sel)
-            flip_panel_toggle(key)
-            shown = page.is_visible(sel)
-            checks.check(f"settings panel toggle hides and restores {key}", hidden and shown)
-
-        # Collapse + hide state persists across reloads (returning profile).
-        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        flip_panel_toggle("core")
-        page.reload()
-        page.wait_for_selector(".article-item", timeout=20000)
-        persisted = page.evaluate(
-            """() => document.querySelector('.pane-matrix').classList.contains('collapsed')
-                 && document.querySelector('.app-shell').classList.contains('hide-core')"""
+        # Redesign (2026-08): the stream rail carries no window chrome — no
+        # collapse/hide buttons, no TRENDING pane on the stream layout.
+        checks.check(
+            "stream rail has no panel chrome",
+            page.locator(".left-rail .panel-collapse:visible, .left-rail .panel-hide:visible").count() == 0,
         )
-        checks.check("panel collapse/hide state persists across reload", bool(persisted))
-        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        flip_panel_toggle("core")
+        checks.check(
+            "trending pane is off the stream layout",
+            not page.is_visible(".left-rail .pane-trending"),
+        )
 
         # Signal slider filters the stream: SIG ≥ 100 should clear (or shrink)
         # it and update the refine summary; sliding back restores it. Start
