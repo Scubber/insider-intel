@@ -3684,9 +3684,11 @@
   // COURT only when a method carries an adjudicated/admitted claim; ALLEGED is
   // a filing's theory; REPORTED is press/social only. Never conflated.
   function proofLabel(article) {
-    const actions = (article.forensics && article.forensics.actions) || [];
+    // claim_status lives on the stored forensics METHODS (the serialized
+    // field is `methods`, not `actions` — the enricher's prompt-side name).
+    const methods = (article.forensics && article.forensics.methods) || [];
     const statuses = new Set(
-      actions.map((a) => String(a.claim_status || "").toLowerCase()),
+      methods.map((m) => String(m.claim_status || "").toLowerCase()),
     );
     if (statuses.has("adjudicated") || statuses.has("admitted"))
       return { key: "confirmed", label: "CONFIRMED IN COURT" };

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from shared.agents import process_article
 from shared.schemas import RawArticle
-from shared.schemas.forensics import PerCaseForensics
+from shared.schemas.forensics import CaseMethod, PerCaseForensics
 from shared.schemas.search import ArticleListResponse
 
 
@@ -32,6 +32,16 @@ def _seed(tmp_path, monkeypatch):
                     link=f"https://example.com/case-{i}",
                     title=f"Insider case {i}",
                     is_insider_case=insider,
+                    context_kind="" if insider else "detection",
+                    legal_posture="indictment" if insider else "unknown",
+                    methods=[
+                        CaseMethod(
+                            action="Copied customer data to USB",
+                            tools=["robocopy"],
+                            claim_status="adjudicated" if insider else "reported",
+                            evidence_quote="dropped by the slimmer",
+                        )
+                    ],
                     extracted_at=datetime(2026, 8, 1, tzinfo=UTC),
                 ),
             }
@@ -54,17 +64,36 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     assert parsed.total_indexed == 2
     assert parsed.count == len(parsed.results) == 2
 
-    # Slimmed: no case_record, forensics reduced to the CONTEXT-stamp flag.
+    # Slimmed: no case_record; forensics reduced to what the stream card
+    # renders (stamps, proof label, posture badge, METHODS fact line).
     raw = json.loads(json.dumps(articles))
     for row in raw["results"]:
         assert "case_record" not in row or row["case_record"] is None
         if row.get("forensics") is not None:
-            assert set(row["forensics"].keys()) == {"link", "title", "is_insider_case"}
+            assert set(row["forensics"].keys()) == {
+                "link",
+                "title",
+                "is_insider_case",
+                "context_kind",
+                "legal_posture",
+                "methods",
+            }
+            for method in row["forensics"]["methods"]:
+                assert set(method.keys()) == {"action", "claim_status"}
 
     # Fields the stream card needs survive.
     flags = {row["forensics"]["is_insider_case"] for row in raw["results"] if row.get("forensics")}
     assert flags == {True, False}
     assert all(row.get("ai_summary") for row in raw["results"])
+    # Purpose stamp + proof label inputs survive the slimming.
+    by_flag = {
+        row["forensics"]["is_insider_case"]: row["forensics"]
+        for row in raw["results"]
+        if row.get("forensics")
+    }
+    assert by_flag[False]["context_kind"] == "detection"
+    assert by_flag[True]["legal_posture"] == "indictment"
+    assert by_flag[True]["methods"][0]["claim_status"] == "adjudicated"
 
     assert meta["indexed_articles"] == 2
     assert meta["generated_at"]
