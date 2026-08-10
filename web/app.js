@@ -5851,8 +5851,12 @@
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);
       } else if (route.view === "evidence") {
+        // Operator call (2026-08-10): the site always STARTS on the stream.
+        // Mobile browsers restore the last URL, so a lingering #/evidence
+        // from a prior visit was making EVIDENCE the de-facto start page.
+        // In-session navigation to EVIDENCE still routes normally.
+        navigate("/");
         await loadArticles();
-        openEvidenceView();
       } else if (route.view === "board") {
         await loadArticles();
         await importBoardFromRoute(route);
