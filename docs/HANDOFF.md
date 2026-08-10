@@ -8,7 +8,10 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 **Last updated:** 2026-08-10 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
-**Rollback checkpoint:** branch `checkpoint/v1.0-parked` (pre-August prod).
+**Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
+working design, blessed before the next UI redesign — restore `web/**` from
+here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
+prod).
 
 ---
 
