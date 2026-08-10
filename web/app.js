@@ -288,10 +288,10 @@
   // Match styles.css desktop rail breakpoint (1024px) — tablet landscape keeps
   // the three-column layout and parks matrix takeover back to the stream.
   const WIDE_MQ = window.matchMedia("(min-width: 1024px)");
-  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings"]);
+  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings", "about"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
-  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence"]);
+  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "about"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -387,10 +387,9 @@
      stream panes can also be hidden and restored from Settings → Display. */
   const PANEL_TOGGLES = [
     ["core", "TRENDING"],
-    ["itm", "ITM INDEX"],
+    ["itm", "TECHNIQUES"],
     ["evidence", "EVIDENCE"],
     ["stream", "CASE STREAM"],
-    ["wb", "WORKBENCH"],
   ];
 
   function panelEl(key) {
@@ -744,6 +743,13 @@
   if (footerSettings) {
     footerSettings.addEventListener("click", () => {
       setActivePane("settings");
+      window.scrollTo({ top: 0 });
+    });
+  }
+  const footerAbout = document.getElementById("footer-about");
+  if (footerAbout) {
+    footerAbout.addEventListener("click", () => {
+      setActivePane("about");
       window.scrollTo({ top: 0 });
     });
   }

@@ -261,7 +261,7 @@
         </aside>
         <aside class="pane pane-matrix" data-panel-key="itm" aria-label="Observed ITM techniques">
           <div class="pane-head">
-            <h2>ITM INDEX</h2>
+            <h2>TECHNIQUES IN THESE CASES</h2>
             <span class="pane-head-actions">
               <button
                 type="button"
@@ -282,7 +282,7 @@
             </span>
           </div>
           <div class="pane-body">
-            <p class="itm-rail-explainer">Techniques seen in the current stream (ITM™).</p>
+            <p class="itm-rail-explainer">Not trending — a tally of the cases in the stream, updating as you filter. Tap one for its technique dossier.</p>
             <div class="itm-rail" id="itm-rail" aria-live="polite"></div>
             <button type="button" class="itm-rail-browse" id="matrix-browse-all">
               Browse full matrix →
@@ -738,6 +738,30 @@
             </div>
           </div>
         </section>
+
+        <section class="pane pane-about-page" data-pane-panel="about" aria-label="Methodology and colophon">
+          <div class="pane-head">
+            <h2>METHODOLOGY &amp; COLOPHON</h2>
+          </div>
+          <div class="pane-body ii-about">
+            <p>
+              insider-intel is an open OSINT research instrument for discovering novel insider
+              techniques — tradecraft that shows up in real cases before it shows up in any
+              framework. It ingests litigated insider cases, insider-relevant news, first-person
+              social confessions, and long-form publications; forensically enriches each case at
+              ingest; and aggregates the corpus into evidence about how insider incidents actually
+              happen and what record classes actually prove them.
+            </p>
+            <dl class="ii-about-facts">
+              <dt>SIG</dt><dd>Insider-confidence score, 0–100, assigned at ingest. The stream floor defaults to 30.</dd>
+              <dt>PROOF STANDARD</dt><dd>Every count separates CONFIRMED IN COURT (a judge ruled it happened, or the insider admitted it) from ALLEGED (claimed in a filing, not yet decided) from REPORTED (press or social only). They are never conflated.</dd>
+              <dt>READ PATH</dt><dd>No model runs at read time. Everything on screen is a projection of stored, append-only forensic records.</dd>
+              <dt>PRIVACY</dt><dd>Roles, never individuals — no persona graphs, no entity resolution across cases.</dd>
+              <dt>EDITORIAL</dt><dd>Findings publish by merge to main. The GitOps trail is the editorial record.</dd>
+              <dt>ATTRIBUTION</dt><dd>Insider Threat Matrix™ © Forscie Limited. This project is not affiliated with or endorsed by Forscie.</dd>
+            </dl>
+          </div>
+        </section>
         <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">
           <div class="pane-head">
             <h2>Settings</h2>
@@ -966,7 +990,8 @@
       <div class="ii-foot-left">
         <span>insider-intel — evidence-based insider-threat research, built from what actually reaches court.</span>
         <span class="ii-foot-links">
-          <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener">ITM™ © FORSCIE LTD — NOT AFFILIATED</a>
+          <button type="button" class="ii-foot-btn" id="footer-about">METHODOLOGY &amp; COLOPHON</button>
+          · <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener">ITM™ © FORSCIE LTD — NOT AFFILIATED</a>
           · <a href="#" id="footer-feed-link">FEED.XML</a>
           · <button type="button" class="ii-foot-btn" id="footer-settings">SETTINGS</button>
         </span>

@@ -299,6 +299,8 @@ def run(base_url: str, headed: bool) -> int:
             itm_row_btn.first.click()
         else:
             page.click("#article-list .article-board-btn")
+        # The board pane lives on the WORKBENCH takeover now (redesign 2026-08).
+        page.click(".masthead-nav-item[data-pane='workbench']")
         page.click("#board-extract")
         page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
         checks.check(
@@ -380,7 +382,6 @@ def run(base_url: str, headed: bool) -> int:
             "core": ".pane-trending",
             "itm": ".pane-matrix",
             "stream": ".pane-articles",
-            "wb": ".pane-workbench",
         }
         # Panel toggles live in Settings → Display; flipping one means a
         # settings round-trip back to the stream.

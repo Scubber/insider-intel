@@ -4800,3 +4800,61 @@ body[data-pane="evidence"] .panels-row {
     display: none;
   }
 }
+
+/* --- Redesign regrid (2026-08): stream = content + one right rail --- */
+@media (min-width: 1024px) {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .pane-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .pane-articles {
+    order: 1;
+    border-right: 0;
+    border-left: 0;
+  }
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .left-rail {
+    order: 2;
+    border-left: 1px solid var(--line);
+  }
+  /* The evidence board lives on the WORKBENCH takeover now, not the stream. */
+  .app-shell:not([data-pane="workbench"]) .pane-workbench {
+    display: none;
+  }
+}
+
+/* ABOUT takeover pane */
+.pane-about-page {
+  display: none;
+}
+.app-shell[data-pane="about"] .pane-about-page {
+  display: block;
+}
+.app-shell[data-pane="about"] .pane-grid {
+  grid-template-columns: 1fr;
+}
+.app-shell[data-pane="about"] .left-rail,
+.app-shell[data-pane="about"] .pane-articles,
+.app-shell[data-pane="about"] .pane-workbench {
+  display: none;
+}
+.ii-about p {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  max-width: 72ch;
+}
+.ii-about-facts {
+  max-width: 80ch;
+  margin: 1rem 0 0;
+}
+.ii-about-facts dt {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-top: 0.8rem;
+}
+.ii-about-facts dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
