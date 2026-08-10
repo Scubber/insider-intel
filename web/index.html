@@ -30,10 +30,11 @@
       (function () {
         // Pre-paint stamps: theme + view tweaks. app.js re-validates against
         // its THEMES set; an unknown stored name only costs one repaint.
+        // Default matches DEFAULT_THEME in app.js ("Dossier Sage").
         var root = document.documentElement;
         root.setAttribute(
           "data-theme",
-          localStorage.getItem("insider-intel-theme") || "cnn-lite"
+          localStorage.getItem("insider-intel-theme") || "Dossier Sage"
         );
         if (localStorage.getItem("insider-intel-kbd-hints") === "false")
           root.setAttribute("data-kbd-hints", "off");
@@ -62,7 +63,7 @@
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
-          <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources, notifications" data-tip-pos="bottom-end">SETTINGS ⚙</button>
+          <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources" data-tip-pos="bottom-end">SETTINGS ⚙</button>
         </nav>
         <span class="live-status" id="live-status">LIVE</span>
         <button
@@ -168,7 +169,6 @@
         <summary class="refine-summary" id="refine-summary">
           <span class="refine-label">Refine</span>
           <span class="refine-state" id="refine-state">INSIDER FOCUS · ALL CHANNELS</span>
-          <span class="refine-note">THEME &amp; DISPLAY MOVED TO SETTINGS →</span>
         </summary>
         <div class="refine-body">
           <div class="stream-filters stream-filters-secondary" id="stream-filters">
@@ -677,9 +677,22 @@
                   </div>
                 </span>
               </div>
-              <p class="kw-hint" id="board-empty">
-                Nothing flagged yet. Use <strong>+ FLAG</strong> on a case to build a hunt.
-              </p>
+              <div class="board-empty" id="board-empty">
+                <p class="kw-hint">
+                  Nothing flagged yet. On the <strong>STREAM</strong>, hit
+                  <strong>+ FLAG</strong> on a case — or load a short example hunt
+                  from the current cases.
+                </p>
+                <button
+                  type="button"
+                  id="board-example"
+                  class="board-example-btn"
+                  data-tip="Flag a few high-signal cases from the stream so you can try MODUS OPERANDI"
+                  data-tip-pos="bottom-start"
+                >
+                  TRY EXAMPLE HUNT
+                </button>
+              </div>
               <ul id="board-list" class="board-list" hidden></ul>
               <p class="board-extract-row">
                 <button type="button" id="board-extract" data-tip="Open the report — TTPs were already extracted at ingest, no processing runs now." data-tip-pos="bottom-start" class="board-extract-btn" disabled>
@@ -822,12 +835,12 @@
                 <div class="settings-field theme-picker" id="theme-picker">
                   <label class="filter-label" for="theme-select">Theme</label>
                   <select id="theme-select" aria-label="Color theme" data-tip="Color theme — applies immediately and persists" data-tip-pos="bottom-start">
+                    <option value="Dossier Sage">Dossier Sage</option>
                     <option value="cnn-lite">Light</option>
                     <option value="midnight">Dark</option>
                     <option value="dossier">Dossier</option>
                     <option value="phosphor">Terminal</option>
                     <option value="diablo">Diablo</option>
-                    <option value="Dossier Sage">Dossier Sage</option>
                     <option value="Dossier Soft">Dossier Soft</option>
                     <option value="Dossier Fog">Dossier Fog</option>
                     <option value="Air Archive">Air Archive</option>
@@ -894,7 +907,6 @@
                     <dt>⏎</dt><dd>Open source</dd>
                     <dt>/</dt><dd>Focus search</dd>
                   </dl>
-                  <p class="settings-todo">TODO: remappable bindings.</p>
                 </div>
               </div>
             </section>
@@ -951,12 +963,9 @@
                   <li><span class="source-inv-main"><span class="source-inv-name">DATATHEFTNEWS</span><span class="source-inv-desc">Curated insider data-theft incident tracker</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
                   <li><span class="source-inv-main"><span class="source-inv-name">TIPS (REDDIT RSS)</span><span class="source-inv-desc">Tip-lane RSS: r/netsec, r/cybersecurity, r/blueteamsec, r/DFIR, r/Malware</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
                 </ul>
-                <button type="button" class="settings-add-btn" id="add-source-btn" data-tip="TODO: source onboarding flow — feed URL / connector pick, auth handled server-side" data-tip-pos="bottom-start">
-                  + ADD SOURCE
-                </button>
-                <p class="settings-todo">
-                  TODO: pause/remove and onboarding are not wired — sources are managed
-                  server-side today.
+                <p class="kw-hint">
+                  Catalog and cadence are managed server-side. Social subscriptions
+                  below are the live controls from this UI.
                 </p>
                 <div class="settings-field">
                   <label for="admin-token-input">OPERATOR TOKEN</label>
@@ -971,37 +980,6 @@
                     reload). Stored only in this browser. Leave empty as a reader.
                   </p>
                 </div>
-              </div>
-            </section>
-
-            <section class="settings-section" data-panel-key="notify" aria-label="Notifications">
-              <div class="settings-head">
-                <h3>NOTIFICATIONS <span class="todo-badge">TODO</span></h3>
-                <span class="head-spacer"></span>
-                <button type="button" class="panel-collapse" data-panel="notify" aria-label="Collapse Notifications" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
-              </div>
-              <div class="settings-body">
-                <label class="settings-check filter-label" for="notify-digest" data-tip="TODO: no delivery backend — preference is stored locally only" data-tip-pos="bottom-start">
-                  <input type="checkbox" id="notify-digest" aria-label="Daily digest email" />
-                  DAILY DIGEST EMAIL
-                </label>
-                <label class="settings-check filter-label" for="notify-alerts" data-tip="TODO: no delivery backend — preference is stored locally only" data-tip-pos="bottom-start">
-                  <input type="checkbox" id="notify-alerts" aria-label="High-signal alerts" />
-                  HIGH-SIGNAL ALERTS
-                </label>
-                <div class="settings-field filter-group-signal">
-                  <span class="filter-label">Alert when — <span class="signal-value" id="alert-signal-value">SIG ≥ 80</span></span>
-                  <input type="range" id="alert-signal" min="50" max="100" step="5" value="80" aria-label="Alert signal threshold" />
-                </div>
-                <div class="settings-field">
-                  <label class="filter-label" for="notify-email">Deliver to</label>
-                  <input type="email" id="notify-email" class="settings-input" placeholder="you@example.com" aria-label="Notification email" />
-                </div>
-                <p class="settings-todo">
-                  TODO: no delivery backend yet — digest scheduler, alert evaluation on
-                  ingest, and email send are all unimplemented. Preferences here are
-                  UI-only.
-                </p>
               </div>
             </section>
 
@@ -1054,12 +1032,10 @@
                   <span class="pub-chip">CISA INSIDER THREAT MITIGATION GUIDE</span>
                   <span class="pub-chip">NITTF INSIDER THREAT GUIDE 2017</span>
                 </div>
-                <button type="button" class="settings-add-btn" id="add-pub-btn" data-tip="TODO: publication onboarding — landing-page extract, crawl cadence, dedupe against the corpus. One-off ingest exists via the API today." data-tip-pos="bottom-start">
-                  + ADD PUBLICATION
-                </button>
-                <p class="settings-todo">
-                  TODO: add/remove from the web UI is not wired — the catalog lives
-                  server-side; one-off URLs can be flagged via POST /publications/ingest_url.
+                <p class="kw-hint">
+                  Curated catalog, refreshed with the corpus. One-off URLs can be
+                  flagged via the publications ingest API (operator token required
+                  in prod).
                 </p>
               </div>
             </section>

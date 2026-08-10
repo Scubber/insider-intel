@@ -161,6 +161,21 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("? reopens the intro", page.is_visible("#intro-body"))
         page.click("#intro-gotit")
 
+        # Empty evidence board: first-run CTA points at FLAG + example hunt.
+        page.click(".masthead-nav-item[data-pane='workbench']")
+        page.wait_for_selector(".pane-workbench", state="visible", timeout=10000)
+        empty_copy = page.text_content("#board-empty") or ""
+        checks.check(
+            "empty board CTA points at FLAG + example hunt",
+            page.is_visible("#board-empty")
+            and page.is_visible("#board-example")
+            and "+ FLAG" in empty_copy
+            and "TRY EXAMPLE HUNT" in empty_copy,
+            f"copy={empty_copy!r}",
+        )
+        page.click(".masthead-nav-item[data-pane='articles']")
+        page.wait_for_selector(".article-item", state="visible", timeout=10000)
+
         # TRENDING panel: real rows (or the honest empty state) — never the
         # old TODO placeholder.
         trend_rows = page.locator(".pane-trending .trend-row").count()
@@ -322,18 +337,31 @@ def run(base_url: str, headed: bool) -> int:
             if page.evaluate("document.documentElement.getAttribute('data-theme')") != theme:
                 theme_ok = False
         checks.check("themes apply from Settings (incl. midnight + cnn-lite)", theme_ok)
-        page.select_option("#theme-select", "cnn-lite")
+        page.select_option("#theme-select", "Dossier Sage")
 
-        # Settings pane renders every section from the design handoff.
+        # Settings pane renders the live sections (Notifications / dead ADD
+        # controls were removed — reader-safe Settings).
         section_keys = page.evaluate(
             """() => [...document.querySelectorAll('.pane-settings .settings-section')]
                  .map((s) => s.dataset.panelKey)"""
         )
-        expected = ["look", "defaults", "sources", "notify", "social", "pubs"]
+        expected = ["look", "defaults", "sources", "social", "pubs"]
         checks.check(
-            "settings pane renders all sections",
-            all(k in section_keys for k in expected),
+            "settings pane renders live sections",
+            all(k in section_keys for k in expected) and "notify" not in section_keys,
             f"got {section_keys}",
+        )
+        todo_copy = page.evaluate(
+            """() => {
+              const root = document.querySelector('.pane-settings');
+              return root ? root.innerText : '';
+            }"""
+        )
+        checks.check(
+            "settings has no TODO / stub ADD chrome",
+            "TODO" not in (todo_copy or "")
+            and "+ ADD SOURCE" not in (todo_copy or "")
+            and "+ ADD PUBLICATION" not in (todo_copy or ""),
         )
         # Settings sections collapse to their headers and persist.
         page.click(".settings-section[data-panel-key='look'] .panel-collapse")

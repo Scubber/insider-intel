@@ -174,6 +174,7 @@
     boardCount: document.getElementById("board-count"),
     boardList: document.getElementById("board-list"),
     boardEmpty: document.getElementById("board-empty"),
+    boardExample: document.getElementById("board-example"),
     boardExtract: document.getElementById("board-extract"),
     boardClear: document.getElementById("board-clear"),
     boardCopyBrief: document.getElementById("board-copy-brief"),
@@ -211,11 +212,6 @@
     defaultSignalValue: document.getElementById("default-signal-value"),
     applyDefaults: document.getElementById("apply-defaults"),
     resetPrefs: document.getElementById("reset-prefs"),
-    notifyDigest: document.getElementById("notify-digest"),
-    notifyAlerts: document.getElementById("notify-alerts"),
-    alertSignal: document.getElementById("alert-signal"),
-    alertSignalValue: document.getElementById("alert-signal-value"),
-    notifyEmail: document.getElementById("notify-email"),
     socialManager: document.getElementById("social-manager"),
     socialSubscribed: document.getElementById("social-subscribed"),
     socialSubscribedEmpty: document.getElementById("social-subscribed-empty"),
@@ -289,7 +285,9 @@
   };
 
   const MOBILE_MQ = window.matchMedia("(max-width: 960px)");
-  const WIDE_MQ = window.matchMedia("(min-width: 1200px)");
+  // Match styles.css desktop rail breakpoint (1024px) — tablet landscape keeps
+  // the three-column layout and parks matrix takeover back to the stream.
+  const WIDE_MQ = window.matchMedia("(min-width: 1024px)");
   const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
@@ -635,7 +633,7 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const DEFAULT_THEME = "cnn-lite";
+  const DEFAULT_THEME = "Dossier Sage";
   const THEMES = new Set([
     "dossier",
     "cnn-lite",
@@ -1228,6 +1226,76 @@
     syncBoardToggle();
     syncStreamBoardButtons();
     setStatus("Extraction board cleared");
+  }
+
+  const EXAMPLE_HUNT_COUNT = 3;
+
+  function pickExampleArticles(pool) {
+    const seen = new Set();
+    const scored = [];
+    (pool || []).forEach((article) => {
+      if (!article || !article.link || seen.has(article.link)) return;
+      if (articleOnBoard(article.link)) return;
+      seen.add(article.link);
+      const hits = (article.itm_hits || []).length;
+      const sig = sigScore(article) || 0;
+      scored.push({
+        article,
+        rank: hits * 1000 + sig,
+      });
+    });
+    scored.sort((a, b) => b.rank - a.rank);
+    return scored.slice(0, EXAMPLE_HUNT_COUNT).map((row) => row.article);
+  }
+
+  async function loadExampleHunt() {
+    if (els.boardExample) els.boardExample.disabled = true;
+    try {
+      let picks = pickExampleArticles(state.streamArticles);
+      if (picks.length < EXAMPLE_HUNT_COUNT) {
+        setStatus("Loading example cases…");
+        try {
+          const data = await api("/articles", {
+            limit: "24",
+            itm_alignment: "insider",
+            min_score: String(Math.max(0.3, streamMinScore())),
+          });
+          const remote = (data && (data.clusters || data.results || data.articles)) || [];
+          // Flatten cluster payloads the stream uses.
+          const flat = [];
+          remote.forEach((row) => {
+            if (row && row.articles && Array.isArray(row.articles)) {
+              row.articles.forEach((a) => flat.push(a));
+            } else if (row && row.link) {
+              flat.push(row);
+            }
+          });
+          picks = pickExampleArticles(picks.concat(flat));
+        } catch (err) {
+          if (!picks.length) throw err;
+        }
+      }
+      if (!picks.length) {
+        setStatus("No cases available for an example hunt — try Refine or wait for LIVE");
+        return;
+      }
+      picks.forEach((article) => {
+        if (!article || !article.link) return;
+        state.extractionBoard[article.link] = boardItemFromArticle(article);
+      });
+      saveExtractionBoard();
+      renderExtractionBoard();
+      syncBoardToggle();
+      syncStreamBoardButtons();
+      setActivePane("workbench");
+      setStatus(
+        `Example hunt · ${picks.length} case(s) flagged — open MODUS OPERANDI when ready`,
+      );
+    } catch (err) {
+      setStatus(`Example hunt failed: ${err.message}`);
+    } finally {
+      if (els.boardExample) els.boardExample.disabled = false;
+    }
   }
 
   function syncBoardToggle() {
@@ -5276,6 +5344,14 @@
     els.boardClear.addEventListener("click", () => clearBoard());
   }
 
+  if (els.boardExample) {
+    els.boardExample.addEventListener("click", () => {
+      loadExampleHunt().catch((err) =>
+        setStatus(`Example hunt failed: ${err.message}`),
+      );
+    });
+  }
+
   if (els.boardShare) {
     els.boardShare.addEventListener("click", () => {
       shareBoardLink().catch((err) => setStatus(`Share failed: ${err.message}`));
@@ -5647,8 +5723,7 @@
     });
   }
 
-  /* Settings ▸ Stream defaults + notifications (notification prefs are UI-only
-     — no delivery backend; the section says so). */
+  /* Settings ▸ Stream defaults (appearance live controls sit above). */
   function syncDefaultScopePills() {
     document.querySelectorAll("#default-scope-pills .pill").forEach((pill) => {
       pill.classList.toggle("active", pill.dataset.defScope === uiState.defScope);
@@ -5722,45 +5797,6 @@
       location.reload();
     });
   }
-
-  function initNotifyPrefs() {
-    const n = uiState.notify;
-    if (els.notifyDigest) {
-      els.notifyDigest.checked = Boolean(n.digest);
-      els.notifyDigest.addEventListener("change", () => {
-        uiState.notify.digest = els.notifyDigest.checked;
-        saveUiState();
-      });
-    }
-    if (els.notifyAlerts) {
-      els.notifyAlerts.checked = Boolean(n.alerts);
-      els.notifyAlerts.addEventListener("change", () => {
-        uiState.notify.alerts = els.notifyAlerts.checked;
-        saveUiState();
-      });
-    }
-    if (els.alertSignal) {
-      els.alertSignal.value = String(n.alertSig || 80);
-      if (els.alertSignalValue) {
-        els.alertSignalValue.textContent = `SIG ≥ ${n.alertSig || 80}`;
-      }
-      els.alertSignal.addEventListener("input", () => {
-        uiState.notify.alertSig = Number(els.alertSignal.value) || 80;
-        if (els.alertSignalValue) {
-          els.alertSignalValue.textContent = `SIG ≥ ${uiState.notify.alertSig}`;
-        }
-      });
-      els.alertSignal.addEventListener("change", () => saveUiState());
-    }
-    if (els.notifyEmail) {
-      els.notifyEmail.value = n.email || "";
-      els.notifyEmail.addEventListener("change", () => {
-        uiState.notify.email = els.notifyEmail.value.trim();
-        saveUiState();
-      });
-    }
-  }
-  initNotifyPrefs();
 
   // The CLEAR search button shows as soon as there is text (mock behavior),
   // not only after a search has run.
