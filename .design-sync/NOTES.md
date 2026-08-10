@@ -25,6 +25,15 @@
   have the user create the project in the claude.ai/design UI and re-adopt
   it by name.
 
+- `.ds-sync` converter deps now also need `ts-morph` (dts.mjs imports it);
+  the 2026-08-10 run installed it alongside playwright/esbuild.
+- 2026-08-10 re-sync: ported the post-July web surfaces as FindingCard,
+  EvidenceBar(+EvidenceLegend), PatternCard (ds- classes copied verbatim
+  from web/styles.css .evp-finding*/.evp-row*/.query-stack rules).
+  EvidenceLegend ships floor-card (it renders inside EvidenceBar's
+  authored preview); the CONTEXT case-stamp variant was deliberately
+  skipped as low-value — port it if CaseCard grows a stamp slot.
+
 ## Known render warns
 
 - (none — 10/10 render cleanly, no thin/identical warns on the final run)
