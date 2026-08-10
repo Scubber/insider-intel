@@ -1,4 +1,4 @@
-# Web UI (local + future Pages)
+# Web UI (local + GitHub Pages)
 
 Static article reader + ITM theme filters + keyword workbench for **insider-intel**.
 
@@ -27,7 +27,7 @@ Open http://127.0.0.1:5500
 
 Default API base: `http://127.0.0.1:8000` in [`config.js`](config.js).
 
-## Hosting later (no secrets in this folder)
+## Hosting (no secrets in this folder)
 
 | Piece | Target |
 |-------|--------|
@@ -40,19 +40,20 @@ Never put API keys in this static UI.
 
 ## Themes
 
-Switcher is in the UI (top-right). Themes live in [`themes.css`](themes.css) as `[data-theme="name"]` CSS variable blocks.
+Switcher lives in **Settings → Appearance**. Themes are `[data-theme="…"]`
+CSS variable packs in [`themes.css`](themes.css); the picker options live in
+[`index.html`](index.html) and the allow-list is `THEMES` in [`app.js`](app.js).
 
-| Theme | Look |
-|-------|------|
-| `cnn-lite` (default) | White page, CNN red, Georgia headlines (lite.cnn.com) |
-| `fox-news` | Red masthead stripe, Franklin/Arial condensed, uppercase brand |
-| `yahoo-finance` | Yahoo purple bar, Helvetica Neue market-board sans |
-| `voya` | Navy masthead + tangerine, Palatino brand / Segoe body |
-| `dracula` | Classic palette; Cascadia/Consolas brand, Segoe body |
-| `matrix` | Green-on-black terminal |
-| `midnight` | Dark blue / cyan ops |
-| `phosphor` | Amber CRT |
-| `signal` | Original light OSINT look |
-| `old-reddit` | Soft gray, orangered + blue links, Verdana (old.reddit.com) |
+**Default:** `Dossier Sage` (Newsreader + Courier Prime; also stamped in the
+`<head>` pre-paint script so first paint matches). Choice persists in
+`localStorage` under `insider-intel-theme`.
 
-**Add a theme:** copy a block in `themes.css`, rename `data-theme`, tweak `--*` vars, add an `<option>` in `index.html`. Choice persists in `localStorage`.
+| Theme family | Examples |
+|--------------|----------|
+| Dossier (default pack) | `Dossier Sage`, `Dossier Soft`, `Dossier Fog`, `dossier` |
+| Archives | `Air Archive`, `Cinder Archive`, `Ice Archive`, `Earth Archive` |
+| Classic backups | `cnn-lite` (Light), `midnight` (Dark), `phosphor` (Terminal), `diablo` |
+| Pack skins | Warhammer / AI-product / game / anime skins in the same picker |
+
+**Add a theme:** copy a `[data-theme]` block in `themes.css`, add an
+`<option>` in `index.html`, and add the name to the `THEMES` set in `app.js`.

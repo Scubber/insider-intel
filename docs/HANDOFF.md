@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-09 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-10 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
 **Rollback checkpoint:** branch `checkpoint/v1.0-parked` (pre-August prod).
@@ -27,6 +27,7 @@ API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
+| **UI honesty** | Settings is reader-safe (no TODO / stub ADD / Notifications chrome). Empty board offers **TRY EXAMPLE HUNT**. Default theme aligned to **Dossier Sage**; desktop rail JS breakpoint matches CSS at **1024px**. |
 
 ---
 
@@ -124,8 +125,10 @@ API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
     unauthenticated admin subdomain was rejected (adds scan surface).
 12. **Misc parked**: EXPORT CASES full-filing-text plan (unbuilt);
     README byline + LICENSE (operator undecided); landscape-iPhone smoke
-    failure (pre-existing); themes.css stale "default" comment; one-off
+    failure (pre-existing); one-off
     04:00Z 2026-08-07 refresh miss (self-healed — watch for recurrence).
+    Notifications delivery backend still unbuilt (UI stub removed 2026-08-10
+    so Settings stays honest until it exists).
 
 ---
 

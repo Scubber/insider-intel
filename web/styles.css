@@ -2358,6 +2358,46 @@ body {
   font-size: 0.85em;
 }
 
+.board-empty {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.75rem;
+}
+
+.board-empty[hidden] {
+  display: none !important;
+}
+
+.board-empty .kw-hint {
+  margin: 0;
+}
+
+.board-example-btn {
+  justify-self: start;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft, transparent);
+  color: var(--accent);
+  border-radius: var(--radius, 2px);
+  cursor: pointer;
+}
+
+.board-example-btn:hover,
+.board-example-btn:focus-visible {
+  background: var(--accent);
+  color: var(--btn-fg, var(--paper));
+  outline: none;
+}
+
+.board-example-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .board-list {
   list-style: none;
   margin: 0.4rem 0 0;
