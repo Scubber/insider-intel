@@ -26,13 +26,30 @@ from shared.settings import get_settings
 # First paint only needs the top of the stream; live data replaces it.
 SNAPSHOT_LIMIT = 200
 # Fields that dominate payload weight and aren't needed for the stream card
-# are dropped: the full forensic record and the legacy case_record (read-view
-# detail, live-only). What survives is exactly what the stream card renders —
-# is_insider_case + context_kind (the purpose stamp), legal_posture (the
-# analyst-note badge), and methods slimmed to action/claim_status (the METHODS
-# fact line and the proof label). link/title kept so the slim record still
-# validates as PerCaseForensics.
-_KEEP_FORENSICS_KEYS = ("link", "title", "is_insider_case", "context_kind", "legal_posture")
+# are dropped: the heavy forensic detail (timeline, hunt seeds, observables,
+# evidence quotes) and the legacy case_record (read-view detail, live-only).
+# What survives is exactly what the stream card renders — the stamps
+# (is_insider_case + context_kind), the posture badge, the analyst-note fact
+# strip (caseFacts in web/app.js), and methods slimmed to action/claim_status
+# (the METHODS fact line and the proof label). link/title kept so the slim
+# record still validates as PerCaseForensics.
+# tests/test_boot_snapshot.py mechanically checks this list against the
+# fields web/app.js actually reads — extend BOTH when the card grows a read.
+_KEEP_FORENSICS_KEYS = (
+    "link",
+    "title",
+    "is_insider_case",
+    "context_kind",
+    "legal_posture",
+    "actor_profile",
+    "actor_role",
+    "access_vector",
+    "motive_signals",
+    "exfil_channels",
+    "timeframe",
+    "detection",
+    "outcome",
+)
 _KEEP_METHOD_KEYS = ("action", "claim_status")
 
 

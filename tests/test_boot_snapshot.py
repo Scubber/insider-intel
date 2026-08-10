@@ -70,14 +70,12 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     for row in raw["results"]:
         assert "case_record" not in row or row["case_record"] is None
         if row.get("forensics") is not None:
-            assert set(row["forensics"].keys()) == {
-                "link",
-                "title",
-                "is_insider_case",
-                "context_kind",
-                "legal_posture",
-                "methods",
-            }
+            from scripts.export_boot_snapshot import _KEEP_FORENSICS_KEYS
+
+            assert set(row["forensics"].keys()) == set(_KEEP_FORENSICS_KEYS) | {"methods"}
+            # Heavy detail must not leak into the first-paint payload.
+            for dropped in ("timeline", "hunt_terms", "hunt_queries", "observables"):
+                assert dropped not in row["forensics"]
             for method in row["forensics"]["methods"]:
                 assert set(method.keys()) == {"action", "claim_status"}
 
@@ -111,3 +109,41 @@ def test_snapshot_cli_writes_files(tmp_path, monkeypatch) -> None:
     data = json.loads((out / "articles.json").read_text())
     assert data["results"]
     assert json.loads((out / "meta.json").read_text())["indexed_articles"] == 2
+
+
+def test_snapshot_covers_stream_card_forensics_reads() -> None:
+    """Contract: every forensics field web/app.js reads on the stream card must
+    survive the exporter's slimming — a new read without a matching whitelist
+    entry ships bare CACHED rows (this exact bug shipped once: context_kind and
+    claim_status were stripped, so stamps and proof labels only appeared LIVE).
+    """
+    import re
+    from pathlib import Path
+
+    from scripts.export_boot_snapshot import _KEEP_FORENSICS_KEYS, _KEEP_METHOD_KEYS
+
+    app_js = Path("web/app.js").read_text(encoding="utf-8")
+
+    # Direct reads: article.forensics.<field> anywhere in the client.
+    fields = set(re.findall(r"\bforensics\.([a-z_]+)", app_js))
+
+    # Aliased reads inside caseFacts() — `const f = (article && article.forensics)`.
+    case_facts = re.search(r"function caseFacts\(article\)\s*\{.*?\n  \}", app_js, re.DOTALL)
+    assert case_facts, "caseFacts() not found in web/app.js — update this contract test"
+    fields |= set(re.findall(r"\bf\.([a-z_]+)", case_facts.group(0)))
+
+    kept = set(_KEEP_FORENSICS_KEYS) | {"methods"}
+    missing = fields - kept
+    assert not missing, (
+        f"web/app.js reads forensics fields the boot snapshot drops: {sorted(missing)} — "
+        "add them to _KEEP_FORENSICS_KEYS in scripts/export_boot_snapshot.py"
+    )
+
+    # The proof label + METHODS fact line read these off each method entry.
+    proof = re.search(r"function proofLabel\(article\)\s*\{.*?\n  \}", app_js, re.DOTALL)
+    assert proof, "proofLabel() not found in web/app.js — update this contract test"
+    method_fields = set(re.findall(r"\b[am]\.([a-z_]+)", proof.group(0)))
+    method_fields |= {"action"}  # caseFacts maps m.action for the fact strip
+    assert method_fields <= set(_KEEP_METHOD_KEYS), (
+        f"method fields read but dropped: {sorted(method_fields - set(_KEEP_METHOD_KEYS))}"
+    )
