@@ -5,6 +5,15 @@ name: refresh-corpus
 # in the Actions tab instead of ad-hoc gcloud runs.
 on:
   workflow_dispatch:
+    inputs:
+      force_reprocess:
+        description: >-
+          Re-process the ENTIRE corpus (lexical retagging after an ITM/lexicon
+          change). No LLM re-billing — enrichment is billed-once — but the run
+          takes longer than a normal refresh. One-off args override; the job's
+          stored config is untouched.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,10 +40,29 @@ jobs:
           service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
       - name: Execute corpus-refresh job
+        env:
+          FORCE: ${{ inputs.force_reprocess && 'true' || 'false' }}
         run: |
+          set -euo pipefail
+          EXTRA_FLAGS=()
+          if [ "${FORCE}" = "true" ]; then
+            # One-off args override: replay the job's own stored args with
+            # --force appended, so the stored config never changes and the
+            # override can't drift from the real entrypoint.
+            BASE_ARGS=$(gcloud run jobs describe corpus-refresh \
+              --region "${REGION}" --project "${PROJECT_ID}" --format=json \
+              | jq -r '.spec.template.spec.template.spec.containers[0].args // [] | join(",")')
+            if [ -z "${BASE_ARGS}" ]; then
+              echo "Job has no stored args (runs the image CMD) — cannot build a --force override safely." >&2
+              exit 1
+            fi
+            echo "Forced reprocess: args override = ${BASE_ARGS},--force"
+            EXTRA_FLAGS+=(--args "${BASE_ARGS},--force")
+          fi
           gcloud run jobs execute corpus-refresh \
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
+            "${EXTRA_FLAGS[@]}" \
             --wait
       - name: Refresh highlights
         if: always()

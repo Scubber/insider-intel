@@ -181,7 +181,9 @@ gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
 **No GCP access?** (Claude Code on the web sandboxes can't reach GCP or the
 prod API directly.) Read-only `workflow_dispatch` diagnostics cover it —
 dispatch from the Actions tab or the GitHub API: `refresh-corpus` /
-`watch-refresh` (force + watch a refresh), `corpus-status` (state + job env
+`watch-refresh` (force + watch a refresh; `refresh-corpus` takes a
+`force_reprocess` input that replays the job with `--force` — full lexical
+retag of the corpus after an ITM/lexicon bump, no LLM re-billing), `corpus-status` (state + job env
 audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
 `corpus-noninsider` (spend-waste audit), `traffic-report` (daily DIY
 analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
