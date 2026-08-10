@@ -139,27 +139,25 @@ def run(base_url: str, headed: bool) -> int:
             "articles" in (page.text_content("#data-state") or ""),
         )
 
-        # Intro banner: expanded on a fresh profile (no localStorage), GOT IT
-        # minimizes to the header bar, the state persists across reloads
-        # (returning profile), and the masthead ? re-expands it.
+        # Redesign shell (2026-08): no intro panel — the masthead carries the
+        # corpus stats line and the status band carries lanes + UTC clock;
+        # the footer carries the theme picker with neutral labels.
+        checks.check("no intro panel in the shell", not page.query_selector("#intro-panel"))
         checks.check(
-            "intro banner shows on first visit",
-            page.is_visible("#intro-body") and page.is_visible("#intro-gotit"),
+            "status band shows lanes + clock",
+            bool(page.query_selector("#lane-status")) and bool((page.text_content("#utc-clock") or "").strip()),
         )
-        page.click("#intro-gotit")
-        checks.check(
-            "GOT IT minimizes the intro (header bar stays)",
-            not page.is_visible("#intro-body") and page.is_visible(".intro-head"),
-        )
-        page.reload()
-        page.wait_for_selector(".article-item", timeout=20000)
-        checks.check(
-            "intro stays minimized for returning visitors",
-            not page.is_visible("#intro-body"),
-        )
-        page.click("#intro-help")
-        checks.check("? reopens the intro", page.is_visible("#intro-body"))
-        page.click("#intro-gotit")
+        footer_theme = page.query_selector("#footer-theme-select")
+        checks.check("footer theme picker present", bool(footer_theme))
+        if footer_theme:
+            labels = page.eval_on_selector(
+                "#footer-theme-select",
+                "el => Array.from(el.options).map(o => o.textContent)",
+            )
+            checks.check(
+                "theme labels are neutral (no media names)",
+                not any(l in ("Evangelion", "StarCraft", "ChatGPT", "Doom 3") for l in labels),
+            )
 
         # Empty evidence board: first-run CTA points at FLAG + example hunt.
         page.click(".masthead-nav-item[data-pane='workbench']")
