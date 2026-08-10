@@ -53,6 +53,8 @@ ENRICH_SCHEMA_VERSION = 2
 # Document provenance / legal stage, validated against these sets; anything
 # else falls back to "unknown".
 SOURCE_TYPES = ("court_filing", "news", "blog", "social", "press_release", "unknown")
+CONTEXT_KINDS = ("detection", "prevention", "tradecraft", "policy", "news")
+
 LEGAL_POSTURES = (
     "indictment",
     "complaint",
@@ -140,6 +142,10 @@ class PerCaseForensics(BaseModel):
     )
     # Case facts (feed the analyst note / legacy CaseRecord) — all default-safe.
     is_insider_case: bool = False
+    # For non-cases only: what the piece is FOR, in ITM control language where
+    # it fits — detection|prevention|tradecraft|policy|news. "" = unclassified
+    # (pre-2026-08 enrichments; the UI falls back to a channel-based label).
+    context_kind: str = ""
     actor_role: str | None = None
     access_vector: str | None = None
     motive_signals: list[str] = Field(default_factory=list)
@@ -389,6 +395,9 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         hunt_terms=_slist(data.get("hunt_terms"), 12, 120),
         hunt_queries=parse_hunt_queries(data.get("hunt_queries")),
         is_insider_case=bool(data.get("is_insider_case")),
+        context_kind=(
+            lambda v: v if v in CONTEXT_KINDS else ""
+        )(str(data.get("context_kind") or "").strip().lower()),
         actor_role=_s(data.get("actor_role"), 200) or None,
         access_vector=_s(data.get("access_vector"), 200) or None,
         motive_signals=_slist(data.get("motive_signals"), 8, 200),
