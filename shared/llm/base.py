@@ -113,6 +113,7 @@ for anything the text does not establish):
 {
   "ai_summary": "2-4 plain sentences an analyst would write.",
   "is_insider_case": false,
+  "context_kind": "news",
   "confidence": 0.0,
   "source_type": "news",
   "legal_posture": "unknown",
@@ -176,6 +177,12 @@ Rules:
 - is_insider_case: true only for a concrete incident/case involving an insider
   (employee, contractor, ex-staff). false for commentary, vendor content,
   policy pieces, or general news — still fill ai_summary for those.
+- context_kind: ONLY when is_insider_case is false — what the piece is useful
+  for to an insider-threat program: "detection" (detection guidance, telemetry
+  or hunting techniques), "prevention" (controls, hardening, program-building
+  guidance), "tradecraft" (attacker/insider technique research), "policy"
+  (law, regulation, compliance), "news" (incident or industry news). Use null
+  when is_insider_case is true.
 - SOURCE vs INFERENCE. methods describe what the source SAYS the insider did;
   set claim_status from the source's own framing (an indictment = "alleged",
   never "adjudicated"). evidence_quote is a short verbatim snippet from the text

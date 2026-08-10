@@ -898,3 +898,17 @@ def test_backfill_reserve_survives_heavy_news_day(monkeypatch, tmp_path: Path) -
     assert rows["https://www.courtlistener.com/docket/9/us-v-example/"].forensics is not None
     news_enriched = sum(1 for link, r in rows.items() if "news-" in link and r.forensics)
     assert news_enriched == 1  # main batch was capped at cap - reserve
+
+def test_context_kind_parsed_and_validated():
+    from shared.schemas.forensics import parse_forensics_json
+
+    rec = parse_forensics_json(
+        {"is_insider_case": False, "context_kind": " Detection "},
+        link="http://x", title="t",
+    )
+    assert rec.context_kind == "detection"
+    junk = parse_forensics_json(
+        {"is_insider_case": False, "context_kind": "totally-made-up"},
+        link="http://x", title="t",
+    )
+    assert junk.context_kind == ""

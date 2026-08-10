@@ -3742,11 +3742,33 @@
     meta.appendChild(metaText);
     if (isContextArticle(article)) {
       // The enricher's own verdict outranks the heuristic insider_type stamp.
+      // Say what the row is FOR, not just what it isn't: the enricher's
+      // context_kind (ITM control language) when stored, else a channel-based
+      // fallback for pre-context_kind enrichments.
       li.classList.add("context-row");
       const stamp = document.createElement("span");
       stamp.className = "case-stamp context";
-      stamp.textContent = "CONTEXT";
-      stamp.title = "LLM-adjudicated: related coverage, not an insider case";
+      const kindLabels = {
+        detection: "DETECTION",
+        prevention: "PREVENTION",
+        tradecraft: "TRADECRAFT",
+        policy: "POLICY",
+        news: "NEWS",
+      };
+      const channelLabels = {
+        filings: "LEGAL CONTEXT",
+        news: "NEWS",
+        tips: "COMMUNITY",
+        social: "COMMUNITY",
+        publications: "REFERENCE",
+      };
+      const kind = (article.forensics && article.forensics.context_kind) || "";
+      stamp.textContent =
+        kindLabels[kind] || channelLabels[article.channel] || "CONTEXT";
+      stamp.title =
+        "AI-adjudicated: not an insider case — kept as context (" +
+        (kindLabels[kind] ? kindLabels[kind].toLowerCase() : "related coverage") +
+        ")";
       meta.appendChild(stamp);
     } else if (article.insider_type) {
       const stamp = document.createElement("span");

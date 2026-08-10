@@ -137,7 +137,10 @@ lane also carries international coverage: CanLII per-court RSS
 (AFP, OAIC, CPS, NCA, ICO, Justice Canada) in `config.py`.
 
 The stream acts on the enricher's own verdict: rows whose stored forensics
-say `is_insider_case=false` render as muted **CONTEXT** (not insider cases)
+say `is_insider_case=false` render muted with a **purpose stamp** — the
+enricher's `context_kind` (DETECTION / PREVENTION / TRADECRAFT / POLICY /
+NEWS, ITM control language) when stored, else a channel fallback (LEGAL
+CONTEXT / NEWS / COMMUNITY / REFERENCE) for pre-`context_kind` enrichments —
 and are hidden by default behind a toggle — un-enriched rows are unknown,
 never context.
 
