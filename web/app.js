@@ -3599,6 +3599,21 @@
     return dl;
   }
 
+  // Plain-language proof standard (redesign 2026-08): a case is CONFIRMED IN
+  // COURT only when a method carries an adjudicated/admitted claim; ALLEGED is
+  // a filing's theory; REPORTED is press/social only. Never conflated.
+  function proofLabel(article) {
+    const actions = (article.forensics && article.forensics.actions) || [];
+    const statuses = new Set(
+      actions.map((a) => String(a.claim_status || "").toLowerCase()),
+    );
+    if (statuses.has("adjudicated") || statuses.has("admitted"))
+      return { key: "confirmed", label: "CONFIRMED IN COURT" };
+    if (statuses.has("alleged")) return { key: "alleged", label: "ALLEGED" };
+    if (statuses.has("reported")) return { key: "reported", label: "REPORTED" };
+    return null;
+  }
+
   function buildArticleRow(cluster) {
     const article = cluster.primary;
     const siblings = cluster.siblings || [];
@@ -3634,10 +3649,15 @@
     const filedIso = isoFiledDate(article.published);
     const filedAge = caseFiledAge(article.published);
     const filedText = filedIso ? `FILED ${filedIso} · ${filedAge}` : `FILED: ${filedAge}`;
-    const metaParts = [`SOURCE: ${article.source_name || "UNATTRIBUTED"}${srcExtra}`, filedText];
+    const metaParts = [`${article.source_name || "UNATTRIBUTED"}${srcExtra}`, filedText];
+    const retrievedIso = isoFiledDate(article.ingested_at);
+    if (retrievedIso && retrievedIso !== filedIso) metaParts.push(`RETRIEVED ${retrievedIso}`);
     const sig = sigScore(article);
     if (sig != null) metaParts.push(`SIG ${sig}`);
+    const proof = proofLabel(article);
+    if (proof) metaParts.push(proof.label);
     metaText.textContent = metaParts.join(" · ");
+    if (proof) metaText.classList.add(`proof-${proof.key}`);
     meta.appendChild(metaText);
     if (isContextArticle(article)) {
       // The enricher's own verdict outranks the heuristic insider_type stamp.
@@ -4437,7 +4457,7 @@
     summary.className = "ledger-summary";
     summary.textContent =
       `${data.enriched_cases} cases with extracted methods · ` +
-      `${s.adjudicated_admitted || 0} adjudicated/admitted · ${s.alleged || 0} alleged`;
+      `${s.adjudicated_admitted || 0} confirmed in court · ${s.alleged || 0} alleged`;
     body.appendChild(summary);
 
     const head = document.createElement("p");
@@ -4459,7 +4479,7 @@
       row.className = "ledger-row";
       const examples = (a.examples || []).length ? ` — e.g. ${a.examples.join("; ")}` : "";
       row.dataset.tip =
-        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} adjudicated/admitted` +
+        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} confirmed in court` +
         (a.adjudicated_share != null ? ` (${a.adjudicated_share}% of adjudicated cases)` : "") +
         ` · ${mech} mechanically implied vs ${inferred} inferred observable(s)${examples}`;
       const label = document.createElement("span");
@@ -4590,7 +4610,7 @@
     };
     stats.append(
       stat(data.enriched_cases, "CASES W/ METHODS"),
-      stat(s.adjudicated_admitted || 0, "ADJUDICATED / ADMITTED", "evp-adj"),
+      stat(s.adjudicated_admitted || 0, "CONFIRMED IN COURT", "evp-adj"),
       stat(s.alleged || 0, "ALLEGED"),
       stat((data.techniques || []).length, "TOP TECHNIQUES SHOWN"),
       stat(`${data.roles && data.roles.known ? data.roles.known : 0}`, "ROLE KNOWN (CASES)")
@@ -4862,7 +4882,7 @@
     if ((d.behaviors || []).length) {
       lines.push("", `Behaviors observed across ${d.cases} real insider case(s):`);
       d.behaviors.forEach((b) => {
-        const s = b.strength === "adjudicated/admitted" ? "proven in court" : b.strength;
+        const s = b.strength === "adjudicated/admitted" ? "confirmed in court" : b.strength;
         lines.push(`- ${b.action} (${s})`);
       });
     }
@@ -4996,7 +5016,7 @@
       if (!d || !d.cases) return;
       const countEl = document.getElementById("dossier-evidence-count");
       if (countEl) {
-        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} adjudicated/admitted · ${d.alleged} alleged`;
+        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged`;
       }
       const dets = document.getElementById("dossier-evidence-detections");
       if (dets) {
