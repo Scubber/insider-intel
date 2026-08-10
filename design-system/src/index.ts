@@ -20,3 +20,11 @@ export {
 } from "./Buttons";
 export { TechniqueSection, type TechniqueSectionProps, type TechniqueCase } from "./TechniqueSection";
 export { ThemeSelect, type ThemeSelectProps, DOSSIER_THEMES } from "./ThemeSelect";
+export { FindingCard, type FindingCardProps } from "./FindingCard";
+export {
+  EvidenceBar,
+  type EvidenceBarProps,
+  EvidenceLegend,
+  type EvidenceLegendProps,
+} from "./EvidenceBar";
+export { PatternCard, type PatternCardProps } from "./PatternCard";

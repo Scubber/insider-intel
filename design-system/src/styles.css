@@ -484,3 +484,177 @@
 [data-theme="Blood Ravens"]{--ink:#e8ddc4;--muted:#96876a;--paper:#0e0708;--panel:rgba(30,13,15,.95);--line:rgba(232,221,196,.18);--signal:#e8ddc4;--signal-soft:rgba(232,221,196,.1);--accent:#9e1b23;--accent-soft:rgba(158,27,35,.22);--focus:#e8ddc4;--btn-fg:#f2ead6;--input-bg:rgba(24,11,12,.92);--side-bg:rgba(18,8,9,.6);--hover:rgba(232,221,196,.05);--atmosphere:radial-gradient(ellipse 85% 45% at 50% 112%,rgba(158,27,35,.3),transparent 62%),radial-gradient(ellipse 55% 35% at 15% -8%,rgba(232,221,196,.06),transparent 55%),linear-gradient(180deg,#160a0c 0%,#0e0708 55%,#070304 100%);--font-display:Georgia,"Times New Roman",Times,serif;--font-body:Georgia,"Times New Roman",Times,serif;--font-mono:"IBM Plex Mono",ui-monospace,monospace;--headline-weight:700;--headline-tracking:.05em;--radius:0}
 [data-theme="Black Templars"]{--ink:#e6e2d8;--muted:#7d7a70;--paper:#050505;--panel:rgba(13,13,13,.97);--line:rgba(230,226,216,.16);--signal:#f4f0e4;--signal-soft:rgba(244,240,228,.08);--accent:#8c0f14;--accent-soft:rgba(140,15,20,.24);--focus:#f4f0e4;--btn-fg:#0a0a0a;--input-bg:rgba(10,10,10,.92);--side-bg:rgba(7,7,7,.6);--hover:rgba(244,240,228,.04);--atmosphere:radial-gradient(ellipse 85% 45% at 50% 112%,rgba(140,15,20,.22),transparent 62%),radial-gradient(ellipse 55% 35% at 50% -8%,rgba(244,240,228,.05),transparent 55%),linear-gradient(180deg,#0a0a0a 0%,#050505 55%,#020202 100%);--font-display:Georgia,"Times New Roman",Times,serif;--font-body:Georgia,"Times New Roman",Times,serif;--font-mono:"IBM Plex Mono",ui-monospace,monospace;--headline-weight:700;--headline-tracking:.05em;--radius:0}
 [data-theme="Raven Guard"]{--ink:#d4d7db;--muted:#6c7076;--paper:#060708;--panel:rgba(15,17,19,.97);--line:rgba(212,215,219,.14);--signal:#f2f4f6;--signal-soft:rgba(242,244,246,.08);--accent:#3d434a;--accent-soft:rgba(61,67,74,.28);--focus:#f2f4f6;--btn-fg:#eef0f2;--input-bg:rgba(12,13,15,.92);--side-bg:rgba(9,10,11,.6);--hover:rgba(242,244,246,.04);--atmosphere:radial-gradient(ellipse 85% 45% at 50% -10%,rgba(61,67,74,.3),transparent 60%),radial-gradient(ellipse 55% 35% at 50% 112%,rgba(242,244,246,.05),transparent 55%),linear-gradient(180deg,#0b0c0e 0%,#060708 55%,#030304 100%);--font-display:Georgia,"Times New Roman",Times,serif;--font-body:Georgia,"Times New Roman",Times,serif;--font-mono:"IBM Plex Mono",ui-monospace,monospace;--headline-weight:700;--headline-tracking:.05em;--radius:0}
+
+/* --- FINDING CARD (mirrors web/styles.css .evp-finding*, 2026-08 findings layer) --- */
+.ds-finding {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--signal);
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.7rem;
+  background: var(--panel);
+}
+.ds-finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+.ds-finding-title {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.ds-finding-tag {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0.05rem 0.35rem;
+  align-self: center;
+  font-family: var(--font-mono);
+}
+.ds-finding-stat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin: 0.2rem 0 0.5rem;
+}
+.ds-finding-stat-num {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--signal);
+  letter-spacing: -0.01em;
+}
+.ds-finding-stat-label {
+  font-size: 0.76rem;
+  color: var(--ink);
+  max-width: 46ch;
+}
+.ds-finding-takeaway {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  max-width: 68ch;
+  margin: 0 0 0.55rem;
+}
+.ds-finding-actions {
+  margin: 0 0 0.55rem;
+  padding-left: 1.05rem;
+  font-size: 0.76rem;
+}
+.ds-finding-actions li {
+  margin-bottom: 0.2rem;
+}
+.ds-finding-method {
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--muted);
+  max-width: 72ch;
+  margin: 0;
+}
+
+/* --- EVIDENCE BAR (mirrors .evp-row/.evp-bar: all-cases vs court-proven) --- */
+.ds-evrow {
+  margin-bottom: 0.55rem;
+}
+.ds-evrow-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: baseline;
+  font-size: 0.74rem;
+}
+.ds-evrow-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-evrow-count {
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ds-evbar {
+  display: block;
+  height: 8px;
+  margin-top: 0.22rem;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.ds-evbar-all {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.ds-evbar-adj {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ds-evlegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  margin: 0 0 0.6rem;
+  font-family: var(--font-mono);
+}
+.ds-evlegend i {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.45rem;
+  margin-right: 0.3rem;
+}
+.ds-evlegend .ds-evlegend-all {
+  background: color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.ds-evlegend .ds-evlegend-adj {
+  background: var(--accent);
+}
+
+/* --- HUNT PATTERN CARD (mirrors .query-stack + .dossier-method-list:
+   synthesized detect/prevent methods, 2026-08 hunt-synthesis layer) --- */
+.ds-pattern {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--side-bg) 70%, transparent);
+  margin-bottom: 0.45rem;
+}
+.ds-pattern-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.ds-pattern-who {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ds-pattern-hint {
+  margin: 0 0.6rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.ds-pattern-methods {
+  list-style: disc;
+  margin: 0.2rem 0.6rem 0.5rem;
+  padding-left: 1.6rem;
+}
+.ds-pattern-methods li {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0.18rem 0;
+}
