@@ -63,6 +63,18 @@ DEFAULT_QUERIES: list[str] = [
     '("North Korea" OR "North Korean" OR DPRK) '
     '("IT worker" OR sanctions OR conspiracy OR laptop OR "wire fraud")',
     '"laptop farm"',
+    # ITM v2.12.0 additions (2026-08-10): the AF026/AF034 log-tampering and
+    # AF030 message-destruction clusters surface in filings as spoliation
+    # claims; MT021.002/.003 split conflicting financial/business interests
+    # out of the moonlighting-flavored COI query above; AF008 steganography
+    # is rare but unambiguous when named.
+    'spoliation (employee OR "former employee") '
+    '("deleted" OR "wiped" OR "destroyed" OR "factory reset")',
+    '("disappearing messages" OR "auto-delete" OR "ephemeral messaging") '
+    '(employee OR "trade secret" OR spoliation OR sanctions)',
+    '(kickback OR "self-dealing" OR "undisclosed interest") '
+    '(employee OR procurement OR vendor) (fraud OR indictment OR breach)',
+    'steganography (employee OR insider OR "trade secret" OR espionage)',
 ]
 
 SOURCE_ID = "courtlistener-recap"

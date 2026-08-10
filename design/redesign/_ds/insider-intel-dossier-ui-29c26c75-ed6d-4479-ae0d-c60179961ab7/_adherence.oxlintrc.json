@@ -1,0 +1,194 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/general/ActionButton/**",
+              "components/general/CaseCard/**",
+              "components/general/Chip/**",
+              "components/general/CopyButton/**",
+              "components/general/DossierProvider/**",
+              "components/general/FactList/**",
+              "components/general/ItmChip/**",
+              "components/general/Panel/**",
+              "components/general/Pill/**",
+              "components/general/TechniqueSection/**",
+              "components/general/ThemeSelect/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Newsreader|Courier Prime|IBM Plex Mono|Space Grotesk|Space Mono|Cormorant Garamond|Xanh Mono))/i]",
+        "message": "Font not provided by the design system. Available: Newsreader, Courier Prime, IBM Plex Mono, Space Grotesk, Space Mono, Cormorant Garamond, Xanh Mono."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ActionButton'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|active|onClick|key|ref|className|style|children)$/]",
+        "message": "<ActionButton> doesn't accept that prop. Declared props: children, active, onClick."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CaseCard'] > JSXAttribute > JSXIdentifier[name!=/^(?:tab|title|meta|note|facts|footer|actions|key|ref|className|style|children)$/]",
+        "message": "<CaseCard> doesn't accept that prop. Declared props: tab, title, meta, note, facts, footer, actions."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Chip'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|signal|key|ref|className|style|children)$/]",
+        "message": "<Chip> doesn't accept that prop. Declared props: children, signal."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CopyButton'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|primary|onClick|key|ref|className|style|children)$/]",
+        "message": "<CopyButton> doesn't accept that prop. Declared props: children, primary, onClick."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='DossierProvider'] > JSXAttribute > JSXIdentifier[name!=/^(?:theme|children|key|ref|className|style|children)$/]",
+        "message": "<DossierProvider> doesn't accept that prop. Declared props: theme, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='FactList'] > JSXAttribute > JSXIdentifier[name!=/^(?:items|key|ref|className|style|children)$/]",
+        "message": "<FactList> doesn't accept that prop. Declared props: items."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ItmChip'] > JSXAttribute > JSXIdentifier[name!=/^(?:id|title|onClick|key|ref|className|style|children)$/]",
+        "message": "<ItmChip> doesn't accept that prop. Declared props: id, title, onClick."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Panel'] > JSXAttribute > JSXIdentifier[name!=/^(?:title|children|key|ref|className|style|children)$/]",
+        "message": "<Panel> doesn't accept that prop. Declared props: title, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Pill'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|active|onClick|key|ref|className|style|children)$/]",
+        "message": "<Pill> doesn't accept that prop. Declared props: children, active, onClick."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='TechniqueSection'] > JSXAttribute > JSXIdentifier[name!=/^(?:id|description|cases|key|ref|className|style|children)$/]",
+        "message": "<TechniqueSection> doesn't accept that prop. Declared props: id, description, cases."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ThemeSelect'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|onChange|themes|key|ref|className|style|children)$/]",
+        "message": "<ThemeSelect> doesn't accept that prop. Declared props: value, onChange, themes."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "ActionButton": {
+        "replaces": []
+      },
+      "CaseCard": {
+        "replaces": []
+      },
+      "Chip": {
+        "replaces": []
+      },
+      "CopyButton": {
+        "replaces": []
+      },
+      "DossierProvider": {
+        "replaces": []
+      },
+      "FactList": {
+        "replaces": []
+      },
+      "ItmChip": {
+        "replaces": []
+      },
+      "Panel": {
+        "replaces": []
+      },
+      "Pill": {
+        "replaces": []
+      },
+      "TechniqueSection": {
+        "replaces": []
+      },
+      "ThemeSelect": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--accent",
+      "--accent-soft",
+      "--atmosphere",
+      "--btn-fg",
+      "--focus",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--headline-tracking",
+      "--headline-weight",
+      "--hover",
+      "--ink",
+      "--input-bg",
+      "--line",
+      "--muted",
+      "--panel",
+      "--paper",
+      "--radius",
+      "--side-bg",
+      "--signal",
+      "--signal-soft"
+    ],
+    "tokenKinds": {
+      "--ink": "color",
+      "--muted": "color",
+      "--paper": "color",
+      "--panel": "color",
+      "--line": "color",
+      "--signal": "color",
+      "--signal-soft": "color",
+      "--accent": "color",
+      "--accent-soft": "color",
+      "--focus": "color",
+      "--btn-fg": "color",
+      "--input-bg": "color",
+      "--side-bg": "color",
+      "--hover": "color",
+      "--atmosphere": "other",
+      "--font-display": "font",
+      "--font-body": "font",
+      "--font-mono": "font",
+      "--headline-weight": "font",
+      "--headline-tracking": "font",
+      "--radius": "radius"
+    },
+    "fontFamilies": [
+      "Cormorant Garamond",
+      "Courier Prime",
+      "IBM Plex Mono",
+      "Newsreader",
+      "Space Grotesk",
+      "Space Mono",
+      "Xanh Mono"
+    ]
+  }
+}

@@ -139,27 +139,25 @@ def run(base_url: str, headed: bool) -> int:
             "articles" in (page.text_content("#data-state") or ""),
         )
 
-        # Intro banner: expanded on a fresh profile (no localStorage), GOT IT
-        # minimizes to the header bar, the state persists across reloads
-        # (returning profile), and the masthead ? re-expands it.
+        # Redesign shell (2026-08): no intro panel — the masthead carries the
+        # corpus stats line and the status band carries lanes + UTC clock;
+        # the footer carries the theme picker with neutral labels.
+        checks.check("no intro panel in the shell", not page.query_selector("#intro-panel"))
         checks.check(
-            "intro banner shows on first visit",
-            page.is_visible("#intro-body") and page.is_visible("#intro-gotit"),
+            "status band shows lanes + clock",
+            bool(page.query_selector("#lane-status")) and bool((page.text_content("#utc-clock") or "").strip()),
         )
-        page.click("#intro-gotit")
-        checks.check(
-            "GOT IT minimizes the intro (header bar stays)",
-            not page.is_visible("#intro-body") and page.is_visible(".intro-head"),
-        )
-        page.reload()
-        page.wait_for_selector(".article-item", timeout=20000)
-        checks.check(
-            "intro stays minimized for returning visitors",
-            not page.is_visible("#intro-body"),
-        )
-        page.click("#intro-help")
-        checks.check("? reopens the intro", page.is_visible("#intro-body"))
-        page.click("#intro-gotit")
+        footer_theme = page.query_selector("#footer-theme-select")
+        checks.check("footer theme picker present", bool(footer_theme))
+        if footer_theme:
+            labels = page.eval_on_selector(
+                "#footer-theme-select",
+                "el => Array.from(el.options).map(o => o.textContent)",
+            )
+            checks.check(
+                "theme labels are neutral (no media names)",
+                not any(l in ("Evangelion", "StarCraft", "ChatGPT", "Doom 3") for l in labels),
+            )
 
         # Empty evidence board: first-run CTA points at FLAG + example hunt.
         page.click(".masthead-nav-item[data-pane='workbench']")
@@ -301,6 +299,8 @@ def run(base_url: str, headed: bool) -> int:
             itm_row_btn.first.click()
         else:
             page.click("#article-list .article-board-btn")
+        # The board pane lives on the WORKBENCH takeover now (redesign 2026-08).
+        page.click(".masthead-nav-item[data-pane='workbench']")
         page.click("#board-extract")
         page.wait_for_selector("#ttp-report:not([hidden])", timeout=15000)
         checks.check(
@@ -382,46 +382,17 @@ def run(base_url: str, headed: bool) -> int:
             "core": ".pane-trending",
             "itm": ".pane-matrix",
             "stream": ".pane-articles",
-            "wb": ".pane-workbench",
         }
-        # Panel toggles live in Settings → Display; flipping one means a
-        # settings round-trip back to the stream.
-        def flip_panel_toggle(key: str) -> None:
-            page.click(".masthead-nav-item[data-pane='settings']")
-            page.click(f".panel-toggle[data-panel-toggle='{key}']")
-            page.click(".masthead-nav-item[data-pane='articles']")
-
-        for key, sel in panel_sel.items():
-            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
-            collapsed = page.evaluate(
-                f"() => document.querySelector(\"{sel}\").classList.contains('collapsed')"
-            )
-            page.click(f"{sel} .panel-collapse[data-panel='{key}']")
-            restored = page.evaluate(
-                f"() => !document.querySelector(\"{sel}\").classList.contains('collapsed')"
-            )
-            checks.check(f"panel {key} collapses and re-expands", collapsed and restored)
-
-            flip_panel_toggle(key)
-            hidden = page.evaluate(
-                f"() => document.querySelector('.app-shell').classList.contains('hide-{key}')"
-            ) and not page.is_visible(sel)
-            flip_panel_toggle(key)
-            shown = page.is_visible(sel)
-            checks.check(f"settings panel toggle hides and restores {key}", hidden and shown)
-
-        # Collapse + hide state persists across reloads (returning profile).
-        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        flip_panel_toggle("core")
-        page.reload()
-        page.wait_for_selector(".article-item", timeout=20000)
-        persisted = page.evaluate(
-            """() => document.querySelector('.pane-matrix').classList.contains('collapsed')
-                 && document.querySelector('.app-shell').classList.contains('hide-core')"""
+        # Redesign (2026-08): the stream rail carries no window chrome — no
+        # collapse/hide buttons, no TRENDING pane on the stream layout.
+        checks.check(
+            "stream rail has no panel chrome",
+            page.locator(".left-rail .panel-collapse:visible, .left-rail .panel-hide:visible").count() == 0,
         )
-        checks.check("panel collapse/hide state persists across reload", bool(persisted))
-        page.click(".pane-matrix .panel-collapse[data-panel='itm']")
-        flip_panel_toggle("core")
+        checks.check(
+            "trending pane is off the stream layout",
+            not page.is_visible(".left-rail .pane-trending"),
+        )
 
         # Signal slider filters the stream: SIG ≥ 100 should clear (or shrink)
         # it and update the refine summary; sliding back restores it. Start

@@ -54,7 +54,7 @@
       <div class="masthead-row masthead-row-top">
         <div class="brand-block">
           <h1 class="product">insider-intel</h1>
-          <p class="tagline">// REAL INSIDER CASES — THE LATEST TACTICS, TO PROTECT YOUR ORG</p>
+          <p class="ii-corpus" id="corpus-stats">REAL INSIDER CASES — WHAT ACTUALLY REACHES COURT</p>
         </div>
         <nav class="masthead-nav" aria-label="Sections">
           <button type="button" class="masthead-nav-item active" data-pane="articles" data-tip="Live case stream with filters" data-tip-pos="bottom">STREAM</button>
@@ -66,92 +66,8 @@
           <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources" data-tip-pos="bottom-end">SETTINGS ⚙</button>
         </nav>
         <span class="live-status" id="live-status">LIVE</span>
-        <button
-          type="button"
-          class="masthead-help"
-          id="intro-help"
-          aria-label="What is this? Reopen the intro"
-          data-tip="What is this? Reopen the intro"
-          data-tip-pos="bottom-end"
-        >
-          ?
-        </button>
       </div>
 
-      <section class="intro-panel" id="intro-panel" aria-label="About insider-intel">
-        <div class="intro-head">
-          <span class="intro-title">WHAT IS THIS?</span>
-          <span class="intro-flow">SCAN → FLAG → HUNT</span>
-          <span class="head-spacer"></span>
-          <button
-            type="button"
-            class="panel-collapse"
-            id="intro-toggle"
-            aria-label="Minimize intro"
-            data-tip="Minimize to the header bar"
-            data-tip-pos="bottom-end"
-          >−</button>
-        </div>
-        <div class="intro-body" id="intro-body">
-          <div class="intro-lede">
-            <div class="intro-lede-text">
-              <h2 class="intro-headline">
-                Learn how insiders actually steal, leak, and sabotage — then prevent,
-                detect, and hunt it in your org.
-              </h2>
-              <p class="intro-copy">
-                This is a live feed of real insider-threat incidents — court cases, security
-                news, and community chatter. Every item is scored for confidence
-                (<strong>SIG, 0–100</strong>) and mapped to
-                <strong>Insider Threat Matrix™</strong> techniques — and each technique's
-                dossier turns its real cases into plain-language ways to
-                <strong>prevent, detect, and hunt</strong> the behavior, tied to the
-                Matrix's own prevention (PV) and detection (DT) controls. The
-                <strong>EVIDENCE</strong> page shows what actually proves these cases in
-                court.
-              </p>
-            </div>
-            <button
-              type="button"
-              class="intro-gotit"
-              id="intro-gotit"
-              data-tip="Minimize this intro — reopen any time with the ? button"
-              data-tip-pos="bottom-end"
-            >
-              GOT IT
-            </button>
-          </div>
-          <div class="intro-steps">
-            <div class="intro-step">
-              <p class="intro-step-title">01 — SCAN</p>
-              <p>
-                Filter the stream to incidents that look like your org — by topic, channel,
-                insider type, or confidence.
-              </p>
-            </div>
-            <div class="intro-step">
-              <p class="intro-step-title">02 — FLAG</p>
-              <p>
-                Hit <strong>+ FLAG</strong> on relevant cases to pin them to your evidence
-                board in the Workbench.
-              </p>
-            </div>
-            <div class="intro-step">
-              <p class="intro-step-title">03 — HUNT</p>
-              <p>
-                <strong>MODUS OPERANDI</strong> shows exactly how those insiders did it,
-                step by step — and each technique's dossier shows how to prevent, detect,
-                and hunt it.
-              </p>
-            </div>
-          </div>
-          <div class="intro-try">
-            <span class="intro-try-label">TRY IT — THE TOP INSIDER RISKS:</span>
-            <div class="hunt-usecases" id="intro-usecases" role="group" aria-label="Top insider risks"></div>
-            <span class="intro-try-hint">← PICK ONE AND WATCH THE STREAM FOCUS</span>
-          </div>
-        </div>
-      </section>
       <div class="masthead-row masthead-row-search">
         <form class="search-bar" id="search-form" autocomplete="off">
         <label class="sr-only" for="q">Search</label>
@@ -308,8 +224,10 @@
         <button type="button" class="mobile-tab" data-pane="settings">Settings</button>
       </nav>
 
-      <div class="panels-row" id="panels-row">
+      <div class="panels-row ii-statusline" id="panels-row">
         <span class="status-line" id="status-line"></span>
+        <span class="ii-lanes" id="lane-status" aria-hidden="true"></span>
+        <span class="ii-clock" id="utc-clock"></span>
       </div>
 
       <div class="pane-grid">
@@ -343,7 +261,7 @@
         </aside>
         <aside class="pane pane-matrix" data-panel-key="itm" aria-label="Observed ITM techniques">
           <div class="pane-head">
-            <h2>ITM INDEX</h2>
+            <h2>TECHNIQUES IN THESE CASES</h2>
             <span class="pane-head-actions">
               <button
                 type="button"
@@ -364,7 +282,7 @@
             </span>
           </div>
           <div class="pane-body">
-            <p class="itm-rail-explainer">Techniques seen in the current stream (ITM™).</p>
+            <p class="itm-rail-explainer">Not trending — a tally of the cases in the stream, updating as you filter. Tap one for its technique dossier.</p>
             <div class="itm-rail" id="itm-rail" aria-live="polite"></div>
             <button type="button" class="itm-rail-browse" id="matrix-browse-all">
               Browse full matrix →
@@ -476,7 +394,7 @@
               <p class="kw-hint">
                 From real cases exhibiting this technique (case-scoped). ✓ = the ITM detection is
                 corroborated by case evidence; bars = share of this technique's cases whose
-                record trail includes the class (darker = adjudicated subset).
+                record trail includes the class (darker = confirmed in court).
               </p>
               <div id="dossier-evidence-detections"></div>
               <div id="dossier-evidence-trail"></div>
@@ -771,7 +689,7 @@
             </div>
             <div class="evp-legend">
               <span><i class="evp-lg-all"></i>ALL CASES (mostly alleged)</span>
-              <span><i class="evp-lg-adj"></i>ADJUDICATED / ADMITTED — court-proven subset</span>
+              <span><i class="evp-lg-adj"></i>CONFIRMED IN COURT — a judge ruled it, or the insider admitted it</span>
               <span><i class="evp-lg-corr"></i>ITM DETECTION CORROBORATED</span>
             </div>
             <div class="evp-corr" id="evp-corr"></div>
@@ -814,10 +732,34 @@
                 are always shown. <b>Attribution scope:</b> technique ids are case-level, so
                 evidence is scoped to cases <i>exhibiting</i> a technique. <b>Collection bias:</b>
                 the corpus reflects our own query lexicon and sweep history. Records are
-                machine-extracted from filings and normalized; adjudicated/admitted and alleged
+                machine-extracted from filings and normalized; confirmed-in-court and alleged
                 are never conflated. ITM™ owned by Forscie Limited — not affiliated.
               </p>
             </div>
+          </div>
+        </section>
+
+        <section class="pane pane-about-page" data-pane-panel="about" aria-label="Methodology and colophon">
+          <div class="pane-head">
+            <h2>METHODOLOGY &amp; COLOPHON</h2>
+          </div>
+          <div class="pane-body ii-about">
+            <p>
+              insider-intel is an open OSINT research instrument for discovering novel insider
+              techniques — tradecraft that shows up in real cases before it shows up in any
+              framework. It ingests litigated insider cases, insider-relevant news, first-person
+              social confessions, and long-form publications; forensically enriches each case at
+              ingest; and aggregates the corpus into evidence about how insider incidents actually
+              happen and what record classes actually prove them.
+            </p>
+            <dl class="ii-about-facts">
+              <dt>SIG</dt><dd>Insider-confidence score, 0–100, assigned at ingest. The stream floor defaults to 30.</dd>
+              <dt>PROOF STANDARD</dt><dd>Every count separates CONFIRMED IN COURT (a judge ruled it happened, or the insider admitted it) from ALLEGED (claimed in a filing, not yet decided) from REPORTED (press or social only). They are never conflated.</dd>
+              <dt>READ PATH</dt><dd>No model runs at read time. Everything on screen is a projection of stored, append-only forensic records.</dd>
+              <dt>PRIVACY</dt><dd>Roles, never individuals — no persona graphs, no entity resolution across cases.</dd>
+              <dt>EDITORIAL</dt><dd>Findings publish by merge to main. The GitOps trail is the editorial record.</dd>
+              <dt>ATTRIBUTION</dt><dd>Insider Threat Matrix™ © Forscie Limited. This project is not affiliated with or endorsed by Forscie.</dd>
+            </dl>
           </div>
         </section>
         <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">
@@ -885,10 +827,6 @@
                     <button type="button" class="pill" data-layout="split" data-tip="Panels side by side">Split</button>
                     <button type="button" class="pill" data-layout="stacked" data-tip="Panels stacked vertically">Stacked</button>
                   </div>
-                </div>
-                <div class="settings-field">
-                  <span class="filter-label" data-tip="Show or hide each desktop panel. Hidden panels stay listed here so you can bring them back. On phone/tablet widths the tabs above control what's visible instead." data-tip-pos="bottom-start" tabindex="0">Panels (desktop layout)</span>
-                  <div class="panel-toggles" id="panel-toggles"></div>
                 </div>
                 <label class="settings-check filter-label" for="redact-toggle" data-tip="Black out case titles, facts, and notes — for screenshots and demos" data-tip-pos="bottom-start">
                   <input type="checkbox" id="redact-toggle" aria-label="Redact case details" />
@@ -1044,15 +982,21 @@
       </div>
     </main>
 
-    <footer class="site-footer">
-      <p>
-        Mapping aligned to the
-        <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener"
-          >Insider Threat Matrix™</a
-        >.
-        Insider Threat Matrix™ is owned by Forscie Limited. Insider Threat Matrix is a
-        trademark of Forscie Limited. Not affiliated with or endorsed by Forscie.
-      </p>
+    <footer class="site-footer ii-footer">
+      <div class="ii-foot-left">
+        <span>insider-intel — evidence-based insider-threat research, built from what actually reaches court.</span>
+        <span class="ii-foot-links">
+          <button type="button" class="ii-foot-btn" id="footer-about">METHODOLOGY &amp; COLOPHON</button>
+          · <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener">ITM™ © FORSCIE LTD — NOT AFFILIATED</a>
+          · <a href="#" id="footer-feed-link">FEED.XML</a>
+          · <button type="button" class="ii-foot-btn" id="footer-settings">SETTINGS</button>
+        </span>
+        <span class="ii-kbd">j/k move · x flag · ⏎ open · / search</span>
+      </div>
+      <label class="ii-foot-theme" for="footer-theme-select">
+        <span>Theme</span>
+        <select id="footer-theme-select" aria-label="Color theme"></select>
+      </label>
     </footer>
 
     <script src="./config.js"></script>

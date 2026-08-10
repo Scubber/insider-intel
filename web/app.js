@@ -288,10 +288,10 @@
   // Match styles.css desktop rail breakpoint (1024px) — tablet landscape keeps
   // the three-column layout and parks matrix takeover back to the stream.
   const WIDE_MQ = window.matchMedia("(min-width: 1024px)");
-  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings"]);
+  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings", "about"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
-  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence"]);
+  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "about"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -387,10 +387,9 @@
      stream panes can also be hidden and restored from Settings → Display. */
   const PANEL_TOGGLES = [
     ["core", "TRENDING"],
-    ["itm", "ITM INDEX"],
+    ["itm", "TECHNIQUES"],
     ["evidence", "EVIDENCE"],
     ["stream", "CASE STREAM"],
-    ["wb", "WORKBENCH"],
   ];
 
   function panelEl(key) {
@@ -521,6 +520,14 @@
       }
     }
     els.statusLine.textContent = parts.join(" · ");
+    const lanes = document.getElementById("lane-status");
+    if (lanes) {
+      const on = Boolean(state.dataState);
+      lanes.textContent = ["FILINGS", "NEWS", "SOCIAL", "PUBLICATIONS"]
+        .map((l) => `${l} ${on ? "●" : "○"}`)
+        .join("  ");
+      lanes.classList.toggle("ii-lanes-ok", on);
+    }
   }
 
   /* Hash router — #/ (stream), #/technique/<ID> (dossier). GH Pages friendly. */
@@ -676,13 +683,87 @@
     const theme = THEMES.has(name) ? name : DEFAULT_THEME;
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
-    if (themeSelect) themeSelect.value = theme;
+    syncThemeSelects(theme);
   }
 
+  // Redesign 2026-08: neutral display labels — same theme values, no
+  // media/brand references in the UI.
+  const THEME_LABELS = {
+    "cnn-lite": "Wire Light",
+    diablo: "Ember",
+    "Diablo II": "Gilt Ember",
+    "Doom 3": "Rust Terminal",
+    Ultramarines: "Cobalt",
+    "Blood Ravens": "Oxblood",
+    "Black Templars": "Obsidian",
+    "Raven Guard": "Graphite",
+    StarCraft: "Void",
+    "Brood War": "Ultraviolet",
+    "GoldenEye 64": "Crimson Gold",
+    "Warcraft III": "Banner Gold",
+    Bleach: "Ivory Ink",
+    "Ultima Online": "Parchment",
+    Evangelion: "Violet",
+    "EVA-01": "Violet Ops",
+    "EVA-02": "Vermilion Ops",
+    "EVA-03": "Onyx Ops",
+    Perplexity: "Teal Console",
+    Linear: "Indigo",
+    Vercel: "Monochrome",
+    ChatGPT: "Slate",
+  };
+  const themeLabel = (v) => THEME_LABELS[v] || v.charAt(0).toUpperCase() + v.slice(1);
+  const footerThemeSelect = document.getElementById("footer-theme-select");
+  function syncThemeSelects(theme) {
+    if (themeSelect) themeSelect.value = theme;
+    if (footerThemeSelect) footerThemeSelect.value = theme;
+  }
   if (themeSelect) {
+    // Relabel the settings options in place (values unchanged).
+    Array.from(themeSelect.options).forEach((o) => {
+      o.textContent = themeLabel(o.value);
+    });
+    if (footerThemeSelect) {
+      Array.from(themeSelect.options).forEach((o) => {
+        const opt = document.createElement("option");
+        opt.value = o.value;
+        opt.textContent = o.textContent;
+        footerThemeSelect.appendChild(opt);
+      });
+      footerThemeSelect.addEventListener("change", () =>
+        applyTheme(footerThemeSelect.value),
+      );
+    }
     applyTheme(localStorage.getItem(THEME_KEY) || DEFAULT_THEME);
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
+
+  // Shell chrome: footer actions + the status band's UTC clock.
+  const footerSettings = document.getElementById("footer-settings");
+  if (footerSettings) {
+    footerSettings.addEventListener("click", () => {
+      setActivePane("settings");
+      window.scrollTo({ top: 0 });
+    });
+  }
+  const footerAbout = document.getElementById("footer-about");
+  if (footerAbout) {
+    footerAbout.addEventListener("click", () => {
+      setActivePane("about");
+      window.scrollTo({ top: 0 });
+    });
+  }
+  const footerFeed = document.getElementById("footer-feed-link");
+  if (footerFeed) footerFeed.href = `${apiBase}/feed.xml`;
+  const utcClock = document.getElementById("utc-clock");
+  function tickClock() {
+    if (!utcClock) return;
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    utcClock.textContent = `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}Z`;
+  }
+  tickClock();
+  setInterval(tickClock, 60000);
 
   // View tweaks: density / layout as Settings pill groups, stored per-user and
   // applied as data-* attributes on <html> (see the pre-paint stamp in
@@ -3599,6 +3680,21 @@
     return dl;
   }
 
+  // Plain-language proof standard (redesign 2026-08): a case is CONFIRMED IN
+  // COURT only when a method carries an adjudicated/admitted claim; ALLEGED is
+  // a filing's theory; REPORTED is press/social only. Never conflated.
+  function proofLabel(article) {
+    const actions = (article.forensics && article.forensics.actions) || [];
+    const statuses = new Set(
+      actions.map((a) => String(a.claim_status || "").toLowerCase()),
+    );
+    if (statuses.has("adjudicated") || statuses.has("admitted"))
+      return { key: "confirmed", label: "CONFIRMED IN COURT" };
+    if (statuses.has("alleged")) return { key: "alleged", label: "ALLEGED" };
+    if (statuses.has("reported")) return { key: "reported", label: "REPORTED" };
+    return null;
+  }
+
   function buildArticleRow(cluster) {
     const article = cluster.primary;
     const siblings = cluster.siblings || [];
@@ -3634,10 +3730,15 @@
     const filedIso = isoFiledDate(article.published);
     const filedAge = caseFiledAge(article.published);
     const filedText = filedIso ? `FILED ${filedIso} · ${filedAge}` : `FILED: ${filedAge}`;
-    const metaParts = [`SOURCE: ${article.source_name || "UNATTRIBUTED"}${srcExtra}`, filedText];
+    const metaParts = [`${article.source_name || "UNATTRIBUTED"}${srcExtra}`, filedText];
+    const retrievedIso = isoFiledDate(article.ingested_at);
+    if (retrievedIso && retrievedIso !== filedIso) metaParts.push(`RETRIEVED ${retrievedIso}`);
     const sig = sigScore(article);
     if (sig != null) metaParts.push(`SIG ${sig}`);
+    const proof = proofLabel(article);
+    if (proof) metaParts.push(proof.label);
     metaText.textContent = metaParts.join(" · ");
+    if (proof) metaText.classList.add(`proof-${proof.key}`);
     meta.appendChild(metaText);
     if (isContextArticle(article)) {
       // The enricher's own verdict outranks the heuristic insider_type stamp.
@@ -4422,6 +4523,7 @@
      every extracted forensic record. Pure read of /evidence/ledger — the API
      recomputes from its in-memory index, so this stays current per /reload. */
   function renderEvidenceLedger(data) {
+    renderCorpusStats(data);
     const body = document.getElementById("ledger-body");
     if (!body) return;
     body.innerHTML = "";
@@ -4437,7 +4539,7 @@
     summary.className = "ledger-summary";
     summary.textContent =
       `${data.enriched_cases} cases with extracted methods · ` +
-      `${s.adjudicated_admitted || 0} adjudicated/admitted · ${s.alleged || 0} alleged`;
+      `${s.adjudicated_admitted || 0} confirmed in court · ${s.alleged || 0} alleged`;
     body.appendChild(summary);
 
     const head = document.createElement("p");
@@ -4459,7 +4561,7 @@
       row.className = "ledger-row";
       const examples = (a.examples || []).length ? ` — e.g. ${a.examples.join("; ")}` : "";
       row.dataset.tip =
-        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} adjudicated/admitted` +
+        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} confirmed in court` +
         (a.adjudicated_share != null ? ` (${a.adjudicated_share}% of adjudicated cases)` : "") +
         ` · ${mech} mechanically implied vs ${inferred} inferred observable(s)${examples}`;
       const label = document.createElement("span");
@@ -4567,7 +4669,19 @@
     }
   }
 
+  function renderCorpusStats(data) {
+    const el = document.getElementById("corpus-stats");
+    if (!el || !data || !data.enriched_cases) return;
+    const s = data.strength_totals || {};
+    const bits = [];
+    if (state.lastTotalIndexed) bits.push(`CORPUS ${state.lastTotalIndexed.toLocaleString()}`);
+    bits.push(`METHOD-BEARING ${data.enriched_cases.toLocaleString()}`);
+    if (s.adjudicated_admitted) bits.push(`CONFIRMED IN COURT ${s.adjudicated_admitted}`);
+    el.textContent = bits.join(" · ");
+  }
+
   function renderEvidencePage(data) {
+    renderCorpusStats(data);
     const stats = document.getElementById("evp-stats");
     if (!stats) return;
     if (!data || !data.enriched_cases) {
@@ -4590,7 +4704,7 @@
     };
     stats.append(
       stat(data.enriched_cases, "CASES W/ METHODS"),
-      stat(s.adjudicated_admitted || 0, "ADJUDICATED / ADMITTED", "evp-adj"),
+      stat(s.adjudicated_admitted || 0, "CONFIRMED IN COURT", "evp-adj"),
       stat(s.alleged || 0, "ALLEGED"),
       stat((data.techniques || []).length, "TOP TECHNIQUES SHOWN"),
       stat(`${data.roles && data.roles.known ? data.roles.known : 0}`, "ROLE KNOWN (CASES)")
@@ -4862,7 +4976,7 @@
     if ((d.behaviors || []).length) {
       lines.push("", `Behaviors observed across ${d.cases} real insider case(s):`);
       d.behaviors.forEach((b) => {
-        const s = b.strength === "adjudicated/admitted" ? "proven in court" : b.strength;
+        const s = b.strength === "adjudicated/admitted" ? "confirmed in court" : b.strength;
         lines.push(`- ${b.action} (${s})`);
       });
     }
@@ -4996,7 +5110,7 @@
       if (!d || !d.cases) return;
       const countEl = document.getElementById("dossier-evidence-count");
       if (countEl) {
-        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} adjudicated/admitted · ${d.alleged} alleged`;
+        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged`;
       }
       const dets = document.getElementById("dossier-evidence-detections");
       if (dets) {
