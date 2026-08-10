@@ -46,18 +46,26 @@ jobs:
           set -euo pipefail
           EXTRA_FLAGS=()
           if [ "${FORCE}" = "true" ]; then
-            # One-off args override: replay the job's own stored args with
-            # --force appended, so the stored config never changes and the
-            # override can't drift from the real entrypoint.
-            BASE_ARGS=$(gcloud run jobs describe corpus-refresh \
+            # One-off args override: the job's stored args are a shell
+            # invocation ["-c", "python -m apps.aggregator all && …reload…"].
+            # Inject --force INSIDE that shell string (a bare extra arg would
+            # be sh's $0 and get ignored), and pass the override with a custom
+            # delimiter — the command string contains commas, so gcloud's
+            # default comma-splitting would corrupt it.
+            CMD=$(gcloud run jobs describe corpus-refresh \
               --region "${REGION}" --project "${PROJECT_ID}" --format=json \
-              | jq -r '.spec.template.spec.template.spec.containers[0].args // [] | join(",")')
-            if [ -z "${BASE_ARGS}" ]; then
-              echo "Job has no stored args (runs the image CMD) — cannot build a --force override safely." >&2
+              | jq -r '.spec.template.spec.template.spec.containers[0].args // [] | .[1] // empty')
+            if [ -z "${CMD}" ]; then
+              echo "Job args are not the expected [-c, <shell>] shape — cannot build a --force override safely." >&2
               exit 1
             fi
-            echo "Forced reprocess: args override = ${BASE_ARGS},--force"
-            EXTRA_FLAGS+=(--args "${BASE_ARGS},--force")
+            FORCED_CMD="${CMD/python -m apps.aggregator all/python -m apps.aggregator all --force}"
+            if [ "${FORCED_CMD}" = "${CMD}" ]; then
+              echo "Could not find 'python -m apps.aggregator all' in the job command — refusing to guess." >&2
+              exit 1
+            fi
+            echo "Forced reprocess command: ${FORCED_CMD}"
+            EXTRA_FLAGS+=(--args "^@@^-c@@${FORCED_CMD}")
           fi
           gcloud run jobs execute corpus-refresh \
             --region "${REGION}" \
