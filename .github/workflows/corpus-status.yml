@@ -55,7 +55,7 @@ jobs:
           if [ -n "${EXEC}" ]; then
             gcloud run jobs executions describe "${EXEC}" \
               --region "${REGION}" --project "${PROJECT_ID}" --format=json \
-              | python3 -c 'import json,sys; e=json.load(sys.stdin); [print(f"  {c.get(\"type\")}: {c.get(\"status\")} — {c.get(\"reason\",\"\")} {c.get(\"message\",\"\")}") for c in e.get("status",{}).get("conditions",[])]'
+              | jq -r '.status.conditions[]? | "  \(.type): \(.status) — \(.reason // "") \(.message // "")"'
           fi
           echo "== Unfiltered job log tail (last 90m) =="
           gcloud logging read 'resource.labels.job_name=corpus-refresh severity>=WARNING' \
