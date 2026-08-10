@@ -4929,3 +4929,15 @@ body[data-pane="evidence"] .panels-row {
   border-color: transparent;
   color: var(--ink);
 }
+
+/* Fidelity: kill the legacy SEARCH button for real (specificity), and strip
+   the stream header's window chrome + inline kbd hint — the prototype keeps
+   shortcuts in the footer only. */
+.search-bar button.hunt-submit {
+  display: none;
+}
+.pane-articles .pane-head .panel-collapse,
+.pane-articles .pane-head .panel-hide,
+.pane-articles .pane-head .kbd-hint {
+  display: none;
+}
