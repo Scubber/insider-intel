@@ -34,6 +34,19 @@
   authored preview); the CONTEXT case-stamp variant was deliberately
   skipped as low-value — port it if CaseCard grows a stamp slot.
 
+- 2026-08-10 (2nd) re-sync: ported the redesign shell that PR #162 landed in
+  `web/` — new Masthead (corpus stats, dark active nav pill, one-line search),
+  StatusBand (lanes + UTC clock), SiteFooter (links/kbd/theme picker);
+  CaseCard grew the `stamp` slot (insider-type hues + dashed context purpose
+  stamps in ITM control language) and the redesign provenance meta format;
+  `ds-chip` now matches the fidelity-pass term-chip (signal-soft bg);
+  ThemeSelect labels went neutral (mirrors web/app.js THEME_LABELS —
+  values keep internal ids, labels never show media/brand names).
+- The converter needs the package self-linked into its own node_modules
+  (`ln -sfn ../.. design-system/node_modules/insider-intel-dossier-ui`) so
+  previews can import by package name — the link is not committed and must
+  be recreated in a fresh checkout.
+
 ## Known render warns
 
 - (none — 10/10 render cleanly, no thin/identical warns on the final run)

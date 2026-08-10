@@ -2,7 +2,15 @@ import "./styles.css";
 
 export { DossierProvider, type DossierProviderProps, type DossierTheme } from "./DossierProvider";
 export { Panel, type PanelProps } from "./Panel";
-export { CaseCard, type CaseCardProps } from "./CaseCard";
+export {
+  CaseCard,
+  type CaseCardProps,
+  type CaseStamp,
+  type CaseStampVariant,
+} from "./CaseCard";
+export { Masthead, type MastheadProps, type MastheadNavItem } from "./Masthead";
+export { StatusBand, type StatusBandProps } from "./StatusBand";
+export { SiteFooter, type SiteFooterProps, type SiteFooterLink } from "./SiteFooter";
 export { FactList, type FactListProps, type Fact } from "./FactList";
 export {
   Chip,
