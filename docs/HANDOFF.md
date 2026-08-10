@@ -85,7 +85,11 @@ prod).
 3. **PACER activation** — DONE 2026-07-24.
 4. **Discovery lanes** — (a) FLP tech-cases-bot feed; (b) ITM-derived query
    generator. Not built.
-5. **Off-site LLM enrichment** — `export-llm` remains the delivery lane.
+5. **Off-site LLM enrichment** — `export-llm` remains the delivery lane
+   (one-way; no import path exists). Operator now has a DGX Spark: wired
+   for local-dev enrichment via the `openai` compat provider
+   (docs/dgx-spark.md); a guarded import lane is the remaining build if the
+   Spark should ever feed prod.
 6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
    still a one-line deferred change.
 7. **Cold-start UX** — **DONE 2026-08-06** (#140/#141): snapshot-first boot
