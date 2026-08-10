@@ -1,7 +1,7 @@
 {
-  "itm_version": "2.11.0",
-  "mitre_version": "19.1",
-  "refreshed_at": "2026-08-08T22:31:05.960632+00:00",
+  "itm_version": "2.12.0",
+  "mitre_version": "19.2",
+  "refreshed_at": "2026-08-10T14:56:31.380473+00:00",
   "source_url": "https://raw.githubusercontent.com/forscie/insider-threat-matrix/main/insider-threat-matrix.json",
   "articles": [
     {
@@ -558,6 +558,10 @@
       ],
       "preventions": [
         {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
           "id": "PV052",
           "title": "Criminal Background Checks"
         },
@@ -600,6 +604,175 @@
         {
           "id": "PV050",
           "title": "Social Media Screening"
+        }
+      ]
+    },
+    {
+      "id": "MT021.002",
+      "title": "Conflicting Financial Interest",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": "MT021",
+      "description_text": "A subject holds an undisclosed financial interest in an organization, individual, transaction, investment, asset, or commercial outcome affected by their organizational responsibilities. The interest may include company ownership, shares, debt, commission, referral payments, profit-sharing arrangements, creditor relationships, beneficial ownership, or another financial position through which the subject may gain or avoid loss. The interest may be held directly or indirectly through a family member, associate, trust, company, or other intermediary. The conflict becomes operationally significant where the subject can influence procurement, supplier selection, pricing, investment decisions, contract awards, customer treatment, regulatory review, access permissions, or the handling of confidential information.",
+      "aliases": [
+        "conflicting financial interest"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT152",
+          "title": "Financial Auditing"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
+          "id": "PV051",
+          "title": "Employment Reference Checks"
+        },
+        {
+          "id": "PV027",
+          "title": "Financial Approval Process"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
+      "id": "MT021.001",
+      "title": "Conflicting Personal Relationship",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": "MT021",
+      "description_text": "A subject is influenced by a personal, familial, romantic, or close social relationship with an individual whose interests are affected by the subject’s organizational responsibilities. The relationship may involve a colleague, applicant, customer, supplier representative, contractor, investigation subject, complainant, or another person connected to an organizational decision. The conflict may arise where the subject can approve access, influence recruitment, award work, alter a case outcome, disclose information, suppress scrutiny, or provide another form of preferential treatment. The existence of a personal relationship does not itself establish harmful intent. The investigative concern arises where the relationship creates a material conflict with the subject’s duties and is not disclosed through the organization’s required process.",
+      "aliases": [
+        "conflicting personal relationship"
+      ],
+      "detections": [
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV054",
+          "title": "Human Resources Collaboration for Early Threat Detection"
+        },
+        {
+          "id": "PV049",
+          "title": "Managerial Approval"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        }
+      ]
+    },
+    {
+      "id": "MT021.003",
+      "title": "External Business Interest",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": "MT021",
+      "description_text": "A subject owns, operates, advises, supports, or materially benefits from an external business whose activities or interests conflict with their responsibilities to the organization. The external interest may include a private company, consultancy, partnership, directorship, freelance operation, side business, or commercial activity conducted through another person. The business does not need to be a direct competitor. A conflict may also arise where it supplies similar services, seeks access to the same customers, depends on organizational resources, or could benefit from information available through the subject’s role. The subject may use organizational working time, information, equipment, personnel, customer relationships, intellectual property, or decision-making authority to support the external business.",
+      "aliases": [
+        "external business interest"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT049",
+          "title": "Social Media Monitoring"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
+          "id": "PV051",
+          "title": "Employment Reference Checks"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV092",
+          "title": "Exclusivity Clause for Contracted Working Hours"
+        },
+        {
+          "id": "PV054",
+          "title": "Human Resources Collaboration for Early Threat Detection"
+        },
+        {
+          "id": "PV013",
+          "title": "Pre-Employment Background Checks"
         }
       ]
     },
@@ -3365,6 +3538,65 @@
         {
           "id": "PV048",
           "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "ME027.005",
+      "title": "Credentials in Documentation and Knowledge Bases",
+      "article_id": "AR2",
+      "theme": "means",
+      "parent_id": "ME027",
+      "description_text": "A subject can access credentials, tokens, keys, connection strings, or other authentication material recorded within internal documentation, runbooks, wikis, shared notes, or knowledge-management systems. Credentials may have been added to support troubleshooting, maintenance, deployment, or operational handover, but remain available to a wider population than intended. Historical versions, attachments, comments, and exported copies may continue to expose the material after it has been removed from the visible document. Access to these repositories may allow a subject to obtain authentication material without being formally granted access to the system or account it protects.",
+      "aliases": [
+        "credentials in documentation and knowledge bases"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT019",
+          "title": "Chrome Browser History"
+        },
+        {
+          "id": "DT018",
+          "title": "Edge Browser History"
+        },
+        {
+          "id": "DT017",
+          "title": "Firefox Browser History"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
         }
       ]
     },
@@ -6327,6 +6559,400 @@
         {
           "id": "PV078",
           "title": "Service Account Classification and Scope Limitation"
+        }
+      ]
+    },
+    {
+      "id": "PR044.005",
+      "title": "Application, Service, and Shared Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject identifies or enumerates accounts maintained within an individual application or accounts used by services, integrations, automation, scheduled processes, or multiple authorized individuals. The subject may review application administration pages, account directories, configuration files, deployment definitions, service documentation, scripts, database records, secrets-management metadata, or account inventories to identify application users, service accounts, integration identities, shared accounts, account owners, or associated privileges. These accounts may be attractive because they can hold broad access, operate without interactive oversight, or provide weaker attribution than a personally assigned identity. Discovery may support later credential collection, unauthorized application access, misuse of automation, persistence, or concealment through a non-personal identity.",
+      "aliases": [
+        "application, service, and shared account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT111",
+          "title": "Cyber Deception, Honey SPN"
+        },
+        {
+          "id": "DT011",
+          "title": "Cyber Deception, Honey User"
+        },
+        {
+          "id": "DT063",
+          "title": "Microsoft Entra ID Sign-in Logs"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV078",
+          "title": "Service Account Classification and Scope Limitation"
+        }
+      ]
+    },
+    {
+      "id": "PR044.004",
+      "title": "Cloud Identity Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject identifies or enumerates users, groups, roles, guest identities, service principals, managed identities, application identities, or other accounts maintained within a cloud environment. The subject may use a cloud administration portal, command-line interface, software development kit, application programming interface, identity platform, or script to retrieve identity and access information. The resulting data may include account names, role assignments, group memberships, authentication methods, account status, tenant relationships, or access to cloud resources. Cloud identity discovery may enable later credential collection, privilege elevation, unauthorized cloud access, impersonation, persistence, or movement between subscriptions, projects, accounts, tenants, or services.",
+      "aliases": [
+        "cloud identity discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT106",
+          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
+        },
+        {
+          "id": "DT063",
+          "title": "Microsoft Entra ID Sign-in Logs"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV056",
+          "title": "Azure Conditional Access Policies"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR044.002",
+      "title": "Directory and Domain Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject identifies or enumerates accounts, groups, roles, and related identity attributes maintained within a centralized organizational directory or domain. The subject may use directory queries, Lightweight Directory Access Protocol requests, PowerShell commands, operating-system utilities, identity-management interfaces, scripts, or administrative tools to identify usernames, group memberships, account status, organizational relationships, delegated permissions, or other directory attributes. The activity may be broad, such as retrieving a complete list of directory identities, or targeted toward a particular department, role, security group, executive, administrator, or dormant account.",
+      "aliases": [
+        "directory and domain account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT011",
+          "title": "Cyber Deception, Honey User"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR044.003",
+      "title": "Email Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject identifies or enumerates organizational email accounts, mailboxes, aliases, distribution lists, shared mailboxes, or other messaging identities in preparation for an infringement. The subject may search a corporate address book, query an email administration interface, review message headers, enumerate valid recipients, export directory information, use scripts or application programming interfaces, or inspect configuration data containing email addresses. Email account discovery may be used to identify targets for impersonation, social engineering, unauthorized mailbox access, information collection, or communication with selected members of the population. Particular concern should be given to enumeration of executive, legal, Human Resources, security, finance, shared, or otherwise sensitive mailboxes outside the subject’s normal responsibilities.",
+      "aliases": [
+        "email account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR044.001",
+      "title": "Local Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject identifies or enumerates accounts configured on an endpoint, server, appliance, or other local operating system. The subject may use operating-system commands, account-management utilities, scripts, registry data, configuration files, or administrative interfaces to identify local usernames, account identifiers, group memberships, account status, last-logon information, or locally assigned privileges. Local account discovery may support later credential collection, unauthorized access, impersonation, privilege elevation, persistence, or movement to another account on the same system. Investigators should assess the commands or tools used, the number of systems queried, the subject’s normal administrative responsibilities, and any subsequent activity involving the discovered accounts.",
+      "aliases": [
+        "local account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT011",
+          "title": "Cyber Deception, Honey User"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "PR044.006",
+      "title": "Privileged and High-Value Account Discovery",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR044",
+      "description_text": "A subject specifically identifies or enumerates privileged, administrative, executive, security, dormant, emergency, or other high-value organizational identities. The subject may search for membership of administrative groups, privileged cloud roles, domain administrators, security personnel, executive accounts, service accounts with elevated access, emergency access identities, or accounts with authority over sensitive systems and business processes. This behavior is distinct from broad account discovery because the subject selectively targets identities whose authority, access, organizational position, or reduced oversight could support a later infringement. The discovered identities may be targeted for credential collection, impersonation, privilege elevation, persistence, unauthorized approval, or anti-forensic account misuse.",
+      "aliases": [
+        "privileged and high-value account discovery"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT111",
+          "title": "Cyber Deception, Honey SPN"
+        },
+        {
+          "id": "DT011",
+          "title": "Cyber Deception, Honey User"
+        },
+        {
+          "id": "DT106",
+          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
+        },
+        {
+          "id": "DT063",
+          "title": "Microsoft Entra ID Sign-in Logs"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV076",
+          "title": "Account Inventory and Ownership Validation"
+        },
+        {
+          "id": "PV056",
+          "title": "Azure Conditional Access Policies"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
         }
       ]
     },
@@ -10208,6 +10834,162 @@
       ]
     },
     {
+      "id": "PR009.003",
+      "title": "Entry and Exit Route Reconnaissance",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR009",
+      "description_text": "A subject identifies or assesses routes through which they or another person could enter, leave, or move through an organizational facility while reducing the likelihood of challenge or detection. The subject may observe loading areas, emergency exits, service corridors, shared tenant spaces, stairwells, parking access points, delivery entrances, maintenance routes, or locations with limited physical security coverage. They may also assess whether doors are routinely propped open, whether exit routes permit re-entry, or whether movement between zones can occur without an additional credential check. The behavior may indicate preparation to bypass normal entry controls, facilitate unauthorized third-party access, remove assets, or move between restricted areas without creating a complete access record.",
+      "aliases": [
+        "entry and exit route reconnaissance"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "PR009.002",
+      "title": "Identification of Unsecured Physical Assets",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR009",
+      "description_text": "A subject searches for or identifies physical assets that are unattended, insufficiently secured, or accessible outside normal control processes. These assets may include laptops, removable media, physical identity tokens, keys, printed records, unlocked cabinets, exposed network ports, backup media, prototype equipment, or devices left in shared or low-occupancy areas. The subject may test whether an asset can be handled, removed, connected to, photographed, or accessed without attracting attention. This behavior is operationally relevant where it indicates that the subject is identifying opportunities that could later support theft, credential misuse, unauthorized system access, data loss, or physical sabotage.",
+      "aliases": [
+        "identification of unsecured physical assets"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "PR009.001",
+      "title": "Restricted Area Reconnaissance",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR009",
+      "description_text": "A subject observes, explores, or informally surveys access routes, entrances, barriers, internal layouts, staffing patterns, and operational routines associated with a restricted physical area. The subject may seek to identify which doors are badge-controlled, when an area is unattended, how visitors are processed, whether personnel challenge unfamiliar individuals, or where movement is not covered by security personnel or closed-circuit television. The activity may appear innocuous in isolation, but repeated or unexplained observation can indicate preparation for unauthorized entry, theft, sabotage, data access, or another physical infringement.",
+      "aliases": [
+        "restricted area reconnaissance"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
+      "id": "PR009.004",
+      "title": "Security Patrol Pattern Observation",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR009",
+      "description_text": "A subject observes the timing, route, frequency, staffing, or behavior of physical security patrols to identify periods or locations where monitoring is reduced. The subject may repeatedly remain near patrol routes, note when security personnel enter or leave an area, track shift changes, observe response times, or determine whether patrols follow predictable schedules. They may also identify areas that are checked only intermittently or periods when security personnel are occupied elsewhere. This behavior can support later unauthorized presence, theft, sabotage, tampering, or access to sensitive areas by allowing the subject to act during a predictable gap in physical oversight.",
+      "aliases": [
+        "security patrol pattern observation"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
+        }
+      ]
+    },
+    {
       "id": "PR008",
       "title": "Physical Item Smuggling",
       "article_id": "AR3",
@@ -12565,6 +13347,416 @@
         {
           "id": "PV001",
           "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
+      "id": "PR040.002",
+      "title": "Testing Access Controls",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject attempts to access a system, repository, application, physical area, account, record set, or other restricted resource to determine whether the applicable access control prevents entry or generates a response. The subject may use their own identity to request or attempt access slightly outside their normal responsibilities, test an expired or unauthorized physical identity token, navigate directly to a restricted application resource, or attempt to view information associated with another team, customer, case, or business function. The action may be deliberately limited so that it can be described as accidental if challenged. Repeated denied attempts, access testing across several resources, or a later successful entry may indicate that the subject is mapping authorization boundaries before conducting unauthorized access or another infringement.",
+      "aliases": [
+        "testing access controls"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        }
+      ]
+    },
+    {
+      "id": "PR040.001",
+      "title": "Testing Data Transfer Controls",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject conducts a limited transfer of non-sensitive or low-value data to determine whether organizational controls detect, block, quarantine, or escalate the activity. The subject may send a file to a personal email account, upload content to an unapproved cloud storage service, transfer data through a messaging platform, or use another external destination before attempting a larger or more sensitive transfer. They may vary the file type, size, classification, destination, compression, encryption, or transfer method to identify which conditions trigger Data Loss Prevention (DLP), web proxy, email gateway, or cloud access security controls. The behavior may include a pause after the test while the subject waits to determine whether security personnel, management, or another authority responds.",
+      "aliases": [
+        "testing data transfer controls"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT041",
+          "title": "Email Gateway"
+        },
+        {
+          "id": "DT040",
+          "title": "Microsoft Exchange Message Trace"
+        },
+        {
+          "id": "DT145",
+          "title": "Microsoft Exchange, Auto Forwarded Message Report"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV021",
+          "title": "DNS Filtering"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV047",
+          "title": "Implement MIP Sensitivity Labels"
+        },
+        {
+          "id": "PV064",
+          "title": "Local DNS Sinkhole, Linux"
+        },
+        {
+          "id": "PV063",
+          "title": "Local DNS Sinkhole, Windows"
+        }
+      ]
+    },
+    {
+      "id": "PR040.003",
+      "title": "Testing Endpoint and Application Controls",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject performs a limited action on an organizational endpoint to determine whether software restrictions, endpoint security controls, browser management, device controls, or application policies prevent or report the behavior. The subject may install a low-impact unauthorized application, add a browser extension, execute a portable utility, alter a minor endpoint setting, or attempt to run software from an unusual location. They may also connect a removable device or use a test script to establish whether application allowlisting, Endpoint Detection and Response (EDR), antivirus, mobile device management, or device-control policies are active. The test may be designed to resemble ordinary experimentation or troubleshooting.",
+      "aliases": [
+        "testing endpoint and application controls"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT023",
+          "title": "MountedDevices Registry Key"
+        },
+        {
+          "id": "DT126",
+          "title": "Registry Value Audit, Start_TrackProgs"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        },
+        {
+          "id": "DT022",
+          "title": "USB Registry Key"
+        },
+        {
+          "id": "DT021",
+          "title": "USBSTOR Registry Key"
+        },
+        {
+          "id": "DT036",
+          "title": "Windows Jump Lists"
+        },
+        {
+          "id": "DT027",
+          "title": "Windows Prefetch"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV084",
+          "title": "Physical Port Security for Workstations"
+        },
+        {
+          "id": "PV009",
+          "title": "Prohibition of Devices On-site"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
+    },
+    {
+      "id": "PR040.006",
+      "title": "Testing Monitoring and Response Processes",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject conducts a minor policy violation or suspicious action to determine whether the organization detects the behavior, how quickly it responds, and which personnel or processes become involved. Unlike testing a particular technical control, the subject is assessing the organization’s wider investigative and enforcement response. They may perform an observable but low-impact action, wait to see whether they are contacted, and use the absence, timing, or nature of the response to estimate alert-review practices, escalation thresholds, investigative coverage, or Organizational Tolerance. The subject may repeat similar tests through different systems or channels to establish whether detections are centrally correlated.",
+      "aliases": [
+        "testing monitoring and response processes"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV054",
+          "title": "Human Resources Collaboration for Early Threat Detection"
+        },
+        {
+          "id": "PV038",
+          "title": "Insider Threat Awareness Training"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
+      "id": "PR040.004",
+      "title": "Testing Network Security Controls",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject performs limited network activity to determine whether firewalls, network segmentation, Domain Name System filtering, web proxies, intrusion detection systems, or protocol restrictions identify or block the connection. The subject may attempt to reach a prohibited domain, connect to a restricted port, access another network segment, use an unapproved protocol, configure a proxy, or send a small amount of traffic through a normally restricted route. The objective is to establish whether the network path is available and whether the activity produces an alert or investigative response. Testing may be repeated across different destinations, ports, protocols, systems, or times of day. A subject may use the results to select a less monitored network route, bypass segmentation, communicate with external infrastructure, or prepare a data-transfer channel.",
+      "aliases": [
+        "testing network security controls"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT096",
+          "title": "DNS Monitoring"
+        },
+        {
+          "id": "DT147",
+          "title": "Endpoint Network Access Agent Telemetry Monitoring"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT113",
+          "title": "Tracking Patterns of Policy Violations"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV021",
+          "title": "DNS Filtering"
+        },
+        {
+          "id": "PV072",
+          "title": "Endpoint Network Access Agent Enforcement"
+        },
+        {
+          "id": "PV006",
+          "title": "Install a Web Proxy Solution"
+        },
+        {
+          "id": "PV064",
+          "title": "Local DNS Sinkhole, Linux"
+        },
+        {
+          "id": "PV063",
+          "title": "Local DNS Sinkhole, Windows"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
+      "id": "PR040.005",
+      "title": "Testing Physical Security Controls",
+      "article_id": "AR3",
+      "theme": "preparation",
+      "parent_id": "PR040",
+      "description_text": "A subject performs a limited physical action to determine whether access controls, security personnel, surveillance, visitor procedures, alarms, or other physical safeguards prevent or identify unauthorized presence. The subject may test a restricted door, present a credential at an unauthorized area, follow another person through a controlled entrance, remain in an area after their approved access period, or enter a sensitive location without a clear operational reason. They may also observe whether security personnel challenge unfamiliar subjects or whether physical access violations generate follow-up activity. The behavior is distinct from general physical exploration because the subject actively interacts with or crosses a security boundary to evaluate the result.",
+      "aliases": [
+        "testing physical security controls"
+      ],
+      "detections": [
+        {
+          "id": "DT033",
+          "title": "Closed-Circuit Television"
+        },
+        {
+          "id": "DT162",
+          "title": "Physical Access Logs"
+        },
+        {
+          "id": "DT163",
+          "title": "Physical Security Patrols"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV094",
+          "title": "Escorted Access to Sensitive Physical Areas"
+        },
+        {
+          "id": "PV069",
+          "title": "Identity Credential Challenge and Verification"
+        },
+        {
+          "id": "PV011",
+          "title": "Physical Access Controls"
+        },
+        {
+          "id": "PV095",
+          "title": "Physical Access Zoning for Critical Infrastructure"
         }
       ]
     },
@@ -23558,6 +24750,57 @@
       ]
     },
     {
+      "id": "AF004.004",
+      "title": "Clear Safari Artifacts",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF004",
+      "description_text": "A subject clears Apple Safari browser artifacts to conceal websites visited, files downloaded, searches performed, authenticated sessions, or other browser-based activity. The subject may clear browsing history for a selected period, remove cookies, cache, and other website data, clear download records, or directly delete or alter locally stored Safari data. Where Safari synchronization is enabled, clearing browsing history may also remove synchronized history from other Apple devices associated with the account. Investigators should examine macOS file-system activity, browser database metadata, endpoint telemetry, and independently retained web records to identify deletion, truncation, or recreation of Safari artifacts. Local evidence should be compared with web proxy, Domain Name System (DNS), authentication, and cloud-service logs.",
+      "aliases": [
+        "clear safari artifacts"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV091",
+          "title": "Browser Security Enforcement and Isolation"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV029",
+          "title": "Enterprise-Managed Web Browsers"
+        },
+        {
+          "id": "PV006",
+          "title": "Install a Web Proxy Solution"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
       "id": "AF027",
       "title": "Clear Email Artifacts",
       "article_id": "AR5",
@@ -23831,6 +25074,73 @@
       ]
     },
     {
+      "id": "AF013.005",
+      "title": "Delete Cloud User Account",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF013",
+      "description_text": "A subject deletes a cloud user account to conceal activity, disrupt attribution, remove access associations, interfere with an investigation, or remove information connected to the account. The deleted identity may be maintained within a cloud platform, cloud identity provider, or Software as a Service application and may include a member or guest account. Deletion may be performed through an administration portal, command-line interface, Application Programming Interface (API), script, or automated identity-lifecycle workflow. Investigators should identify the initiating subject, target identity, deletion method, source address, privileged role used, approval record, and deletion time.",
+      "aliases": [
+        "delete cloud user account"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT064",
+          "title": "AWS CloudTrail, Resource Deletion"
+        },
+        {
+          "id": "DT115",
+          "title": "AWS Unauthorized System or Service Modification"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV056",
+          "title": "Azure Conditional Access Policies"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV055",
+          "title": "Enforce Multi-Factor Authentication (MFA)"
+        },
+        {
+          "id": "PV085",
+          "title": "Multi-Party Approval Enforcement"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
       "id": "AF013.003",
       "title": "Delete Local Linux User",
       "article_id": "AR5",
@@ -23982,6 +25292,392 @@
         {
           "id": "PV033",
           "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.002",
+      "title": "Disable Application Logging",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or materially weakens audit logging within an organizational application to prevent authentication, access, transaction, workflow, or administrative activity from being recorded. The subject may disable an audit feature, change the application’s log level, exclude security-relevant event categories, suppress audit hooks, alter logging configuration files, or modify application programming interface, database, or workflow settings that control event generation. The activity may be conducted through an administrative interface, direct configuration access, a script, an application programming interface, or the underlying database. Investigators should compare application configuration changes with administrative sessions, change records, database activity, identity logs, endpoint telemetry, and expected application-event volumes.",
+      "aliases": [
+        "disable application logging"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.004",
+      "title": "Disable Cloud and Identity Audit Logging",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or materially weakens native audit logging within a cloud platform, identity provider, cloud account, subscription, project, tenant, or Software as a Service environment. The subject may disable audit services, remove data-event categories, alter diagnostic settings, disable identity or administrative audit events, exclude resources from monitoring, or change the destination to which native audit records are sent. The activity may affect cloud control-plane actions, resource access, authentication, role assignments, application administration, or other security-relevant events. Investigators should review provider-maintained administrative records, privileged-role activation, configuration changes, logging-resource changes, policy modifications, and discrepancies between native audit sources and exported records.",
+      "aliases": [
+        "disable cloud and identity audit logging"
+      ],
+      "detections": [
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT115",
+          "title": "AWS Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT117",
+          "title": "Azure Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT116",
+          "title": "GCP Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT106",
+          "title": "Microsoft Entra ID Privileged Identity Management Resource Audit"
+        },
+        {
+          "id": "DT063",
+          "title": "Microsoft Entra ID Sign-in Logs"
+        },
+        {
+          "id": "DT118",
+          "title": "OCI Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.001",
+      "title": "Disable Host Logging",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or materially weakens logging on an endpoint, server, appliance, or other host to prevent operating-system and local security activity from being recorded. The subject may stop an audit or logging service, disable event channels, change audit policy, remove monitored event categories, suppress command or process logging, or modify host configuration so that security-relevant events are no longer generated. Investigators should examine service-state changes, audit-policy modifications, logging configuration files, privileged commands, process execution, and unexpected gaps in host telemetry.",
+      "aliases": [
+        "disable host logging"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        },
+        {
+          "id": "DT081",
+          "title": "Security Software Anti-Tampering Alerts"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.005",
+      "title": "Disable Log Forwarding and Collection",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or interferes with the mechanisms used to transmit, collect, process, or ingest logs into a centralized repository, archive, data lake, or Security Information and Event Management platform. The subject may stop or reconfigure a forwarding agent, disable syslog transmission, remove a collector subscription, change a destination address, revoke a pipeline identity, block required network traffic, alter routing or filtering rules, or suppress specific event sources before ingestion. Local records may continue to exist even though investigators lose centralized visibility. Investigators should identify missing source heartbeats, ingestion gaps, forwarding-agent health changes, configuration modifications, authentication failures, queue backlogs, rejected events, and discrepancies between local records and centrally retained data.",
+      "aliases": [
+        "disable log forwarding and collection"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT081",
+          "title": "Security Software Anti-Tampering Alerts"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.006",
+      "title": "Disable Log Retention Controls",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or materially weakens controls intended to preserve logs for a defined period, causing records to expire, become unavailable, or lose protected status before they are likely to be reviewed. The subject may shorten a retention period, remove an event source from archival storage, disable object lock or immutability, alter storage lifecycle rules, reduce repository capacity, change index-retention settings, or remove a protected logging tier. The configuration change may affect future records or accelerate the removal of records already held within a managed platform. Investigators should review retention-policy history, lifecycle-rule changes, storage configuration, object-lock status, privileged access, change approvals, archive coverage, and the oldest available record for each expected source.",
+      "aliases": [
+        "disable log retention controls"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT115",
+          "title": "AWS Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT117",
+          "title": "Azure Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT116",
+          "title": "GCP Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT118",
+          "title": "OCI Unauthorized System or Service Modification"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF034.003",
+      "title": "Disable Network and Security Device Logging",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF034",
+      "description_text": "A subject disables or materially weakens logging on network or security infrastructure to prevent network activity, access decisions, configuration changes, or security events from being recorded. Affected infrastructure may include firewalls, proxies, routers, switches, Virtual Private Network services, Domain Name System services, Network Access Control systems, intrusion detection systems, secure web gateways, or other security appliances. The subject may disable local logging, remove event categories, reduce log severity, stop flow generation, disable security alerts, or alter the device’s logging destination. Investigators should review device configuration history, management-plane access, privileged sessions, change records, collector status, NetFlow, packet inspection, endpoint telemetry, and parallel network sensors.",
+      "aliases": [
+        "disable network and security device logging"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT081",
+          "title": "Security Software Anti-Tampering Alerts"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV074",
+          "title": "Network Segmentation"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
         },
         {
           "id": "PV002",
@@ -24250,6 +25946,57 @@
       ]
     },
     {
+      "id": "AF001.004",
+      "title": "Clear Zsh History",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF001",
+      "description_text": "A subject clears, truncates, redirects, or suppresses Z shell (Zsh) command history to prevent executed commands from being reviewed. The subject may delete or truncate the history file, clear commands held within the current session, change or unset the HISTFILE parameter, reduce the number of commands retained through SAVEHIST, redirect history to a non-persistent location, or modify shell startup files to prevent future commands from being written. The Zsh history file is commonly stored as .zsh_history within the subject’s home directory, although its location is determined by the configured HISTFILE parameter. Investigators should examine the presence, size, timestamps, and contents of the history file; changes to .zshrc and other shell configuration files; macOS File System Events; and process or endpoint telemetry showing commands that do not appear in the surviving history.",
+      "aliases": [
+        "clear zsh history"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV001",
+          "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
       "id": "AF001.003",
       "title": "PYTHONHISTORY Environment Variable Null",
       "article_id": "AR5",
@@ -24506,6 +26253,230 @@
       ]
     },
     {
+      "id": "AF026.002",
+      "title": "Application Log Modification",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF026",
+      "description_text": "A subject intentionally alters audit, authentication, access, transaction, or administrative records generated by an organizational application to conceal or misrepresent activity conducted through that application. The subject may change the recorded actor, timestamp, source address, action, affected object, approval state, or result. Modification may be performed through application administration functionality, an Application Programming Interface (API), direct database access, scripts, or access to the underlying log repository. Investigators should compare application records with identity logs, database activity, endpoint telemetry, web proxy records, workflow history, and relevant business records.",
+      "aliases": [
+        "application log modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT030",
+          "title": "auditd Timestamp Modification Rule"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF026.004",
+      "title": "Cloud Audit Log Modification",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF026",
+      "description_text": "A subject intentionally alters cloud audit records or exported cloud log data to conceal, misattribute, or misrepresent activity conducted within a cloud environment. The subject may replace or modify log objects held in cloud storage, alter records within a log analytics workspace or data lake, manipulate a custom logging pipeline, or insert fabricated events into a downstream repository. Changes may affect the recorded identity, source address, operation, resource, timestamp, request parameters, or outcome. Provider-maintained audit histories may prevent direct modification by tenant administrators. Investigators should therefore compare native provider records with exported copies, storage-object versions, logging-pipeline configurations, access records, and Security Information and Event Management (SIEM) data.",
+      "aliases": [
+        "cloud audit log modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF026.001",
+      "title": "Host Log Modification",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF026",
+      "description_text": "A subject intentionally alters host-based log records to conceal, misattribute, or misrepresent activity conducted on an endpoint, server, or other operating system. The subject may change timestamps, account names, event identifiers, source addresses, command details, or action outcomes within Windows Event Logs, Linux system or audit logs, macOS logs, security-agent logs, or other locally stored records. Modification may be performed using administrative tools, scripts, third-party log scrubbers, or direct access to .evtx, .log, or other log files. Investigators should compare local records with centrally forwarded logs, Endpoint Detection and Response (EDR) telemetry, process execution records, file metadata, and File Integrity Monitoring (FIM) events. This Sub-section applies where log content is altered but the record or log remains present.",
+      "aliases": [
+        "host log modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT030",
+          "title": "auditd Timestamp Modification Rule"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        },
+        {
+          "id": "DT081",
+          "title": "Security Software Anti-Tampering Alerts"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF026.003",
+      "title": "Network and Security Device Log Modification",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF026",
+      "description_text": "A subject intentionally alters records generated by network or security infrastructure to conceal, misattribute, or misrepresent network activity. Affected records may include firewall, proxy, Virtual Private Network (VPN), Domain Name System (DNS), Network Access Control (NAC), intrusion detection, router, switch, or secure web gateway logs. The subject may change source or destination addresses, ports, protocols, requested domains, authenticated identities, timestamps, security decisions, or action outcomes. Modification may occur on the originating device, its management controller, a centralized collector, or another downstream repository. Investigators should compare device logs with NetFlow, packet inspection, endpoint telemetry, DNS records, identity events, and independently collected network records.",
+      "aliases": [
+        "network and security device log modification"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT014",
+          "title": "Utilize Cold Storage for Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV033",
+          "title": "Native Anti-Tampering Protections"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
       "id": "AF030",
       "title": "Message Deletion",
       "article_id": "AR5",
@@ -24540,6 +26511,215 @@
         }
       ],
       "preventions": []
+    },
+    {
+      "id": "AF030.005",
+      "title": "Administrative Deletion of Communication Messages",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF030",
+      "description_text": "A subject uses administrative, moderation, ownership, compliance, or delegated platform privileges to delete messages created by another subject or to remove communication records from a shared organizational environment. The subject may delete individual messages, conversation threads, channel content, direct-message history, group discussions, or entire communication spaces. Because the subject acts through an elevated or delegated role, the deletion may affect evidence belonging to several participants and may remove communications that the original author could not delete themselves. This behavior may be used to conceal improper instructions, remove evidence of collusion, suppress complaints, protect another subject, or interfere with an active investigation.",
+      "aliases": [
+        "administrative deletion of communication messages"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT159",
+          "title": "Microsoft Litigation Hold"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT128",
+          "title": "Microsoft Purview eDiscovery"
+        },
+        {
+          "id": "DT158",
+          "title": "Microsoft Purview eDiscovery Hold"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT160",
+          "title": "Slack Data Retention Settings"
+        },
+        {
+          "id": "DT161",
+          "title": "Slack Legal Holds"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV068",
+          "title": "Microsoft Litigation Hold"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF030.004",
+      "title": "Bulk Deletion of Message History",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF030",
+      "description_text": "A subject deletes a substantial volume of messages, conversations, threads, channels, or communication history to remove or materially reduce the records available for investigation. Bulk deletion may involve selecting and deleting multiple messages, repeatedly deleting individual messages within a short period, clearing an entire conversation, removing channel history, deleting archived communications, or using scripts, administrative tools, application programming interfaces, or automation to remove content at scale. The behavior may occur after the subject becomes aware of an investigation, disciplinary process, access review, audit, legal dispute, or anticipated offboarding. It may also occur immediately before the subject conducts another infringement where prior communications could reveal planning, coordination, relationships, or intent.",
+      "aliases": [
+        "bulk deletion of message history"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT128",
+          "title": "Microsoft Purview eDiscovery"
+        },
+        {
+          "id": "DT158",
+          "title": "Microsoft Purview eDiscovery Hold"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT160",
+          "title": "Slack Data Retention Settings"
+        },
+        {
+          "id": "DT161",
+          "title": "Slack Legal Holds"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV068",
+          "title": "Microsoft Litigation Hold"
+        }
+      ]
+    },
+    {
+      "id": "AF030.006",
+      "title": "Deletion of Communication Containers",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF030",
+      "description_text": "A subject deletes a channel, group, workspace, conversation, mailbox folder, discussion board, or other communication container to remove the messages and associated context held within it. Deleting a communication container may remove or obscure a larger body of evidence than deleting individual messages. The affected records may include message content, participant lists, timestamps, thread relationships, attachments, reactions, membership changes, and links to other organizational material. The subject may delete the container after communications associated with an infringement have concluded, after participants have left the group, or after the subject becomes aware that the communication environment may be reviewed. They may also rename, archive, or move the container before deletion to make it more difficult to identify.",
+      "aliases": [
+        "deletion of communication containers"
+      ],
+      "detections": [
+        {
+          "id": "DT159",
+          "title": "Microsoft Litigation Hold"
+        },
+        {
+          "id": "DT154",
+          "title": "Microsoft Purview Communication Compliance"
+        },
+        {
+          "id": "DT128",
+          "title": "Microsoft Purview eDiscovery"
+        },
+        {
+          "id": "DT158",
+          "title": "Microsoft Purview eDiscovery Hold"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT160",
+          "title": "Slack Data Retention Settings"
+        },
+        {
+          "id": "DT161",
+          "title": "Slack Legal Holds"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV068",
+          "title": "Microsoft Litigation Hold"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
     },
     {
       "id": "AF030.001",
@@ -24591,6 +26771,61 @@
       ],
       "detections": [],
       "preventions": []
+    },
+    {
+      "id": "AF030.003",
+      "title": "Use of Disappearing or Self-Deleting Messages",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF030",
+      "description_text": "A subject enables or uses a communication feature that automatically deletes messages after they are read, after a defined period, or when a conversation is closed, with the intention of reducing the communication evidence available to investigators. The subject may use disappearing-message functionality within an approved corporate platform or through a non-corporate messaging application. Automatic deletion may be configured for an individual conversation, group, channel, workspace, or account. The subject may also change an existing conversation from persistent retention to temporary retention before exchanging information connected to an infringement. This behavior differs from the manual deletion of corporate or non-corporate messages because the removal mechanism is established before or during the communication.",
+      "aliases": [
+        "use of disappearing or self-deleting messages"
+      ],
+      "detections": [
+        {
+          "id": "DT159",
+          "title": "Microsoft Litigation Hold"
+        },
+        {
+          "id": "DT128",
+          "title": "Microsoft Purview eDiscovery"
+        },
+        {
+          "id": "DT158",
+          "title": "Microsoft Purview eDiscovery Hold"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT155",
+          "title": "Slack Data Export Conversation Analysis"
+        },
+        {
+          "id": "DT160",
+          "title": "Slack Data Retention Settings"
+        },
+        {
+          "id": "DT161",
+          "title": "Slack Legal Holds"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV068",
+          "title": "Microsoft Litigation Hold"
+        }
+      ]
     },
     {
       "id": "AF033",
@@ -24815,6 +27050,140 @@
       ]
     },
     {
+      "id": "AF029.007",
+      "title": "Destination Disguising",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF029",
+      "description_text": "A subject causes network activity to appear directed toward an approved, trusted, or otherwise benign service while the underlying communication is routed to a different destination. Destination disguising may exploit differences between the hostname, certificate, application request, routing layer, or infrastructure used to establish and process a connection. To organizational monitoring, the traffic may initially appear associated with a common cloud, content-delivery, hosting, or software service, while the actual request is forwarded to infrastructure controlled by or selected by the subject. Methods may include domain fronting, manipulation of host headers, use of shared content-delivery infrastructure, concealed redirects, or the abuse of legitimate cloud services as intermediary routing points.",
+      "aliases": [
+        "destination disguising"
+      ],
+      "detections": [
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT051",
+          "title": "DNS Logging"
+        },
+        {
+          "id": "DT096",
+          "title": "DNS Monitoring"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV021",
+          "title": "DNS Filtering"
+        },
+        {
+          "id": "PV072",
+          "title": "Endpoint Network Access Agent Enforcement"
+        },
+        {
+          "id": "PV006",
+          "title": "Install a Web Proxy Solution"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
+      "id": "AF029.006",
+      "title": "Proxy Chaining",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF029",
+      "description_text": "A subject routes network traffic through multiple proxy servers, relay services, gateways, or intermediary systems to conceal the final destination of the connection and frustrate attribution. Unlike the use of a single manually configured proxy, proxy chaining deliberately introduces multiple network hops between the subject’s endpoint and the external destination. Each intermediary may reveal only the preceding and subsequent connection, preventing any single organizational log source from recording the complete route. The chain may include web proxies, Secure Shell tunnels, SOCKS proxies, commercial anonymity services, cloud-hosted systems, compromised infrastructure, or personally controlled servers.",
+      "aliases": [
+        "proxy chaining"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV060",
+          "title": "Disable Proxy Configuration on Windows Systems"
+        },
+        {
+          "id": "PV072",
+          "title": "Endpoint Network Access Agent Enforcement"
+        },
+        {
+          "id": "PV006",
+          "title": "Install a Web Proxy Solution"
+        },
+        {
+          "id": "PV018",
+          "title": "Network Intrusion Prevention Systems"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
+        }
+      ]
+    },
+    {
       "id": "AF029.004",
       "title": "Switching to Unmonitored Networks",
       "article_id": "AR5",
@@ -24862,6 +27231,69 @@
         {
           "id": "PV001",
           "title": "No Ready System-Level Mitigation"
+        }
+      ]
+    },
+    {
+      "id": "AF029.005",
+      "title": "Unauthorized Encrypted DNS Usage",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF029",
+      "description_text": "A subject configures or uses an unauthorized encrypted Domain Name System (DNS) service to prevent organizational infrastructure from observing, recording, filtering, or enforcing domain-resolution activity. Encrypted DNS protocols, including DNS over HTTPS (DoH) and DNS over Transport Layer Security (DoT), protect DNS queries from observation while they travel between the endpoint and the resolver. Although these protocols have legitimate privacy and security applications, their unauthorized use can bypass enterprise DNS servers, DNS filtering, threat-intelligence controls, and domain-level investigative logging. The subject may enable encrypted DNS through browser settings, operating-system configuration, mobile applications, command-line utilities, or third-party resolver software.",
+      "aliases": [
+        "unauthorized encrypted dns usage"
+      ],
+      "detections": [
+        {
+          "id": "DT097",
+          "title": "Deep Packet Inspection"
+        },
+        {
+          "id": "DT051",
+          "title": "DNS Logging"
+        },
+        {
+          "id": "DT096",
+          "title": "DNS Monitoring"
+        },
+        {
+          "id": "DT147",
+          "title": "Endpoint Network Access Agent Telemetry Monitoring"
+        },
+        {
+          "id": "DT098",
+          "title": "NetFlow Analysis"
+        },
+        {
+          "id": "DT042",
+          "title": "Network Intrusion Detection Systems"
+        },
+        {
+          "id": "DT039",
+          "title": "Web Proxy Logs"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV021",
+          "title": "DNS Filtering"
+        },
+        {
+          "id": "PV072",
+          "title": "Endpoint Network Access Agent Enforcement"
+        },
+        {
+          "id": "PV029",
+          "title": "Enterprise-Managed Web Browsers"
+        },
+        {
+          "id": "PV032",
+          "title": "Next-Generation Firewalls"
+        },
+        {
+          "id": "PV034",
+          "title": "Protocol Allow Listing"
         }
       ]
     },
@@ -25402,6 +27834,143 @@
       "preventions": []
     },
     {
+      "id": "AF008.002",
+      "title": "Audio Steganography",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF008",
+      "description_text": "A subject embeds data within an audio file or audio stream so that the concealed information is carried inside apparently legitimate sound content. The audio may continue to play normally, while modifications to the underlying samples, frequency components, timing, phase, or file structure contain a hidden payload. Audio steganography may be used to conceal sensitive organizational data within music, voice recordings, podcasts, meeting recordings, sound effects, or other audio content before the file is transferred through an approved or commonly used communication channel. The subject may select audio because normal variations in sound, background noise, and compression can make small alterations difficult to identify through ordinary review.",
+      "aliases": [
+        "audio steganography"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        }
+      ]
+    },
+    {
+      "id": "AF008.005",
+      "title": "Document Steganography",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF008",
+      "description_text": "A subject conceals data within a business document by using content, objects, fields, formatting, or internal structures that are not visible during ordinary viewing. The carrier may be a word-processing document, spreadsheet, presentation, Portable Document Format file, or another document type routinely used by the organization. The document may open and display expected content while containing hidden text, files, archives, scripts, worksheets, comments, embedded objects, metadata, or other concealed material. Methods may include white text on a white background, extremely small font sizes, content positioned outside the visible page, hidden spreadsheet rows or worksheets, concealed presentation objects, embedded files, unused form fields, custom metadata, document layers, or internal package relationships.",
+      "aliases": [
+        "document steganography"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        }
+      ]
+    },
+    {
+      "id": "AF008.006",
+      "title": "File-Structure Steganography",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF008",
+      "description_text": "A subject conceals data within unused, ignored, optional, or non-rendered areas of a file or container so that the carrier continues to function normally while the hidden payload remains outside the content presented to the viewer. The technique may use padding, reserved fields, unused headers, slack areas, archive comments, trailing data, application-specific metadata, or other structures retained during transfer but not normally displayed or processed. Examples include placing data after the logical end of a file, storing content in unused container fields, or exploiting differences between how applications and security tools interpret the same format.",
+      "aliases": [
+        "file-structure steganography"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT088",
+          "title": "Bash History"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        },
+        {
+          "id": "DT055",
+          "title": "PowerShell Logging"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        }
+      ]
+    },
+    {
       "id": "AF008.001",
       "title": "Image Steganography",
       "article_id": "AR5",
@@ -25453,6 +28022,96 @@
         {
           "id": "PV002",
           "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "AF008.004",
+      "title": "Text Steganography",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF008",
+      "description_text": "A subject conceals information within apparently ordinary written text by manipulating characters, spacing, formatting, language patterns, or other textual features that are unlikely to attract attention during normal reading. The visible content may appear to be a legitimate email, document, chat message, report, source-code comment, or other written communication. Hidden information may be encoded through additional spaces or tabs, capitalization, punctuation, selected words, spelling variations, character placement, font changes, Unicode substitutions, zero-width characters, or bidirectional control characters. Text steganography may be used to communicate small quantities of sensitive information, instructions, identifiers, authentication material, or encoded content without creating an obvious attachment or visible block of ciphertext.",
+      "aliases": [
+        "text steganography"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        }
+      ]
+    },
+    {
+      "id": "AF008.003",
+      "title": "Video Steganography",
+      "article_id": "AR5",
+      "theme": "anti-forensics",
+      "parent_id": "AF008",
+      "description_text": "A subject embeds data within a video file or video stream to conceal sensitive information inside apparently legitimate visual or audiovisual content. Video files provide multiple locations for hidden data, including individual frames, color values, compression coefficients, motion data, audio tracks, subtitles, metadata, and unused container structures. A subject may distribute a payload across many frames or components, reducing the amount of alteration applied to any single part of the file. The resulting video may appear and play normally while carrying documents, source code, credentials, records, archives, or other organizational data. The subject may transfer the video through email, cloud storage, messaging platforms, or media-sharing services where large audiovisual files are expected.",
+      "aliases": [
+        "video steganography"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT146",
+          "title": "File Integrity Monitoring"
+        },
+        {
+          "id": "DT028",
+          "title": "File Metadata"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV015",
+          "title": "Application Whitelisting"
+        },
+        {
+          "id": "PV020",
+          "title": "Data Loss Prevention Solution"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
         }
       ]
     },
