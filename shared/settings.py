@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -543,6 +543,14 @@ class Settings(BaseSettings):
         """Hunt-synthesis chain; inherits the summarizer chain when unset."""
         chain = self._provider_chain(self.hunt_synth_llm_provider)
         return chain or self.summarizer_provider_chain()
+
+    @field_validator("admin_api_token", "export_api_token", mode="after")
+    @classmethod
+    def _strip_token(cls, v: str | None) -> str | None:
+        """Secret Manager values often carry a trailing newline; a raw token in
+        an Authorization header is a ValueError in urllib — sanitize once here
+        so every consumer (job reload call, API verify) agrees."""
+        return v.strip() if isinstance(v, str) else v
 
     def custom_llm_provider_map(self) -> dict[str, dict]:
         """Named custom OpenAI-compatible providers from LLM_CUSTOM_PROVIDERS JSON.

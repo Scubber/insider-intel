@@ -508,7 +508,9 @@ def _try_reload_api() -> None:
         with urllib.request.urlopen(req, timeout=5) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         print(f"API reloaded ({url}): {body}")
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        # ValueError included: a malformed token (e.g. trailing newline from a
+        # secret) must degrade to this note, never kill a finished run.
         print(
             f"Note: could not reload API at {url} ({exc}). "
             "If the UI is open, POST /reload or restart launch_local.py "
