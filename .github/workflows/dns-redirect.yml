@@ -53,54 +53,71 @@ jobs:
             | jq -re '.result[0].id')
           echo "id=${ZONE_ID}" >> "$GITHUB_OUTPUT"
           echo "zone ${ZONE_NAME} = ${ZONE_ID}"
-      - name: Upsert redirect (dynamic-redirect ruleset, page-rule fallback)
+      - name: Install redirect (ruleset, then Worker, then page-rule)
         run: |
           set -euo pipefail
           Z="${{ steps.zone.outputs.id }}"
-          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
+          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+          JSON=(-H "Content-Type: application/json")
 
-          # Attempt 1: modern Single/Dynamic Redirect ruleset (account tokens OK;
-          # needs permission Zone -> Single Redirect -> Edit).
+          # --- Attempt 1: modern dynamic-redirect ruleset (needs Single Redirect perm) ---
           RS_BODY=$(jq -n --arg target "${TARGET}" '{
             name: "default", kind: "zone", phase: "http_request_dynamic_redirect",
-            rules: [{
-              description: "park-redirect: forward everything to the live site while the domain ages",
-              expression: "true", action: "redirect",
+            rules: [{description: "park-redirect", expression: "true", action: "redirect",
               action_parameters: {from_value: {status_code: 301,
                 target_url: {expression: ("concat(\"" + $target + "\", http.request.uri.path)")},
-                preserve_query_string: true}}
-            }]
+                preserve_query_string: true}}}]
           }')
-          RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${RS_BODY}" \
+          RESP=$(curl -s -X PUT "${AUTH[@]}" "${JSON[@]}" --data "${RS_BODY}" \
             "https://api.cloudflare.com/client/v4/zones/${Z}/rulesets/phases/http_request_dynamic_redirect/entrypoint")
-          echo "ruleset attempt:"; echo "${RESP}" | jq '{success, errors}'
+          echo "1) ruleset:"; echo "${RESP}" | jq -c '{success, errors}'
+          if echo "${RESP}" | jq -e '.success' >/dev/null; then echo "installed via ruleset"; exit 0; fi
+
+          # --- Attempt 2: Worker (token has Workers Scripts Write) + zone route ---
+          ACC=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/accounts" | jq -r '.result[0].id')
+          cat > /tmp/worker.js <<'WEOF'
+          export default {
+            async fetch(request) {
+              const url = new URL(request.url);
+              return Response.redirect("https://intel.thederpweb.com" + url.pathname + url.search, 301);
+            }
+          };
+          WEOF
+          sed -i 's/^          //' /tmp/worker.js
+          RESP=$(curl -s -X PUT "${AUTH[@]}" \
+            -F 'metadata={"main_module":"worker.js","compatibility_date":"2026-01-01"};type=application/json' \
+            -F 'worker.js=@/tmp/worker.js;type=application/javascript+module' \
+            "https://api.cloudflare.com/client/v4/accounts/${ACC}/workers/scripts/park-redirect")
+          echo "2a) worker upload:"; echo "${RESP}" | jq -c '{success, errors}'
           if echo "${RESP}" | jq -e '.success' >/dev/null; then
-            echo "Redirect installed via dynamic-redirect ruleset."
-            exit 0
+            EXISTING=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/workers/routes" \
+              | jq -r '.result // [] | map(select(.script == "park-redirect")) | .[0].id // empty')
+            ROUTE_BODY='{"pattern":"*'"${ZONE_NAME}"'/*","script":"park-redirect"}'
+            if [ -n "${EXISTING}" ]; then
+              RESP=$(curl -s -X PUT "${AUTH[@]}" "${JSON[@]}" --data "${ROUTE_BODY}" \
+                "https://api.cloudflare.com/client/v4/zones/${Z}/workers/routes/${EXISTING}")
+            else
+              RESP=$(curl -s -X POST "${AUTH[@]}" "${JSON[@]}" --data "${ROUTE_BODY}" \
+                "https://api.cloudflare.com/client/v4/zones/${Z}/workers/routes")
+            fi
+            echo "2b) worker route:"; echo "${RESP}" | jq -c '{success, errors}'
+            if echo "${RESP}" | jq -e '.success' >/dev/null; then echo "installed via Worker route"; exit 0; fi
           fi
 
-          # Attempt 2: legacy Page Rule (works only with USER tokens + Page Rules Write).
+          # --- Attempt 3: legacy page rule (user tokens only) ---
           PATTERN="*${ZONE_NAME}/*"
           PR_BODY=$(jq -n --arg pat "${PATTERN}" --arg target "${TARGET}/\$2" '{
             targets: [{target: "url", constraint: {operator: "matches", value: $pat}}],
             actions: [{id: "forwarding_url", value: {url: $target, status_code: 301}}],
-            status: "active"
-          }')
-          EXISTING=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules" \
-            | jq -r --arg pat "${PATTERN}" '.result // [] | map(select(.targets[0].constraint.value == $pat)) | .[0].id // empty')
-          if [ -n "${EXISTING}" ]; then
-            RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${PR_BODY}" \
-              "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules/${EXISTING}")
-          else
-            RESP=$(curl -s -X POST "${AUTH[@]}" --data "${PR_BODY}" \
-              "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules")
-          fi
-          echo "page-rule attempt:"; echo "${RESP}" | jq '{success, errors}'
+            status: "active"}')
+          RESP=$(curl -s -X POST "${AUTH[@]}" "${JSON[@]}" --data "${PR_BODY}" \
+            "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules")
+          echo "3) page rule:"; echo "${RESP}" | jq -c '{success, errors}'
           echo "${RESP}" | jq -e '.success' >/dev/null || {
-            echo "::error::Both mechanisms failed. Account tokens need permission Zone -> Single Redirect -> Edit for the ruleset path; the page-rule path needs a USER token with Page Rules Write."
+            echo "::error::All three mechanisms failed — see per-attempt errors above."
             exit 1
           }
-          echo "Redirect installed via page rule."
+          echo "installed via page rule"
       - name: Verify the domain answers with the redirect
         run: |
           set -euo pipefail
