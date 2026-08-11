@@ -6,7 +6,7 @@
     <title>insider-intel</title>
     <!-- Dossier-theme typefaces (Newsreader + Courier Prime, plus the theme
          pack's IBM Plex Mono / Space Grotesk / Space Mono / Cormorant Garamond /
-         Xanh Mono). The default "Dossier Sage" theme uses Newsreader + Courier
+         Xanh Mono). The "Dossier Sage" theme uses Newsreader + Courier
          Prime; backup classic themes use system stacks. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,11 +30,11 @@
       (function () {
         // Pre-paint stamps: theme + view tweaks. app.js re-validates against
         // its THEMES set; an unknown stored name only costs one repaint.
-        // Default matches DEFAULT_THEME in app.js ("Dossier Sage").
+        // Default matches DEFAULT_THEME in app.js ("cnn-lite" / Wire Light).
         var root = document.documentElement;
         root.setAttribute(
           "data-theme",
-          localStorage.getItem("insider-intel-theme") || "Dossier Sage"
+          localStorage.getItem("insider-intel-theme") || "cnn-lite"
         );
         if (localStorage.getItem("insider-intel-kbd-hints") === "false")
           root.setAttribute("data-kbd-hints", "off");
