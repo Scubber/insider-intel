@@ -265,7 +265,15 @@ legacy fallback.
   dispatch. Skipping a check is fine, saying so is not optional.
 - `.mcp.json` provides **Playwright MCP** (official Docker image,
   `--network=host`) — use it to drive/screenshot local (:5500/:8000) or prod
-  UI. Physical-click testing catches what curl can't (see gotchas). The
+  UI — and the **Cloudflare MCP servers** (`mcp.cloudflare.com` full API via
+  Code Mode, `docs.mcp.cloudflare.com` docs). Cloudflare MCP is
+  OAuth-gated: authenticate once via `/mcp` in an interactive session
+  (headless/remote sessions can't complete the flow — they fall back to the
+  `CLOUDFLARE_API_TOKEN`-driven `dns/**` workflows, which remain the
+  merge-audited path for DNS record changes regardless). For the full
+  platform skills, run `/plugin marketplace add cloudflare/skills` +
+  `/plugin install cloudflare@cloudflare` locally (per-user, not repo
+  config). Physical-click testing catches what curl can't (see gotchas). The
   responsive rail collapses below **1024px** into the INSIGHTS tab, so test
   tablet widths, not just desktop.
 - `deploy-api.yml` smoke-tests `/health`, `/articles`, `/social/catalog`,
