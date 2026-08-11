@@ -247,18 +247,20 @@
 }
 
 /* Chips */
+/* Term chip — redesign fidelity (2026-08): operator terms are tinted with
+   the signal color, dashed border kept transparent so size is unchanged. */
 .ds-chip {
   display: inline-block;
   max-width: 100%;
-  padding: 0.15rem 0.45rem;
+  padding: 0.15rem 0.5rem;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-radius: var(--radius);
+  font-size: 0.68rem;
+  background: var(--signal-soft);
+  color: var(--ink);
+  border-radius: 0;
   overflow-wrap: anywhere;
   white-space: normal;
-  border: 0;
+  border: 1px dashed transparent;
 }
 
 .ds-chip--signal {
@@ -657,4 +659,306 @@
   font-size: 0.82rem;
   line-height: 1.45;
   margin: 0.18rem 0;
+}
+
+/* ================================================================
+   Redesign shell (2026-08) — Masthead, StatusBand, SiteFooter.
+   Values copied verbatim from web/styles.css (.top, .masthead-*,
+   .ii-corpus, .ii-statusline, .ii-footer + the fidelity pass).
+   ================================================================ */
+
+.ds-masthead {
+  padding: 1.75rem clamp(1rem, 3vw, 2.5rem) 1rem;
+  background: var(--top-bg, transparent);
+  border-bottom: 1px solid var(--top-line, var(--line));
+}
+
+.ds-masthead-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ds-masthead-brand-block {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.ds-masthead-brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: var(--brand-weight, 700);
+  letter-spacing: var(--brand-tracking, -0.03em);
+  text-transform: var(--brand-transform, none);
+  line-height: 1.05;
+  color: var(--top-ink, var(--ink));
+  white-space: nowrap;
+}
+
+.ds-masthead-corpus {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.ds-masthead-nav {
+  display: flex;
+  gap: 1.15rem;
+  margin-left: auto;
+  align-items: baseline;
+}
+
+.ds-masthead-nav-item {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--top-muted, var(--muted));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 0 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ds-masthead-nav-item:hover {
+  color: var(--top-ink, var(--ink));
+}
+
+/* Fidelity pass: the active section is a solid-ink pill (the accent
+   underline from the base rule remains, as shipped). */
+.ds-masthead-nav-item--active {
+  border-bottom-color: var(--accent);
+  background: var(--ink);
+  color: var(--btn-fg);
+  border-radius: var(--radius, 2px);
+}
+
+.ds-masthead-live {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--top-muted, var(--muted));
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+/* One bordered query line; Enter submits — no SEARCH button. */
+.ds-masthead-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 18rem;
+  max-width: 33rem;
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: var(--radius, 2px);
+  padding: 0.55rem 0.75rem;
+}
+
+.ds-masthead-search:focus-within {
+  border-color: var(--focus);
+}
+
+.ds-masthead-search input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  font: inherit;
+  color: var(--top-field-ink, var(--ink));
+}
+
+/* Status band — thin mono strip between masthead and content grid. */
+.ds-statusband {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.45rem clamp(1rem, 3vw, 2.5rem);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.ds-statusband-status {
+  margin-left: auto;
+  font-size: 0.64rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-statusband-lanes {
+  white-space: pre;
+}
+
+.ds-statusband-lanes--ok {
+  color: var(--signal);
+}
+
+.ds-statusband-clock {
+  margin-left: auto;
+}
+
+/* Site footer — blurb + links + kbd hints left, theme picker right. */
+.ds-sitefooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding: 1rem clamp(1rem, 3vw, 2.5rem) 1.4rem;
+}
+
+.ds-sitefooter-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.ds-sitefooter-links a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.ds-sitefooter-links a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ds-sitefooter-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.ds-sitefooter-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ds-sitefooter-kbd {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+
+.ds-sitefooter-theme {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* ================================================================
+   Case classification stamp (redesign 2026-08) — sits at the right
+   edge of the provenance meta line. Values from web/styles.css
+   .row-meta / .case-meta / .case-stamp.
+   ================================================================ */
+
+.ds-case-metarow {
+  margin: 0 0 0.45rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.ds-case-metarow .ds-case-meta {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-case-stamp {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.45rem;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.85;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* LLM-adjudicated non-case: muted, dashed — visually "filed as background". */
+.ds-case-stamp--context {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.ds-case-stamp--malicious {
+  color: #a8352a;
+}
+
+.ds-case-stamp--negligent {
+  color: #8a6a1f;
+}
+
+.ds-case-stamp--unintentional {
+  color: #3f5e7a;
+}
+
+/* Fixed classification hues go muddy on the dark backup themes — lift to
+   legible tints and drop the opacity there (mirrors web/styles.css). */
+[data-theme="midnight"] .ds-case-stamp,
+[data-theme="phosphor"] .ds-case-stamp {
+  opacity: 1;
+}
+
+[data-theme="midnight"] .ds-case-stamp--malicious,
+[data-theme="phosphor"] .ds-case-stamp--malicious {
+  color: #e07a70;
+}
+
+[data-theme="midnight"] .ds-case-stamp--negligent,
+[data-theme="phosphor"] .ds-case-stamp--negligent {
+  color: #d9ad4e;
+}
+
+[data-theme="midnight"] .ds-case-stamp--unintentional,
+[data-theme="phosphor"] .ds-case-stamp--unintentional {
+  color: #8fb3d9;
+}
+
+/* Wire Light (cnn-lite): pure-black ink turns the solid-ink highlights into
+   harsh black boxes on the white page — use the theme's red instead
+   (mirrors web/styles.css). */
+[data-theme="cnn-lite"] .ds-masthead-nav-item--active,
+[data-theme="cnn-lite"] .ds-itm-chip,
+[data-theme="cnn-lite"] .ds-case-tab {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
 }

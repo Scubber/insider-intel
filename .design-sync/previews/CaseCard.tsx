@@ -9,7 +9,8 @@ export const CourtCase = () => (
   <CaseCard
     tab="CASE 2026-0717-K4F"
     title="DictateMD, Inc. v. Ahmadi"
-    meta="COURTLISTENER RECAP · FILED 1D AGO · SIG 82"
+    meta="COURTLISTENER RECAP · FILED 2026-08-01 · 9D AGO · RETRIEVED 2026-08-05 · SIG 82 · CONFIRMED IN COURT"
+    stamp={{ label: "MALICIOUS", variant: "malicious" }}
     note="Departing engineer accused of downloading the customer database and product schematics in the two weeks before resignation, syncing them to a personal cloud drive. Forensic review of the returned laptop surfaced the transfers."
     facts={[
       { label: "ACTOR", value: "Departing engineer" },
@@ -38,7 +39,7 @@ export const NewsCase = () => (
   <CaseCard
     tab="NEWS 2026-0715-2QZ"
     title="Insider charged after exfiltrating source code to rival startup"
-    meta="SECURITYWEEK · FILED 3D AGO · SIG 64"
+    meta="SECURITYWEEK · FILED 2026-08-07 · 3D AGO · SIG 64 · ALLEGED"
     note="Prosecutors say the developer cloned internal repositories to a personal laptop during his notice period and joined a competitor two weeks later."
     footer={
       <>
@@ -52,5 +53,16 @@ export const NewsCase = () => (
         <ActionButton>OPEN ↗</ActionButton>
       </>
     }
+  />
+);
+
+export const ContextRow = () => (
+  <CaseCard
+    tab="PUB 2026-0712-7HH"
+    title="CISA guidance: detecting bulk cloud-sync exfiltration"
+    meta="CISA · FILED 2026-07-12 · RETRIEVED 2026-07-14 · SIG 41"
+    stamp={{ label: "DETECTION", variant: "context" }}
+    note="Reference guidance, not a case — the enricher adjudicated it non-insider and stamped what it is useful FOR (ITM control language)."
+    actions={<ActionButton>OPEN ↗</ActionButton>}
   />
 );

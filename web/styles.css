@@ -4941,3 +4941,19 @@ body[data-pane="evidence"] .panels-row {
 .pane-articles .pane-head .kbd-hint {
   display: none;
 }
+
+/* Wire Light (cnn-lite): pure-black ink makes the solid-ink highlight
+   elements read as harsh black boxes on the white page. Use the theme's
+   red instead — white-on-red is the wire-service idiom, and softer than
+   black-on-white at these sizes. */
+[data-theme="cnn-lite"] .masthead-nav-item.active,
+[data-theme="cnn-lite"] .matrix-tech-id,
+[data-theme="cnn-lite"] .itm-id-chip {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+[data-theme="cnn-lite"] .case-tab {
+  background: var(--accent);
+  color: #ffffff;
+}

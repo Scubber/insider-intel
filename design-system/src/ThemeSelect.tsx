@@ -37,42 +37,38 @@ export const DOSSIER_THEMES: DossierTheme[] = [
   "Vermillion Court",
 ];
 
-const THEME_LABELS: Record<DossierTheme, string> = {
-  dossier: "Dossier",
-  midnight: "Midnight",
-  phosphor: "Phosphor",
-  "cnn-lite": "CNN Lite",
-  diablo: "Diablo",
-  "Dossier Sage": "Dossier Sage",
-  "Dossier Soft": "Dossier Soft",
-  "Dossier Fog": "Dossier Fog",
-  "Air Archive": "Air Archive",
-  "Cinder Archive": "Cinder Archive",
-  "Ice Archive": "Ice Archive",
-  "Earth Archive": "Earth Archive",
-  Ultramarines: "Ultramarines",
-  Perplexity: "Perplexity",
-  Linear: "Linear",
-  Vercel: "Vercel",
-  ChatGPT: "ChatGPT",
-  "Doom 3": "Doom 3",
-  "Diablo II": "Diablo II",
-  StarCraft: "StarCraft",
-  "Brood War": "Brood War",
-  "GoldenEye 64": "GoldenEye 64",
-  "Warcraft III": "Warcraft III",
-  Bleach: "Bleach",
-  "Ultima Online": "Ultima Online",
-  Evangelion: "Evangelion",
-  "EVA-01": "EVA-01",
-  "EVA-02": "EVA-02",
-  "EVA-03": "EVA-03",
-  Cryostat: "Cryostat",
-  "Vermillion Court": "Vermillion Court",
-  "Blood Ravens": "Blood Ravens",
-  "Black Templars": "Black Templars",
-  "Raven Guard": "Raven Guard",
+/**
+ * Neutral display names, mirroring the site (web/app.js THEME_LABELS): theme
+ * VALUES keep their internal ids, but user-facing labels never show media or
+ * brand names. Unlisted ids fall back to a capitalized id.
+ */
+const THEME_LABELS: Partial<Record<DossierTheme, string>> = {
+  "cnn-lite": "Wire Light",
+  diablo: "Ember",
+  "Diablo II": "Gilt Ember",
+  "Doom 3": "Rust Terminal",
+  Ultramarines: "Cobalt",
+  "Blood Ravens": "Oxblood",
+  "Black Templars": "Obsidian",
+  "Raven Guard": "Graphite",
+  StarCraft: "Void",
+  "Brood War": "Ultraviolet",
+  "GoldenEye 64": "Crimson Gold",
+  "Warcraft III": "Banner Gold",
+  Bleach: "Ivory Ink",
+  "Ultima Online": "Parchment",
+  Evangelion: "Violet",
+  "EVA-01": "Violet Ops",
+  "EVA-02": "Vermilion Ops",
+  "EVA-03": "Onyx Ops",
+  Perplexity: "Teal Console",
+  Linear: "Indigo",
+  Vercel: "Monochrome",
+  ChatGPT: "Slate",
 };
+
+const themeLabel = (value: DossierTheme): string =>
+  THEME_LABELS[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
 
 export interface ThemeSelectProps {
   /** Currently selected theme. */
@@ -98,7 +94,7 @@ export function ThemeSelect({ value, onChange, themes = DOSSIER_THEMES }: ThemeS
       >
         {themes.map((theme) => (
           <option key={theme} value={theme}>
-            {THEME_LABELS[theme] ?? theme}
+            {themeLabel(theme)}
           </option>
         ))}
       </select>
