@@ -38,13 +38,35 @@ jobs:
             | jq -re '.result[0].id')
           echo "id=${ZONE_ID}" >> "$GITHUB_OUTPUT"
           echo "zone ${ZONE_NAME} = ${ZONE_ID}"
-      - name: Upsert forwarding page rule
+      - name: Upsert redirect (dynamic-redirect ruleset, page-rule fallback)
         run: |
           set -euo pipefail
           Z="${{ steps.zone.outputs.id }}"
           AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
+
+          # Attempt 1: modern Single/Dynamic Redirect ruleset (account tokens OK;
+          # needs permission Zone -> Single Redirect -> Edit).
+          RS_BODY=$(jq -n --arg target "${TARGET}" '{
+            name: "default", kind: "zone", phase: "http_request_dynamic_redirect",
+            rules: [{
+              description: "park-redirect: forward everything to the live site while the domain ages",
+              expression: "true", action: "redirect",
+              action_parameters: {from_value: {status_code: 301,
+                target_url: {expression: ("concat(\"" + $target + "\", http.request.uri.path)")},
+                preserve_query_string: true}}
+            }]
+          }')
+          RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${RS_BODY}" \
+            "https://api.cloudflare.com/client/v4/zones/${Z}/rulesets/phases/http_request_dynamic_redirect/entrypoint")
+          echo "ruleset attempt:"; echo "${RESP}" | jq '{success, errors}'
+          if echo "${RESP}" | jq -e '.success' >/dev/null; then
+            echo "Redirect installed via dynamic-redirect ruleset."
+            exit 0
+          fi
+
+          # Attempt 2: legacy Page Rule (works only with USER tokens + Page Rules Write).
           PATTERN="*${ZONE_NAME}/*"
-          BODY=$(jq -n --arg pat "${PATTERN}" --arg target "${TARGET}/\$2" '{
+          PR_BODY=$(jq -n --arg pat "${PATTERN}" --arg target "${TARGET}/\$2" '{
             targets: [{target: "url", constraint: {operator: "matches", value: $pat}}],
             actions: [{id: "forwarding_url", value: {url: $target, status_code: 301}}],
             status: "active"
@@ -52,17 +74,18 @@ jobs:
           EXISTING=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules" \
             | jq -r --arg pat "${PATTERN}" '.result // [] | map(select(.targets[0].constraint.value == $pat)) | .[0].id // empty')
           if [ -n "${EXISTING}" ]; then
-            RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${BODY}" \
+            RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${PR_BODY}" \
               "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules/${EXISTING}")
           else
-            RESP=$(curl -s -X POST "${AUTH[@]}" --data "${BODY}" \
+            RESP=$(curl -s -X POST "${AUTH[@]}" --data "${PR_BODY}" \
               "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules")
           fi
-          echo "${RESP}" | jq '{success, errors, rule: {id: .result.id, status: .result.status, target: .result.targets[0].constraint.value, action: .result.actions[0].value}}'
+          echo "page-rule attempt:"; echo "${RESP}" | jq '{success, errors}'
           echo "${RESP}" | jq -e '.success' >/dev/null || {
-            echo "::error::Page rule write failed — see errors above."
+            echo "::error::Both mechanisms failed. Account tokens need permission Zone -> Single Redirect -> Edit for the ruleset path; the page-rule path needs a USER token with Page Rules Write."
             exit 1
           }
+          echo "Redirect installed via page rule."
       - name: Verify the domain answers with the redirect
         run: |
           set -euo pipefail
