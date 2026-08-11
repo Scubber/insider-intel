@@ -9,6 +9,8 @@
   var host = window.location.hostname || "";
   var isPublic =
     host === "intel.thederpweb.com" ||
+    host === "insider-intel.net" ||
+    host === "www.insider-intel.net" ||
     host === "td3.dev" ||
     host === "www.td3.dev" ||
     host === "scubber.github.io" ||

@@ -1,15 +1,15 @@
-# insider-intel.net — future PRODUCTION domain, currently in its aging
-# period. The parking redirect (301 → intel.thederpweb.com, apex + www)
-# is a WORKER, not DNS: the `park-redirect` Workers script is attached to
-# both hostnames as Workers Custom Domains (installed + verified by the
-# dns-redirect workflow, 2026-08-11).
+# insider-intel.net — PRODUCTION domain. The site is served here by the
+# `park-redirect` WORKER (an edge proxy of intel.thederpweb.com, operator
+# decision 2026-08-11: serve directly, no redirect), attached to apex +
+# www as Workers Custom Domains via the dns-redirect workflow.
+# thederpweb remains the dev-facing name; both serve the same deployment.
 #
 # IMPORTANT: Workers Custom Domains create and own their DNS records.
 # This file must stay EMPTY of apex/www entries while the Worker is
 # attached — declaring them here would make octoDNS fight the Worker for
 # the records and break the redirect.
 #
-# At cutover (~3-6 months): detach the custom domains / delete the
-# park-redirect Worker, then land the real records here — apex/www to
-# GitHub Pages (or Cloudflare Pages), api → ghs.googlehosted.com.
+# Optional later hardening: replace the proxy Worker with native hosting
+# (Cloudflare Pages / GitHub Pages custom-domain swap) and land real
+# records here — apex/www + api → ghs.googlehosted.com.
 {}

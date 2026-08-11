@@ -1,6 +1,8 @@
 name: dns-redirect
 
-# Upsert the insider-intel.net parking redirect (301 → intel.thederpweb.com)
+# Make insider-intel.net SERVE the site: a Worker edge-proxies the live
+# origin (intel.thederpweb.com), attached to apex + www as Workers Custom
+# Domains. (Historic name: this started as a parking redirect.)
 # as a Page Rule (Forwarding URL) via the Cloudflare API — the mechanism the
 # operator's token can write (Page Rules Write; it lacks Single Redirect) —
 # then verify the domain actually answers with it. Dispatch-only; idempotent
@@ -76,10 +78,18 @@ jobs:
           # --- Attempt 2: Worker (token has Workers Scripts Write) + zone route ---
           ACC=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/accounts" | jq -r '.result[0].id')
           cat > /tmp/worker.js <<'WEOF'
+          // insider-intel.net serves the site itself: edge proxy of the live
+          // origin. thederpweb stays the dev-facing name; same deployment.
           export default {
             async fetch(request) {
               const url = new URL(request.url);
-              return Response.redirect("https://intel.thederpweb.com" + url.pathname + url.search, 301);
+              const upstream = "https://intel.thederpweb.com" + url.pathname + url.search;
+              const resp = await fetch(upstream, {
+                method: request.method,
+                headers: request.headers,
+                redirect: "follow",
+              });
+              return new Response(resp.body, resp);
             }
           };
           WEOF
@@ -142,19 +152,19 @@ jobs:
             exit 1
           }
           echo "installed via page rule"
-      - name: Verify the domain answers with the redirect
+      - name: Verify the domain serves the site
         run: |
           set -euo pipefail
           for host in "${ZONE_NAME}" "www.${ZONE_NAME}"; do
             for i in 1 2 3 4 5; do
-              CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${host}/" || echo 000)
-              LOC=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 20 "https://${host}/" || true)
-              echo "attempt ${i}: https://${host}/ → ${CODE} ${LOC}"
-              if [ "${CODE}" = "301" ] && [ "${LOC}" = "${TARGET}/" ]; then
+              CODE=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 25 "https://${host}/" || echo 000)
+              MARK=$(grep -c 'insider-intel' /tmp/body || true)
+              echo "attempt ${i}: https://${host}/ → ${CODE} (site markers: ${MARK})"
+              if [ "${CODE}" = "200" ] && [ "${MARK}" -gt 0 ]; then
                 break
               fi
-              [ "${i}" = "5" ] && { echo "::error::https://${host}/ did not return the expected 301 → ${TARGET}/"; exit 1; }
+              [ "${i}" = "5" ] && { echo "::error::https://${host}/ did not serve the site (last status ${CODE})"; exit 1; }
               sleep 5
             done
           done
-          echo "Redirect live on apex + www."
+          echo "Site live on apex + www."
