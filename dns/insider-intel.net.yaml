@@ -1,26 +1,15 @@
 # insider-intel.net — future PRODUCTION domain, currently in its aging
-# period (parked behind a Cloudflare redirect to the live site so it
-# accrues benign history with NRD filters and categorization engines).
+# period. The parking redirect (301 → intel.thederpweb.com, apex + www)
+# is a WORKER, not DNS: the `park-redirect` Workers script is attached to
+# both hostnames as Workers Custom Domains (installed + verified by the
+# dns-redirect workflow, 2026-08-11).
 #
-# The A records point at TEST-NET (192.0.2.1) and exist only to give the
-# Cloudflare proxy something to attach to — with proxied: true the edge
-# answers, the address is never contacted. The actual redirect
-# (301 → https://intel.thederpweb.com) is a Cloudflare Redirect Rule,
-# which lives outside DNS (dashboard: Rules → Redirect Rules); the
-# DNS-scoped API token deliberately cannot manage rules.
+# IMPORTANT: Workers Custom Domains create and own their DNS records.
+# This file must stay EMPTY of apex/www entries while the Worker is
+# attached — declaring them here would make octoDNS fight the Worker for
+# the records and break the redirect.
 #
-# At cutover (~3–6 months): replace with the real records — apex/www to
-# GitHub Pages, api → ghs.googlehosted.com (Cloud Run mapping) — and
-# drop the redirect rule.
-'':
-  - octodns:
-      cloudflare:
-        proxied: true
-    type: A
-    value: 192.0.2.1
-www:
-  - octodns:
-      cloudflare:
-        proxied: true
-    type: CNAME
-    value: insider-intel.net.
+# At cutover (~3-6 months): detach the custom domains / delete the
+# park-redirect Worker, then land the real records here — apex/www to
+# GitHub Pages (or Cloudflare Pages), api → ghs.googlehosted.com.
+{}
