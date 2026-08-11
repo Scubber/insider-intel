@@ -1,0 +1,9 @@
+# thederpweb.com — current live zone, still served by Route 53.
+#
+# On transfer to Cloudflare: dump the real records from the Route 53
+# console (or `octodns-dump` with AWS creds), commit them here, and
+# activate the zone in config.yaml. Do NOT hand-author from memory —
+# the live zone is the source of truth until then. Known members:
+#   intel.thederpweb.com      → GitHub Pages (site)
+#   api.intel.thederpweb.com  → Cloud Run domain mapping (API)
+{}

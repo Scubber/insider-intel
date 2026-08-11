@@ -1,0 +1,15 @@
+# insider-intel.net — future PRODUCTION domain (parked while it ages past
+# newly-registered-domain filters; see dns/README.md).
+#
+# Planned cutover shape (activate with the zone in config.yaml):
+#
+# '':
+#   - type: ALIAS        # apex → GitHub Pages (Cloudflare flattens CNAME at apex)
+#     value: scubber.github.io.
+# www:
+#   - type: CNAME
+#     value: scubber.github.io.
+# api:
+#   - type: CNAME        # Cloud Run domain mapping target
+#     value: ghs.googlehosted.com.
+{}

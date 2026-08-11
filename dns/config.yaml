@@ -1,0 +1,29 @@
+# octoDNS config — DNS as code for this project's zones on Cloudflare.
+#
+# Zones live as YAML files in this directory; changes ship like everything
+# else here: PR → dns-plan shows the diff → merge → dns-apply pushes it.
+# The CLOUDFLARE_API_TOKEN repo secret (Zone:Read + DNS:Edit, all zones)
+# is the only credential; nothing sensitive lives in these files.
+#
+# ACTIVATION: a zone listed here must already exist in the Cloudflare
+# account (registered there, or added and delegated). Uncomment its entry
+# once it does — until then octodns-sync would fail on the missing zone.
+
+providers:
+  zones_config:
+    class: octodns.provider.yaml.YamlProvider
+    directory: ./dns
+    default_ttl: 300
+    enforce_order: true
+
+  cloudflare:
+    class: octodns_cloudflare.CloudflareProvider
+    token: env/CLOUDFLARE_API_TOKEN
+
+zones: {}
+  # insider-intel.net.:
+  #   sources: [zones_config]
+  #   targets: [cloudflare]
+  # thederpweb.com.:
+  #   sources: [zones_config]
+  #   targets: [cloudflare]
