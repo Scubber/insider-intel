@@ -640,7 +640,7 @@
   }
 
   const THEME_KEY = "insider-intel-theme";
-  const DEFAULT_THEME = "Dossier Sage";
+  const DEFAULT_THEME = "cnn-lite";
   const THEMES = new Set([
     "dossier",
     "cnn-lite",

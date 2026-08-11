@@ -337,7 +337,7 @@ def run(base_url: str, headed: bool) -> int:
             if page.evaluate("document.documentElement.getAttribute('data-theme')") != theme:
                 theme_ok = False
         checks.check("themes apply from Settings (incl. midnight + cnn-lite)", theme_ok)
-        page.select_option("#theme-select", "Dossier Sage")
+        page.select_option("#theme-select", "cnn-lite")
 
         # Settings pane renders the live sections (Notifications / dead ADD
         # controls were removed — reader-safe Settings).
