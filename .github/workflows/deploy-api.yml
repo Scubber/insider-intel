@@ -63,6 +63,7 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --memory=2Gi \
+            --update-env-vars '^##^CORS_ORIGINS=https://intel.thederpweb.com,https://insider-intel.net,https://www.insider-intel.net,https://td3.dev,https://scubber.github.io' \
             --update-secrets 'ADMIN_API_TOKEN=ADMIN_API_TOKEN:latest'
       - name: Roll refresh job to same image
         # Re-assert the ingest config here (GitOps: repo is the source of truth).
