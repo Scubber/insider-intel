@@ -20,6 +20,15 @@ jobs:
       ZONE_NAME: insider-intel.net
       TARGET: https://intel.thederpweb.com
     steps:
+      - name: Which credential is in play
+        env:
+          DNS_ADMIN_SET: ${{ secrets.CLOUDFLARE_DNS_ADMIN != '' }}
+        run: |
+          set -euo pipefail
+          echo "CLOUDFLARE_DNS_ADMIN secret present: ${DNS_ADMIN_SET}"
+          curl -s -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            | jq '{success, status: .result.status, token_id: .result.id, errors}'
       - name: Resolve zone id
         id: zone
         run: |
