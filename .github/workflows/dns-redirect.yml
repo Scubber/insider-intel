@@ -1,0 +1,77 @@
+name: dns-redirect
+
+# Upsert the insider-intel.net parking redirect (301 → intel.thederpweb.com)
+# as a zone Dynamic Redirect ruleset via the Cloudflare API, then verify the
+# domain actually answers with it. Dispatch-only; idempotent (PUT replaces
+# the zone's dynamic-redirect entrypoint ruleset wholesale — this zone has
+# no other redirect rules, and the cutover will retire this one).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ZONE_NAME: insider-intel.net
+      TARGET: https://intel.thederpweb.com
+    steps:
+      - name: Resolve zone id
+        id: zone
+        run: |
+          set -euo pipefail
+          ZONE_ID=$(curl -sf -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/zones?name=${ZONE_NAME}" \
+            | jq -re '.result[0].id')
+          echo "id=${ZONE_ID}" >> "$GITHUB_OUTPUT"
+          echo "zone ${ZONE_NAME} = ${ZONE_ID}"
+      - name: Upsert dynamic-redirect ruleset
+        run: |
+          set -euo pipefail
+          BODY=$(jq -n --arg target "${TARGET}" '{
+            name: "default",
+            kind: "zone",
+            phase: "http_request_dynamic_redirect",
+            rules: [{
+              description: "park-redirect: forward everything to the live site while the domain ages",
+              expression: "true",
+              action: "redirect",
+              action_parameters: {
+                from_value: {
+                  status_code: 301,
+                  target_url: { expression: ("concat(\"" + $target + "\", http.request.uri.path)") },
+                  preserve_query_string: true
+                }
+              }
+            }]
+          }')
+          RESP=$(curl -s -X PUT \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "${BODY}" \
+            "https://api.cloudflare.com/client/v4/zones/${{ steps.zone.outputs.id }}/rulesets/phases/http_request_dynamic_redirect/entrypoint")
+          echo "${RESP}" | jq '{success, errors, rules: (.result.rules // [] | map({description, expression, enabled}))}'
+          echo "${RESP}" | jq -e '.success' >/dev/null || {
+            echo "::error::Ruleset write failed — if errors mention authorization, add permission 'Zone → Single Redirect → Edit' (a.k.a. Dynamic URL Redirects) to the CLOUDFLARE_API_TOKEN and re-dispatch."
+            exit 1
+          }
+      - name: Verify the domain answers with the redirect
+        run: |
+          set -euo pipefail
+          for host in "${ZONE_NAME}" "www.${ZONE_NAME}"; do
+            for i in 1 2 3 4 5; do
+              CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${host}/" || echo 000)
+              LOC=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 20 "https://${host}/" || true)
+              echo "attempt ${i}: https://${host}/ → ${CODE} ${LOC}"
+              if [ "${CODE}" = "301" ] && [ "${LOC}" = "${TARGET}/" ]; then
+                break
+              fi
+              [ "${i}" = "5" ] && { echo "::error::https://${host}/ did not return the expected 301 → ${TARGET}/"; exit 1; }
+              sleep 5
+            done
+          done
+          echo "Redirect live on apex + www."
