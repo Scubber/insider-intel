@@ -1,15 +1,26 @@
-# insider-intel.net — future PRODUCTION domain (parked while it ages past
-# newly-registered-domain filters; see dns/README.md).
+# insider-intel.net — future PRODUCTION domain, currently in its aging
+# period (parked behind a Cloudflare redirect to the live site so it
+# accrues benign history with NRD filters and categorization engines).
 #
-# Planned cutover shape (activate with the zone in config.yaml):
+# The A records point at TEST-NET (192.0.2.1) and exist only to give the
+# Cloudflare proxy something to attach to — with proxied: true the edge
+# answers, the address is never contacted. The actual redirect
+# (301 → https://intel.thederpweb.com) is a Cloudflare Redirect Rule,
+# which lives outside DNS (dashboard: Rules → Redirect Rules); the
+# DNS-scoped API token deliberately cannot manage rules.
 #
-# '':
-#   - type: ALIAS        # apex → GitHub Pages (Cloudflare flattens CNAME at apex)
-#     value: scubber.github.io.
-# www:
-#   - type: CNAME
-#     value: scubber.github.io.
-# api:
-#   - type: CNAME        # Cloud Run domain mapping target
-#     value: ghs.googlehosted.com.
-{}
+# At cutover (~3–6 months): replace with the real records — apex/www to
+# GitHub Pages, api → ghs.googlehosted.com (Cloud Run mapping) — and
+# drop the redirect rule.
+'':
+  - octodns:
+      cloudflare:
+        proxied: true
+    type: A
+    value: 192.0.2.1
+www:
+  - octodns:
+      cloudflare:
+        proxied: true
+    type: CNAME
+    value: insider-intel.net.
