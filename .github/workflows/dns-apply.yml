@@ -28,7 +28,7 @@ jobs:
         run: pip install --quiet 'octodns==1.21.1' 'octodns-cloudflare==1.2.0'
       - name: Apply
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DNS_ADMIN || secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
           if python3 -c 'import sys,yaml; sys.exit(0 if yaml.safe_load(open("dns/config.yaml"))["zones"] else 1)'; then

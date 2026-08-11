@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DNS_ADMIN || secrets.CLOUDFLARE_API_TOKEN }}
       ZONE_NAME: insider-intel.net
       TARGET: https://intel.thederpweb.com
     steps:
