@@ -951,3 +951,14 @@
 [data-theme="phosphor"] .ds-case-stamp--unintentional {
   color: #8fb3d9;
 }
+
+/* Wire Light (cnn-lite): pure-black ink turns the solid-ink highlights into
+   harsh black boxes on the white page — use the theme's red instead
+   (mirrors web/styles.css). */
+[data-theme="cnn-lite"] .ds-masthead-nav-item--active,
+[data-theme="cnn-lite"] .ds-itm-chip,
+[data-theme="cnn-lite"] .ds-case-tab {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
