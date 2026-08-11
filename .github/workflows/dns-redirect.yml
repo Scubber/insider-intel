@@ -29,6 +29,21 @@ jobs:
           curl -s -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/user/tokens/verify" \
             | jq '{success, status: .result.status, token_id: .result.id, errors}'
+      - name: Dump the active token's own permission policy
+        run: |
+          set -euo pipefail
+          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+          ACC=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/accounts" | jq -r '.result[0].id // empty')
+          echo "account: ${ACC:-<not readable>}"
+          if [ -n "${ACC}" ]; then
+            curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACC}/tokens?per_page=50" \
+              | jq '[.result // [] | .[] | {name, status, groups: [.policies[]?.permission_groups[]?.name]}]' \
+              || echo "token list not readable with this token"
+          fi
+          echo "--- read test: dynamic-redirect entrypoint ---"
+          Z=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones?name=${ZONE_NAME}" | jq -r '.result[0].id')
+          curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/rulesets/phases/http_request_dynamic_redirect/entrypoint" \
+            | jq '{success, errors, rules: (.result.rules // [] | length)}'
       - name: Resolve zone id
         id: zone
         run: |
