@@ -1,10 +1,10 @@
 name: dns-redirect
 
 # Upsert the insider-intel.net parking redirect (301 → intel.thederpweb.com)
-# as a zone Dynamic Redirect ruleset via the Cloudflare API, then verify the
-# domain actually answers with it. Dispatch-only; idempotent (PUT replaces
-# the zone's dynamic-redirect entrypoint ruleset wholesale — this zone has
-# no other redirect rules, and the cutover will retire this one).
+# as a Page Rule (Forwarding URL) via the Cloudflare API — the mechanism the
+# operator's token can write (Page Rules Write; it lacks Single Redirect) —
+# then verify the domain actually answers with it. Dispatch-only; idempotent
+# (matches on the URL pattern and updates in place). Cutover retires it.
 on:
   workflow_dispatch:
 
@@ -38,34 +38,29 @@ jobs:
             | jq -re '.result[0].id')
           echo "id=${ZONE_ID}" >> "$GITHUB_OUTPUT"
           echo "zone ${ZONE_NAME} = ${ZONE_ID}"
-      - name: Upsert dynamic-redirect ruleset
+      - name: Upsert forwarding page rule
         run: |
           set -euo pipefail
-          BODY=$(jq -n --arg target "${TARGET}" '{
-            name: "default",
-            kind: "zone",
-            phase: "http_request_dynamic_redirect",
-            rules: [{
-              description: "park-redirect: forward everything to the live site while the domain ages",
-              expression: "true",
-              action: "redirect",
-              action_parameters: {
-                from_value: {
-                  status_code: 301,
-                  target_url: { expression: ("concat(\"" + $target + "\", http.request.uri.path)") },
-                  preserve_query_string: true
-                }
-              }
-            }]
+          Z="${{ steps.zone.outputs.id }}"
+          AUTH=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json")
+          PATTERN="*${ZONE_NAME}/*"
+          BODY=$(jq -n --arg pat "${PATTERN}" --arg target "${TARGET}/\$2" '{
+            targets: [{target: "url", constraint: {operator: "matches", value: $pat}}],
+            actions: [{id: "forwarding_url", value: {url: $target, status_code: 301}}],
+            status: "active"
           }')
-          RESP=$(curl -s -X PUT \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data "${BODY}" \
-            "https://api.cloudflare.com/client/v4/zones/${{ steps.zone.outputs.id }}/rulesets/phases/http_request_dynamic_redirect/entrypoint")
-          echo "${RESP}" | jq '{success, errors, rules: (.result.rules // [] | map({description, expression, enabled}))}'
+          EXISTING=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules" \
+            | jq -r --arg pat "${PATTERN}" '.result // [] | map(select(.targets[0].constraint.value == $pat)) | .[0].id // empty')
+          if [ -n "${EXISTING}" ]; then
+            RESP=$(curl -s -X PUT "${AUTH[@]}" --data "${BODY}" \
+              "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules/${EXISTING}")
+          else
+            RESP=$(curl -s -X POST "${AUTH[@]}" --data "${BODY}" \
+              "https://api.cloudflare.com/client/v4/zones/${Z}/pagerules")
+          fi
+          echo "${RESP}" | jq '{success, errors, rule: {id: .result.id, status: .result.status, target: .result.targets[0].constraint.value, action: .result.actions[0].value}}'
           echo "${RESP}" | jq -e '.success' >/dev/null || {
-            echo "::error::Ruleset write failed — if errors mention authorization, add permission 'Zone → Single Redirect → Edit' (a.k.a. Dynamic URL Redirects) to the CLOUDFLARE_API_TOKEN and re-dispatch."
+            echo "::error::Page rule write failed — see errors above."
             exit 1
           }
       - name: Verify the domain answers with the redirect
