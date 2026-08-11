@@ -6,8 +6,9 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
 **Last updated:** 2026-08-11 · **Repo:** `Scubber/insider-intel` · **Prod:**
-API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
-(`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
+API on Cloud Run (`insider-intel-api`, 2Gi), UI at **insider-intel.net**
+(Worker edge-proxy of the GitHub Pages origin) + `intel.thederpweb.com`
+(dev-facing, same deployment), corpus in GCS, corpus-refresh job every 6h.
 **Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
 working design, blessed before the next UI redesign — restore `web/**` from
 here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
@@ -53,6 +54,10 @@ prod).
 | #140 | **Snapshot-first boot** (CACHED→LIVE, web/data via Pages artifact) |
 | #141 | deploy-pages 20min timeout |
 | #142–#145 | DIY traffic analytics: weekly→**daily**, forensic CSV + GeoIP (+ column fix) |
+| #157–#166 | Findings for decision-makers; prevent/detect/hunt copy; Settings consolidation; STREAM start page; ITM v2.12 (+45 techniques) + force-reprocess knob; redesign port; DGX Spark doc; context purpose stamps + reload-token fix |
+| #167 | Design-system mirror catches up with redesign; **boot snapshot keeps stamp fields**; proofLabel reads `methods` (labels never rendered before); snapshot contract test; Wire Light red highlights |
+| #168–#180 | **DNS as code** (octoDNS `dns/`, plan/apply workflows); insider-intel.net zone live; `dns-redirect` workflow (ruleset→Worker→page-rule attempts, Workers Custom Domains won); thederpweb dump + unlock |
+| #181–#182 | insider-intel.net **serves the site** (Worker edge proxy + CORS + config.js hosts); default theme **Wire Light** |
 
 ---
 
@@ -138,18 +143,21 @@ prod).
     04:00Z 2026-08-07 refresh miss (self-healed — watch for recurrence).
     Notifications delivery backend still unbuilt (UI stub removed 2026-08-10
     so Settings stays honest until it exists).
-13. **Prod domain + Cloudflare migration (ACTIVE 2026-08-11).** Plan:
-    register `insider-intel.net` on Cloudflare Registrar (DNS check says
-    likely available — no NS delegation; .com/.io variants taken), park it
-    3–6 months to age past newly-registered-domain filters, then cut prod
-    over; `intel.thederpweb.com` becomes dev. thederpweb.com transfers off
-    Route 53 to Cloudflare (remaining years + creation date carry over,
-    +1yr on transfer). Tooling SHIPPED: octoDNS scaffold under `dns/`
-    (`dns-plan` on PR/dispatch, `dns-apply` on merge; `CLOUDFLARE_API_TOKEN`
-    repo secret — Zone:Read + DNS:Edit, all zones — is set). Zones stay
-    `{}` in `dns/config.yaml` until they exist on Cloudflare; activation
-    checklist in `dns/README.md`. Operator to-dos: register the .net,
-    start the transfer. Also unblocks thread #11's Cloudflare Access.
+13. **Prod domain + Cloudflare migration — LIVE 2026-08-11.**
+    `insider-intel.net` (registered on Cloudflare) SERVES the site: the
+    `park-redirect` Worker edge-proxies `intel.thederpweb.com`, attached to
+    apex + www as Workers Custom Domains via the `dns-redirect` dispatch
+    workflow (self-verifying: asserts live 200s). CORS_ORIGINS asserted in
+    `deploy-api.yml` includes the new origins; `web/config.js` treats them
+    as public hosts. DNS-as-code: octoDNS under `dns/` (`dns-plan` on PR,
+    `dns-apply` on merge; `CLOUDFLARE_DNS_ADMIN` secret — OVER-SCOPED,
+    trim to Zone Read / DNS Write / Workers Scripts Write + Registrar).
+    The insider-intel.net zone file stays `{}` — the Worker owns apex/www
+    records; octoDNS must not fight it. thederpweb.com: records dumped to
+    `dns/` (inactive), transfer lock disabled, expiry 2027-06-15 — operator
+    finishes the Cloudflare transfer (add site → NS → auth code) anytime.
+    NRD caveat: some corporate proxies may block the fresh domain for
+    weeks. Also unblocks thread #11's Cloudflare Access.
 
 ---
 
