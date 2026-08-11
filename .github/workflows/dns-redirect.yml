@@ -104,6 +104,30 @@ jobs:
             if echo "${RESP}" | jq -e '.success' >/dev/null; then echo "installed via Worker route"; exit 0; fi
           fi
 
+          # --- Attempt 2c: Workers Custom Domains (stays in the Workers API surface) ---
+          OK_DOMAINS=1
+          for HOST in "${ZONE_NAME}" "www.${ZONE_NAME}"; do
+            for TRY in 1 2; do
+              RESP=$(curl -s -X PUT "${AUTH[@]}" "${JSON[@]}" \
+                --data "$(jq -n --arg z "${Z}" --arg h "${HOST}" '{zone_id: $z, hostname: $h, service: "park-redirect", environment: "production"}')" \
+                "https://api.cloudflare.com/client/v4/accounts/${ACC}/workers/domains")
+              echo "2c) custom domain ${HOST} (try ${TRY}):"; echo "${RESP}" | jq -c '{success, errors}'
+              if echo "${RESP}" | jq -e '.success' >/dev/null; then break; fi
+              # Conflicting placeholder record? Remove it (we have DNS Write) and retry once.
+              if [ "${TRY}" = "1" ] && echo "${RESP}" | jq -e '.errors[0].message | test("record|exists|conflict"; "i")' >/dev/null; then
+                RID=$(curl -s "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/dns_records?name=${HOST}" \
+                  | jq -r '.result[0].id // empty')
+                if [ -n "${RID}" ]; then
+                  echo "   removing conflicting DNS record ${RID} for ${HOST}"
+                  curl -s -X DELETE "${AUTH[@]}" "https://api.cloudflare.com/client/v4/zones/${Z}/dns_records/${RID}" | jq -c '{success}'
+                  continue
+                fi
+              fi
+              OK_DOMAINS=0; break
+            done
+          done
+          if [ "${OK_DOMAINS}" = "1" ]; then echo "installed via Workers custom domains"; exit 0; fi
+
           # --- Attempt 3: legacy page rule (user tokens only) ---
           PATTERN="*${ZONE_NAME}/*"
           PR_BODY=$(jq -n --arg pat "${PATTERN}" --arg target "${TARGET}/\$2" '{
