@@ -20,10 +20,10 @@ providers:
     class: octodns_cloudflare.CloudflareProvider
     token: env/CLOUDFLARE_API_TOKEN
 
-zones: {}
-  # insider-intel.net.:
-  #   sources: [zones_config]
-  #   targets: [cloudflare]
+zones:
+  insider-intel.net.:
+    sources: [zones_config]
+    targets: [cloudflare]
   # thederpweb.com.:
   #   sources: [zones_config]
   #   targets: [cloudflare]
