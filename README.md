@@ -15,7 +15,8 @@ convict them — and which methods don't yet map to anything in the matrix.**
 Hunt terms and detection queries fall out of that as byproducts; the mission
 is the discovery.
 
-**Live:** [intel.thederpweb.com](https://intel.thederpweb.com) · API:
+**Live:** [insider-intel.net](https://insider-intel.net) (also
+[intel.thederpweb.com](https://intel.thederpweb.com)) · API:
 [api.intel.thederpweb.com](https://api.intel.thederpweb.com)
 
 Everything is mapped to the
@@ -27,7 +28,7 @@ Preparation · Infringement · Anti-Forensics).
 ## The EVIDENCE ledger — the research product
 
 The flagship output is the **EVIDENCE page**
-([intel.thederpweb.com → EVIDENCE](https://intel.thederpweb.com/#/evidence)):
+([insider-intel.net → EVIDENCE](https://insider-intel.net/#/evidence)):
 a continuously recomputed forensic aggregation across every method-bearing case
 in the corpus. It answers questions a single case report can't:
 
