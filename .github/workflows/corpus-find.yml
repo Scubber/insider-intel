@@ -1,0 +1,76 @@
+name: corpus-find
+
+# One-off: search the WHOLE corpus (all channels, title+link+source+body)
+# for a whole-word term and print channel + title + link so we can tell a
+# real party hit from an incidental substring.
+on:
+  workflow_dispatch:
+    inputs:
+      term:
+        description: "Search term (matched whole-word, case-insensitive)"
+        required: true
+        default: "Voya"
+      max_hits:
+        description: "Max rows to print"
+        required: false
+        default: "40"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Find term across the corpus
+        env:
+          TERM: ${{ github.event.inputs.term }}
+          MAX_HITS: ${{ github.event.inputs.max_hits }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${OBJ}" corpus.jsonl
+          RE="\\b${TERM}\\b"
+          echo "=== whole-word /${RE}/i across title, link, source_name, summary, clean_text ==="
+
+          echo "-- hits by channel --"
+          jq -c --arg re "${RE}" '
+            select(
+              (.title // "" | test($re;"i")) or
+              (.link // "" | test($re;"i")) or
+              (.source_name // "" | test($re;"i")) or
+              (.summary // "" | test($re;"i")) or
+              (.clean_text // "" | test($re;"i"))
+            ) | .channel // "unknown"
+          ' corpus.jsonl | sort | uniq -c || true
+
+          echo
+          echo "-- where the term appears (title vs body-only) + insider verdict --"
+          jq -r --arg re "${RE}" --argjson n "${MAX_HITS:-40}" '
+            select(
+              (.title // "" | test($re;"i")) or
+              (.link // "" | test($re;"i")) or
+              (.source_name // "" | test($re;"i")) or
+              (.summary // "" | test($re;"i")) or
+              (.clean_text // "" | test($re;"i"))
+            )
+            | {
+                ch: (.channel // "?"),
+                inTitle: ((.title // "" | test($re;"i")) or (.summary // "" | test($re;"i"))),
+                inBodyOnly: (((.clean_text // "" | test($re;"i"))) and ((.title // "" | test($re;"i")) or (.summary // "" | test($re;"i")) | not)),
+                insider: (.forensics.is_insider_case // null),
+                title: (.title // "")[0:110],
+                link: (.link // "")
+              }
+            | "[\(.ch)] title/summary=\(.inTitle) bodyOnly=\(.inBodyOnly) insider=\(.insider)\n    \(.title)\n    \(.link)"
+          ' corpus.jsonl | head -n $(( ${MAX_HITS:-40} * 3 )) || true
