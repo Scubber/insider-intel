@@ -167,4 +167,16 @@ jobs:
               sleep 5
             done
           done
-          echo "Site live on apex + www."
+          # Assets must serve with correct content types — an unstyled
+          # "just text" render means CSS/JS didn't load.
+          for path in /styles.css /themes.css /app.js /config.js; do
+            CT=$(curl -s -o /dev/null -w '%{content_type}' --max-time 25 "https://${ZONE_NAME}${path}" || echo none)
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "https://${ZONE_NAME}${path}" || echo 000)
+            echo "asset ${path}: ${CODE} ${CT}"
+            case "${path}" in
+              *.css) echo "${CT}" | grep -q 'text/css' || { echo "::error::${path} wrong content type"; exit 1; };;
+              *.js)  echo "${CT}" | grep -qE 'javascript' || { echo "::error::${path} wrong content type"; exit 1; };;
+            esac
+            [ "${CODE}" = "200" ] || { echo "::error::${path} returned ${CODE}"; exit 1; }
+          done
+          echo "Site live on apex + www; assets serve with correct types."
