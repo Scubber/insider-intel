@@ -23,8 +23,13 @@ from pathlib import Path
 from apps.search.service import get_index
 from shared.settings import get_settings
 
-# First paint only needs the top of the stream; live data replaces it.
-SNAPSHOT_LIMIT = 200
+# The snapshot IS the visit for most readers: at ~13 visits/day every request
+# hits a Cloud Run cold start, so the stream painted from this file is what
+# people actually read for the first 30s-2min while probeLiveApi waits out the
+# boot. 800 slim card rows ≈ ~1 MB gzip (measured 2026-08-16: 500 rows =
+# 0.64 MB, 1000 = 1.28 MB) — cheap enough to make first paint the product and
+# the LIVE flip a minor top-up instead of the main event.
+SNAPSHOT_LIMIT = 800
 # Fields that dominate payload weight and aren't needed for the stream card
 # are dropped: the heavy forensic detail (timeline, hunt seeds, observables,
 # evidence quotes) and the legacy case_record (read-view detail, live-only).
