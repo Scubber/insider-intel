@@ -19,11 +19,14 @@ providers:
   cloudflare:
     class: octodns_cloudflare.CloudflareProvider
     token: env/CLOUDFLARE_API_TOKEN
+    # Account-owned tokens are rejected by the Page Rules endpoint, which the
+    # provider otherwise queries for URLFWD support. We use no URLFWD records.
+    pagerules: false
 
 zones:
   insider-intel.net.:
     sources: [zones_config]
     targets: [cloudflare]
-  # thederpweb.com.:
-  #   sources: [zones_config]
-  #   targets: [cloudflare]
+  thederpweb.com.:
+    sources: [zones_config]
+    targets: [cloudflare]

@@ -9,63 +9,77 @@
 #   intel.thederpweb.com      → GitHub Pages (site)
 #   api.intel.thederpweb.com  → Cloud Run domain mapping (API)
 '':
-  - type: A
-    ttl: 60
+  - ttl: 60
+    type: A
     values:
       - 185.199.108.153
       - 185.199.109.153
       - 185.199.110.153
       - 185.199.111.153
-  - type: AAAA
-    ttl: 60
+  - ttl: 60
+    type: AAAA
     values:
       - 2606:50c0:8000::153
       - 2606:50c0:8001::153
       - 2606:50c0:8002::153
       - 2606:50c0:8003::153
-  - type: TXT
-    ttl: 300
+  - ttl: 3600
+    type: MX
+    values:
+      # RFC 7505 null MX: this domain receives no mail, say so explicitly.
+      - exchange: .
+        preference: 0
+  - ttl: 300
+    type: TXT
     values:
       - google-site-verification=nrgnsAqZqtghTgxuidQa0O3fdCwZbt0-QiYqnDZAIhQ
+      # No mail is ever sent from this domain; hard-fail all SPF checks.
+      - v=spf1 -all
 _dabc37ff78f09ae5420072feaa66e2b2.www:
-  type: CNAME
   ttl: 300
+  type: CNAME
   value: _cb59b37b5c9cfaa74d9611f0b358ae2a.jkddzztszm.acm-validations.aws.
 _db5cfce2656e05de60112c712a049c6b:
-  type: CNAME
   ttl: 300
+  type: CNAME
   value: _a15a1ed49a829648c76143045fb395c3.jkddzztszm.acm-validations.aws.
-_github-pages-challenge-scubber:
+_dmarc:
+  ttl: 3600
   type: TXT
+  values:
+    # Reject anything claiming to be @thederpweb.com; no mail exists.
+    - v=DMARC1\; p=reject\; sp=reject\; adkim=s\; aspf=s
+_github-pages-challenge-scubber:
   ttl: 60
+  type: TXT
   values:
     - 1bfc8a1df98005db3a7fcf03ebdd6c
 _github-pages-challenge-scubber.intel:
-  type: TXT
   ttl: 60
+  type: TXT
   values:
     - b9754b58cebabf2a734f32b48b6588
 api.intel:
-  type: CNAME
   ttl: 300
+  type: CNAME
   value: ghs.googlehosted.com.
 info:
-  type: CNAME
   ttl: 60
+  type: CNAME
   value: deeb3eff7dfrn.cloudfront.net.
 intel:
-  type: CNAME
   ttl: 60
+  type: CNAME
   value: scubber.github.io.
 resume:
-  type: CNAME
   ttl: 60
+  type: CNAME
   value: scubber.github.io.
 valhalla:
-  type: CNAME
   ttl: 60
+  type: CNAME
   value: ec2-3-235-17-215.compute-1.amazonaws.com.
 www:
-  type: CNAME
   ttl: 60
+  type: CNAME
   value: scubber.github.io.
