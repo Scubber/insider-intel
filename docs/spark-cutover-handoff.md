@@ -7,15 +7,14 @@ Architecture is already merged (`docs/dgx-spark.md` §4, sparky
 actually done on the box*, what broke, and what is still unsafe to leave
 running.
 
-**URGENT:** a staging `spark_refresh.sh` is **still running** on sparky
-(started 11:48Z, PIDs `410895`/`410908`, container
-`insider-intel-spark-refresh-run-09d1dfb7399b`). Chain is
-`sparky,anthropic`. vLLM times out at 300s on rich filings and **falls
-through to Haiku**, spending Claude credits. Operator is low on credits.
-**Kill it first** (see §Next). Cloud Scheduler is still the prod writer;
-this job only writes `spark-staging/` after a successful pipeline — it has
-not reached `push` yet, so prod GCS/site are untouched. The credit bleed
-is Anthropic during enrich, not a prod corpus write.
+**RESOLVED 2026-08-16 12:55Z:** the runaway staging `spark_refresh.sh`
+(started 11:48Z, chain `sparky,anthropic`, 300s timeout) was killed by the
+follow-up session. Final damage: **6 billed Haiku calls** (~pennies; the
+fallback resolves to `claude-haiku-4-5`), 15 in-memory enrichments lost
+(the fresh-ingest loop has no checkpoint), **nothing written to the
+bucket** — push never ran. Prod GCS/site untouched throughout. Post-incident
+review + fixes: PR #190 (wrapper hardening) and this branch (probe
+fail-closed); the checklist below was corrected accordingly.
 
 ---
 
@@ -30,12 +29,16 @@ website (Cloud Run + Pages): untouched; serves the bucket
 ```
 
 Outbound only. No tunnel from GCP into the house. Pause Cloud Scheduler
-`corpus-refresh-schedule` only after a proven cycle against the **real**
-prefix, so the bucket has a single writer.
+`corpus-refresh-schedule` after a proven cycle against the **staging**
+prefix and **before any cycle against the real prefix** — both writers
+whole-file-replace `processed/articles.jsonl`, so a Spark push racing a
+cloud-job write silently deletes the loser's rows (append-only history is
+row-level and cannot protect against object replacement).
 
 Host: NVIDIA DGX Spark, SSH alias **`sparky`** (Windows NVIDIA Sync →
 `spark-85b2.local`, user `wintermute`). WSL has **no** SSH config for this
-host — `scp`/`ssh sparky` must run from **Windows**, not WSL.
+host — use Windows interop **`ssh.exe sparky '<cmd>'`** from WSL (it reads
+the Windows profile's SSH config/keys); plain WSL `ssh` is refused.
 
 vLLM (live, do not assume the example SKU):
 
@@ -142,6 +145,9 @@ Intended fix (started, **not landed** — kill interrupted):
 4. Code: `OPENAI_COMPAT_ENABLE_THINKING=false` → vLLM
    `chat_template_kwargs.enable_thinking=false` so thinking tokens do not
    eat the budget. Default true so Cloud Run openai-compat (gpt-4o) is unchanged.
+   **NOT IMPLEMENTED** — no such knob exists anywhere in code yet; setting it
+   in `.env.spark` is a silent no-op. Parked as a follow-up PR; the 900s
+   timeout carries the cutover without it.
 5. Lower `SUMMARIZER_MAX_ARTICLES_PER_RUN` for the first proving run (200 at
    ~2–15 min/article is many hours). Prod trickle is 25.
 
@@ -159,8 +165,11 @@ From `docs/dgx-spark.md` §4. Do in this order:
    `forensics.model` is the served Qwen id (or Haiku only if fallback still on)
 5. **Do not** treat a staging `/reload` as “the site shows Spark rows” — Cloud
    Run reads prod prefixes, not `spark-staging/`
-6. Point `SPARK_CORPUS_BUCKET` at `gs://insider-intel-502413-corpus` (no suffix)
-7. Pause Cloud Scheduler job `corpus-refresh-schedule` (us-east1)
+6. **Pause Cloud Scheduler job `corpus-refresh-schedule` (us-east1) FIRST** —
+   after the tick's in-flight run completes, so the bucket has zero writers
+7. Only then point `SPARK_CORPUS_BUCKET` at `gs://insider-intel-502413-corpus`
+   (no suffix) and set `SPARK_RELOAD_URL` (empty while on staging — PR #190
+   skips the reload when it is unset)
 8. Enable a 6h timer/cron on sparky matching `0 */6 ET` =
    `0 4,10,16,22 * * *` UTC in August. No unit file exists in either repo yet.
    User crontab is easier than systemd --user (no linger/sudo). Wrapper must
@@ -206,4 +215,8 @@ nohup bash scripts/spark_refresh.sh > /tmp/spark_refresh_staging.log 2>&1 &
 - `~/.config/insider-intel-spark-sa.json` (WSL and sparky)
 - `~/insider-intel/.env.spark`
 - `~/sparky/.env` (`VLLM_API_KEY`)
-- docker inspect of `sparky-vllm` prints the API key in `Cmd` — do not paste
+- docker inspect of `sparky-vllm` prints the API key in `Cmd` — do not paste.
+  The same key is in the container's **process argv**, so plain `ps aux` /
+  `pgrep -af` on the host leaks it identically — treat the current key as
+  disclosed; rotate + move it off `--api-key` into env when next touching
+  `~/sparky` (dirty tree there, coordinate separately)
