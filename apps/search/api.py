@@ -109,6 +109,20 @@ def health() -> dict[str, object]:
     }
 
 
+@app.get("/lanes/health")
+def lanes_health() -> dict:
+    """Per-source ingest lane health (source-health indicator payload).
+
+    The refresh job smoke-tests every configured source each cycle and
+    persists one row per lane under ``state/`` (apps/aggregator/lane_health.py
+    — job-written, API reads it, same contract as technique_hunts.json).
+    Empty-but-valid shape until the first instrumented refresh runs.
+    """
+    from apps.aggregator.lane_health import read_lane_health
+
+    return read_lane_health(get_settings().lane_health_path)
+
+
 @app.get("/sources", response_model=list[SourceInfo])
 def list_sources(
     min_score: float = Query(default=0.0, ge=0.0, le=1.0),

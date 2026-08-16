@@ -30,10 +30,20 @@ archive, web-keyword RSS, and **social** — Reddit (`reddit_pipeline.py`, OAuth
 app auth when `REDDIT_CLIENT_ID/SECRET` set, public JSON otherwise) and X
 (`x_pipeline.py`, needs `X_BEARER_TOKEN` or `X_CONSUMER_KEY`/`SECRET` — the
 pipeline mints the bearer; pulls are cadence-capped for the free tier via
-`X_INGEST_EVERY_HOURS`). Social sources are user-picked
+`X_INGEST_EVERY_HOURS`). **Scheduled social pulls are parked** (operator
+decision 2026-08-16, no OAuth app; `SOCIAL_INGEST_ENABLED=false` default in
+`shared/settings.py` — manual `ingest_social`/`ingest_social_url` still work).
+Social sources are user-picked
 subscriptions (`data/config/social_subscriptions.json` — the `config/` GCS
 prefix is exactly why the API may write there) seeded from a curated catalog
 derived from `shared/taxonomy/use_cases.py`.
+
+Every refresh cycle smoke-tests each configured lane:
+`apps/aggregator/lane_health.py` enumerates lanes from the live config, folds
+the per-source outcomes into `data/state/lane_health.json` (consecutive-failure
+counts carry across cycles; ≥3 failed/empty cycles = broken, logged as
+`[LANE-BROKEN]`), and the API serves it at `GET /lanes/health` for the UI's
+source-health footer.
 
 CourtListener flagging is query-driven, not a local scan: the hand-authored
 insider lexicon in `courtlistener.py::DEFAULT_QUERIES` (projected from ITM

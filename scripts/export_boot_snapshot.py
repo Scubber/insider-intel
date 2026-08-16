@@ -23,6 +23,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from apps.aggregator.lane_health import read_lane_health
 from apps.search.service import get_index
 from shared.settings import get_settings
 from shared.utils.evidence import build_evidence_ledger
@@ -121,6 +122,16 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict]:
             "quote_verbatim_share_pct": ledger["quote_grounding"]["verbatim_share_pct"],
         },
     }
+    # Source-health footer while the API cold-starts: embed the lane-health
+    # summary (refresh-job-written under state/; the pages workflow copies it
+    # next to the corpus). Absent file → no key, UI just waits for the live
+    # /lanes/health.
+    lane_health = read_lane_health(settings.lane_health_path)
+    if lane_health.get("generated_at"):
+        meta["lane_health"] = {
+            "generated_at": lane_health["generated_at"],
+            **(lane_health.get("summary") or {}),
+        }
     return articles, meta
 
 

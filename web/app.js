@@ -4567,6 +4567,37 @@
     }
   }
 
+  /** Source-health footer: "DATA SOURCES: X HEALTHY / Y BROKEN (names)".
+   *  summary is /lanes/health `summary` (live) or meta.json `lane_health`
+   *  (boot snapshot). Fail-soft: no data → the line simply stays hidden. */
+  function renderLaneHealth(summary) {
+    const el = document.getElementById("footer-lane-health");
+    if (!el) return;
+    if (!summary || !summary.total) {
+      el.hidden = true;
+      return;
+    }
+    const broken = summary.broken || 0;
+    const healthy = typeof summary.healthy === "number" ? summary.healthy : summary.total - broken;
+    let text = `DATA SOURCES: ${healthy} HEALTHY`;
+    if (broken) {
+      const names = (summary.broken_lanes || []).join(", ");
+      text += ` / ${broken} BROKEN${names ? ` (${names.toUpperCase()})` : ""}`;
+    }
+    el.textContent = text;
+    el.classList.toggle("lane-health-broken", broken > 0);
+    el.hidden = false;
+  }
+
+  async function loadLaneHealth() {
+    try {
+      const data = await api("/lanes/health", {}, { timeoutMs: 10000 });
+      renderLaneHealth(data && data.summary);
+    } catch (err) {
+      console.warn("Lane health unavailable", err);
+    }
+  }
+
   /* EVIDENCE LEDGER pane: what evidence made real cases, aggregated across
      every extracted forensic record. Pure read of /evidence/ledger — the API
      recomputes from its in-memory index, so this stays current per /reload. */
@@ -5669,6 +5700,7 @@
       state.snapshotMode = true;
       state.snapshotGeneratedAt = meta.generated_at || null;
       state.lastTotalIndexed = data.total_indexed || data.results.length;
+      renderLaneHealth(meta.lane_health || null);
       renderArticles(data, streamTitle());
       updateStatusLine();
       if (els.liveStatus) {
@@ -6008,6 +6040,7 @@
       await loadSources();
       loadTrending();
       loadEvidenceLedger();
+      loadLaneHealth();
       loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
