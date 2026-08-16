@@ -120,6 +120,11 @@ def test_ledger_endpoint_aggregates_corpus(tmp_path, monkeypatch) -> None:
         assert data["channels"]["endpoint"] == 2
         # Internal per-technique maps stay off the corpus-wide payload.
         assert "technique_hunts" not in data
+        # Staleness stamp + verdict-gated basis thread through to the client.
+        assert data["generated_at"]
+        assert data["basis"]["contributing_cases"] == 2
+        assert data["basis"]["excluded_non_insider"] == 0
+        assert "posture" in data and "quote_grounding" in data
 
         # Bounds validated.
         assert client.get("/evidence/ledger", params={"top": 0}).status_code == 422
@@ -247,6 +252,216 @@ def test_entity_term_filter() -> None:
         "removable media",
     ]:
         assert not is_entity_term(t), t
+
+
+# ---------------------------------------------------------------------------
+# Verdict gate / posture cap / staleness stamp / quote grounding (2026-08-16
+# audit fixes) — synthetic dict rows straight into the aggregation core.
+# ---------------------------------------------------------------------------
+
+
+def _method(
+    action: str = "USB copy of design files",
+    *,
+    claim: str = "adjudicated",
+    quote: str = "",
+    verbatim: bool | None = None,
+) -> dict:
+    return {
+        "action": action,
+        "claim_status": claim,
+        "evidence_quote": quote,
+        "evidence_quote_verbatim": verbatim,
+        "observables": [
+            {
+                "description": "mass copy to removable media",
+                "artifact": "EDR removable-media events",
+                "channel": "endpoint",
+                "basis": "mechanically_implied",
+            }
+        ],
+    }
+
+
+def _row(
+    link: str,
+    *,
+    insider: bool | None = True,
+    methods: list[dict] | None = None,
+    posture: str = "unknown",
+    model: str = "model-a",
+) -> dict:
+    forensics = {
+        "legal_posture": posture,
+        "model": model,
+        "candidate_technique_ids": ["IF002"],
+        "methods": [_method()] if methods is None else methods,
+    }
+    if insider is not None:
+        forensics["is_insider_case"] = insider
+    return {"link": link, "title": link, "published": "2024-03-01", "forensics": forensics}
+
+
+def test_non_insider_rows_excluded_from_insider_aggregates() -> None:
+    """D-contamination: adjudicated-NOT-insider rows contribute nothing."""
+    ledger = build_evidence_ledger(
+        [
+            _row("in-1", insider=True),
+            _row("in-2", insider=True),
+            _row("out-1", insider=False),  # enriched, method-bearing, non-insider
+        ]
+    )
+    assert ledger["total_rows"] == 3
+    assert ledger["enriched_cases"] == 2  # gate applied
+    techs = {t["id"]: t for t in ledger["techniques"]}
+    assert techs["IF002"]["cases"] == 2
+    assert ledger["channels"]["endpoint"] == 2
+    arts = {a["artifact"]: a for a in ledger["detected_by"]}
+    assert arts["removable-media (USB) logs"]["cases"] == 2
+    assert sum(ledger["strength_totals"].values()) == 2
+    assert ledger["basis"] == {
+        "corpus_rows": 3,
+        "enriched_rows": 3,
+        "verdict_true_rows": 2,
+        "contributing_cases": 2,
+        "excluded_non_insider": 1,
+        "excluded_no_verdict": 0,
+        "model_mix": {"model-a": 2},
+    }
+
+
+def test_missing_or_none_verdict_excluded() -> None:
+    """Uncertainty is not evidence: a row with no verdict fails the gate."""
+    ledger = build_evidence_ledger(
+        [
+            _row("in-1", insider=True),
+            _row("unadjudicated", insider=None),  # no is_insider_case field at all
+            {
+                "link": "null-verdict",
+                "title": "null-verdict",
+                "published": "2024-03-01",
+                "forensics": {"is_insider_case": None, "methods": [_method()]},
+            },
+        ]
+    )
+    assert ledger["enriched_cases"] == 1
+    assert ledger["basis"]["excluded_no_verdict"] == 2
+    assert ledger["basis"]["excluded_non_insider"] == 0
+    assert ledger["basis"]["verdict_true_rows"] == 1
+    techs = {t["id"]: t for t in ledger["techniques"]}
+    assert techs["IF002"]["cases"] == 1
+
+
+def test_posture_weight_ordering_constant() -> None:
+    """Documented ordering: adjudicated/plea > settlement > indictment > complaint."""
+    from shared.utils.evidence import POSTURE_ADJUDICATED_MIN_WEIGHT, POSTURE_WEIGHT
+
+    assert (
+        POSTURE_WEIGHT["conviction"]
+        > POSTURE_WEIGHT["plea"]
+        > POSTURE_WEIGHT["settlement"]
+        > POSTURE_WEIGHT["indictment"]
+        > POSTURE_WEIGHT["complaint"]
+    )
+    assert POSTURE_WEIGHT["sentencing"] >= POSTURE_ADJUDICATED_MIN_WEIGHT
+    assert POSTURE_WEIGHT["civil_suit"] == POSTURE_WEIGHT["complaint"]
+    # Missing signal never caps: none/unknown deliberately absent.
+    assert "none" not in POSTURE_WEIGHT and "unknown" not in POSTURE_WEIGHT
+
+
+def test_case_strength_capped_by_posture() -> None:
+    from shared.utils.evidence import case_strength
+
+    adjudicated = [{"claim_status": "adjudicated"}]
+    alleged = [{"claim_status": "alleged"}]
+    # Adjudicated-grade postures let a court finding stand.
+    assert case_strength(adjudicated, "conviction") == "adjudicated/admitted"
+    assert case_strength(adjudicated, "plea") == "adjudicated/admitted"
+    # Allegation-stage documents can never mint an adjudicated case.
+    assert case_strength(adjudicated, "indictment") == "alleged"
+    assert case_strength(adjudicated, "complaint") == "alleged"
+    assert case_strength(adjudicated, "civil_suit") == "alleged"
+    assert case_strength(adjudicated, "settlement") == "alleged"
+    # No posture signal → claim_status stands (legacy rows don't degrade).
+    assert case_strength(adjudicated, "unknown") == "adjudicated/admitted"
+    assert case_strength(adjudicated) == "adjudicated/admitted"
+    # Posture never PROMOTES a weaker claim.
+    assert case_strength(alleged, "conviction") == "alleged"
+    assert case_strength([{"claim_status": "reported"}], "conviction") == "reported/unclear"
+
+
+def test_ledger_applies_posture_cap_and_reports_it() -> None:
+    ledger = build_evidence_ledger(
+        [
+            _row("conv", posture="conviction"),  # adjudicated claim, stands
+            _row("compl", posture="complaint"),  # adjudicated claim, capped
+            _row("legacy", posture="unknown"),  # no signal, stands
+        ]
+    )
+    s = ledger["strength_totals"]
+    assert s["adjudicated_admitted"] == 2 and s["alleged"] == 1
+    assert ledger["posture"]["capped_cases"] == 1
+    assert ledger["posture"]["mix"] == {"complaint": 1, "conviction": 1, "unknown": 1}
+    techs = {t["id"]: t for t in ledger["techniques"]}
+    assert techs["IF002"]["adjudicated_admitted"] == 2 and techs["IF002"]["alleged"] == 1
+
+
+def test_staleness_stamp_deterministic() -> None:
+    from datetime import UTC, datetime
+
+    fixed = datetime(2026, 8, 16, 12, 0, 0, tzinfo=UTC)
+    rows = [
+        _row("in-1", insider=True, model="model-a"),
+        _row("in-2", insider=True, model="model-b"),
+        _row("out", insider=False),
+        {"link": "raw", "title": "raw", "published": "", "forensics": None},  # unenriched
+    ]
+    ledger = build_evidence_ledger(rows, now=fixed)
+    assert ledger["generated_at"] == "2026-08-16T12:00:00+00:00"
+    b = ledger["basis"]
+    assert b["corpus_rows"] == 4 and b["enriched_rows"] == 3
+    assert b["verdict_true_rows"] == 2 and b["contributing_cases"] == 2
+    assert b["model_mix"] == {"model-a": 1, "model-b": 1}
+    # Same rows, same now → identical payload (deterministic export).
+    assert build_evidence_ledger(rows, now=fixed) == ledger
+
+
+def test_verbatim_quote_preference_and_share() -> None:
+    methods = [
+        _method("emailed files to personal account", claim="alleged"),  # no quote
+        _method(
+            "synced files to Dropbox",
+            claim="alleged",
+            quote="synced roughly 9,700 files to a personal Dropbox",
+            verbatim=True,
+        ),
+        _method(
+            "wiped his laptop",
+            claim="alleged",
+            quote="he definitely wiped everything",
+            verbatim=False,  # paraphrase/fabrication — must never surface
+        ),
+        _method(
+            "printed customer lists",
+            claim="alleged",
+            quote="printed the full customer list",
+            verbatim=None,  # legacy: quote claimed, never stamped
+        ),
+    ]
+    ledger = build_evidence_ledger([_row("case", methods=methods)])
+    assert ledger["quote_grounding"] == {
+        "quoted_methods": 3,
+        "verbatim_true": 1,
+        "verbatim_false": 1,
+        "unstamped": 1,
+        "verbatim_share_pct": 33,
+    }
+    behaviors = ledger["technique_behaviors"]["IF002"]
+    # Verbatim-True behavior sorts first within equal strength; only its quote
+    # is surfaced — False/unstamped quotes are withheld entirely.
+    assert behaviors[0]["action"] == "synced files to Dropbox"
+    assert behaviors[0]["quote"] == "synced roughly 9,700 files to a personal Dropbox"
+    assert all(b["quote"] is None for b in behaviors[1:])
 
 
 def test_crosswalk_ids_exist_in_catalog() -> None:

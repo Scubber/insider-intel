@@ -110,6 +110,14 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
 
     assert meta["indexed_articles"] == 2
     assert meta["generated_at"]
+    # Verdict-gated ledger basis rides in meta.json for the cached-first-paint
+    # EVIDENCE staleness banner: 2 enriched rows, 1 insider-True contributor.
+    basis = meta["evidence_basis"]
+    assert basis["generated_at"]
+    assert basis["corpus_rows"] == 2 and basis["enriched_rows"] == 2
+    assert basis["verdict_true_rows"] == 1 and basis["contributing_cases"] == 1
+    assert basis["excluded_non_insider"] == 1 and basis["excluded_no_verdict"] == 0
+    assert "quote_verbatim_share_pct" in basis
 
 
 def test_snapshot_cli_writes_files(tmp_path, monkeypatch) -> None:

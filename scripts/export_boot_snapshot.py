@@ -7,7 +7,10 @@ never committed to git; the pages workflow generates it into the artifact.
 
 Writes to --out (default web/data/):
   articles.json  — ArticleListResponse-shaped: total_indexed/count/results
-  meta.json      — {generated_at, indexed_articles}
+  meta.json      — {generated_at, indexed_articles, evidence_basis}
+                   evidence_basis = the verdict-gated ledger's generation
+                   stamp (row counts through the gate, model mix, verbatim
+                   quote share) for the EVIDENCE-page staleness banner
 
 Run from insider-intel/:
   python -m scripts.export_boot_snapshot --out web/data
@@ -22,6 +25,7 @@ from pathlib import Path
 
 from apps.search.service import get_index
 from shared.settings import get_settings
+from shared.utils.evidence import build_evidence_ledger
 
 # The snapshot IS the visit for most readers: at ~13 visits/day every request
 # hits a Cloud Run cold start, so the stream painted from this file is what
@@ -93,9 +97,29 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict]:
         "results": results,
         "clusters": [],
     }
+    # D-staleness: the ledger's generation basis rides in meta.json so the
+    # cached first paint can render the EVIDENCE basis banner ("based on N
+    # adjudicated-or-alleged cases as of DATE") before the live API answers.
+    ledger = build_evidence_ledger(
+        (
+            {
+                "link": a.link,
+                "title": a.title,
+                "published": a.published.isoformat() if a.published else "",
+                "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
+            }
+            for a in index.articles
+        ),
+        top=1,
+    )
     meta = {
         "generated_at": datetime.now(UTC).isoformat(),
         "indexed_articles": index.size,
+        "evidence_basis": {
+            "generated_at": ledger["generated_at"],
+            **ledger["basis"],
+            "quote_verbatim_share_pct": ledger["quote_grounding"]["verbatim_share_pct"],
+        },
     }
     return articles, meta
 

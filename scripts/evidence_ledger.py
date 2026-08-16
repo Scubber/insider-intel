@@ -43,18 +43,39 @@ def _iter_rows(path: str):
 
 def render_markdown(ledger: dict) -> str:
     s = ledger["strength_totals"]
+    b = ledger.get("basis") or {}
+    q = ledger.get("quote_grounding") or {}
+    p = ledger.get("posture") or {}
     out = []
     out.append("# Insider Evidence Ledger")
     out.append("")
     out.append(
-        f"Corpus rows: **{ledger['total_rows']}** · cases with extracted methods: "
+        f"Corpus rows: **{ledger['total_rows']}** · insider cases with extracted methods: "
         f"**{ledger['enriched_cases']}** (adjudicated/admitted: {s['adjudicated_admitted']}, "
         f"alleged: {s['alleged']}, reported/unclear: {s['reported_unclear']})"
     )
     out.append("")
-    out.append("> Counting rule: a case's strength is the STRONGEST claim_status any of its")
-    out.append("> methods carries. Adjudicated/admitted methods are ground truth; alleged is")
-    out.append("> a complaint's theory. Never read the two columns as equivalent.")
+    mix = ", ".join(f"{m}×{n}" for m, n in (b.get("model_mix") or {}).items()) or "n/a"
+    share = q.get("verbatim_share_pct")
+    out.append(
+        f"_Generated {ledger.get('generated_at', '?')} · verdict-gated basis: "
+        f"{b.get('corpus_rows', ledger['total_rows'])} corpus rows → "
+        f"{b.get('enriched_rows', 0)} enriched → {b.get('verdict_true_rows', 0)} "
+        f"adjudicated-insider; excluded method-bearing rows: "
+        f"{b.get('excluded_non_insider', 0)} non-insider + "
+        f"{b.get('excluded_no_verdict', 0)} no-verdict. "
+        f"Posture-capped cases: {p.get('capped_cases', 0)}. "
+        f"Verbatim-verified quotes: {share if share is not None else 'n/a'}"
+        f"{'%' if share is not None else ''} of {q.get('quoted_methods', 0)}. "
+        f"Enrichment models: {mix}_"
+    )
+    out.append("")
+    out.append("> Counting rules: only rows adjudicated `is_insider_case=True` contribute.")
+    out.append("> A case's strength is the STRONGEST claim_status any of its methods")
+    out.append("> carries, capped by the document's legal_posture — a complaint/indictment")
+    out.append("> can never mint an adjudicated case. Adjudicated/admitted methods are")
+    out.append("> ground truth; alleged is a complaint's theory. Never read the two")
+    out.append("> columns as equivalent.")
 
     out.append("")
     out.append("## 1 · Technique frequency (ITM)")

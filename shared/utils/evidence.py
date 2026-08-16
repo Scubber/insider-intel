@@ -7,18 +7,53 @@ Rolls stored forensic records (plain dicts — works on raw JSONL rows or
 runner can import it; no LLM spend anywhere in this path.
 
 Counting rules (keep these honest):
-- A case's strength is the STRONGEST claim_status any of its methods carries.
-  ``adjudicated``/``admitted`` methods are ground truth; ``alleged`` is a
-  complaint's theory — the two are never conflated.
+- Verdict gate (D-contamination, 2026-08-16 audit): only rows the enricher
+  adjudicated ``is_insider_case is True`` contribute to insider-behavior
+  aggregates. Non-insider and unadjudicated (missing/None verdict) rows are
+  counted in the ``basis`` block but contribute NOTHING — before the gate,
+  ~33.7% of contributing rows were non-insider.
+- A case's strength is the STRONGEST claim_status any of its methods carries,
+  CAPPED by the document's ``legal_posture`` (D-posture): ``adjudicated``/
+  ``admitted`` methods are ground truth; ``alleged`` is a complaint's theory —
+  the two are never conflated, and a civil complaint can never mint an
+  adjudicated case no matter how its text reads (see POSTURE_WEIGHT).
 - ``mechanically_implied`` observables are the defensible detection claims.
+- Every ledger is stamped (D-staleness): ``generated_at`` plus a ``basis``
+  block (row counts through the gate, model mix) so renderers can say
+  "based on N cases as of DATE" instead of implying freshness.
 """
 
 from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from datetime import UTC, datetime
 
 STRONG_STATUSES = {"adjudicated", "admitted"}
+STRENGTH_RANK = {"reported/unclear": 0, "alleged": 1, "adjudicated/admitted": 2}
+
+# D-posture (2026-08-16 audit): ordinal weight of each legal stage — how much
+# finding-of-fact force the DOCUMENT itself carries. claim_status is the LLM's
+# read of how one document frames an action; inside a civil complaint,
+# "adjudicated"-sounding language is still the plaintiff's theory. Posture
+# therefore CAPS a case's strength, never raises it: a posture below
+# POSTURE_ADJUDICATED_MIN_WEIGHT can never count as adjudicated/admitted.
+# Ordering: conviction/sentencing (court findings) ≥ plea (admission on the
+# record) > settlement (resolved, but typically no admission or finding) >
+# indictment (a grand jury's charge — probable cause, not proof) >
+# complaint/civil_suit (one side's allegations). "none"/"unknown" carry no
+# document signal, so claim_status stands uncapped rather than degrading
+# legacy rows on absent data.
+POSTURE_WEIGHT: dict[str, int] = {
+    "conviction": 5,
+    "sentencing": 5,
+    "plea": 4,
+    "settlement": 3,
+    "indictment": 2,
+    "civil_suit": 1,
+    "complaint": 1,
+}
+POSTURE_ADJUDICATED_MIN_WEIGHT = 4
 CHANNELS = ("email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human")
 
 # Freeform artifact strings from the enricher vary ("EDR removable-media
@@ -137,6 +172,7 @@ def is_entity_term(term: str) -> bool:
         if alpha and len(capped) / len(alpha) >= 0.6:
             return True
     return False
+
 
 # WHO — roles, never individuals. Two independent axes normalized from the
 # free-text actor_role/actor_profile the enricher extracts per case.
@@ -293,24 +329,60 @@ def technique_theme(tech_id: str) -> str:
     return THEME_BY_PREFIX.get(str(tech_id)[:2].upper(), "other")
 
 
-def case_strength(methods: list[dict]) -> str:
-    """Strongest claim_status across a case's methods."""
+def case_strength(methods: list[dict], legal_posture: str = "") -> str:
+    """Strongest claim_status across a case's methods, capped by legal posture.
+
+    D-posture (2026-08-16 audit): without the cap, allegations in complaints
+    were weighted like adjudicated facts whenever the enricher stamped a
+    method "adjudicated" while reading a complaint. The document's legal
+    stage now sets a ceiling (see POSTURE_WEIGHT): postures below
+    POSTURE_ADJUDICATED_MIN_WEIGHT cap the case at "alleged". Posture never
+    PROMOTES — an alleged-only method list stays alleged even under a
+    conviction posture — and an unknown/absent posture leaves claim_status
+    uncapped so legacy rows don't degrade on missing data.
+    """
     statuses = {str(m.get("claim_status") or "unclear").lower() for m in methods}
     if statuses & STRONG_STATUSES:
-        return "adjudicated/admitted"
-    if "alleged" in statuses:
+        strength = "adjudicated/admitted"
+    elif "alleged" in statuses:
+        strength = "alleged"
+    else:
+        strength = "reported/unclear"
+    weight = POSTURE_WEIGHT.get(str(legal_posture or "").strip().lower())
+    if (
+        weight is not None
+        and weight < POSTURE_ADJUDICATED_MIN_WEIGHT
+        and STRENGTH_RANK[strength] > STRENGTH_RANK["alleged"]
+    ):
         return "alleged"
-    return "reported/unclear"
+    return strength
 
 
-def build_evidence_ledger(rows, *, top: int = 25) -> dict:
+def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -> dict:
     """Aggregate corpus rows (dicts) into the ledger payload.
 
     Each row needs ``link``/``title``/``published`` and a ``forensics`` dict
     with ``methods`` (and optionally ``candidate_technique_ids``). Rows
     without extracted methods are counted but contribute nothing.
+
+    Verdict gate (D-contamination): a method-bearing row contributes to the
+    insider aggregates only when ``forensics.is_insider_case is True`` — same
+    semantics as the projection layer's verdict-gated selection
+    (``shared.schemas.forensics.select_best_enrichment``). Rows adjudicated
+    non-insider (False) or never adjudicated (missing/None) are tallied in
+    ``basis`` and skipped. ``enriched_cases`` therefore now means
+    "verdict-true cases with extracted methods" (name kept for the site).
+
+    ``now`` (D-staleness) injects the ``generated_at`` stamp for
+    deterministic tests; defaults to the current UTC time.
     """
     total_rows = enriched_cases = 0
+    enriched_rows = verdict_true_rows = 0
+    excluded_non_insider = excluded_no_verdict = 0
+    posture_mix: Counter = Counter()
+    posture_capped = 0
+    model_mix: Counter = Counter()
+    quotes_verbatim = quotes_paraphrased = quotes_unstamped = 0
     tech_cases: dict[str, Counter] = defaultdict(Counter)
     tech_examples: dict[str, list[str]] = defaultdict(list)
     tech_families: dict[str, Counter] = defaultdict(Counter)  # technique -> family -> cases
@@ -337,16 +409,50 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
         if not isinstance(row, dict):
             continue
         total_rows += 1
-        f = row.get("forensics") or {}
+        f = row.get("forensics")
+        f = f if isinstance(f, dict) else {}
+        if f:
+            enriched_rows += 1
+        verdict = f.get("is_insider_case")
+        if f and verdict is True:
+            verdict_true_rows += 1
         methods = [m for m in (f.get("methods") or []) if isinstance(m, dict)]
         if not methods:
             continue
+        # D-contamination gate: insider-behavior statistics only from rows the
+        # enricher adjudicated as insider cases. False and missing/None both
+        # fail the gate (uncertainty is not evidence).
+        if verdict is not True:
+            if verdict is False:
+                excluded_non_insider += 1
+            else:
+                excluded_no_verdict += 1
+            continue
         enriched_cases += 1
+        model_mix[str(f.get("model") or "").strip() or "unknown"] += 1
         link = str(row.get("link") or f"row-{total_rows}")
         title = str(row.get("title") or link)[:90]
-        strength = case_strength(methods)
+        posture = str(f.get("legal_posture") or "unknown").strip().lower() or "unknown"
+        posture_mix[posture] += 1
+        strength = case_strength(methods, posture)
+        if strength != case_strength(methods):
+            posture_capped += 1
         strength_totals[strength] += 1
         year = str(row.get("published") or "")[:4] or "????"
+
+        # Quote grounding: tally the deterministic evidence_quote_verbatim
+        # stamps (shared.schemas.forensics.stamp_quote_verbatim) so the page
+        # can state what share of surfaced quotes is verified verbatim.
+        for m in methods:
+            if not str(m.get("evidence_quote") or "").strip():
+                continue
+            stamp = m.get("evidence_quote_verbatim")
+            if stamp is True:
+                quotes_verbatim += 1
+            elif stamp is False:
+                quotes_paraphrased += 1
+            else:
+                quotes_unstamped += 1
 
         function, emp_state = normalize_role(
             str(f.get("actor_role") or ""), str(f.get("actor_profile") or "")
@@ -376,8 +482,20 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for t in (str(x).strip() for x in (f.get("hunt_terms") or []))
             if t and not is_entity_term(t)
         ]
+        # (action, verbatim-verified quote) pairs — only quotes stamped
+        # evidence_quote_verbatim=True ride along; paraphrases/fabrications
+        # (False) and unstamped legacy quotes surface as no quote at all.
         case_actions = [
-            a for a in (str(m.get("action") or "").strip() for m in methods) if a
+            (
+                action,
+                (
+                    str(m.get("evidence_quote") or "").strip()
+                    if m.get("evidence_quote_verbatim") is True
+                    else ""
+                ),
+            )
+            for m, action in ((m, str(m.get("action") or "").strip()) for m in methods)
+            if action
         ]
 
         for tech in f.get("candidate_technique_ids") or []:
@@ -411,13 +529,20 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
                     continue
                 term_seen[tech].add(key)
                 tech_terms[tech].append(term[:80])
-            for action in case_actions:
+            for action, quote in case_actions:
                 key = " ".join(action.lower().split())[:120]
                 full = len(tech_behaviors[tech]) >= BEHAVIORS_PER_TECHNIQUE
                 if key in behavior_seen[tech] or full:
                     continue
                 behavior_seen[tech].add(key)
-                tech_behaviors[tech].append({"action": action[:160], "strength": strength})
+                tech_behaviors[tech].append(
+                    {
+                        "action": action[:160],
+                        "strength": strength,
+                        # Verbatim-True source quote or None — never a paraphrase.
+                        "quote": quote[:200] or None,
+                    }
+                )
 
         for m in methods:
             m_strong = str(m.get("claim_status") or "").lower() in STRONG_STATUSES
@@ -478,10 +603,40 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
         rows.sort(key=lambda r: (r["label"] == "unknown", -r["cases"]))
         return rows
 
+    quoted_methods = quotes_verbatim + quotes_paraphrased + quotes_unstamped
     return {
         "total_rows": total_rows,
         "enriched_cases": enriched_cases,
         "small_n_floor": SMALL_N_FLOOR,
+        # D-staleness: generation stamp + the row counts behind every number,
+        # so the site can render a "based on N cases as of DATE" basis banner.
+        "generated_at": (now or datetime.now(UTC)).isoformat(),
+        "basis": {
+            "corpus_rows": total_rows,
+            "enriched_rows": enriched_rows,
+            "verdict_true_rows": verdict_true_rows,
+            "contributing_cases": enriched_cases,
+            "excluded_non_insider": excluded_non_insider,
+            "excluded_no_verdict": excluded_no_verdict,
+            "model_mix": dict(sorted(model_mix.items(), key=lambda kv: (-kv[1], kv[0]))),
+        },
+        # D-posture: document-stage mix of contributing cases plus how many
+        # had their method-claimed strength demoted by the posture ceiling.
+        "posture": {
+            "mix": dict(sorted(posture_mix.items(), key=lambda kv: (-kv[1], kv[0]))),
+            "capped_cases": posture_capped,
+        },
+        # Quote grounding: share of contributing cases' claimed quotes whose
+        # deterministic verbatim stamp verified them against the source.
+        "quote_grounding": {
+            "quoted_methods": quoted_methods,
+            "verbatim_true": quotes_verbatim,
+            "verbatim_false": quotes_paraphrased,
+            "unstamped": quotes_unstamped,
+            "verbatim_share_pct": (
+                round(100 * quotes_verbatim / quoted_methods) if quoted_methods else None
+            ),
+        },
         "strength_totals": {
             "adjudicated_admitted": strong_total,
             "alleged": strength_totals["alleged"],
@@ -527,8 +682,13 @@ def build_evidence_ledger(rows, *, top: int = 25) -> dict:
             for t, hunts in tech_hunts.items()
         },
         "technique_terms": {t: terms for t, terms in tech_terms.items()},
+        # Adjudicated first; within a strength, verbatim-quoted behaviors
+        # outrank quote-less ones (quote-grounding preference).
         "technique_behaviors": {
-            t: sorted(b, key=lambda x: x["strength"] != "adjudicated/admitted")
+            t: sorted(
+                b,
+                key=lambda x: (x["strength"] != "adjudicated/admitted", x["quote"] is None),
+            )
             for t, b in tech_behaviors.items()
         },
         "detected_by": [
