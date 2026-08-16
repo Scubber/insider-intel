@@ -162,6 +162,7 @@
     panelBody: document.getElementById("panel-body"),
     panelTitle: document.getElementById("panel-title"),
     panelMeta: document.getElementById("panel-meta"),
+    panelProvenance: document.getElementById("panel-provenance"),
     panelLink: document.getElementById("panel-link"),
     operatorList: document.getElementById("operator-list"),
     caseRecordGroup: document.getElementById("case-record-group"),
@@ -3525,6 +3526,16 @@
     els.panelBody.hidden = false;
     els.panelTitle.textContent = article.title;
     els.panelMeta.textContent = `${article.source_name} · ${formatDate(article.published)}`;
+    // Enrichment provenance (transparency stamp): `enriched_by` is the
+    // server-computed human label for the model that produced this row's
+    // analyst note + forensics (shared/utils/model_display.py — one source of
+    // truth for LIVE and CACHED). Absent on un-enriched rows: omit the line,
+    // never render a raw id or "None".
+    if (els.panelProvenance) {
+      const enrichedBy = article.enriched_by || "";
+      els.panelProvenance.textContent = enrichedBy ? `Enriched by ${enrichedBy}` : "";
+      els.panelProvenance.hidden = !enrichedBy;
+    }
     els.panelLink.href = article.link;
     fillCopyableChips(els.operatorList, composeOperatorTerms(article), true);
     renderCaseRecord(caseFacts(article));
@@ -4005,6 +4016,7 @@
         lines.push(`${label}: ${text}`);
       });
       if (analystText) lines.push("", "ANALYST NOTE", ...noteParas);
+      if (article.enriched_by) lines.push(`Enriched by ${article.enriched_by}`);
       lines.push("", article.link);
       copyText(lines.filter((l) => l != null).join("\n"), "Copied card");
     });
@@ -4050,7 +4062,19 @@
       actions.appendChild(expandBtn);
     }
 
-    footer.append(terms, actions);
+    footer.append(terms);
+    // Enrichment provenance stamp — card metadata footer, quieter than the
+    // chips. `enriched_by` is server-computed from the stored enricher model
+    // id (one source of truth for LIVE and CACHED); un-enriched rows carry
+    // none and show nothing — never a raw id or "None".
+    if (article.enriched_by) {
+      const prov = document.createElement("span");
+      prov.className = "case-provenance";
+      prov.textContent = `Enriched by ${article.enriched_by}`;
+      prov.title = "Provenance: the model that produced this card's analyst note and forensic record";
+      footer.appendChild(prov);
+    }
+    footer.appendChild(actions);
 
     // Inline SHOW MORE bar under the clamped note — the discoverable twin of
     // the footer READ button. A sibling of the card <button> (a control can't
