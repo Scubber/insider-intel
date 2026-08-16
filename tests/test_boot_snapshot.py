@@ -43,6 +43,9 @@ def _seed(tmp_path, monkeypatch):
                         )
                     ],
                     extracted_at=datetime(2026, 8, 1, tzinfo=UTC),
+                    # Enriched row carries the served-model id; the pre-stamp
+                    # row has none (model=None) — its card shows no provenance.
+                    model="claude-haiku-4-5-20251001" if insider else None,
                 ),
             }
         )
@@ -92,6 +95,18 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     assert by_flag[False]["context_kind"] == "detection"
     assert by_flag[True]["legal_posture"] == "indictment"
     assert by_flag[True]["methods"][0]["claim_status"] == "adjudicated"
+
+    # Provenance survives to the client payload: the top-level `enriched_by`
+    # label (precomputed server-side from forensics.model — one source of
+    # truth for LIVE and CACHED) rides through the slimming untouched. Rows
+    # without a stamped model omit it — the UI must never see "None".
+    rows_by_flag = {
+        row["forensics"]["is_insider_case"]: row for row in raw["results"] if row.get("forensics")
+    }
+    assert rows_by_flag[True]["enriched_by"] == "Claude Haiku 4.5"
+    assert rows_by_flag[False]["enriched_by"] is None
+    # The raw model id itself stays out of the slim forensics payload.
+    assert "model" not in rows_by_flag[True]["forensics"]
 
     assert meta["indexed_articles"] == 2
     assert meta["generated_at"]

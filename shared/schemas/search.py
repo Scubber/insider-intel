@@ -65,6 +65,14 @@ class SearchHit(BaseModel):
         default=None,
         description="Ingest-time forensic reconstruction (unified enricher LLM)",
     )
+    enriched_by: str | None = Field(
+        default=None,
+        description=(
+            "Human provenance label for the enrichment model "
+            "(shared.utils.model_display), e.g. 'Claude Haiku 4.5'; "
+            "None when the row was never enriched"
+        ),
+    )
 
 
 class SearchRequest(BaseModel):

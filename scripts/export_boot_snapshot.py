@@ -40,6 +40,11 @@ SNAPSHOT_LIMIT = 800
 # record still validates as PerCaseForensics.
 # tests/test_boot_snapshot.py mechanically checks this list against the
 # fields web/app.js actually reads — extend BOTH when the card grows a read.
+# The enrichment-provenance label (`enriched_by`, "Enriched by Claude Haiku
+# 4.5") rides TOP-LEVEL on each hit — precomputed at projection time
+# (shared/utils/model_display.py via apps/search/index.py::_to_hit), so it
+# survives this slimming untouched and the raw model id stays out of the
+# payload.
 _KEEP_FORENSICS_KEYS = (
     "link",
     "title",

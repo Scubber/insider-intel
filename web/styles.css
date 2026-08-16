@@ -1896,6 +1896,19 @@ body {
   border-radius: 0 0 var(--radius) var(--radius);
 }
 
+/* Enrichment provenance stamp — footer metadata, quieter than the chips and
+   action buttons around it. */
+.case-provenance {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
 .case-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2300,6 +2313,16 @@ body {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+/* Enrichment provenance line under the detail meta — metadata, not a banner. */
+.panel-provenance {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.8;
 }
 
 .panel-summary {

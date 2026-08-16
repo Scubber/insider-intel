@@ -21,6 +21,7 @@ from shared.schemas import (
 )
 from shared.schemas.articles import resolve_channel
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
+from shared.utils.model_display import enricher_display_name
 from shared.utils.story_key import compute_story_key
 
 logger = logging.getLogger(__name__)
@@ -684,6 +685,7 @@ class ArticleSearchIndex:
     @staticmethod
     def _to_hit(article: ProcessedArticle, score: float) -> SearchHit:
         story_key = (getattr(article, "story_key", None) or "").strip()
+        forensics = getattr(article, "forensics", None)
         if not story_key:
             story_key = compute_story_key(
                 article.title,
@@ -713,5 +715,12 @@ class ArticleSearchIndex:
             insider_type=getattr(article, "insider_type", None),
             ai_summary=getattr(article, "ai_summary", None),
             case_record=getattr(article, "case_record", None),
-            forensics=getattr(article, "forensics", None),
+            forensics=forensics,
+            # Provenance label for the projected enrichment generation — the
+            # model stamped on the SELECTED forensics record, mapped to its
+            # human label once here so the live API and the boot snapshot
+            # (built from these same hits) ship the identical string.
+            enriched_by=enricher_display_name(
+                getattr(forensics, "model", None) if forensics is not None else None
+            ),
         )
