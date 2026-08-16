@@ -250,6 +250,99 @@ def test_custom_auto_model_probes_v1_models(monkeypatch) -> None:
     assert [p.model_name for p in chain] == ["Qwen/Qwen3.8-27B-FP8"]
 
 
+def test_auto_probe_sends_bearer_header(monkeypatch) -> None:
+    seen = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        seen["headers"] = headers or {}
+        return _HttpResp({"data": [{"id": "served-model"}]})
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.get", fake_get)
+    monkeypatch.setenv("SPARKY_API_KEY", "probe-secret")
+    chain = get_summarizer_chain(
+        _settings(
+            SUMMARIZER_LLM_PROVIDER="sparky",
+            LLM_CUSTOM_PROVIDERS=json.dumps(
+                {
+                    "sparky": {
+                        "base_url": "http://vllm:8000/v1",
+                        "model": "auto",
+                        "api_key_env": "SPARKY_API_KEY",
+                    }
+                }
+            ),
+        )
+    )
+    assert [p.model_name for p in chain] == ["served-model"]
+    assert seen["headers"].get("Authorization") == "Bearer probe-secret"
+
+
+_SPARKY_AUTO = json.dumps({"sparky": {"base_url": "http://vllm:8000/v1", "model": "auto"}})
+
+
+def test_auto_probe_retries_transient_failure(monkeypatch) -> None:
+    import httpx as httpx_mod
+
+    calls = {"n": 0}
+
+    def flaky_get(url, headers=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx_mod.ConnectError("connection refused")
+        return _HttpResp({"data": [{"id": "served-after-retry"}]})
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.get", flaky_get)
+    monkeypatch.setattr("shared.llm.openai_provider.time.sleep", lambda s: None)
+    chain = get_summarizer_chain(
+        _settings(SUMMARIZER_LLM_PROVIDER="sparky", LLM_CUSTOM_PROVIDERS=_SPARKY_AUTO)
+    )
+    assert calls["n"] == 2
+    assert [p.model_name for p in chain] == ["served-after-retry"]
+
+
+def test_auto_probe_failure_is_loud_and_not_cached(monkeypatch, caplog) -> None:
+    # A dead probe must drop the provider for THIS resolution only: the empty
+    # chain is never cached (a vLLM restart mid-run heals on the next article),
+    # and the failure logs [FAIL] lines — an empty chain returns before
+    # budget.take(), so the enrichment tripwire can't see this state.
+    import logging
+
+    import httpx as httpx_mod
+
+    def dead_get(url, headers=None, timeout=None):
+        raise httpx_mod.ConnectError("connection refused")
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.get", dead_get)
+    monkeypatch.setattr("shared.llm.openai_provider.time.sleep", lambda s: None)
+    settings = _settings(SUMMARIZER_LLM_PROVIDER="sparky", LLM_CUSTOM_PROVIDERS=_SPARKY_AUTO)
+    with caplog.at_level(logging.ERROR):
+        assert get_summarizer_chain(settings) == []
+    assert "[FAIL] llm-probe" in caplog.text
+    assert "[FAIL] llm-chain" in caplog.text
+
+    # Same settings object, NO cache reset: once the server answers, the very
+    # next resolution succeeds.
+    monkeypatch.setattr(
+        "shared.llm.openai_provider.httpx.get",
+        lambda url, headers=None, timeout=None: _HttpResp({"data": [{"id": "recovered"}]}),
+    )
+    assert [p.model_name for p in get_summarizer_chain(settings)] == ["recovered"]
+
+
+def test_auto_probe_rejects_malformed_bodies(monkeypatch) -> None:
+    # Shape problems are terminal (no retry can fix them) but never raise.
+    for body in ({"data": "nope"}, {"data": []}, {"data": [{"id": ""}]}, ["not", "a", "dict"]):
+        monkeypatch.setattr(
+            "shared.llm.openai_provider.httpx.get",
+            lambda url, headers=None, timeout=None, body=body: _HttpResp(body),
+        )
+        monkeypatch.setattr("shared.llm.openai_provider.time.sleep", lambda s: None)
+        chain = get_summarizer_chain(
+            _settings(SUMMARIZER_LLM_PROVIDER="sparky", LLM_CUSTOM_PROVIDERS=_SPARKY_AUTO)
+        )
+        assert chain == [], f"body {body!r} should drop the provider"
+
+
 def test_enrichment_stamps_served_model_from_completion(monkeypatch) -> None:
     from shared.llm.openai_provider import OpenAICompatSummarizer
 

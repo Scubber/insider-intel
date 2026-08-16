@@ -129,6 +129,15 @@ def _resolve_provider(
 
         if is_auto_model(model):
             model = discover_openai_compat_model(base_url, api_key) or ""
+            if not model:
+                # The probe already logged its [FAIL]; name the consequence here
+                # so the job log ties the skipped provider to the dead probe.
+                logger.error(
+                    "[FAIL] llm-chain: custom provider %r is model:auto but the probe "
+                    "failed; provider skipped",
+                    name,
+                )
+                return None
         if not model:
             logger.warning("Custom LLM provider %r missing model; skipped", name)
             return None
@@ -226,6 +235,13 @@ def get_synthesizer_chain(settings: Settings) -> list[SynthesizerProvider]:
         provider = _build_synthesizer(name, settings, override)
         if provider is not None:
             providers.append(provider)
+    if chain and not providers:
+        logger.error(
+            "[FAIL] llm-chain: synthesizer chain %s configured but 0 providers resolved; "
+            "hunt synthesis skipped until one resolves",
+            chain,
+        )
+        return providers
     _SYNTHESIZER_CHAIN_CACHE[cache_key] = providers
     return providers
 
@@ -248,6 +264,17 @@ def get_summarizer_chain(settings: Settings) -> list[SummarizerProvider]:
         provider = _build_summarizer(name, settings, override)
         if provider is not None:
             providers.append(provider)
+    if chain and not providers:
+        # Not cached: a transient probe failure must not freeze a dead chain
+        # for the whole run — the next call re-resolves. Loud, because an
+        # empty chain returns before budget.take(), so the enrichment [FAIL]
+        # tripwire can never see this state.
+        logger.error(
+            "[FAIL] llm-chain: summarizer chain %s configured but 0 providers resolved; "
+            "enrichment skipped until one resolves",
+            chain,
+        )
+        return providers
     _SUMMARIZER_CHAIN_CACHE[cache_key] = providers
     return providers
 
@@ -265,6 +292,13 @@ def get_discoverer_chain(settings: Settings) -> list[DiscovererProvider]:
         provider = _build_discoverer(name, settings, override)
         if provider is not None:
             providers.append(provider)
+    if chain and not providers:
+        logger.error(
+            "[FAIL] llm-chain: discoverer chain %s configured but 0 providers resolved; "
+            "discovery skipped until one resolves",
+            chain,
+        )
+        return providers
     _DISCOVERER_CHAIN_CACHE[cache_key] = providers
     return providers
 

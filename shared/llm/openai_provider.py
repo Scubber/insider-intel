@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import NamedTuple
 
 import httpx
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 _AUTO_MODEL_TOKENS = frozenset({"", "auto", "*"})
 _SERVED_MODEL_CACHE: dict[str, str] = {}
+_PROBE_BACKOFF_SECONDS = 2.0
 
 
 class ChatResult(NamedTuple):
@@ -55,13 +57,18 @@ def is_auto_model(model: str | None) -> bool:
 
 
 def discover_openai_compat_model(
-    base_url: str, api_key: str | None, *, timeout: float = 10.0
+    base_url: str, api_key: str | None, *, timeout: float = 10.0, attempts: int = 3
 ) -> str | None:
     """Return the first id from GET /v1/models, or None.
 
     Used when a custom provider sets ``model`` to ``auto`` (or omits it) so a
     host can swap vLLM weights without retuning tenant config. The completion
     response ``model`` field still wins for ``forensics.model`` tagging.
+
+    A None here makes the chain builder drop the provider — on a local-only
+    chain that silently zeroes enrichment for the run — so transient failures
+    (server restart, checkpoint still loading) get retried with backoff and
+    the terminal failure is a greppable [FAIL] line, never just a warning.
     """
     base = base_url.rstrip("/")
     cached = _SERVED_MODEL_CACHE.get(base)
@@ -70,21 +77,54 @@ def discover_openai_compat_model(
     headers: dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    try:
-        response = httpx.get(f"{base}/models", headers=headers, timeout=timeout)
-        response.raise_for_status()
-        rows = response.json().get("data") or []
-        if not isinstance(rows, list) or not rows:
-            return None
-        mid = str(rows[0].get("id") or "").strip()
-        if not mid:
-            return None
-        _SERVED_MODEL_CACHE[base] = mid
-        logger.info("OpenAI-compat %s serves %s", base, mid)
-        return mid
-    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
-        logger.warning("OpenAI-compat GET /models failed for %s: %s", base, exc)
-        return None
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(_PROBE_BACKOFF_SECONDS * attempt)
+        try:
+            response = httpx.get(f"{base}/models", headers=headers, timeout=timeout)
+            response.raise_for_status()
+            body = response.json()
+            rows = body.get("data") if isinstance(body, dict) else None
+            # A well-formed reply with no usable id is a config problem, not a
+            # transient one — retrying can't fix the body shape.
+            if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+                logger.error(
+                    "[FAIL] llm-probe: GET %s/models returned an unexpected body: %.200r",
+                    base,
+                    body,
+                )
+                return None
+            mid = str(rows[0].get("id") or "").strip()
+            if not mid:
+                logger.error("[FAIL] llm-probe: GET %s/models first row has no id", base)
+                return None
+            _SERVED_MODEL_CACHE[base] = mid
+            logger.info("OpenAI-compat %s serves %s", base, mid)
+            return mid
+        except (
+            httpx.HTTPError,
+            AttributeError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            last_error = exc
+            logger.warning(
+                "OpenAI-compat GET /models attempt %d/%d failed for %s: %s",
+                attempt + 1,
+                attempts,
+                base,
+                exc,
+            )
+    logger.error(
+        "[FAIL] llm-probe: GET %s/models failed after %d attempts: %s",
+        base,
+        attempts,
+        last_error,
+    )
+    return None
 
 
 def _chat_completion(
