@@ -141,10 +141,28 @@ def run_processing(
             result.articles_processed += 1
             # Curated publications bypass the score gate: long reference docs
             # dilute keyword density and would otherwise silently drop out.
+            # Enriched rows also bypass it: the enrich node has already spent
+            # budget (real money on funded chains), and dropping the row here
+            # both forfeits that spend and — because no processed row exists to
+            # satisfy the prior/skip check — re-qualifies the SAME article
+            # every cycle forever. Measured 2026-08-16: ten articles (some
+            # weeks old, one an adjudicated insider=True case) were being
+            # re-enriched and discarded every 6h run. Billed once means kept.
             is_publication = resolve_channel(raw.source_id, raw.channel) == "publications"
-            if not is_publication and processed.relevance_score < min_score:
+            if (
+                not is_publication
+                and processed.relevance_score < min_score
+                and processed.forensics is None
+            ):
                 result.articles_skipped += 1
                 continue
+            if processed.forensics is not None and processed.relevance_score < min_score:
+                logger.info(
+                    "Keeping below-threshold enriched article %r (score=%.2f < %.2f)",
+                    (processed.title or "")[:80],
+                    processed.relevance_score,
+                    min_score,
+                )
             if raw.link in prior_by_link:
                 reprocessed_existing = True
             batch.append(processed)
@@ -307,9 +325,7 @@ def _backfill_summaries(
             # use_itm_alignment: sweep only rows where extraction is plausible
             # (classified use case, insider alignment, or a filing body) —
             # weak-hit news yields methods=0 and must not spend.
-            or not article_qualifies(
-                row, filing_min_chars=filing_min_chars, use_itm_alignment=True
-            )
+            or not article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True)
         ):
             continue
         if row.case_record is None:
