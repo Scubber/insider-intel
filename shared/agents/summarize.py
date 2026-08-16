@@ -20,6 +20,7 @@ from shared.schemas.forensics import (
     PerCaseForensics,
     case_record_from_forensics,
     parse_forensics_json,
+    stamp_quote_verbatim,
 )
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
 
@@ -386,6 +387,9 @@ def enrich_fields(
             "model": used_model,
         }
     )
+    # Grounding stamp against the text the model actually saw (post-truncation):
+    # quotes it could not have copied are paraphrases by definition.
+    stamp_quote_verbatim(forensics, text)
     summary = (str(raw.get("ai_summary") or "")).strip() or None
     record = case_record_from_forensics(forensics)
     llm_hits = _validate_itm_refs(_coerce_itm_refs(raw.get("itm_refs")), lexical_hits)

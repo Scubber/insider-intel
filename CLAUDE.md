@@ -104,9 +104,17 @@ prompt — that's the point.
 **Enrichments are append-only, never rewritten** (operator mandate):
 every generation lands in `ProcessedArticle.enrichment_history`
 (`shared/schemas/forensics.py::EnrichmentRecord`, deduped by signature); the
-top-level `ai_summary`/`forensics` are a select-best-by-richness *projection*
+top-level `ai_summary`/`forensics` are a *projection* selected in two stages:
+the `is_insider_case` **verdict** is won by whichever side's best generation
+carries the higher confidence, then richness picks within that verdict
 (`enrichment_richness`: analyst note + method count + confidence, ties →
-newest). A thin re-enrich can therefore never gut a rich record, and
+newest). Richness alone can never flip an adjudication — a chatty
+low-confidence generation lands in history but not the projection (critical
+once multi-model sweeps write second opinions). Every method also carries a
+write-time `evidence_quote_verbatim` grounding stamp (deterministic
+normalized-substring check against the text the model saw; backfill via
+`scripts/backfill_quote_verbatim.py`). A thin re-enrich can therefore never
+gut a rich record, and
 `_clear_llm_fields` intentionally does NOT clear history. If a run's LLM
 attempts all produce nothing, the job logs
 `[FAIL] enrichment: N LLM attempt(s), 0 records produced` — that tripwire
