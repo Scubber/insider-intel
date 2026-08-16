@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from typing import NamedTuple
 
 import httpx
 
@@ -35,6 +37,94 @@ SYNTH_MAX_TOKENS = 3000
 logger = logging.getLogger(__name__)
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
+_AUTO_MODEL_TOKENS = frozenset({"", "auto", "*"})
+_SERVED_MODEL_CACHE: dict[str, str] = {}
+_PROBE_BACKOFF_SECONDS = 2.0
+
+
+class ChatResult(NamedTuple):
+    content: str
+    model: str | None = None
+
+
+def reset_served_model_cache() -> None:
+    """Test hook — GET /v1/models is cached per base_url."""
+    _SERVED_MODEL_CACHE.clear()
+
+
+def is_auto_model(model: str | None) -> bool:
+    return (model or "").strip().lower() in _AUTO_MODEL_TOKENS
+
+
+def discover_openai_compat_model(
+    base_url: str, api_key: str | None, *, timeout: float = 10.0, attempts: int = 3
+) -> str | None:
+    """Return the first id from GET /v1/models, or None.
+
+    Used when a custom provider sets ``model`` to ``auto`` (or omits it) so a
+    host can swap vLLM weights without retuning tenant config. The completion
+    response ``model`` field still wins for ``forensics.model`` tagging.
+
+    A None here makes the chain builder drop the provider — on a local-only
+    chain that silently zeroes enrichment for the run — so transient failures
+    (server restart, checkpoint still loading) get retried with backoff and
+    the terminal failure is a greppable [FAIL] line, never just a warning.
+    """
+    base = base_url.rstrip("/")
+    cached = _SERVED_MODEL_CACHE.get(base)
+    if cached:
+        return cached
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(_PROBE_BACKOFF_SECONDS * attempt)
+        try:
+            response = httpx.get(f"{base}/models", headers=headers, timeout=timeout)
+            response.raise_for_status()
+            body = response.json()
+            rows = body.get("data") if isinstance(body, dict) else None
+            # A well-formed reply with no usable id is a config problem, not a
+            # transient one — retrying can't fix the body shape.
+            if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+                logger.error(
+                    "[FAIL] llm-probe: GET %s/models returned an unexpected body: %.200r",
+                    base,
+                    body,
+                )
+                return None
+            mid = str(rows[0].get("id") or "").strip()
+            if not mid:
+                logger.error("[FAIL] llm-probe: GET %s/models first row has no id", base)
+                return None
+            _SERVED_MODEL_CACHE[base] = mid
+            logger.info("OpenAI-compat %s serves %s", base, mid)
+            return mid
+        except (
+            httpx.HTTPError,
+            AttributeError,
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            last_error = exc
+            logger.warning(
+                "OpenAI-compat GET /models attempt %d/%d failed for %s: %s",
+                attempt + 1,
+                attempts,
+                base,
+                exc,
+            )
+    logger.error(
+        "[FAIL] llm-probe: GET %s/models failed after %d attempts: %s",
+        base,
+        attempts,
+        last_error,
+    )
+    return None
 
 
 def _chat_completion(
@@ -46,8 +136,8 @@ def _chat_completion(
     system: str,
     user: str,
     max_tokens: int | None = None,
-) -> str | None:
-    """POST a JSON-mode chat completion; returns the reply text or None."""
+) -> ChatResult | None:
+    """POST a JSON-mode chat completion; returns content + served model, or None."""
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -70,10 +160,23 @@ def _chat_completion(
             payload.pop("response_format", None)
             response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        body = response.json()
+        content = body["choices"][0]["message"]["content"]
+        served = body.get("model")
+        served_model = served.strip() if isinstance(served, str) and served.strip() else None
+        return ChatResult(content=content, model=served_model)
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
         logger.warning("OpenAI-compat chat call failed: %s", exc)
         return None
+
+
+def _content_and_tag(owner: object, result: ChatResult | None) -> str | None:
+    """Return reply text and stamp owner.model_name from the server when present."""
+    if result is None:
+        return None
+    if result.model and hasattr(owner, "model_name"):
+        owner.model_name = result.model
+    return result.content
 
 
 class OpenAICompatClassifier:
@@ -91,13 +194,16 @@ class OpenAICompatClassifier:
         self._timeout = timeout
 
     def classify(self, *, title: str, text: str) -> ClassificationResult | None:
-        content = _chat_completion(
-            base_url=self._base_url,
-            model=self._model,
-            api_key=self._api_key,
-            timeout=self._timeout,
-            system=CLASSIFY_SYSTEM_PROMPT,
-            user=build_user_prompt(title, text),
+        content = _content_and_tag(
+            self,
+            _chat_completion(
+                base_url=self._base_url,
+                model=self._model,
+                api_key=self._api_key,
+                timeout=self._timeout,
+                system=CLASSIFY_SYSTEM_PROMPT,
+                user=build_user_prompt(title, text),
+            ),
         )
         if content is None:
             return None
@@ -124,20 +230,23 @@ class OpenAICompatSummarizer:
     def extract_case(
         self, *, title: str, source: str, text: str, itm_candidates: str
     ) -> dict | None:
-        content = _chat_completion(
-            base_url=self._base_url,
-            model=self._model,
-            api_key=self._api_key,
-            timeout=self._timeout,
-            system=ENRICH_SYSTEM_PROMPT,
-            user=build_enrich_prompt(
-                title=title,
-                source=source,
-                text=text,
-                itm_candidates=itm_candidates,
-                max_chars=self._max_input_chars,
+        content = _content_and_tag(
+            self,
+            _chat_completion(
+                base_url=self._base_url,
+                model=self._model,
+                api_key=self._api_key,
+                timeout=self._timeout,
+                system=ENRICH_SYSTEM_PROMPT,
+                user=build_enrich_prompt(
+                    title=title,
+                    source=source,
+                    text=text,
+                    itm_candidates=itm_candidates,
+                    max_chars=self._max_input_chars,
+                ),
+                max_tokens=ENRICH_MAX_TOKENS,
             ),
-            max_tokens=ENRICH_MAX_TOKENS,
         )
         if content is None:
             return None
@@ -164,18 +273,21 @@ class OpenAICompatDiscoverer:
         self.model_name = model
 
     def discover_techniques(self, *, forensics_json: str, itm_shortlist: str) -> dict | None:
-        content = _chat_completion(
-            base_url=self._base_url,
-            model=self._model,
-            api_key=self._api_key,
-            timeout=self._timeout,
-            system=DISCOVER_SYSTEM_PROMPT,
-            user=build_discover_prompt(
-                forensics_json=forensics_json,
-                itm_shortlist=itm_shortlist,
-                max_chars=self._max_input_chars,
+        content = _content_and_tag(
+            self,
+            _chat_completion(
+                base_url=self._base_url,
+                model=self._model,
+                api_key=self._api_key,
+                timeout=self._timeout,
+                system=DISCOVER_SYSTEM_PROMPT,
+                user=build_discover_prompt(
+                    forensics_json=forensics_json,
+                    itm_shortlist=itm_shortlist,
+                    max_chars=self._max_input_chars,
+                ),
+                max_tokens=DISCOVER_MAX_TOKENS,
             ),
-            max_tokens=DISCOVER_MAX_TOKENS,
         )
         if content is None:
             return None
@@ -200,14 +312,17 @@ class OpenAICompatSynthesizer:
         self.model_name = model
 
     def synthesize_hunts(self, *, technique_json: str) -> dict | None:
-        content = _chat_completion(
-            base_url=self._base_url,
-            model=self._model,
-            api_key=self._api_key,
-            timeout=self._timeout,
-            system=SYNTH_SYSTEM_PROMPT,
-            user=build_synth_prompt(technique_json=technique_json),
-            max_tokens=SYNTH_MAX_TOKENS,
+        content = _content_and_tag(
+            self,
+            _chat_completion(
+                base_url=self._base_url,
+                model=self._model,
+                api_key=self._api_key,
+                timeout=self._timeout,
+                system=SYNTH_SYSTEM_PROMPT,
+                user=build_synth_prompt(technique_json=technique_json),
+                max_tokens=SYNTH_MAX_TOKENS,
+            ),
         )
         if content is None:
             return None

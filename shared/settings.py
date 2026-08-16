@@ -369,8 +369,11 @@ class Settings(BaseSettings):
     xai_api_key: str | None = Field(default=None, alias="XAI_API_KEY")
     xai_model: str = Field(default="grok-4", alias="XAI_MODEL")
     # Extra OpenAI-compatible providers usable by name in any *_LLM_PROVIDER chain
-    # (e.g. a third-party model like SOL). JSON map, one entry per provider:
+    # (e.g. a third-party model like SOL, or a local vLLM named "sparky"). JSON
+    # map, one entry per provider:
     #   {"sol": {"base_url": "https://…/v1", "model": "sol-5.6", "api_key_env": "SOL_API_KEY"}}
+    # ``model`` may be "auto" (or omitted): the client probes GET /v1/models.
+    # forensics.model is stamped from the completion response, not this string.
     # The key is read from the named env var (kept a secret), never inlined here.
     llm_custom_providers: str = Field(
         default="",

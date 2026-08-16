@@ -86,10 +86,13 @@ Gotchas (from `shared/llm/`):
   deadline (and bills the fallback, if one is chained — the 2026-08-16
   incident).
 - Alternatively, define a named entry in `LLM_CUSTOM_PROVIDERS`
-  (`{"spark": {"base_url": "http://<spark>:8001/v1", "model": "<model>"}}`)
-  and reference `spark` in the chain — same mechanics, and it can sit as a
-  fallback after funded providers. Custom entries work in the summarizer /
-  discoverer / hunt-synthesis chains (not the classifier).
+  (`{"spark": {"base_url": "http://<spark>:8001/v1", "model": "auto"}}`)
+  and reference `spark` in the chain — `model: auto` probes `GET /v1/models`.
+  Same mechanics, and it can sit as a fallback after funded providers. Custom
+  entries work in the summarizer / discoverer / hunt-synthesis chains (not
+  the classifier). `forensics.model` is stamped from the completion
+  response's `model` field, so a host weight swap shows up in provenance
+  without a tenant config edit.
 
 Then exercise it: `make shell` → seed a corpus (docs/DEVELOPMENT.md) →
 `python -m apps.aggregator process --force` and watch `Case enriched …`
@@ -128,6 +131,8 @@ Files:
   a local failure then costs a slot (re-swept free next cycle), never money.
   Chaining a funded fallback is a deliberate opt-in — combined with raised
   caps, one slow/dead vLLM converts the whole raised budget into paid calls.
+  Set `model` to `auto` (the example default) so the job takes whatever vLLM
+  is serving; do not pin a Qwen SKU in this repo.
 - `scripts/spark_refresh.sh` — one cycle: bucket pull → pipeline → bucket
   push → `/reload` (skipped while `SPARK_RELOAD_URL` is empty, i.e. on
   staging). Cron/systemd-timer it (e.g. every 6h) from the repo root. The
@@ -156,8 +161,9 @@ run:**
    PATH and locking).
 
 The paused cloud job stays around as a manual fallback; enrichment provenance
-is per-record (`forensics.model`), so a mixed Qwen/Claude corpus is normal and
-select-best over `enrichment_history` keeps the richer record either way.
+is per-record (`forensics.model` = the id the server put on the completion,
+e.g. whatever Qwen SKU is loaded), so a mixed local/Claude corpus is normal
+and select-best over `enrichment_history` keeps the richer record either way.
 
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
 the Spark.

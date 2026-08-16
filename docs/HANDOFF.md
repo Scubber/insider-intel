@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-11 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-16 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
 **Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
@@ -53,6 +53,8 @@ prod).
 | #140 | **Snapshot-first boot** (CACHED→LIVE, web/data via Pages artifact) |
 | #141 | deploy-pages 20min timeout |
 | #142–#145 | DIY traffic analytics: weekly→**daily**, forensic CSV + GeoIP (+ column fix) |
+| #188 | **Spark corpus-tenant mode** (compose + `spark_refresh.sh` + timeout knob). Cutover not done — see thread #5. |
+| #189 | OPEN: stamp `forensics.model` from served OpenAI-compat id; `model: auto` |
 
 ---
 
@@ -85,11 +87,20 @@ prod).
 3. **PACER activation** — DONE 2026-07-24.
 4. **Discovery lanes** — (a) FLP tech-cases-bot feed; (b) ITM-derived query
    generator. Not built.
-5. **Off-site LLM enrichment** — `export-llm` remains the delivery lane
-   (one-way; no import path exists). Operator now has a DGX Spark: wired
-   for local-dev enrichment via the `openai` compat provider
-   (docs/dgx-spark.md); a guarded import lane is the remaining build if the
-   Spark should ever feed prod.
+5. **Spark as the corpus tenant (ACTIVE 2026-08-16 — hand to next agent).**
+   Architecture SHIPPED (#188): Spark runs the whole ingest+enrich job and
+   syncs the private bucket; Cloud Run never dials home (`docs/dgx-spark.md`
+   §4). **Cutover is not done.** Full ops log, IAM, env knobs, vLLM timeout
+   diagnosis, and kill/retry commands:
+   [`docs/spark-cutover-handoff.md`](spark-cutover-handoff.md).
+   **Do this first:** the staging `spark_refresh.sh` on sparky is still
+   running with `sparky,anthropic` and a 300s timeout — rich filings miss
+   Qwen (~15 tok/s, need ~800s for 12k JSON) and **spend Haiku credits**.
+   Kill the container, drop Anthropic from the Spark chain, raise timeout
+   to 900s, then prove staging before pausing `corpus-refresh-schedule`.
+   Open PR: [#189](https://github.com/Scubber/insider-intel/pull/189)
+   (dynamic `forensics.model` / `model: auto`). Prod site has **no** Spark
+   rows; bucket writer is still the Cloud Run job.
 6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
    still a one-line deferred change.
 7. **Cold-start UX** — **DONE 2026-08-06** (#140/#141): snapshot-first boot
