@@ -120,11 +120,18 @@ def _resolve_provider(
     if custom:
         base_url = str(custom.get("base_url") or "").strip()
         model = model_override or str(custom.get("model") or "").strip()
-        if not base_url or not model:
-            logger.warning("Custom LLM provider %r missing base_url/model; skipped", name)
+        if not base_url:
+            logger.warning("Custom LLM provider %r missing base_url; skipped", name)
             return None
         key_env = str(custom.get("api_key_env") or "").strip()
         api_key = os.environ.get(key_env) if key_env else custom.get("api_key")
+        from shared.llm.openai_provider import discover_openai_compat_model, is_auto_model
+
+        if is_auto_model(model):
+            model = discover_openai_compat_model(base_url, api_key) or ""
+        if not model:
+            logger.warning("Custom LLM provider %r missing model; skipped", name)
+            return None
         return ("openai_compat", base_url, model, api_key)
     logger.warning("Unknown LLM provider %r in chain; skipped", name)
     return None
@@ -332,9 +339,12 @@ def get_discoverer_provider(settings: Settings) -> DiscovererProvider | None:
 
 def reset_provider_cache() -> None:
     """Test hook."""
+    from shared.llm.openai_provider import reset_served_model_cache
+
     _PROVIDER_CACHE.clear()
     _SUMMARIZER_CACHE.clear()
     _DISCOVERER_CACHE.clear()
     _SUMMARIZER_CHAIN_CACHE.clear()
     _DISCOVERER_CHAIN_CACHE.clear()
     _SYNTHESIZER_CHAIN_CACHE.clear()
+    reset_served_model_cache()

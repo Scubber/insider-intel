@@ -211,3 +211,60 @@ def test_budget_consumed_once_regardless_of_fallbacks(monkeypatch) -> None:
     budget = SummaryBudget(5)
     _enrich([_Exploding(), _Fake("ok", _GOOD_REPLY)], monkeypatch, budget=budget)
     assert budget.spent == 1  # one article = one budget unit, not one-per-attempt
+
+
+class _HttpResp:
+    def __init__(self, payload, status=200, text=""):
+        self.status_code = status
+        self._payload = payload
+        self.text = text
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise AssertionError(f"unexpected status {self.status_code}")
+
+    def json(self):
+        return self._payload
+
+
+def test_custom_auto_model_probes_v1_models(monkeypatch) -> None:
+    def fake_get(url, headers=None, timeout=None):
+        assert url == "http://vllm:8000/v1/models"
+        return _HttpResp({"data": [{"id": "Qwen/Qwen3.8-27B-FP8"}]})
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.get", fake_get)
+    chain = get_summarizer_chain(
+        _settings(
+            SUMMARIZER_LLM_PROVIDER="sparky",
+            LLM_CUSTOM_PROVIDERS=json.dumps(
+                {
+                    "sparky": {
+                        "base_url": "http://vllm:8000/v1",
+                        "model": "auto",
+                        "api_key_env": "SPARKY_API_KEY",
+                    }
+                }
+            ),
+        )
+    )
+    assert [p.model_name for p in chain] == ["Qwen/Qwen3.8-27B-FP8"]
+
+
+def test_enrichment_stamps_served_model_from_completion(monkeypatch) -> None:
+    from shared.llm.openai_provider import OpenAICompatSummarizer
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        import json as json_mod
+
+        payload = {
+            "model": "Qwen/Qwen3.8-27B-FP8",
+            "choices": [{"message": {"content": json_mod.dumps(_GOOD_REPLY)}}],
+        }
+        return _HttpResp(payload)
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.post", fake_post)
+    provider = OpenAICompatSummarizer(base_url="http://vllm:8000/v1", model="stale-pin")
+    summary, forensics, _, _ = _enrich([provider], monkeypatch)
+    assert provider.model_name == "Qwen/Qwen3.8-27B-FP8"
+    assert forensics is not None and forensics.model == "Qwen/Qwen3.8-27B-FP8"
+    assert summary == "note"
