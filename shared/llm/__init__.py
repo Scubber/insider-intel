@@ -150,7 +150,11 @@ def _build_summarizer(
     from shared.llm.openai_provider import OpenAICompatSummarizer
 
     return OpenAICompatSummarizer(
-        base_url=base_url, model=model, api_key=api_key, max_input_chars=max_chars
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        max_input_chars=max_chars,
+        timeout=settings.openai_compat_timeout_seconds,
     )
 
 
@@ -170,7 +174,12 @@ def _build_discoverer(
         return AnthropicDiscoverer(api_key=api_key, model=model)
     from shared.llm.openai_provider import OpenAICompatDiscoverer
 
-    return OpenAICompatDiscoverer(base_url=base_url, model=model, api_key=api_key)
+    return OpenAICompatDiscoverer(
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        timeout=settings.openai_compat_timeout_seconds,
+    )
 
 
 def _build_synthesizer(
@@ -189,7 +198,12 @@ def _build_synthesizer(
         return AnthropicSynthesizer(api_key=api_key, model=model)
     from shared.llm.openai_provider import OpenAICompatSynthesizer
 
-    return OpenAICompatSynthesizer(base_url=base_url, model=model, api_key=api_key)
+    return OpenAICompatSynthesizer(
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        timeout=settings.openai_compat_timeout_seconds,
+    )
 
 
 def get_synthesizer_chain(settings: Settings) -> list[SynthesizerProvider]:

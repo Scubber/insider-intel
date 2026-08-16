@@ -1,0 +1,37 @@
+# Spark tenant stack: run the full ingest + enrichment pipeline on a DGX Spark
+# box that also hosts a vLLM OpenAI-compatible endpoint (the "sparky" host repo
+# pattern: an external docker network named `sparky` with vLLM reachable at
+# http://vllm:8000/v1). See docs/dgx-spark.md §4 and scripts/spark_refresh.sh.
+#
+#   docker compose -f docker-compose.spark.yml run --rm refresh
+#
+# No ports are published — this is a batch job, nothing is exposed. The corpus
+# lives in ./data on the host, synced with the private GCS bucket by the
+# wrapper script, and stays private end to end.
+name: insider-intel-spark
+
+services:
+  refresh:
+    build:
+      context: .
+      # `docker build .` already yields the runtime stage (repo invariant);
+      # explicit here so this file can't silently drift onto the dev image.
+      target: runtime
+    image: insider-intel-spark
+    command: python -m apps.aggregator all
+    env_file:
+      - path: .env.spark
+        required: true
+    volumes:
+      # Bucket-shaped data dir (raw/ processed/ state/ config/). The runtime
+      # image's `app` user is uid 1000 — keep ./data owned by the uid-1000
+      # host user or the job can't write.
+      - ./data:/app/data
+    networks:
+      - sparky
+    init: true
+
+networks:
+  sparky:
+    external: true
+    name: sparky
