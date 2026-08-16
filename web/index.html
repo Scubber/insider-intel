@@ -28,22 +28,13 @@
     <link rel="stylesheet" href="./styles.css" />
     <script>
       (function () {
-        // Pre-paint stamps: theme + view tweaks. app.js re-validates against
-        // its THEMES set; an unknown stored name only costs one repaint.
+        // Pre-paint stamp: theme only. app.js re-validates against its THEMES
+        // set; an unknown stored name only costs one repaint.
         // Default matches DEFAULT_THEME in app.js ("cnn-lite" / Wire Light).
-        var root = document.documentElement;
-        root.setAttribute(
+        document.documentElement.setAttribute(
           "data-theme",
           localStorage.getItem("insider-intel-theme") || "cnn-lite"
         );
-        if (localStorage.getItem("insider-intel-kbd-hints") === "false")
-          root.setAttribute("data-kbd-hints", "off");
-        var density = localStorage.getItem("insider-intel-density");
-        if (density === "compact" || density === "comfy") root.setAttribute("data-density", density);
-        if (localStorage.getItem("insider-intel-layout") === "stacked")
-          root.setAttribute("data-layout", "stacked");
-        if (localStorage.getItem("insider-intel-redacted") === "true")
-          root.setAttribute("data-redacted", "true");
       })();
     </script>
   </head>
@@ -63,7 +54,7 @@
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
-          <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources" data-tip-pos="bottom-end">SETTINGS ⚙</button>
+          <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Theme and stream defaults" data-tip-pos="bottom-end">SETTINGS ⚙</button>
           <!-- Deliberately NOT .masthead-nav-item: that class's shared click
                handler switches panes; GUIDE toggles the guide panel instead. -->
           <button type="button" class="masthead-nav-guide" id="guide-open" aria-expanded="false" aria-controls="guide-panel" data-tip="How to use this site — per-tab cheat sheet" data-tip-pos="bottom-end">GUIDE</button>
@@ -877,39 +868,6 @@
                     <option value="Vermillion Court">Vermillion Court</option>
                   </select>
                 </div>
-                <div class="settings-field">
-                  <span class="filter-label">Density</span>
-                  <div class="pill-group" id="density-pills" role="group" aria-label="Text density">
-                    <button type="button" class="pill" data-density="compact" data-tip="Smaller text — more cases on screen">Compact</button>
-                    <button type="button" class="pill" data-density="standard" data-tip="Default sizing">Standard</button>
-                    <button type="button" class="pill" data-density="comfy" data-tip="Larger text — easier reading">Comfy</button>
-                  </div>
-                </div>
-                <div class="settings-field">
-                  <span class="filter-label">Pane layout</span>
-                  <div class="pill-group" id="layout-pills" role="group" aria-label="Pane layout">
-                    <button type="button" class="pill" data-layout="split" data-tip="Panels side by side">Split</button>
-                    <button type="button" class="pill" data-layout="stacked" data-tip="Panels stacked vertically">Stacked</button>
-                  </div>
-                </div>
-                <label class="settings-check filter-label" for="redact-toggle" data-tip="Black out case titles, facts, and notes — for screenshots and demos" data-tip-pos="bottom-start">
-                  <input type="checkbox" id="redact-toggle" aria-label="Redact case details" />
-                  REDACT CASE DETAILS
-                </label>
-                <label class="settings-check filter-label" for="kbd-hints-toggle" data-tip="Show the j/k · x · ⏎ · / shortcut hint in the stream header" data-tip-pos="bottom-start">
-                  <input type="checkbox" id="kbd-hints-toggle" aria-label="Show keyboard hints" checked />
-                  SHOW KEYBOARD HINTS IN STREAM
-                </label>
-                <div class="settings-field">
-                  <span class="filter-label">Keyboard reference</span>
-                  <dl class="kbd-ref">
-                    <dt>j / k</dt><dd>Next / previous case</dd>
-                    <dt>x</dt><dd>Flag case to evidence board</dd>
-                    <dt>d</dt><dd>Dismiss case</dd>
-                    <dt>⏎</dt><dd>Open source</dd>
-                    <dt>/</dt><dd>Focus search</dd>
-                  </dl>
-                </div>
               </div>
             </section>
 
@@ -939,105 +897,9 @@
                   <button type="button" id="apply-defaults" class="copy-btn" data-tip="Set the current stream filters to these defaults now" data-tip-pos="bottom-start">
                     APPLY TO CURRENT SESSION
                   </button>
-                  <button type="button" id="reset-prefs" class="copy-btn" data-tip="Clear saved UI preferences (theme, layout, panels, intro) and reload as a first-time visitor. Your evidence board is kept." data-tip-pos="bottom-start">
+                  <button type="button" id="reset-prefs" class="copy-btn" data-tip="Clear saved UI preferences (theme, panels, intro) and reload as a first-time visitor. Your evidence board is kept." data-tip-pos="bottom-start">
                     RESET PREFERENCES ↺
                   </button>
-                </p>
-              </div>
-            </section>
-
-            <section class="settings-section" data-panel-key="sources" aria-label="Data sources">
-              <div class="settings-head">
-                <h3>DATA SOURCES</h3>
-                <span class="head-spacer"></span>
-                <button type="button" class="panel-collapse" data-panel="sources" aria-label="Collapse Data sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
-              </div>
-              <div class="settings-body">
-                <p class="kw-hint">
-                  Read-only inventory. Credentials live server-side — never in this static
-                  UI.
-                </p>
-                <ul class="source-inventory">
-                  <li><span class="source-inv-main"><span class="source-inv-name">COURTLISTENER</span><span class="source-inv-desc">RECAP dockets + filings (trade secret, sabotage, insider fraud)</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
-                  <li><span class="source-inv-main"><span class="source-inv-name">PACER PURCHASE</span><span class="source-inv-desc">Targeted docket purchases for high-signal cases (budget-capped)</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
-                  <li><span class="source-inv-main"><span class="source-inv-name">REDDIT</span><span class="source-inv-desc">Subreddit streams via social subscriptions</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
-                  <li><span class="source-inv-main"><span class="source-inv-name">X</span><span class="source-inv-desc">Handle timelines via social subscriptions (free-tier cadence)</span></span><span class="source-chip">PAUSED</span></li>
-                  <li><span class="source-inv-main"><span class="source-inv-name">DATATHEFTNEWS</span><span class="source-inv-desc">Curated insider data-theft incident tracker</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
-                  <li><span class="source-inv-main"><span class="source-inv-name">TIPS (REDDIT RSS)</span><span class="source-inv-desc">Tip-lane RSS: r/netsec, r/cybersecurity, r/blueteamsec, r/DFIR, r/Malware</span></span><span class="source-chip source-chip-active">ACTIVE</span></li>
-                </ul>
-                <p class="kw-hint">
-                  Catalog and cadence are managed server-side. Social subscriptions
-                  below are the live controls from this UI.
-                </p>
-                <div class="settings-field">
-                  <label for="admin-token-input">OPERATOR TOKEN</label>
-                  <input
-                    type="password"
-                    id="admin-token-input"
-                    placeholder="required for subscribe / flag-URL / reload"
-                    autocomplete="off"
-                  />
-                  <p class="kw-hint">
-                    Sent as a bearer on write actions (subscriptions, flag-a-URL,
-                    reload). Stored only in this browser. Leave empty as a reader.
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            <section class="settings-section" data-panel-key="social" aria-label="Social sources">
-              <div class="settings-head">
-                <h3>SOCIAL SOURCES</h3>
-                <span class="head-spacer"></span>
-                <button type="button" class="panel-collapse" data-panel="social" aria-label="Collapse Social sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
-              </div>
-              <div class="settings-body social-manager" id="social-manager">
-                <div class="social-manager-group">
-                  <h4 class="filter-label">Subscribed</h4>
-                  <ul id="social-subscribed" class="social-source-list"></ul>
-                  <p class="kw-hint" id="social-subscribed-empty">Nothing subscribed yet.</p>
-                </div>
-                <div class="social-manager-group">
-                  <h4 class="filter-label">Suggested</h4>
-                  <ul id="social-suggested" class="social-source-list"></ul>
-                </div>
-                <form class="social-add-row" id="social-add-form" autocomplete="off">
-                  <select id="social-add-platform" aria-label="Platform">
-                    <option value="reddit">reddit</option>
-                    <option value="x">x</option>
-                  </select>
-                  <input
-                    id="social-add-handle"
-                    type="text"
-                    placeholder="r/subreddit or @handle"
-                    aria-label="Subreddit or handle"
-                  />
-                  <button type="submit" class="ghost" data-tip="Subscribe — synced to the aggregator via the social subscriptions API" data-tip-pos="bottom-start">Add</button>
-                </form>
-              </div>
-            </section>
-
-            <section class="settings-section" data-panel-key="pubs" aria-label="Publication sources">
-              <div class="settings-head">
-                <h3>PUBLICATION SOURCES</h3>
-                <span class="head-spacer"></span>
-                <button type="button" class="panel-collapse" data-panel="pubs" aria-label="Collapse Publication sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
-              </div>
-              <div class="settings-body">
-                <p class="kw-hint">
-                  Long-form reference docs swept by the 6-hour refresh (curated catalog,
-                  server-side).
-                </p>
-                <div class="pub-source-chips">
-                  <span class="pub-chip">SEI COMMON SENSE GUIDE 7E</span>
-                  <span class="pub-chip">SEI POSITIVE DETERRENCE COLLECTION</span>
-                  <span class="pub-chip">CISA INSIDER THREAT MITIGATION GUIDE</span>
-                  <span class="pub-chip">NITTF INSIDER THREAT GUIDE 2017</span>
-                </div>
-                <p class="kw-hint">
-                  Curated catalog, refreshed with the corpus. One-off URLs can be
-                  flagged via the publications ingest API (operator token required
-                  in prod).
                 </p>
               </div>
             </section>

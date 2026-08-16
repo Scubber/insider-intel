@@ -145,7 +145,8 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("no intro panel in the shell", not page.query_selector("#intro-panel"))
         checks.check(
             "status band shows lanes + clock",
-            bool(page.query_selector("#lane-status")) and bool((page.text_content("#utc-clock") or "").strip()),
+            bool(page.query_selector("#lane-status"))
+            and bool((page.text_content("#utc-clock") or "").strip()),
         )
         footer_theme = page.query_selector("#footer-theme-select")
         checks.check("footer theme picker present", bool(footer_theme))
@@ -156,7 +157,10 @@ def run(base_url: str, headed: bool) -> int:
             )
             checks.check(
                 "theme labels are neutral (no media names)",
-                not any(l in ("Evangelion", "StarCraft", "ChatGPT", "Doom 3") for l in labels),
+                not any(
+                    label in ("Evangelion", "StarCraft", "ChatGPT", "Doom 3")
+                    for label in labels
+                ),
             )
 
         # Empty evidence board: first-run CTA points at FLAG + example hunt.
@@ -339,16 +343,19 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("themes apply from Settings (incl. midnight + cnn-lite)", theme_ok)
         page.select_option("#theme-select", "cnn-lite")
 
-        # Settings pane renders the live sections (Notifications / dead ADD
-        # controls were removed — reader-safe Settings).
+        # Settings pane is slimmed (2026-08-16): theme + STREAM DEFAULTS only.
+        # The source-manager sections (sources/social/pubs) and the appearance
+        # extras are gone.
         section_keys = page.evaluate(
             """() => [...document.querySelectorAll('.pane-settings .settings-section')]
                  .map((s) => s.dataset.panelKey)"""
         )
-        expected = ["look", "defaults", "sources", "social", "pubs"]
+        expected = ["look", "defaults"]
+        removed = ("sources", "social", "pubs", "notify")
         checks.check(
-            "settings pane renders live sections",
-            all(k in section_keys for k in expected) and "notify" not in section_keys,
+            "settings pane renders only theme + stream defaults",
+            all(k in section_keys for k in expected)
+            and not any(k in section_keys for k in removed),
             f"got {section_keys}",
         )
         todo_copy = page.evaluate(
@@ -376,18 +383,12 @@ def run(base_url: str, headed: bool) -> int:
         page.click(".masthead-nav-item[data-pane='articles']")
         page.wait_for_selector(".article-item", state="visible", timeout=10000)
 
-        # Every stream panel collapses via its − button and hides/restores via
-        # the PANELS checkbox row.
-        panel_sel = {
-            "core": ".pane-trending",
-            "itm": ".pane-matrix",
-            "stream": ".pane-articles",
-        }
         # Redesign (2026-08): the stream rail carries no window chrome — no
         # collapse/hide buttons, no TRENDING pane on the stream layout.
+        rail_chrome = ".left-rail .panel-collapse:visible, .left-rail .panel-hide:visible"
         checks.check(
             "stream rail has no panel chrome",
-            page.locator(".left-rail .panel-collapse:visible, .left-rail .panel-hide:visible").count() == 0,
+            page.locator(rail_chrome).count() == 0,
         )
         checks.check(
             "trending pane is off the stream layout",
