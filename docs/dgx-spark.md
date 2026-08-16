@@ -75,6 +75,10 @@ Gotchas (from `shared/llm/`):
   mode for cleaner forensics extraction.
 - `SUMMARIZER_MODEL` overrides only the **first** chain entry; in a
   local-only chain (`openai` alone) set `OPENAI_COMPAT_MODEL` instead.
+- A local model generating the full enrichment JSON (up to 12k output tokens)
+  can outlast the client's 90s default timeout, which logs
+  `OpenAI-compat chat call failed` and falls through the chain. Raise
+  `OPENAI_COMPAT_TIMEOUT_SECONDS` (e.g. 300) on the box serving the model.
 - Alternatively, define a named entry in `LLM_CUSTOM_PROVIDERS`
   (`{"spark": {"base_url": "http://<spark>:8001/v1", "model": "<model>"}}`)
   and reference `spark` in the chain — same mechanics, and it can sit as a
@@ -93,5 +97,38 @@ off-site analysis — great Spark fodder for research passes over the corpus —
 but nothing reads enrichment output back in: enrichments are written only by
 the corpus-refresh job's enrich node, `enrichment_history` is append-only,
 and the API's bucket write access is limited to `config/`. Turning the Spark
-into prod's enricher would be a deliberate design change (a guarded import
-lane), not a config flip — parked with open thread #5 in docs/HANDOFF.md.
+into a *partial* enricher would be a deliberate design change (a guarded
+import lane), not a config flip — parked with open thread #5 in
+docs/HANDOFF.md. The sanctioned alternative is §4: the Spark takes over the
+**whole** refresh job, which needs no import lane at all.
+
+## 4. Spark as the corpus tenant (the whole refresh job on the Spark)
+
+The supported way to put the Spark in production's data path: it runs the
+entire scheduled ingest + enrichment cycle and syncs the corpus with the
+private GCS bucket; the Cloud Run service and the public site are untouched
+and keep serving whatever is in the bucket. This does not violate the ground
+rules above — prod never dials a home endpoint; the Spark only makes
+*outbound* calls (GCS, the `/reload` poke, and the ingestion sources), and
+its own LLM traffic stays on the local docker network.
+
+Files:
+
+- `docker-compose.spark.yml` — the refresh job as a tenant of the "sparky"
+  host pattern: joins the external `sparky` docker network, reaches vLLM at
+  `http://vllm:8000/v1`, publishes no ports.
+- `.env.spark.example` — copy to `.env.spark` (gitignored) and fill in. The
+  LLM chain is a named custom provider first (`sparky`, $0) with a funded
+  fallback second, so a local timeout costs money, not correctness.
+- `scripts/spark_refresh.sh` — one cycle: bucket pull → pipeline → bucket
+  push → `/reload`. Cron/systemd-timer it (e.g. every 6h) from the repo root.
+
+Cutover order matters: prove a full manual cycle first (ideally against a
+staging bucket prefix), **pause the Cloud Scheduler refresh job** so the
+bucket has a single writer, then enable the timer. The paused cloud job stays
+around as a manual fallback; enrichment provenance is per-record
+(`forensics.model`), so a mixed Qwen/Claude corpus is normal and select-best
+over `enrichment_history` keeps the richer record either way.
+
+Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
+the Spark.

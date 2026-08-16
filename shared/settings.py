@@ -346,6 +346,17 @@ class Settings(BaseSettings):
     )
     openai_compat_api_key: str | None = Field(default=None, alias="OPENAI_COMPAT_API_KEY")
     openai_compat_model: str = Field(default="llama3.1:8b", alias="OPENAI_COMPAT_MODEL")
+    # A self-hosted model generating the full 12k-token enrichment JSON can run
+    # past the 90s default; raise this on such a box instead of letting every
+    # long generation fall through the chain to a funded provider. Applies to
+    # all openai-compat chain entries (openai/gemini/xai/custom) in the
+    # summarizer, discoverer, and hunt-synthesis builders.
+    openai_compat_timeout_seconds: float = Field(
+        default=90.0,
+        ge=1.0,
+        alias="OPENAI_COMPAT_TIMEOUT_SECONDS",
+        description="HTTP timeout (seconds) for OpenAI-compatible chat calls",
+    )
     # Real OpenAI: setting OPENAI_API_KEY (and no OPENAI_COMPAT_* overrides)
     # retargets the openai provider from local Ollama to api.openai.com.
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")

@@ -104,6 +104,20 @@ def test_sol_reuses_openai_key_and_endpoint(monkeypatch) -> None:
     assert sol._api_key == "sk-real"  # pulled from api_key_env
 
 
+def test_timeout_knob_reaches_openai_compat_providers() -> None:
+    chain = get_summarizer_chain(
+        _settings(
+            SUMMARIZER_LLM_PROVIDER="openai",
+            OPENAI_API_KEY="sk-x",
+            OPENAI_COMPAT_TIMEOUT_SECONDS="300",
+        )
+    )
+    assert [p._timeout for p in chain] == [300.0]
+    # Default stays the historical 90s.
+    chain = get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="openai", OPENAI_API_KEY="sk-x"))
+    assert [p._timeout for p in chain] == [90.0]
+
+
 def test_single_provider_string_still_works() -> None:
     chain = get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="openai", OPENAI_API_KEY="sk-x"))
     assert len(chain) == 1
