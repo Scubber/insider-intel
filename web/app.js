@@ -202,7 +202,6 @@
     introGotit: document.getElementById("intro-gotit"),
     introHelp: document.getElementById("intro-help"),
     introUsecases: document.getElementById("intro-usecases"),
-    panelToggles: document.getElementById("panel-toggles"),
     trendingList: document.getElementById("trending-list"),
     statusLine: document.getElementById("status-line"),
     boardMenuBtn: document.getElementById("board-menu-btn"),
@@ -335,7 +334,6 @@
   const uiState = {
     introMinimized: false,
     collapsed: {},
-    hidden: {},
     signal: SIG_DEFAULT,
     defScope: "insider",
     defSignal: SIG_DEFAULT,
@@ -349,7 +347,6 @@
       if (raw && typeof raw === "object") {
         if (typeof raw.introMinimized === "boolean") uiState.introMinimized = raw.introMinimized;
         if (raw.collapsed && typeof raw.collapsed === "object") uiState.collapsed = raw.collapsed;
-        if (raw.hidden && typeof raw.hidden === "object") uiState.hidden = raw.hidden;
         if (Number.isFinite(Number(raw.signal))) uiState.signal = Number(raw.signal);
         if (raw.defScope === "all" || raw.defScope === "insider") uiState.defScope = raw.defScope;
         if (Number.isFinite(Number(raw.defSignal))) uiState.defSignal = Number(raw.defSignal);
@@ -375,15 +372,9 @@
   state.signal = uiState.signal;
   state.itmAlignment = uiState.defScope;
 
-  /* Panel chrome: every keyed panel/section collapses to its header; the four
-     stream panes can also be hidden and restored from Settings → Display. */
-  const PANEL_TOGGLES = [
-    ["core", "TRENDING"],
-    ["itm", "TECHNIQUES"],
-    ["evidence", "EVIDENCE"],
-    ["stream", "CASE STREAM"],
-  ];
-
+  /* Panel chrome: every keyed panel/section collapses to its header (−/+),
+     reversible in place. The old hide (✕) feature is gone — its restore UI
+     never existed, so hiding was a one-way trap. */
   function panelEl(key) {
     return document.querySelector(`[data-panel-key="${key}"]`);
   }
@@ -398,38 +389,6 @@
         btn.dataset.tip = collapsed ? "Expand this panel" : "Collapse to header bar";
       });
     });
-    const shell = els.appWorkbench;
-    if (shell) {
-      PANEL_TOGGLES.forEach(([key]) => {
-        shell.classList.toggle(`hide-${key}`, Boolean(uiState.hidden[key]));
-      });
-    }
-    renderPanelToggles();
-  }
-
-  function renderPanelToggles() {
-    if (!els.panelToggles) return;
-    els.panelToggles.innerHTML = "";
-    PANEL_TOGGLES.forEach(([key, label]) => {
-      const hidden = Boolean(uiState.hidden[key]);
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "panel-toggle";
-      btn.classList.toggle("panel-toggle-hidden", hidden);
-      btn.dataset.panelToggle = key;
-      btn.setAttribute("aria-pressed", hidden ? "false" : "true");
-      btn.dataset.tip = hidden ? `Restore the ${label} panel` : `Hide the ${label} panel`;
-      const box = document.createElement("span");
-      box.className = "panel-toggle-box";
-      box.textContent = hidden ? "" : "✓";
-      btn.append(box, document.createTextNode(` ${label}${hidden ? " — HIDDEN" : ""}`));
-      btn.addEventListener("click", () => {
-        uiState.hidden[key] = !uiState.hidden[key];
-        saveUiState();
-        applyPanelChrome();
-      });
-      els.panelToggles.appendChild(btn);
-    });
   }
 
   document.addEventListener("click", (event) => {
@@ -441,13 +400,6 @@
         return;
       }
       uiState.collapsed[key] = !uiState.collapsed[key];
-      saveUiState();
-      applyPanelChrome();
-      return;
-    }
-    const hideBtn = event.target.closest(".panel-hide[data-panel]");
-    if (hideBtn) {
-      uiState.hidden[hideBtn.dataset.panel] = true;
       saveUiState();
       applyPanelChrome();
     }

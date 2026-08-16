@@ -920,15 +920,6 @@ body {
   display: block;
 }
 
-/* PANELS-row hides: hidden panels release their space to the neighbors. */
-.app-shell.hide-core .pane-trending,
-.app-shell.hide-itm .pane-matrix,
-.app-shell.hide-evidence .pane-evidence,
-.app-shell.hide-stream .pane-articles,
-.app-shell.hide-wb:not([data-pane="workbench"]) .pane-workbench {
-  display: none !important;
-}
-
 /* EVIDENCE LEDGER pane (left rail, under ITM INDEX) */
 .ledger-explainer,
 .ledger-summary {
@@ -996,37 +987,6 @@ body {
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 999px;
   color: var(--muted, #8a8f98);
-}
-
-@media (min-width: 1024px) {
-  .app-shell.hide-core.hide-itm.hide-evidence:not([data-pane="workbench"]):not(
-      [data-pane="settings"]
-    )
-    .pane-grid {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-
-  .app-shell.hide-core.hide-itm.hide-evidence .left-rail {
-    display: none;
-  }
-
-  .app-shell.hide-stream:not([data-pane="workbench"]):not([data-pane="settings"])
-    .pane-grid {
-    grid-template-columns: 250px minmax(0, 1fr);
-  }
-
-  .app-shell.hide-wb:not([data-pane="workbench"]):not([data-pane="settings"])
-    .pane-grid {
-    grid-template-columns: 250px minmax(0, 1fr);
-  }
-
-  .app-shell.hide-core.hide-itm.hide-stream .pane-grid,
-  .app-shell.hide-core.hide-itm.hide-wb:not([data-pane="workbench"]):not([data-pane="settings"])
-    .pane-grid,
-  .app-shell.hide-stream.hide-wb:not([data-pane="workbench"]):not([data-pane="settings"])
-    .pane-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* Collapsed panel/section = header bar only. */
@@ -4079,9 +4039,8 @@ button.chip.itm-chip {
   font-weight: 400;
 }
 
-/* Panel chrome: collapse (−/+) and hide (✕) buttons */
-.panel-collapse,
-.panel-hide {
+/* Panel chrome: collapse (−/+) buttons */
+.panel-collapse {
   width: 20px;
   height: 20px;
   display: inline-flex;
@@ -4098,8 +4057,7 @@ button.chip.itm-chip {
   padding: 0;
 }
 
-.panel-collapse:hover,
-.panel-hide:hover {
+.panel-collapse:hover {
   color: var(--ink);
   border-color: var(--accent);
 }
@@ -4121,45 +4079,6 @@ button.chip.itm-chip {
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--muted);
-}
-
-.panel-toggles {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-}
-
-.panel-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.6rem;
-  border: 1px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-}
-
-.panel-toggle-box {
-  width: 0.9rem;
-  height: 0.9rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  font-size: 0.6rem;
-  line-height: 1;
-}
-
-.panel-toggle-hidden {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 .status-line {
@@ -4694,8 +4613,7 @@ body[data-pane="evidence"] .panels-row {
   .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .left-rail .pane-trending {
     display: none;
   }
-  .left-rail .panel-collapse,
-  .left-rail .panel-hide {
+  .left-rail .panel-collapse {
     display: none;
   }
 }
@@ -4731,7 +4649,6 @@ body[data-pane="evidence"] .panels-row {
   display: none;
 }
 .pane-articles .pane-head .panel-collapse,
-.pane-articles .pane-head .panel-hide,
 .pane-articles .pane-head .kbd-hint {
   display: none;
 }
@@ -4788,7 +4705,7 @@ body[data-pane="evidence"] .panels-row {
   white-space: nowrap;
 }
 
-/* Same box as .panel-collapse/.panel-hide — separate class so the shared
+/* Same box as .panel-collapse — separate class so the shared
    panel-chrome click handler never sees it. */
 .guide-close {
   width: 20px;

@@ -385,7 +385,7 @@ def run(base_url: str, headed: bool) -> int:
 
         # Redesign (2026-08): the stream rail carries no window chrome — no
         # collapse/hide buttons, no TRENDING pane on the stream layout.
-        rail_chrome = ".left-rail .panel-collapse:visible, .left-rail .panel-hide:visible"
+        rail_chrome = ".left-rail .panel-collapse:visible"
         checks.check(
             "stream rail has no panel chrome",
             page.locator(rail_chrome).count() == 0,
