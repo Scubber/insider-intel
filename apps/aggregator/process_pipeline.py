@@ -247,6 +247,13 @@ def run_processing(
         run_hunt_synthesis(processed_path, settings=settings)
     except Exception as exc:  # noqa: BLE001 — derived view must not sink ingest
         logger.warning("Hunt synthesis pass failed: %s", exc)
+    # Fold the rows upsert() appended this cycle back to one line per link.
+    # Best-effort: an uncompacted file stays correct (load_all is
+    # last-line-wins); it is just larger until the next successful compact.
+    try:
+        processed_store.compact()
+    except OSError as exc:
+        logger.warning("Could not compact processed store: %s", exc)
     result.finished_at = datetime.now(UTC)
     logger.info(
         "Processing complete: read=%d processed=%d saved=%d skipped=%d errors=%d",
