@@ -77,8 +77,14 @@ Gotchas (from `shared/llm/`):
   local-only chain (`openai` alone) set `OPENAI_COMPAT_MODEL` instead.
 - A local model generating the full enrichment JSON (up to 12k output tokens)
   can outlast the client's 90s default timeout, which logs
-  `OpenAI-compat chat call failed` and falls through the chain. Raise
-  `OPENAI_COMPAT_TIMEOUT_SECONDS` (e.g. 300) on the box serving the model.
+  `OpenAI-compat chat call failed` and falls through the chain. The client is
+  a **non-streaming POST**, so `OPENAI_COMPAT_TIMEOUT_SECONDS` is an
+  end-to-end *generation deadline*: size it as `ENRICH_MAX_TOKENS (12,000) ÷
+  your measured decode tok/s + headroom` — e.g. ~15 tok/s ⇒ ~800s ⇒ set 900.
+  Undersizing it doesn't fail loudly; it silently partitions work so the local
+  box completes only thin cases while every rich case times out at exactly the
+  deadline (and bills the fallback, if one is chained — the 2026-08-16
+  incident).
 - Alternatively, define a named entry in `LLM_CUSTOM_PROVIDERS`
   (`{"spark": {"base_url": "http://<spark>:8001/v1", "model": "<model>"}}`)
   and reference `spark` in the chain — same mechanics, and it can sit as a
@@ -118,17 +124,40 @@ Files:
   host pattern: joins the external `sparky` docker network, reaches vLLM at
   `http://vllm:8000/v1`, publishes no ports.
 - `.env.spark.example` — copy to `.env.spark` (gitignored) and fill in. The
-  LLM chain is a named custom provider first (`sparky`, $0) with a funded
-  fallback second, so a local timeout costs money, not correctness.
+  LLM chain is the named custom provider (`sparky`, $0) **alone** by default:
+  a local failure then costs a slot (re-swept free next cycle), never money.
+  Chaining a funded fallback is a deliberate opt-in — combined with raised
+  caps, one slow/dead vLLM converts the whole raised budget into paid calls.
 - `scripts/spark_refresh.sh` — one cycle: bucket pull → pipeline → bucket
-  push → `/reload`. Cron/systemd-timer it (e.g. every 6h) from the repo root.
+  push → `/reload` (skipped while `SPARK_RELOAD_URL` is empty, i.e. on
+  staging). Cron/systemd-timer it (e.g. every 6h) from the repo root. The
+  script exports the user-space Cloud SDK onto `PATH` itself (cron and
+  non-interactive SSH never read `~/.bashrc`), holds a `flock` so cycles
+  never overlap (skips are logged, not silent), bounds a cycle at 5.5h, and
+  passes `--build` so a `git pull` is actually picked up — plain
+  `compose run` reuses a stale image forever. It pushes only
+  `raw/ processed/ state/`: `config/` is pull-only because the prod API
+  itself writes subscriptions there.
 
-Cutover order matters: prove a full manual cycle first (ideally against a
-staging bucket prefix), **pause the Cloud Scheduler refresh job** so the
-bucket has a single writer, then enable the timer. The paused cloud job stays
-around as a manual fallback; enrichment provenance is per-record
-(`forensics.model`), so a mixed Qwen/Claude corpus is normal and select-best
-over `enrichment_history` keeps the richer record either way.
+**Cutover order matters — the scheduler pause comes before any real-prefix
+run:**
+
+1. Prove a full manual cycle against the `spark-staging/` bucket prefix
+   (`SPARK_RELOAD_URL` empty).
+2. **Pause the Cloud Scheduler refresh job.** Both writers whole-file-replace
+   `processed/articles.jsonl`; append-only history and billed-once dedup are
+   row-level properties *inside* the file and give zero protection against
+   object replacement, so a Spark push racing a cloud-job write silently
+   deletes the loser's rows (recoverable only via bucket versioning +
+   `corpus-recover.yml`, and only if noticed).
+3. Only now point `SPARK_CORPUS_BUCKET` at the bucket root, set
+   `SPARK_RELOAD_URL`, and run one watched real-prefix cycle.
+4. Enable the timer (user crontab is simplest; the script provides its own
+   PATH and locking).
+
+The paused cloud job stays around as a manual fallback; enrichment provenance
+is per-record (`forensics.model`), so a mixed Qwen/Claude corpus is normal and
+select-best over `enrichment_history` keeps the richer record either way.
 
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
 the Spark.
