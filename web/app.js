@@ -5944,6 +5944,7 @@
         "insider-intel-density",
         "insider-intel-layout",
         "insider-intel-redacted",
+        "insider-intel-guide-dismissed",
       ].forEach((key) => {
         try {
           localStorage.removeItem(key);
@@ -6058,6 +6059,92 @@
     li.append(msg, retry);
     els.articleList.appendChild(li);
   }
+
+  /* ── Site guide: first-visit intro + persistent GUIDE reopener. ──────────
+     Additive layer with its own elements (guide-*) and its own storage key —
+     deliberately not part of uiState, so guide state never interacts with the
+     panel-chrome blob. Static content only: never blocks boot(), search, or
+     the snapshot paint, and works fully offline. The first visit shows the
+     short intro (jobs → tabs); GUIDE reopens it expanded with the per-tab
+     cheat sheet. Esc, ✕, or GOT IT dismisses and persists — the panel never
+     auto-shows again after any dismissal. */
+  const GUIDE_DISMISSED_KEY = "insider-intel-guide-dismissed";
+
+  function guideDismissed() {
+    try {
+      return localStorage.getItem(GUIDE_DISMISSED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function openGuide(expanded) {
+    const panel = document.getElementById("guide-panel");
+    if (!panel) return;
+    const cheat = document.getElementById("guide-cheat");
+    const more = document.getElementById("guide-more");
+    if (cheat) cheat.hidden = !expanded;
+    if (more) more.hidden = Boolean(expanded);
+    panel.hidden = false;
+    const openBtn = document.getElementById("guide-open");
+    if (openBtn) {
+      openBtn.classList.add("active");
+      openBtn.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  function closeGuide() {
+    const panel = document.getElementById("guide-panel");
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    try {
+      localStorage.setItem(GUIDE_DISMISSED_KEY, "true");
+    } catch {
+      /* private mode — dismissal lasts the session only */
+    }
+    const openBtn = document.getElementById("guide-open");
+    if (openBtn) {
+      openBtn.classList.remove("active");
+      openBtn.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  (function wireGuide() {
+    const panel = document.getElementById("guide-panel");
+    if (!panel) return;
+    [
+      document.getElementById("guide-open"),
+      document.getElementById("footer-guide"),
+    ].forEach((btn) => {
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        // The masthead button toggles; the footer one always opens (it sits
+        // a full page below the panel, so "close" would look like a no-op).
+        if (btn.id === "guide-open" && !panel.hidden) {
+          closeGuide();
+          return;
+        }
+        openGuide(true);
+        try {
+          panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+    const dismiss = document.getElementById("guide-dismiss");
+    if (dismiss) dismiss.addEventListener("click", () => closeGuide());
+    const gotit = document.getElementById("guide-gotit");
+    if (gotit) gotit.addEventListener("click", () => closeGuide());
+    const more = document.getElementById("guide-more");
+    if (more) more.addEventListener("click", () => openGuide(true));
+    // Esc dismisses wherever focus is — the guide is chrome, not a form.
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !panel.hidden) closeGuide();
+    });
+    // First visit only: the short intro, no cheat sheet.
+    if (!guideDismissed()) openGuide(false);
+  })();
 
   boot();
 })();
