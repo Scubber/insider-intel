@@ -208,18 +208,10 @@
     boardMenuBtn: document.getElementById("board-menu-btn"),
     boardMenu: document.getElementById("board-menu"),
     exportCases: document.getElementById("export-cases"),
-    kbdHintsToggle: document.getElementById("kbd-hints-toggle"),
     defaultSignal: document.getElementById("default-signal"),
     defaultSignalValue: document.getElementById("default-signal-value"),
     applyDefaults: document.getElementById("apply-defaults"),
     resetPrefs: document.getElementById("reset-prefs"),
-    socialManager: document.getElementById("social-manager"),
-    socialSubscribed: document.getElementById("social-subscribed"),
-    socialSubscribedEmpty: document.getElementById("social-subscribed-empty"),
-    socialSuggested: document.getElementById("social-suggested"),
-    socialAddForm: document.getElementById("social-add-form"),
-    socialAddPlatform: document.getElementById("social-add-platform"),
-    socialAddHandle: document.getElementById("social-add-handle"),
     refinePanel: document.getElementById("refine-panel"),
     refineState: document.getElementById("refine-state"),
     matrixQ: document.getElementById("matrix-q"),
@@ -339,7 +331,6 @@
      existing insider-intel-* keys. ─────────────────────────────────────── */
   const UI_STATE_KEY = "insider-intel-ui-v2";
   const ADMIN_TOKEN_KEY = "insider-intel-admin-token";
-  const KBD_HINTS_KEY = "insider-intel-kbd-hints";
 
   const uiState = {
     introMinimized: false,
@@ -766,77 +757,6 @@
   tickClock();
   setInterval(tickClock, 60000);
 
-  // View tweaks: density / layout as Settings pill groups, stored per-user and
-  // applied as data-* attributes on <html> (see the pre-paint stamp in
-  // index.html; styles.css carries the matching rules).
-  const TWEAKS = [
-    {
-      key: "insider-intel-density",
-      attr: "data-density",
-      group: document.getElementById("density-pills"),
-      dataAttr: "density",
-      values: new Set(["compact", "standard", "comfy"]),
-      fallback: "standard",
-    },
-    {
-      key: "insider-intel-layout",
-      attr: "data-layout",
-      group: document.getElementById("layout-pills"),
-      dataAttr: "layout",
-      values: new Set(["split", "stacked"]),
-      fallback: "split",
-    },
-  ];
-  TWEAKS.forEach(({ key, attr, group, dataAttr, values, fallback }) => {
-    if (!group) return;
-    const apply = (raw) => {
-      const value = values.has(raw) ? raw : fallback;
-      if (value === fallback) document.documentElement.removeAttribute(attr);
-      else document.documentElement.setAttribute(attr, value);
-      localStorage.setItem(key, value);
-      group.querySelectorAll(".pill").forEach((pill) => {
-        pill.classList.toggle("active", pill.dataset[dataAttr] === value);
-      });
-    };
-    apply(localStorage.getItem(key) || fallback);
-    group.addEventListener("click", (event) => {
-      const pill = event.target.closest(`.pill[data-${dataAttr}]`);
-      if (pill) apply(pill.dataset[dataAttr]);
-    });
-  });
-  const redactToggle = document.getElementById("redact-toggle");
-  if (redactToggle) {
-    const applyRedacted = (on) => {
-      if (on) document.documentElement.setAttribute("data-redacted", "true");
-      else document.documentElement.removeAttribute("data-redacted");
-      localStorage.setItem("insider-intel-redacted", String(on));
-      redactToggle.checked = on;
-    };
-    applyRedacted(localStorage.getItem("insider-intel-redacted") === "true");
-    redactToggle.addEventListener("change", () => applyRedacted(redactToggle.checked));
-  }
-  const adminTokenInput = document.getElementById("admin-token-input");
-  if (adminTokenInput) {
-    adminTokenInput.value = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
-    adminTokenInput.addEventListener("change", () => {
-      const value = adminTokenInput.value.trim();
-      if (value) localStorage.setItem(ADMIN_TOKEN_KEY, value);
-      else localStorage.removeItem(ADMIN_TOKEN_KEY);
-    });
-  }
-  if (els.kbdHintsToggle) {
-    const applyKbdHints = (on) => {
-      if (on) document.documentElement.removeAttribute("data-kbd-hints");
-      else document.documentElement.setAttribute("data-kbd-hints", "off");
-      localStorage.setItem(KBD_HINTS_KEY, String(on));
-      els.kbdHintsToggle.checked = on;
-    };
-    applyKbdHints(localStorage.getItem(KBD_HINTS_KEY) !== "false");
-    els.kbdHintsToggle.addEventListener("change", () =>
-      applyKbdHints(els.kbdHintsToggle.checked),
-    );
-  }
-
   function setStatus(text) {
     els.status.textContent = text;
   }
@@ -918,7 +838,9 @@
     });
     const timeoutMs = Number(options.timeoutMs) || 0;
     const { timeoutMs: _drop, ...fetchOpts } = options;
-    // Operator token (Settings → DATA SOURCES): bearer on write/ops endpoints.
+    // Operator token: bearer on write/ops endpoints. No UI sets this key any
+    // more (Settings slimming, 2026-08-16) — operators stamp it into
+    // localStorage from the console; admin ops otherwise run via curl.
     const method = String(fetchOpts.method || "GET").toUpperCase();
     if (method !== "GET") {
       const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
@@ -948,9 +870,7 @@
     }
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
-        throw new Error(
-          `${res.status} — operator token required (Settings → DATA SOURCES)`,
-        );
+        throw new Error(`${res.status} — operator token required`);
       }
       throw new Error(`${res.status} ${res.statusText}`);
     }
@@ -5731,106 +5651,6 @@
     }
   }
 
-  function socialSourceRow(info, { subscribed }) {
-    const li = document.createElement("li");
-    li.className = "social-source-item";
-    const main = document.createElement("span");
-    main.className = "social-source-name";
-    main.textContent = info.name;
-    if (info.use_cases && info.use_cases.length) {
-      main.title = info.use_cases
-        .map((id) => USE_CASE_LABELS[id] || id)
-        .join(", ");
-    }
-    const count = document.createElement("span");
-    count.className = "meta";
-    count.textContent = info.article_count ? ` (${info.article_count})` : "";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "ghost social-source-btn";
-    btn.textContent = subscribed ? "Remove" : "Add";
-    btn.addEventListener("click", () => {
-      const action = subscribed
-        ? api(
-            `/social/subscriptions/${encodeURIComponent(info.platform)}/${encodeURIComponent(info.id)}`,
-            {},
-            { method: "DELETE" },
-          )
-        : api(
-            "/social/subscriptions",
-            {},
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ platform: info.platform, id: info.id }),
-            },
-          );
-      action
-        .then(() => loadSocialCatalog())
-        .then(() => loadSources())
-        .catch((err) => setStatus(`Social update failed: ${err.message}`));
-    });
-    li.append(main, count, btn);
-    return li;
-  }
-
-  async function loadSocialCatalog() {
-    if (!els.socialManager) return;
-    let catalog;
-    try {
-      catalog = await api("/social/catalog");
-    } catch (err) {
-      // Older API without social endpoints: hide the panel.
-      els.socialManager.hidden = true;
-      console.warn("Social catalog unavailable", err);
-      return;
-    }
-    els.socialManager.hidden = false;
-    const subscriptions = (catalog && catalog.subscriptions) || [];
-    const suggestions = ((catalog && catalog.suggestions) || []).filter(
-      (info) => !info.subscribed,
-    );
-    if (els.socialSubscribed) {
-      els.socialSubscribed.innerHTML = "";
-      subscriptions.forEach((info) => {
-        els.socialSubscribed.appendChild(socialSourceRow(info, { subscribed: true }));
-      });
-    }
-    if (els.socialSubscribedEmpty) {
-      els.socialSubscribedEmpty.hidden = subscriptions.length > 0;
-    }
-    if (els.socialSuggested) {
-      els.socialSuggested.innerHTML = "";
-      suggestions.forEach((info) => {
-        els.socialSuggested.appendChild(socialSourceRow(info, { subscribed: false }));
-      });
-    }
-  }
-
-  if (els.socialAddForm) {
-    els.socialAddForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const platform = (els.socialAddPlatform && els.socialAddPlatform.value) || "reddit";
-      const handle = ((els.socialAddHandle && els.socialAddHandle.value) || "").trim();
-      if (!handle) return;
-      api(
-        "/social/subscriptions",
-        {},
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ platform, id: handle }),
-        },
-      )
-        .then(() => {
-          if (els.socialAddHandle) els.socialAddHandle.value = "";
-          return loadSocialCatalog();
-        })
-        .then(() => loadSources())
-        .catch((err) => setStatus(`Social add failed: ${err.message}`));
-    });
-  }
-
   /* Evidence-board ⋯ overflow menu: toggles on click, closes on item click or
      any outside click. */
   function setBoardMenuOpen(open) {
@@ -5933,7 +5753,7 @@
     });
   }
 
-  /* Settings ▸ Stream defaults (appearance live controls sit above). */
+  /* Settings ▸ Stream defaults (the theme control is wired above). */
   function syncDefaultScopePills() {
     document.querySelectorAll("#default-scope-pills .pill").forEach((pill) => {
       pill.classList.toggle("active", pill.dataset.defScope === uiState.defScope);
@@ -5985,15 +5805,7 @@
     els.resetPrefs.addEventListener("click", () => {
       // Clear UI preferences and reload as a first-time visitor. The evidence
       // board and dismissed-case list are analyst work product — kept.
-      [
-        UI_STATE_KEY,
-        THEME_KEY,
-        KBD_HINTS_KEY,
-        "insider-intel-density",
-        "insider-intel-layout",
-        "insider-intel-redacted",
-        "insider-intel-guide-dismissed",
-      ].forEach((key) => {
+      [UI_STATE_KEY, THEME_KEY, "insider-intel-guide-dismissed"].forEach((key) => {
         try {
           localStorage.removeItem(key);
         } catch {
@@ -6058,7 +5870,6 @@
       loadTrending();
       loadEvidenceLedger();
       loadLaneHealth();
-      loadSocialCatalog().catch((err) => console.warn("Social catalog failed", err));
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);

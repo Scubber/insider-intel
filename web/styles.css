@@ -3541,57 +3541,6 @@ button.chip.itm-chip {
   color: #2471a3;
 }
 
-/* Social sources manager (Refine panel) */
-.social-manager {
-  min-width: 0;
-  font-size: 0.8rem;
-}
-
-.social-manager > summary {
-  cursor: pointer;
-}
-
-.social-manager-group {
-  margin: 0.4rem 0;
-}
-
-.social-source-list {
-  list-style: none;
-  margin: 0.2rem 0;
-  padding: 0;
-  max-height: 12rem;
-  overflow-y: auto;
-}
-
-.social-source-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.15rem 0;
-}
-
-.social-source-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.social-source-btn {
-  margin-left: auto;
-  font-size: 0.68rem;
-}
-
-.social-add-row {
-  display: flex;
-  gap: 0.35rem;
-  margin-top: 0.4rem;
-}
-
-.social-add-row input[type="text"] {
-  flex: 1;
-  min-width: 0;
-}
-
 /* ── Masthead rows: brand + nav + LIVE (row 1), search + Core Four (row 2) ── */
 .masthead-row-top {
   display: flex;
@@ -3908,57 +3857,6 @@ button.chip.itm-chip {
   border-color: #211d16;
   background: #efe9d9;
   color: #a8352a;
-}
-
-/* View tweaks (design-handoff pack): density / layout / redaction, keyed off
-   data-* attributes the inline head script and app.js stamp on <html>.
-   The whole site sizes in rem, so density is one root font-size change. */
-html[data-density="compact"] {
-  font-size: 13.5px;
-}
-
-html[data-density="comfy"] {
-  font-size: 18px;
-}
-
-html[data-layout="stacked"] .pane-grid {
-  grid-template-columns: 1fr !important;
-}
-
-html[data-layout="stacked"] .pane-matrix,
-html[data-layout="stacked"] .pane-workbench {
-  position: static !important;
-  max-height: none !important;
-}
-
-html[data-layout="stacked"] .pane {
-  border-right: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-/* Redaction bars over fact values and analyst notes. */
-html[data-redacted="true"] .case-record-list dd,
-html[data-redacted="true"] .analyst-note {
-  background: var(--ink);
-  color: transparent;
-  user-select: none;
-}
-
-html[data-redacted="true"] .case-record-list dd *,
-html[data-redacted="true"] .analyst-note * {
-  color: transparent !important;
-}
-
-.view-tweaks .redact-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  cursor: pointer;
-}
-
-.view-tweaks input[type="checkbox"] {
-  accent-color: var(--accent);
-  margin: 0;
 }
 
 /* Inline SHOW MORE / SHOW LESS bar under the clamped analyst note. Continues
@@ -4287,8 +4185,7 @@ html[data-redacted="true"] .analyst-note * {
   line-height: 1.5;
 }
 
-.trending-todo,
-.settings-todo {
+.trending-todo {
   margin: 0.4rem 0 0;
   font-family: var(--font-mono);
   font-size: 0.66rem;
@@ -4385,139 +4282,6 @@ html[data-redacted="true"] .analyst-note * {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-}
-
-.settings-check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.settings-check input {
-  accent-color: var(--accent);
-}
-
-.settings-input {
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  padding: 0.45rem 0.6rem;
-  max-width: 20rem;
-}
-
-.kbd-ref {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.25rem 0.85rem;
-}
-
-.kbd-ref dt {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.kbd-ref dd {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.settings-add-btn {
-  align-self: flex-start;
-  padding: 0.45rem 0.85rem;
-  border: 1px dashed var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-}
-
-.settings-add-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.source-inventory {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.source-inventory li {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px dashed var(--line);
-}
-
-.source-inv-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.source-inv-name {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--ink);
-}
-
-.source-inv-desc {
-  font-size: 0.76rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.source-chip {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--line);
-  color: var(--muted);
-}
-
-.source-chip-active {
-  color: var(--signal, var(--accent));
-  background: var(--signal-soft, transparent);
-  border-color: transparent;
-}
-
-.pub-source-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.pub-chip {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  background: var(--accent-soft, transparent);
 }
 
 /* Evidence board ⋯ overflow menu */
@@ -4619,11 +4383,6 @@ html[data-redacted="true"] .analyst-note * {
   font-size: 0.88rem;
   line-height: 1.5;
   color: var(--muted);
-}
-
-/* Keyboard hints off (Settings ▸ Appearance) */
-html[data-kbd-hints="off"] .kbd-hint {
-  display: none !important;
 }
 
 /* Mid-width masthead: keep the nav on-screen by letting it wrap under the
