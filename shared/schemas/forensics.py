@@ -98,6 +98,15 @@ class CaseMethod(BaseModel):
         default="",
         description="Short verbatim excerpt from the source supporting this action",
     )
+    evidence_quote_verbatim: bool | None = Field(
+        default=None,
+        description=(
+            "Deterministic grounding stamp: True when evidence_quote is a "
+            "normalized substring of the source text the enricher saw, False "
+            "when it is a paraphrase/fabrication, None when no quote was "
+            "claimed. Stamped at write time; never set by the LLM."
+        ),
+    )
     observables: list[CaseObservable] = Field(default_factory=list)
 
 
@@ -205,23 +214,69 @@ def enrichment_richness(rec: EnrichmentRecord | None) -> float:
     return note + methods * 10.0 + conf
 
 
-def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord | None:
-    """Pick the richest stored generation (ties break to the newest).
+def _selection_key(rec: EnrichmentRecord) -> tuple[float, float]:
+    extracted = rec.forensics.extracted_at
+    recency = extracted.timestamp() if extracted is not None else 0.0
+    return (enrichment_richness(rec), recency)
 
-    This is what keeps a thin re-enrichment from downgrading a card: a poorer
-    new generation is appended to history but never *selected* over a richer
-    prior one.
+
+def _confidence(rec: EnrichmentRecord) -> float:
+    try:
+        return float(rec.forensics.confidence or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord | None:
+    """Pick the projected generation: richest WITHIN the winning verdict.
+
+    Richness alone must never flip ``is_insider_case`` (2026-08-16 audit:
+    method count dominates confidence 10x in ``enrichment_richness``, so a
+    verbose low-confidence generation could silently re-adjudicate a case —
+    fatal once multi-model sweeps write second opinions into history).
+    Selection is two-stage: the VERDICT is won by whichever class's best
+    generation carries the higher confidence (ties: richer, then newer); the
+    projection is then the richest generation within that class. A thin
+    re-enrich still can't gut a rich record, and a chatty one can't flip a
+    confident adjudication.
     """
-    best: EnrichmentRecord | None = None
-    best_key: tuple[float, float] = (-1.0, -1.0)
+    best_by_verdict: dict[bool, EnrichmentRecord] = {}
     for rec in history:
-        extracted = rec.forensics.extracted_at
-        recency = extracted.timestamp() if extracted is not None else 0.0
-        key = (enrichment_richness(rec), recency)
-        if key > best_key:
-            best_key = key
-            best = rec
-    return best
+        verdict = bool(rec.forensics.is_insider_case)
+        incumbent = best_by_verdict.get(verdict)
+        if incumbent is None or _selection_key(rec) > _selection_key(incumbent):
+            best_by_verdict[verdict] = rec
+    if not best_by_verdict:
+        return None
+    if len(best_by_verdict) == 1:
+        return next(iter(best_by_verdict.values()))
+    return max(best_by_verdict.values(), key=lambda r: (_confidence(r), _selection_key(r)))
+
+
+_QUOTE_NORM_TABLE = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'", "–": "-", "—": "-"})
+
+
+def _normalize_quote_text(text: str) -> str:
+    return " ".join((text or "").translate(_QUOTE_NORM_TABLE).lower().split())
+
+
+def stamp_quote_verbatim(forensics: PerCaseForensics, source_text: str) -> PerCaseForensics:
+    """Stamp each method's ``evidence_quote_verbatim`` against the source text.
+
+    Deterministic and zero-LLM (audit item D5): a normalized substring check —
+    case, whitespace runs, and typographic quote/dash variants are forgiven;
+    anything else is a paraphrase or fabrication and stamps False. Empty
+    quotes stay None: nothing claimed, nothing to verify. Runs at write time
+    so every new generation carries its grounding verdict; a backfill script
+    stamps stored history (scripts/backfill_quote_verbatim.py).
+    """
+    haystack = _normalize_quote_text(source_text)
+    for method in forensics.methods or []:
+        quote = (method.evidence_quote or "").strip()
+        method.evidence_quote_verbatim = (
+            None if not quote else _normalize_quote_text(quote) in haystack
+        )
+    return forensics
 
 
 def _enrichment_signature(rec: EnrichmentRecord) -> tuple:
@@ -395,9 +450,9 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         hunt_terms=_slist(data.get("hunt_terms"), 12, 120),
         hunt_queries=parse_hunt_queries(data.get("hunt_queries")),
         is_insider_case=bool(data.get("is_insider_case")),
-        context_kind=(
-            lambda v: v if v in CONTEXT_KINDS else ""
-        )(str(data.get("context_kind") or "").strip().lower()),
+        context_kind=(lambda v: v if v in CONTEXT_KINDS else "")(
+            str(data.get("context_kind") or "").strip().lower()
+        ),
         actor_role=_s(data.get("actor_role"), 200) or None,
         access_vector=_s(data.get("access_vector"), 200) or None,
         motive_signals=_slist(data.get("motive_signals"), 8, 200),

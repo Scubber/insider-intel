@@ -130,7 +130,7 @@ for anything the text does not establish):
       "target_data": null,
       "quantity": null,
       "claim_status": "alleged",
-      "evidence_quote": "short verbatim excerpt from the source for this action",
+      "evidence_quote": "EXACT copy-paste from the source text, character for character",
       "observables": [
         {
           "description": "the class of trace this behavior would leave",
@@ -185,8 +185,10 @@ Rules:
   when is_insider_case is true.
 - SOURCE vs INFERENCE. methods describe what the source SAYS the insider did;
   set claim_status from the source's own framing (an indictment = "alleged",
-  never "adjudicated"). evidence_quote is a short verbatim snippet from the text
-  that supports the action — "" only if no snippet fits. Keep tool names and
+  never "adjudicated"). evidence_quote MUST be an exact substring of the text
+  above, copied character for character — never reworded, condensed, or
+  reconstructed from memory. An empty "" is always correct when no exact
+  snippet fits; a paraphrased "quote" is always wrong. Keep tool names and
   quantities verbatim where present; no invented facts. Be tactically
   specific: name every application, service, device, or protocol the source
   mentions (Zoom, Telegram, rclone, AnyDesk, USB drive, personal Gmail…) in
