@@ -64,6 +64,9 @@
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
           <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Appearance, defaults, sources" data-tip-pos="bottom-end">SETTINGS ⚙</button>
+          <!-- Deliberately NOT .masthead-nav-item: that class's shared click
+               handler switches panes; GUIDE toggles the guide panel instead. -->
+          <button type="button" class="masthead-nav-guide" id="guide-open" aria-expanded="false" aria-controls="guide-panel" data-tip="How to use this site — per-tab cheat sheet" data-tip-pos="bottom-end">GUIDE</button>
         </nav>
         <span class="live-status" id="live-status">LIVE</span>
       </div>
@@ -223,6 +226,66 @@
         </button>
         <button type="button" class="mobile-tab" data-pane="settings">Settings</button>
       </nav>
+
+      <!-- Site guide: auto-shows once per browser (dismiss persisted under
+           insider-intel-guide-dismissed), then only on demand via GUIDE in the
+           masthead or footer. Static content — no data dependency, works in
+           snapshot-only mode. Wired at the bottom of app.js. -->
+      <section class="guide-panel" id="guide-panel" hidden aria-label="How to use this site">
+        <div class="guide-head">
+          <h2 class="guide-title">HOW TO USE THIS SITE</h2>
+          <span class="head-spacer"></span>
+          <span class="guide-kbd" aria-hidden="true">ESC DISMISSES · GUIDE REOPENS</span>
+          <button
+            type="button"
+            class="guide-close"
+            id="guide-dismiss"
+            aria-label="Dismiss the guide"
+            data-tip="Dismiss — GUIDE in the header reopens it"
+            data-tip-pos="bottom-end"
+          >✕</button>
+        </div>
+        <div class="guide-body">
+          <p class="guide-lede">
+            Insider-threat intelligence distilled from real court cases — what insiders
+            did, the trail they left, and what caught them.
+            <span class="guide-who">For people building or running an insider-threat program.</span>
+          </p>
+          <dl class="guide-jobs">
+            <dt>BUILD A PROGRAM</dt>
+            <dd>EVIDENCE shows which controls and record classes actually catch insiders. The PUBLICATIONS channel on STREAM carries the standard guides.</dd>
+            <dt>DETECT</dt>
+            <dd>MATRIX › Detections. A technique's dossier lists the detections that catch it, with case corroboration.</dd>
+            <dt>PREVENT</dt>
+            <dd>MATRIX › Preventions — controls mapped to the techniques real insiders used.</dd>
+            <dt>HUNT</dt>
+            <dd>Search a scenario on STREAM, + FLAG cases, open MODUS OPERANDI on WORKBENCH. Technique dossiers carry HOW TO HUNT THIS.</dd>
+          </dl>
+          <div class="guide-cheat" id="guide-cheat" hidden>
+            <p class="guide-section-head">TAB CHEAT SHEET</p>
+            <dl class="guide-jobs guide-tabs">
+              <dt>STREAM</dt>
+              <dd>What is happening in insider risk now. Press / to search a scenario, then + FLAG a case worth hunting.</dd>
+              <dt>MATRIX</dt>
+              <dd>What techniques exist and what catches them. Click a technique to open its case dossier.</dd>
+              <dt>EVIDENCE</dt>
+              <dd>What proof real cases actually produce. Tap a technique row for its stage detail.</dd>
+              <dt>WORKBENCH</dt>
+              <dd>What your flagged insiders actually did. Flag cases on STREAM, then hit MODUS OPERANDI.</dd>
+              <dt>SETTINGS</dt>
+              <dd>How the site starts and looks. Set your default scope and SIG floor.</dd>
+            </dl>
+            <p class="guide-trust">
+              TRUST — claims trace to cited court filings. CONFIRMED IN COURT and ALLEGED
+              are never conflated. Enrichment provenance is stamped on each card.
+            </p>
+          </div>
+          <p class="guide-actions">
+            <button type="button" id="guide-more" class="copy-btn">FULL GUIDE →</button>
+            <button type="button" id="guide-gotit" class="copy-btn copy-btn-primary">GOT IT</button>
+          </p>
+        </div>
+      </section>
 
       <div class="panels-row ii-statusline" id="panels-row">
         <span class="status-line" id="status-line"></span>
@@ -987,7 +1050,8 @@
       <div class="ii-foot-left">
         <span>insider-intel — evidence-based insider-threat research, built from what actually reaches court.</span>
         <span class="ii-foot-links">
-          <button type="button" class="ii-foot-btn" id="footer-about">METHODOLOGY &amp; COLOPHON</button>
+          <button type="button" class="ii-foot-btn" id="footer-guide">GUIDE</button>
+          · <button type="button" class="ii-foot-btn" id="footer-about">METHODOLOGY &amp; COLOPHON</button>
           · <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener">ITM™ © FORSCIE LTD — NOT AFFILIATED</a>
           · <a href="#" id="footer-feed-link">FEED.XML</a>
           · <button type="button" class="ii-foot-btn" id="footer-settings">SETTINGS</button>

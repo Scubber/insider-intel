@@ -4985,3 +4985,179 @@ body[data-pane="evidence"] .panels-row {
   background: var(--accent);
   color: #ffffff;
 }
+
+/* ── Site guide: first-visit intro + GUIDE reopener (masthead + footer). ──
+   Follows the retired .intro-panel strip: a full-width bordered panel between
+   the masthead and the pane grid, mono uppercase labels, theme tokens only.
+   Unlike .intro-panel it is NOT hidden on phones — mobile users gave the
+   "how do I use this" feedback too. */
+.guide-panel {
+  margin: 0.85rem clamp(1rem, 3vw, 2.5rem) 0.35rem;
+  border: 1px solid var(--top-line, var(--line));
+  background: var(--panel);
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.guide-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.guide-kbd {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Same box as .panel-collapse/.panel-hide — separate class so the shared
+   panel-chrome click handler never sees it. */
+.guide-close {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.guide-close:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.guide-body {
+  padding: 0.9rem 1rem 1rem;
+}
+
+.guide-lede {
+  margin: 0 0 0.75rem;
+  max-width: 72ch;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.guide-who {
+  display: block;
+  color: var(--muted);
+}
+
+.guide-jobs {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.guide-jobs dt {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  white-space: nowrap;
+  padding-top: 0.1rem;
+}
+
+.guide-jobs dd {
+  margin: 0;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+.guide-section-head {
+  margin: 0.9rem 0 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.3rem;
+}
+
+.guide-trust {
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 88ch;
+}
+
+.guide-actions {
+  margin: 0.9rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Phones: the two-column dl folds to label-over-line. */
+@media (max-width: 640px) {
+  .guide-jobs {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+
+  .guide-jobs dd {
+    margin-bottom: 0.45rem;
+  }
+
+  .guide-kbd {
+    display: none;
+  }
+}
+
+/* Phone landscape: the guide yields vertical space like the rest of the
+   above-stream chrome (matches the .intro-panel/.panels-row rule). */
+@media (max-height: 520px) and (max-width: 960px) {
+  .guide-panel {
+    display: none;
+  }
+}
+
+/* GUIDE in the masthead — mirrors .masthead-nav-item styling without joining
+   its selector: that class's shared click handler switches panes. */
+.masthead-nav-guide {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--top-muted, var(--muted));
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 0 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.masthead-nav-guide:hover {
+  color: var(--top-ink, var(--ink));
+}
+
+.masthead-nav-guide.active {
+  color: var(--top-ink, var(--ink));
+  border-bottom-color: var(--accent);
+}
