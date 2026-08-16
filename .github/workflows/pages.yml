@@ -30,6 +30,7 @@ concurrency:
 env:
   PROJECT_ID: insider-intel-502413
   OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+  LANE_HEALTH_OBJ: gs://insider-intel-502413-corpus/state/lane_health.json
 
 jobs:
   deploy:
@@ -51,8 +52,12 @@ jobs:
         run: |
           set -uo pipefail
           if gcloud storage cp "${OBJ}" /tmp/corpus.jsonl; then
+            # Lane health is optional flavor for the footer — never a build gate.
+            gcloud storage cp "${LANE_HEALTH_OBJ}" /tmp/lane_health.json \
+              || echo "lane health copy failed — snapshot ships without it"
             pip install -q -e . \
               && PROCESSED_ARTICLES_PATH=/tmp/corpus.jsonl \
+                 LANE_HEALTH_PATH=/tmp/lane_health.json \
                  python -m scripts.export_boot_snapshot --out web/data \
               || echo "snapshot build failed — deploying without boot cache"
           else

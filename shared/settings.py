@@ -247,6 +247,17 @@ class Settings(BaseSettings):
         le=200_000,
     )
 
+    # Scheduled Reddit/X social pulls. Parked 2026-08-16 (operator decision):
+    # no OAuth app and no plans for one — archive dumps may return later — and
+    # without credentials every refresh cycle just logged Reddit 403/429
+    # tracebacks. Flip to true (SOCIAL_INGEST_ENABLED=1) to resume; the manual
+    # ingest_social / ingest_social_url commands and the subscriptions API
+    # keep working regardless of this switch.
+    social_ingest_enabled: bool = Field(
+        default=False,
+        alias="SOCIAL_INGEST_ENABLED",
+        description="Master switch for the scheduled Reddit/X ingest lanes",
+    )
     # Social — Reddit. Public JSON works from residential IPs; cloud IPs get
     # 429'd, so set a free "script" app's credentials for OAuth app auth.
     reddit_client_id: str | None = Field(default=None, alias="REDDIT_CLIENT_ID")
@@ -329,6 +340,11 @@ class Settings(BaseSettings):
         default="data/state/technique_seeds.json",
         alias="TECHNIQUE_SEEDS_PATH",
         description="Novel-candidate view (job-written under state/, API reads it)",
+    )
+    lane_health_path: str = Field(
+        default="data/state/lane_health.json",
+        alias="LANE_HEALTH_PATH",
+        description="Per-lane ingest health (job-written under state/, API reads it)",
     )
 
     # Use-case / insider-type classifier LLM refiner (heuristics always run)

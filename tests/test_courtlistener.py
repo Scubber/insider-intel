@@ -331,7 +331,9 @@ def test_crypto_feeds_disabled_by_default() -> None:
     enabled_ids = {f.id for f in get_enabled_feeds()}
     assert "coincentral" not in enabled_ids
     assert "doj-press" in enabled_ids
-    assert "sec-litigation" in enabled_ids
+    # sec-litigation was removed 2026-08-16 (feed URL 404); sec-press is the
+    # surviving SEC lane.
+    assert "sec-press" in enabled_ids
 
 
 def _fake_search_recorder(results=None):

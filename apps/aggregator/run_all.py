@@ -133,7 +133,10 @@ def run_full_pipeline(
             include_raw=include_raw,
         )
     social_result: IngestionRunResult | None = None
-    if not skip_social:
+    # Scheduled social pulls are parked behind SOCIAL_INGEST_ENABLED (operator
+    # decision 2026-08-16; see shared/settings.py) — without credentials they
+    # only produced per-cycle error noise.
+    if not skip_social and settings.social_ingest_enabled:
         from apps.aggregator.ingest_state import DEFAULT_STATE_PATH, JsonIngestState
 
         social_result = _merge_ingestion(
@@ -167,6 +170,31 @@ def run_full_pipeline(
         social_result,
         publications_result,
     )
+    # Lane-health telemetry: one smoke-test row per configured source lane,
+    # enumerated from the live config so new/removed sources track
+    # automatically; broken lanes get a loud [LANE-BROKEN] call-out.
+    from apps.aggregator.lane_health import (
+        expected_lane_specs,
+        log_lane_health,
+        record_lane_health,
+    )
+
+    try:
+        health = record_lane_health(
+            combined.sources,
+            expected_lane_specs(
+                feeds=sources,
+                include_feedly=not skip_feedly,
+                include_courtlistener=not skip_courtlistener,
+                include_web_keywords=not skip_web_keywords,
+                include_datatheftnews=not skip_datatheftnews,
+                include_social=not skip_social,
+                include_publications=not skip_publications,
+            ),
+        )
+        log_lane_health(health)
+    except Exception:  # noqa: BLE001 — telemetry must never kill a finished run
+        logger.exception("Lane-health recording failed")
     logger.info(
         "Full pipeline done: ingested_saved=%d processed_saved=%d",
         combined.total_articles_saved,

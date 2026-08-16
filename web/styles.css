@@ -4758,6 +4758,11 @@ body[data-pane="evidence"] .panels-row {
   color: var(--accent);
   border-color: var(--accent);
 }
+/* Source-health line (refresh-job lane telemetry via /lanes/health). Muted
+   when everything is healthy; accent-colored when lanes are broken. */
+.ii-foot-lanes.lane-health-broken {
+  color: var(--accent);
+}
 .ii-foot-btn {
   background: none;
   border: 0;

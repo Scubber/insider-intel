@@ -9,7 +9,8 @@ Feedly board parity (Insider Threats x Top Stories / ITM-Hunt):
   3. Or --feeds-file apps/aggregator/feeds.insider_board.example.json
 
 Tip / social-adjacent (Reddit RSS, channel=tips):
-  - Included in DEFAULT_FEEDS (reddit-*)
+  - reddit-* entries exist in DEFAULT_FEEDS but are disabled (lane parked
+    2026-08-16 — see the block comment on them below)
   - Or --feeds-file apps/aggregator/feeds.tips.example.json
 
 Multi-domain HR/legal (see docs/sourcing.md):
@@ -164,24 +165,16 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.oaic.gov.au/rss",
         category="insider-legal",
     ),
-    FeedSource(
-        id="cps-news",
-        name="Crown Prosecution Service (UK) — News",
-        url="https://www.cps.gov.uk/rss.xml",
-        category="insider-legal",
-    ),
+    # cps-news removed 2026-08-16: https://www.cps.gov.uk/rss.xml is a hard
+    # 404 (Drupal error page); no replacement RSS path found on cps.gov.uk.
     FeedSource(
         id="nca-news",
         name="UK National Crime Agency — News",
         url="https://www.nationalcrimeagency.gov.uk/news?format=feed&type=rss",
         category="insider-legal",
     ),
-    FeedSource(
-        id="ico-news",
-        name="ICO (UK privacy regulator) — News",
-        url="https://ico.org.uk/rss/news",
-        category="insider-legal",
-    ),
+    # ico-news removed 2026-08-16: https://ico.org.uk/rss/news is a hard 404
+    # (HTML error page); the ICO retired its RSS endpoint.
     FeedSource(
         id="justice-canada-news",
         name="Justice Canada — News Releases",
@@ -230,13 +223,8 @@ DEFAULT_FEEDS: list[FeedSource] = [
         enabled=False,  # HTTP 403 from datacenter/CI IPs
     ),
     # Vendor / research blogs that surface insider / DPRK IT worker TTPs
-    FeedSource(
-        id="group-ib",
-        name="Group-IB Blog",
-        url="https://www.group-ib.com/blog/feed/",
-        category="threat-research",
-        enabled=False,  # feed 404
-    ),
+    # group-ib removed 2026-08-16: feed 404 confirmed again (was already
+    # disabled for it); no working RSS path on group-ib.com.
     FeedSource(
         id="darktrace",
         name="Darktrace Blog",
@@ -270,17 +258,10 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.insiderisk.io/rss.xml",
         category="threat-research",
     ),
-    # U.S. Treasury press releases — major OFAC/sanctions announcements (e.g.
-    # DPRK IT workers). OFAC retired its own RSS (Jan 2025) for GovDelivery
-    # email, so a Treasury press-release RSS is UNCONFIRMED — disabled pending a
-    # verified feed URL (treasury.gov 403s the build env; may be email-only).
-    FeedSource(
-        id="treasury-press",
-        name="U.S. Treasury Press Releases",
-        url="https://home.treasury.gov/news/press-releases/feed",
-        category="insider-legal",
-        enabled=False,  # VERIFY: Treasury RSS unconfirmed (possibly email-only)
-    ),
+    # treasury-press removed 2026-08-16: the guessed
+    # home.treasury.gov/news/press-releases/feed URL is a hard 404. OFAC
+    # retired RSS (Jan 2025) for GovDelivery email — Treasury appears to be
+    # email-only now; re-add if a real feed URL ever surfaces.
     # Crypto / fintech (insider / rogue employee / KYC leak stories)
     FeedSource(
         id="coincentral",
@@ -303,13 +284,10 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="insider-crypto",
         enabled=False,
     ),
-    # Legal / gov — SEC litigation (stable RSS)
-    FeedSource(
-        id="sec-litigation",
-        name="SEC Litigation Releases",
-        url="https://www.sec.gov/enforcement-litigation-releases.rss",
-        category="insider-legal",
-    ),
+    # sec-litigation removed 2026-08-16: enforcement-litigation-releases.rss
+    # is a hard 404 (SEC site restructure); candidate replacement paths
+    # (/rss/litigation/litreleases.xml etc.) 403 the build env so none could
+    # be verified. sec-press below still works and covers enforcement news.
     FeedSource(
         id="sec-press",
         name="SEC Press Releases",
@@ -382,7 +360,9 @@ DEFAULT_FEEDS: list[FeedSource] = [
     FeedSource(
         id="scmagazine",
         name="SC Media",
-        url="https://www.scworld.com/feed",
+        # /feed started redirecting to the HTML homepage (parse-dead);
+        # /feed/topic/latest is the live Atom feed (verified 2026-08-16).
+        url="https://www.scworld.com/feed/topic/latest",
         category="insider-osint",
     ),
     FeedSource(
@@ -428,12 +408,10 @@ DEFAULT_FEEDS: list[FeedSource] = [
         category="insider-legal",
         enabled=False,  # HTTP 403
     ),
-    FeedSource(
-        id="mandiant",
-        name="Google Cloud Security Blog",
-        url="https://cloud.google.com/blog/topics/security/rss",
-        category="threat-research",
-    ),
+    # mandiant (Google Cloud Security Blog) removed 2026-08-16:
+    # cloud.google.com/blog/topics/security/rss now serves the HTML blog page
+    # (192KB of markup, no XML) — a parse error every cycle. Google security
+    # coverage still lands via google-threat-intel, msrc-blog, unit42, etc.
     FeedSource(
         id="unit42",
         name="Palo Alto Unit 42",
@@ -483,12 +461,18 @@ DEFAULT_FEEDS: list[FeedSource] = [
         enabled=False,
     ),
     # Tip / social-adjacent via Reddit RSS (no API key). Same RawArticle plane.
+    # PARKED 2026-08-16 (operator decision, with the Reddit/X social lanes —
+    # see SOCIAL_INGEST_ENABLED in shared/settings.py): Reddit 429s/403s
+    # unauthenticated pulls from cloud IPs and there is no OAuth app; archive
+    # dumps may return later. Kept disabled (not deleted) so re-enabling is a
+    # one-line flip per feed.
     FeedSource(
         id="reddit-netsec",
         name="Reddit r/netsec",
         url="https://www.reddit.com/r/netsec/.rss",
         category="tips-reddit",
         channel="tips",
+        enabled=False,  # parked 2026-08-16 with the social lanes
     ),
     FeedSource(
         id="reddit-malware",
@@ -496,6 +480,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.reddit.com/r/Malware/.rss",
         category="tips-reddit",
         channel="tips",
+        enabled=False,  # parked 2026-08-16 with the social lanes
     ),
     FeedSource(
         id="reddit-cybersecurity",
@@ -503,6 +488,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.reddit.com/r/cybersecurity/.rss",
         category="tips-reddit",
         channel="tips",
+        enabled=False,  # parked 2026-08-16 with the social lanes
     ),
     FeedSource(
         id="reddit-blueteamsec",
@@ -510,6 +496,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.reddit.com/r/blueteamsec/.rss",
         category="tips-reddit",
         channel="tips",
+        enabled=False,  # parked 2026-08-16 with the social lanes
     ),
     FeedSource(
         id="reddit-dfir",
@@ -517,6 +504,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.reddit.com/r/DFIR/.rss",
         category="tips-reddit",
         channel="tips",
+        enabled=False,  # parked 2026-08-16 with the social lanes
     ),
     # Insider-focused research + Scattered-Spider / attribution-forensics sources
     FeedSource(
@@ -563,12 +551,8 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://www.microsoft.com/en-us/security/blog/feed/",
         category="threat-research",
     ),
-    FeedSource(
-        id="darkatlas",
-        name="DarkAtlas",
-        url="https://darkatlas.io/blog/rss.xml",
-        category="threat-research",
-    ),
+    # darkatlas removed 2026-08-16: darkatlas.io/blog/rss.xml is a hard 404
+    # (Next.js error page); no working feed path found on the rebuilt site.
     FeedSource(
         id="dfir-report",
         name="The DFIR Report",
