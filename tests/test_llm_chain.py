@@ -361,3 +361,68 @@ def test_enrichment_stamps_served_model_from_completion(monkeypatch) -> None:
     assert provider.model_name == "Qwen/Qwen3.8-27B-FP8"
     assert forensics is not None and forensics.model == "Qwen/Qwen3.8-27B-FP8"
     assert summary == "note"
+
+
+# --- enable_thinking knob -------------------------------------------------------
+
+
+def test_thinking_off_adds_chat_template_kwargs(monkeypatch) -> None:
+    from shared.llm.openai_provider import OpenAICompatSummarizer
+
+    seen: dict = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        seen["payload"] = json
+        import json as json_mod
+
+        return _HttpResp(
+            {"model": "m", "choices": [{"message": {"content": json_mod.dumps(_GOOD_REPLY)}}]}
+        )
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.post", fake_post)
+    provider = OpenAICompatSummarizer(base_url="http://v:8000/v1", model="m", enable_thinking=False)
+    provider.extract_case(title="t", source="courtlistener-recap", text="x", itm_candidates="")
+    assert seen["payload"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+    # Default (thinking on) sends NOTHING — non-vLLM payloads stay byte-identical.
+    provider = OpenAICompatSummarizer(base_url="http://v:8000/v1", model="m")
+    provider.extract_case(title="t", source="courtlistener-recap", text="x", itm_candidates="")
+    assert "chat_template_kwargs" not in seen["payload"]
+
+
+def test_thinking_knob_threads_from_settings() -> None:
+    chain = get_summarizer_chain(
+        _settings(
+            SUMMARIZER_LLM_PROVIDER="openai",
+            OPENAI_API_KEY="sk-x",
+            OPENAI_COMPAT_ENABLE_THINKING="false",
+        )
+    )
+    assert [p._enable_thinking for p in chain] == [False]
+    chain = get_summarizer_chain(_settings(SUMMARIZER_LLM_PROVIDER="openai", OPENAI_API_KEY="sk-x"))
+    assert [p._enable_thinking for p in chain] == [True]
+
+
+def test_400_naming_chat_template_kwargs_strips_and_retries(monkeypatch) -> None:
+    from shared.llm.openai_provider import OpenAICompatSummarizer
+
+    calls: list = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append(dict(json))
+        if len(calls) == 1:
+            return _HttpResp({}, status=400, text="chat_template_kwargs is not supported")
+        import json as json_mod
+
+        return _HttpResp(
+            {"model": "m", "choices": [{"message": {"content": json_mod.dumps(_GOOD_REPLY)}}]}
+        )
+
+    monkeypatch.setattr("shared.llm.openai_provider.httpx.post", fake_post)
+    provider = OpenAICompatSummarizer(base_url="http://v:8000/v1", model="m", enable_thinking=False)
+    result = provider.extract_case(
+        title="t", source="courtlistener-recap", text="x", itm_candidates=""
+    )
+    assert result is not None
+    assert "chat_template_kwargs" in calls[0]
+    assert "chat_template_kwargs" not in calls[1]

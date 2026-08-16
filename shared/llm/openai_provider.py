@@ -136,6 +136,7 @@ def _chat_completion(
     system: str,
     user: str,
     max_tokens: int | None = None,
+    enable_thinking: bool = True,
 ) -> ChatResult | None:
     """POST a JSON-mode chat completion; returns content + served model, or None."""
     headers = {"Content-Type": "application/json"}
@@ -152,13 +153,23 @@ def _chat_completion(
     }
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
+    if not enable_thinking:
+        # vLLM/Qwen3-style servers; key is absent entirely when thinking is on,
+        # so non-vLLM payloads stay byte-identical to pre-knob behavior.
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     url = f"{base_url}/chat/completions"
     try:
         response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
-        if response.status_code == 400 and "response_format" in response.text:
-            # Some local servers reject response_format; retry without it.
-            payload.pop("response_format", None)
-            response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
+        if response.status_code == 400:
+            # Some servers reject response_format or chat_template_kwargs by
+            # name; strip whichever the error mentions and retry once.
+            stripped = False
+            for key in ("response_format", "chat_template_kwargs"):
+                if key in payload and key in response.text:
+                    payload.pop(key, None)
+                    stripped = True
+            if stripped:
+                response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
         response.raise_for_status()
         body = response.json()
         content = body["choices"][0]["message"]["content"]
@@ -219,12 +230,14 @@ class OpenAICompatSummarizer:
         api_key: str | None = None,
         max_input_chars: int = 6000,
         timeout: float = 90.0,
+        enable_thinking: bool = True,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._api_key = api_key
         self._max_input_chars = max_input_chars
         self._timeout = timeout
+        self._enable_thinking = enable_thinking
         self.model_name = model
 
     def extract_case(
@@ -237,6 +250,7 @@ class OpenAICompatSummarizer:
                 model=self._model,
                 api_key=self._api_key,
                 timeout=self._timeout,
+                enable_thinking=self._enable_thinking,
                 system=ENRICH_SYSTEM_PROMPT,
                 user=build_enrich_prompt(
                     title=title,
@@ -264,12 +278,14 @@ class OpenAICompatDiscoverer:
         api_key: str | None = None,
         max_input_chars: int = 12000,
         timeout: float = 90.0,
+        enable_thinking: bool = True,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._api_key = api_key
         self._max_input_chars = max_input_chars
         self._timeout = timeout
+        self._enable_thinking = enable_thinking
         self.model_name = model
 
     def discover_techniques(self, *, forensics_json: str, itm_shortlist: str) -> dict | None:
@@ -280,6 +296,7 @@ class OpenAICompatDiscoverer:
                 model=self._model,
                 api_key=self._api_key,
                 timeout=self._timeout,
+                enable_thinking=self._enable_thinking,
                 system=DISCOVER_SYSTEM_PROMPT,
                 user=build_discover_prompt(
                     forensics_json=forensics_json,
@@ -304,11 +321,13 @@ class OpenAICompatSynthesizer:
         model: str,
         api_key: str | None = None,
         timeout: float = 90.0,
+        enable_thinking: bool = True,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._api_key = api_key
         self._timeout = timeout
+        self._enable_thinking = enable_thinking
         self.model_name = model
 
     def synthesize_hunts(self, *, technique_json: str) -> dict | None:
@@ -319,6 +338,7 @@ class OpenAICompatSynthesizer:
                 model=self._model,
                 api_key=self._api_key,
                 timeout=self._timeout,
+                enable_thinking=self._enable_thinking,
                 system=SYNTH_SYSTEM_PROMPT,
                 user=build_synth_prompt(technique_json=technique_json),
                 max_tokens=SYNTH_MAX_TOKENS,

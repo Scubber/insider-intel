@@ -357,6 +357,17 @@ class Settings(BaseSettings):
         alias="OPENAI_COMPAT_TIMEOUT_SECONDS",
         description="HTTP timeout (seconds) for OpenAI-compatible chat calls",
     )
+    # Qwen3-family reasoning models default to a heavy thinking pass whose
+    # tokens bill against max_tokens on the same clock as the JSON — on the
+    # Spark that inflated enrichments toward the 12k cap (~10.8k observed) and
+    # starved the 3k-cap synthesizer to zero output. False sends vLLM
+    # chat_template_kwargs.enable_thinking=false; the default True sends
+    # NOTHING, keeping payloads to non-vLLM servers byte-identical.
+    openai_compat_enable_thinking: bool = Field(
+        default=True,
+        alias="OPENAI_COMPAT_ENABLE_THINKING",
+        description="Set false to disable reasoning/thinking on OpenAI-compatible servers (vLLM)",
+    )
     # Real OpenAI: setting OPENAI_API_KEY (and no OPENAI_COMPAT_* overrides)
     # retargets the openai provider from local Ollama to api.openai.com.
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
