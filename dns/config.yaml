@@ -23,10 +23,23 @@ providers:
     # provider otherwise queries for URLFWD support. We use no URLFWD records.
     pagerules: false
 
+processors:
+  # insider-intel.net apex + www are Workers Custom Domains: the park-redirect
+  # Worker creates and owns their DNS records (proxied AAAA 100::). They are
+  # deliberately absent from insider-intel.net.yaml, so without this filter
+  # octoDNS plans their deletion — which would take down the production site.
+  # include_target defaults to true, hiding the live records from the diff.
+  worker-owned:
+    class: octodns.processor.filter.NameRejectlistFilter
+    rejectlist:
+      - ''
+      - www
+
 zones:
   insider-intel.net.:
     sources: [zones_config]
     targets: [cloudflare]
+    processors: [worker-owned]
   thederpweb.com.:
     sources: [zones_config]
     targets: [cloudflare]
