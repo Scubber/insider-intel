@@ -2161,6 +2161,13 @@ body {
   border-color: var(--muted);
 }
 
+/* Adjudicated insider case with no established disposition: muted + dashed
+   like .context ("not a firm classification"), distinguished by its text. */
+.case-stamp.insider-type-unclassified {
+  color: var(--muted);
+  border-style: dashed;
+}
+
 .case-stamp.insider-type-malicious {
   color: #a8352a;
 }

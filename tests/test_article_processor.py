@@ -142,6 +142,62 @@ def test_unclassified_article_has_defaults() -> None:
     assert processed.classification_source is None
 
 
+def test_retag_reprocess_classifies_off_prior_llm_motive_hits() -> None:
+    """A --force re-tag reprocess must classify off the FULL adjudicated hit set.
+
+    LLM-adjudicated Motive hits carried from a prior enrichment used to be
+    merged only AFTER the classify node ran, so an enriched insider case whose
+    text has no heuristic cue phrases stayed insider_type=None on every re-tag
+    sweep — despite the pipeline having already paid for a Motive adjudication
+    that the curated MT→disposition mapping covers.
+    """
+    from datetime import UTC, datetime
+
+    from shared.schemas.articles import ExtractedEntities, ItmHit
+    from shared.schemas.forensics import PerCaseForensics
+
+    raw = _raw(
+        title="Former engineer moved customer files before departure",
+        link="https://example.com/untyped-case",
+        summary="An engineer transferred a large volume of files shortly before resigning.",
+    )
+    first = process_article(raw)
+    assert first.insider_type is None  # no cue phrases, nothing to corroborate
+
+    # Prior enrichment adjudicated MT005 (Personal Gain — a malicious Motive).
+    prior = first.model_copy(
+        update={
+            "entities": first.entities.model_copy(
+                update={
+                    "itm_hits": [
+                        *first.entities.itm_hits,
+                        ItmHit(
+                            id="MT005",
+                            title="Personal Gain",
+                            theme="motive",
+                            article_id="AR1",
+                            source="llm",
+                        ),
+                    ]
+                }
+            ),
+            "forensics": PerCaseForensics(
+                link="https://example.com/untyped-case",
+                title="Former engineer moved customer files before departure",
+                is_insider_case=True,
+                extracted_at=datetime(2026, 8, 1, tzinfo=UTC),
+            ),
+        }
+    )
+    assert isinstance(prior.entities, ExtractedEntities)
+
+    reprocessed = process_article(raw, prior=prior)
+    assert reprocessed.insider_type == "malicious"
+    assert reprocessed.classification_source == "heuristic"
+    # The carried adjudication also survives in the stored entity view.
+    assert any(h.id == "MT005" and h.source == "llm" for h in reprocessed.entities.itm_hits)
+
+
 def test_old_shape_processed_row_still_loads(tmp_path: Path) -> None:
     """Rows written before the classification fields existed must parse."""
     import json

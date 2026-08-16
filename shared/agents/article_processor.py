@@ -94,6 +94,18 @@ def _node_classify(state: ArticleProcessState) -> ArticleProcessState:
     entities = ExtractedEntities.model_validate(state.get("entities") or {})
     text = state.get("clean_text") or ""
 
+    # The heuristics corroborate insider_type/use_cases off ITM Motive hits,
+    # but at this node the entity view is lexical-only — LLM-adjudicated hits
+    # carried from a prior enrichment are merged later, in summarize. On a
+    # re-tag reprocess (--force sweep) that ordering hid already-paid-for
+    # Motive adjudications from the classifier, so an enriched insider case
+    # whose text carries no cue phrases stayed insider_type=None forever.
+    # Merge the carried hits for classification only; the stored entity view
+    # is still produced by the summarize node's own merge.
+    prior_llm_hits = [ItmHit.model_validate(h) for h in state.get("prior_llm_itm_hits") or []]
+    if prior_llm_hits:
+        entities = merge_llm_hits(entities, prior_llm_hits)
+
     use_cases = classify_use_cases(text, entities)
     insider_type = classify_insider_type(text, entities)
     source: str | None = "heuristic" if (use_cases or insider_type) else None
@@ -272,9 +284,7 @@ def _node_discover(state: ArticleProcessState) -> ArticleProcessState:
     from shared.schemas.forensics import PerCaseForensics
 
     settings = get_settings()
-    budget = state.get("discover_budget") or SummaryBudget(
-        settings.discoverer_max_articles_per_run
-    )
+    budget = state.get("discover_budget") or SummaryBudget(settings.discoverer_max_articles_per_run)
     try:
         forensics = PerCaseForensics.model_validate(forensics_payload)
         discovery = discover_case(forensics=forensics, settings=settings, budget=budget)
