@@ -171,6 +171,7 @@ def _build_summarizer(
         api_key=api_key,
         max_input_chars=max_chars,
         timeout=settings.openai_compat_timeout_seconds,
+        enable_thinking=settings.openai_compat_enable_thinking,
     )
 
 
@@ -195,6 +196,7 @@ def _build_discoverer(
         model=model,
         api_key=api_key,
         timeout=settings.openai_compat_timeout_seconds,
+        enable_thinking=settings.openai_compat_enable_thinking,
     )
 
 
@@ -219,6 +221,7 @@ def _build_synthesizer(
         model=model,
         api_key=api_key,
         timeout=settings.openai_compat_timeout_seconds,
+        enable_thinking=settings.openai_compat_enable_thinking,
     )
 
 
