@@ -1,9 +1,71 @@
-# thederpweb.com — current live zone, still served by Route 53.
+# thederpweb.com — dumped from the live Route 53 zone (Z07156861TIV89XOIWVIA)
+# on 2026-08-16 via `aws route53 list-resource-record-sets`, per this file's
+# own prior instruction: the live zone is the source of truth. NS/SOA excluded
+# (provider-managed). All records DNS-only (unproxied) for exact behavioral
+# parity through the registrar transfer; Cloudflare proxying is a later,
+# deliberate change if ever wanted.
 #
-# On transfer to Cloudflare: dump the real records from the Route 53
-# console (or `octodns-dump` with AWS creds), commit them here, and
-# activate the zone in config.yaml. Do NOT hand-author from memory —
-# the live zone is the source of truth until then. Known members:
+# Known members:
 #   intel.thederpweb.com      → GitHub Pages (site)
 #   api.intel.thederpweb.com  → Cloud Run domain mapping (API)
-{}
+'':
+  - type: A
+    ttl: 60
+    values:
+      - 185.199.108.153
+      - 185.199.109.153
+      - 185.199.110.153
+      - 185.199.111.153
+  - type: AAAA
+    ttl: 60
+    values:
+      - 2606:50c0:8000::153
+      - 2606:50c0:8001::153
+      - 2606:50c0:8002::153
+      - 2606:50c0:8003::153
+  - type: TXT
+    ttl: 300
+    values:
+      - google-site-verification=nrgnsAqZqtghTgxuidQa0O3fdCwZbt0-QiYqnDZAIhQ
+_dabc37ff78f09ae5420072feaa66e2b2.www:
+  type: CNAME
+  ttl: 300
+  value: _cb59b37b5c9cfaa74d9611f0b358ae2a.jkddzztszm.acm-validations.aws.
+_db5cfce2656e05de60112c712a049c6b:
+  type: CNAME
+  ttl: 300
+  value: _a15a1ed49a829648c76143045fb395c3.jkddzztszm.acm-validations.aws.
+_github-pages-challenge-scubber:
+  type: TXT
+  ttl: 60
+  values:
+    - 1bfc8a1df98005db3a7fcf03ebdd6c
+_github-pages-challenge-scubber.intel:
+  type: TXT
+  ttl: 60
+  values:
+    - b9754b58cebabf2a734f32b48b6588
+api.intel:
+  type: CNAME
+  ttl: 300
+  value: ghs.googlehosted.com.
+info:
+  type: CNAME
+  ttl: 60
+  value: deeb3eff7dfrn.cloudfront.net.
+intel:
+  type: CNAME
+  ttl: 60
+  value: scubber.github.io.
+resume:
+  type: CNAME
+  ttl: 60
+  value: scubber.github.io.
+valhalla:
+  type: CNAME
+  ttl: 60
+  value: ec2-3-235-17-215.compute-1.amazonaws.com.
+www:
+  type: CNAME
+  ttl: 60
+  value: scubber.github.io.
