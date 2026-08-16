@@ -3789,6 +3789,18 @@
       stamp.textContent =
         INSIDER_TYPE_LABELS[article.insider_type] || article.insider_type;
       meta.appendChild(stamp);
+    } else if (article.forensics && article.forensics.is_insider_case === true) {
+      // Adjudicated insider case whose disposition no classifier established
+      // (no cue phrases, no mapped Motive technique, LLM refiner not enabled
+      // for this channel). Say so — an empty stamp slot on a confirmed case
+      // reads as a rendering bug, not as an honest "not classified".
+      const stamp = document.createElement("span");
+      stamp.className = "case-stamp insider-type-unclassified";
+      stamp.textContent = "UNCLASSIFIED";
+      stamp.title =
+        "AI-adjudicated: insider case — disposition (malicious / negligent / " +
+        "unintentional) not established by the classifier";
+      meta.appendChild(stamp);
     }
 
     // 4. Headline
@@ -5246,6 +5258,10 @@
       const reload = await api("/reload", {}, { method: "POST" });
       state.itmCatalog = null;
       state.itmCatalogKey = "";
+      // Novel-candidate view is session-cached like the catalog; without this
+      // reset the matrix CANDIDATES tab keeps showing the pre-sweep state
+      // until a full page reload.
+      state.candidates = null;
       await ensureItmCatalog(true);
       renderMatrixBrowse();
       loadTrending();
