@@ -190,10 +190,10 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
                     page.evaluate("() => location.hash") == "#/tooling",
                 )
             if link == "#/about":
-                # ABOUT is static prose + one live counts line: the pane must
-                # render offline, byline included, with no hardcoded numbers
-                # replacing the honest empty state.
-                about_text = page.text_content(".pane-about-page") or ""
+                # ABOUT is static prose: the pane must render offline with the
+                # byline and attribution. Whitespace-normalized — markup may
+                # break the phrase across an inline link.
+                about_text = " ".join((page.text_content(".pane-about-page") or "").split())
                 checks.check(
                     f"{tag}: #/about renders the ABOUT pane with its byline",
                     page.is_visible(".pane-about-page")
