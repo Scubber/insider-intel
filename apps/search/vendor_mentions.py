@@ -53,8 +53,8 @@ VENDOR_ALIASES_PATH = (
 # Vendor-sheet receipts cap: each vendor's payload carries at most this many
 # case references (the most recent by published date); ``more_cases`` reports
 # how many further naming cases exist beyond the cap. Keeps the /tooling
-# payload bounded (77 vendors × 25 refs worst case) while the sheet stays a
-# real receipts list, not a bare count.
+# payload bounded (164 vendor entries × 25 refs worst case) while the sheet
+# stays a real receipts list, not a bare count.
 VENDOR_CASE_REFS_CAP = 25
 
 

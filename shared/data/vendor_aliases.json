@@ -24,90 +24,193 @@
     "   are FORBIDDEN as bare aliases — court prose is full of 'sterling',",
     "   'archer', 'relativity', 'hid', 'sans', 'purview' ('within the purview",
     "   of'), 'sentinel', 'falcon', 'canary', 'encase' (the verb), 'group",
-    "   policy' (group insurance policies). Those vendors use compound",
-    "   aliases ('RSA Archer', 'HID Global', 'Sterling background check',",
-    "   'Windows Group Policy', 'Purview eDiscovery') instead.",
+    "   policy' (group insurance policies), 'keeper', 'vault', 'duo',",
+    "   'nightfall', 'barracuda' (a fish), 'carbon black' (an industrial",
+    "   material with its own trade-secret case law), 'area 1' (numbered",
+    "   facility zones), 'one identity' ('used more than one identity').",
+    "   Those vendors use compound aliases ('RSA Archer', 'HID Global',",
+    "   'Sterling background check', 'Windows Group Policy', 'Purview",
+    "   eDiscovery', 'Keeper Security', 'HashiCorp Vault', 'Cisco Duo',",
+    "   'Nightfall AI', 'Barracuda Networks', 'VMware Carbon Black',",
+    "   'Cloudflare Area 1', 'One Identity Safeguard') instead.",
     "2. Single-token aliases are allowed ONLY from single_token_allowlist",
     "   below: coined brand names with no common-English collision",
-    "   (CrowdStrike, Teramind, ObserveIT, Okta, ...). 'Velociraptor' is a",
-    "   documented judgment call: a species name, but implausible as",
-    "   non-product prose in an insider-case corpus. Multi-word aliases must",
-    "   be at least 6 characters.",
+    "   (CrowdStrike, Teramind, ObserveIT, Okta, ...). 'Velociraptor' and",
+    "   'Suricata' are documented judgment calls: species names, but",
+    "   implausible as non-product prose in an insider-case corpus.",
+    "   Multi-word aliases must be at least 6 characters.",
     "3. When no safe alias exists, the entry keeps an EMPTY alias list plus a",
     "   'no_safe_alias' note so the vendor can never miscount ('Intune device",
     "   control': any real mention says 'Intune', which names the platform —",
-    "   claimed by the Microsoft Intune entry under hardening).",
+    "   claimed by the Microsoft Intune entry under hardening; 'Accurate",
+    "   Background': 'accurate background check/screening' is everyday court",
+    "   prose about the screening process itself).",
     "4. A company token shared across category entries belongs to its",
     "   flagship entry only (bare 'Proofpoint' -> email; bare 'SentinelOne'",
-    "   -> edr; bare 'Splunk' -> siem; bare 'Intune' -> hardening); sibling",
-    "   entries use product-qualified compounds or well-known former product",
-    "   names (ObserveIT, Wombat Security, Attivo, Splunk UBA).",
+    "   -> edr; bare 'Splunk' -> siem; bare 'Intune' -> hardening; bare",
+    "   'Sophos' -> edr; bare 'Exterro' -> ediscovery; bare 'Forcepoint' ->",
+    "   dlp); sibling entries use product-qualified compounds or well-known",
+    "   former product names (ObserveIT, Wombat Security, Attivo, Splunk UBA,",
+    "   'Proofpoint DLP', 'Exterro FTK', 'Forcepoint Federal', 'Forcepoint",
+    "   ONE', 'Zscaler DLP'/'Zscaler Deception'). A company whose flagship is",
+    "   NOT the listed product never lends its bare token at all ('Trellix",
+    "   DLP' not bare 'Trellix'; 'FortiNDR' not bare 'Fortinet'; 'HashiCorp",
+    "   Vault' not bare 'HashiCorp' — Terraform mentions would pollute pam).",
     "5. Well-known FORMER names count as aliases (ObserveIT, Websense, Vontu,",
     "   Azure Active Directory, Google Chronicle, Bomgar, Thycotic, Centrify,",
-    "   Lumension, kCura, Guidance Software, Attivo, Wombat Security) — old",
-    "   court records name products by the name of their era.",
+    "   Lumension, kCura, Guidance Software, Attivo, Wombat Security,",
+    "   Verdasys, Ekran System, Forcepoint Federal, SpectorSoft, Skyhigh",
+    "   Networks, MVISION Cloud, Avanan, Stealthwatch, Awake Security,",
+    "   AirWatch, Desktop Central, NinjaRMM, AccessData, Recommind,",
+    "   Logikcull, PhishMe, ForgeRock, Openpath, McAfee DLP, Elastic",
+    "   Endgame, Cb Response, senhasegura) — old court records name products",
+    "   by the name of their era.",
     "6. Same product legitimately homed in two categories (Netskope: dlp and",
-    "   casb) carries the same aliases in both entries; a mention counts for",
-    "   both homes."
+    "   casb; Exabeam: siem and ueba) carries the same aliases in both",
+    "   entries; a mention counts for both homes."
   ],
   "single_token_allowlist": [
+    "Acalvio",
+    "AccessData",
+    "ActivTrak",
+    "Agari",
+    "AirWatch",
     "AppOmni",
+    "ArcSight",
     "Attivo",
     "AuditBoard",
+    "Avanan",
+    "Avigilon",
+    "Axcelerate",
     "BeyondTrust",
+    "BigFix",
+    "Binalyze",
+    "Bitdefender",
     "Bomgar",
+    "Brainspace",
+    "Brivo",
+    "Casepoint",
     "Cellebrite",
     "Centrify",
     "Checkr",
+    "Cisive",
+    "Code42",
+    "Cofense",
     "Corelight",
     "CoSoSys",
     "CounterCraft",
     "CrowdStrike",
     "CyberArk",
+    "Cybereason",
+    "Cyberhaven",
     "Darktrace",
     "Delinea",
+    "Devo",
+    "DriveLock",
     "DTEX",
+    "ESET",
+    "Everfox",
     "Everlaw",
     "Exabeam",
     "Exterro",
     "ExtraHop",
     "Forcepoint",
+    "ForgeRock",
+    "FortiNDR",
     "Genetec",
+    "GravityZone",
+    "Graylog",
     "Gurucul",
+    "HighBond",
     "HireRight",
     "Hoxhunt",
+    "Incydr",
+    "InsightIDR",
+    "InterGuard",
     "Intune",
+    "IRONSCALES",
     "Jamf",
+    "JumpCloud",
+    "Kandji",
     "kCura",
+    "KeeperPAM",
     "KnowBe4",
     "Lenel",
     "LenelS2",
     "LogicGate",
+    "Logikcull",
+    "LogRhythm",
     "Lumension",
+    "MetricStream",
     "Mimecast",
+    "NAVEX",
     "Netskope",
+    "NinjaOne",
+    "NinjaRMM",
+    "NINJIO",
+    "Nuix",
     "ObserveIT",
+    "OfficeScan",
     "Okta",
+    "OneLogin",
+    "OneTrust",
+    "Openpath",
     "PaperCut",
+    "PhishMe",
+    "PingFederate",
+    "PingOne",
     "Proofpoint",
     "QRadar",
+    "Rapid7",
+    "Recommind",
     "RelativityOne",
+    "Riskonnect",
+    "Safetica",
     "SailPoint",
     "Saviynt",
+    "SecurID",
     "Securonix",
+    "senhasegura",
     "SentinelOne",
+    "Sophos",
+    "SoSafe",
+    "SpectorSoft",
     "Splunk",
+    "Stealthwatch",
+    "StrongDM",
+    "Suricata",
+    "Syteca",
     "Tanium",
     "Teramind",
     "Thinkst",
     "Thycotic",
+    "Varonis",
     "Velociraptor",
+    "Verdasys",
+    "Veriato",
     "Verkada",
     "Vontu",
+    "WALLIX",
     "Websense",
+    "X-Ways",
     "Zeek"
   ],
   "vendors": [
+    {
+      "name": "Code42 Incydr",
+      "category": "dlp",
+      "aliases": ["Code42", "Incydr"]
+    },
+    {
+      "name": "Cyberhaven",
+      "category": "dlp",
+      "aliases": ["Cyberhaven"]
+    },
+    {
+      "name": "Digital Guardian",
+      "category": "dlp",
+      "aliases": ["Digital Guardian", "Verdasys"]
+    },
     {
       "name": "Forcepoint DLP",
       "category": "dlp",
@@ -124,14 +227,65 @@
       "aliases": ["Netskope"]
     },
     {
+      "name": "Nightfall",
+      "category": "dlp",
+      "aliases": ["Nightfall AI", "Nightfall DLP"]
+    },
+    {
+      "name": "Proofpoint DLP",
+      "category": "dlp",
+      "aliases": ["Proofpoint DLP", "Proofpoint Enterprise DLP", "Proofpoint Data Loss Prevention"]
+    },
+    {
       "name": "Symantec DLP",
       "category": "dlp",
       "aliases": ["Symantec DLP", "Symantec Data Loss Prevention", "Vontu"]
     },
     {
+      "name": "Trellix DLP",
+      "category": "dlp",
+      "aliases": ["Trellix DLP", "McAfee DLP", "McAfee Data Loss Prevention"]
+    },
+    {
+      "name": "Zscaler DLP",
+      "category": "dlp",
+      "aliases": ["Zscaler DLP", "Zscaler Data Protection"]
+    },
+    {
+      "name": "Bitdefender GravityZone",
+      "category": "edr",
+      "aliases": ["Bitdefender", "GravityZone"]
+    },
+    {
+      "name": "Carbon Black",
+      "category": "edr",
+      "aliases": [
+        "VMware Carbon Black",
+        "Carbon Black EDR",
+        "Carbon Black Cloud",
+        "Cb Response",
+        "Cb Defense"
+      ]
+    },
+    {
       "name": "CrowdStrike Falcon",
       "category": "edr",
       "aliases": ["CrowdStrike Falcon", "CrowdStrike"]
+    },
+    {
+      "name": "Cybereason",
+      "category": "edr",
+      "aliases": ["Cybereason"]
+    },
+    {
+      "name": "Elastic Defend",
+      "category": "edr",
+      "aliases": ["Elastic Defend", "Elastic Endgame"]
+    },
+    {
+      "name": "ESET PROTECT",
+      "category": "edr",
+      "aliases": ["ESET PROTECT", "ESET"]
     },
     {
       "name": "Microsoft Defender for Endpoint",
@@ -149,9 +303,35 @@
       "aliases": ["SentinelOne"]
     },
     {
+      "name": "Sophos Intercept X",
+      "category": "edr",
+      "aliases": ["Sophos Intercept X", "Sophos"]
+    },
+    {
+      "name": "Trend Vision One",
+      "category": "edr",
+      "aliases": [
+        "Trend Vision One",
+        "Trend Micro Vision One",
+        "Trend Micro Apex One",
+        "Trend Micro",
+        "OfficeScan"
+      ]
+    },
+    {
+      "name": "Devo",
+      "category": "siem",
+      "aliases": ["Devo"]
+    },
+    {
       "name": "Elastic Security",
       "category": "siem",
       "aliases": ["Elastic Security", "Elastic SIEM"]
+    },
+    {
+      "name": "Exabeam",
+      "category": "siem",
+      "aliases": ["Exabeam"]
     },
     {
       "name": "Google SecOps",
@@ -159,9 +339,19 @@
       "aliases": ["Google SecOps", "Google Chronicle", "Chronicle Security"]
     },
     {
+      "name": "Graylog",
+      "category": "siem",
+      "aliases": ["Graylog"]
+    },
+    {
       "name": "IBM QRadar",
       "category": "siem",
       "aliases": ["IBM QRadar", "QRadar"]
+    },
+    {
+      "name": "LogRhythm",
+      "category": "siem",
+      "aliases": ["LogRhythm"]
     },
     {
       "name": "Microsoft Sentinel",
@@ -169,9 +359,24 @@
       "aliases": ["Microsoft Sentinel", "Azure Sentinel"]
     },
     {
+      "name": "OpenText ArcSight",
+      "category": "siem",
+      "aliases": ["ArcSight"]
+    },
+    {
+      "name": "Rapid7 InsightIDR",
+      "category": "siem",
+      "aliases": ["InsightIDR", "Rapid7"]
+    },
+    {
       "name": "Splunk",
       "category": "siem",
       "aliases": ["Splunk"]
+    },
+    {
+      "name": "Sumo Logic",
+      "category": "siem",
+      "aliases": ["Sumo Logic"]
     },
     {
       "name": "Exabeam",
@@ -194,9 +399,29 @@
       "aliases": ["Splunk UBA", "Splunk User Behavior Analytics"]
     },
     {
+      "name": "Varonis",
+      "category": "ueba",
+      "aliases": ["Varonis"]
+    },
+    {
+      "name": "ActivTrak",
+      "category": "irm",
+      "aliases": ["ActivTrak"]
+    },
+    {
       "name": "DTEX",
       "category": "irm",
       "aliases": ["DTEX", "DTEX Systems"]
+    },
+    {
+      "name": "Everfox",
+      "category": "irm",
+      "aliases": ["Everfox", "Forcepoint Federal"]
+    },
+    {
+      "name": "InterGuard",
+      "category": "irm",
+      "aliases": ["InterGuard"]
     },
     {
       "name": "Microsoft Purview IRM",
@@ -209,9 +434,24 @@
       "aliases": ["Proofpoint ITM", "ObserveIT", "Proofpoint Insider Threat Management"]
     },
     {
+      "name": "Syteca",
+      "category": "irm",
+      "aliases": ["Syteca", "Ekran System"]
+    },
+    {
       "name": "Teramind",
       "category": "irm",
       "aliases": ["Teramind"]
+    },
+    {
+      "name": "Veriato",
+      "category": "irm",
+      "aliases": ["Veriato", "SpectorSoft"]
+    },
+    {
+      "name": "ARCON",
+      "category": "pam",
+      "aliases": ["ARCON PAM", "ARCON Privileged Access Management"]
     },
     {
       "name": "BeyondTrust",
@@ -229,6 +469,51 @@
       "aliases": ["Delinea", "Thycotic", "Centrify"]
     },
     {
+      "name": "HashiCorp Vault",
+      "category": "pam",
+      "aliases": ["HashiCorp Vault", "Vault Enterprise"]
+    },
+    {
+      "name": "Keeper Security",
+      "category": "pam",
+      "aliases": ["Keeper Security", "Keeper Password Manager", "KeeperPAM"]
+    },
+    {
+      "name": "One Identity Safeguard",
+      "category": "pam",
+      "aliases": ["One Identity Safeguard"]
+    },
+    {
+      "name": "Segura (senhasegura)",
+      "category": "pam",
+      "aliases": ["senhasegura", "Segura PAM"]
+    },
+    {
+      "name": "StrongDM",
+      "category": "pam",
+      "aliases": ["StrongDM"]
+    },
+    {
+      "name": "WALLIX",
+      "category": "pam",
+      "aliases": ["WALLIX"]
+    },
+    {
+      "name": "Cisco Duo",
+      "category": "iam",
+      "aliases": ["Cisco Duo", "Duo Security"]
+    },
+    {
+      "name": "IBM Security Verify",
+      "category": "iam",
+      "aliases": ["IBM Security Verify", "IBM Verify"]
+    },
+    {
+      "name": "JumpCloud",
+      "category": "iam",
+      "aliases": ["JumpCloud"]
+    },
+    {
       "name": "Microsoft Entra ID",
       "category": "iam",
       "aliases": ["Entra ID", "Microsoft Entra", "Azure Active Directory", "Azure AD"]
@@ -237,6 +522,21 @@
       "name": "Okta",
       "category": "iam",
       "aliases": ["Okta"]
+    },
+    {
+      "name": "OneLogin",
+      "category": "iam",
+      "aliases": ["OneLogin"]
+    },
+    {
+      "name": "Ping Identity",
+      "category": "iam",
+      "aliases": ["Ping Identity", "PingOne", "PingFederate", "ForgeRock"]
+    },
+    {
+      "name": "RSA SecurID",
+      "category": "iam",
+      "aliases": ["RSA SecurID", "SecurID"]
     },
     {
       "name": "SailPoint",
@@ -254,6 +554,11 @@
       "aliases": ["AppOmni"]
     },
     {
+      "name": "Forcepoint ONE",
+      "category": "casb",
+      "aliases": ["Forcepoint ONE"]
+    },
+    {
       "name": "Microsoft Defender for Cloud Apps",
       "category": "casb",
       "aliases": ["Defender for Cloud Apps", "Microsoft Cloud App Security"]
@@ -269,9 +574,44 @@
       "aliases": ["Obsidian Security"]
     },
     {
+      "name": "Palo Alto SaaS Security",
+      "category": "casb",
+      "aliases": ["Palo Alto SaaS Security", "Prisma SaaS", "Palo Alto Aperture"]
+    },
+    {
+      "name": "Skyhigh Security",
+      "category": "casb",
+      "aliases": ["Skyhigh Security", "Skyhigh Networks", "McAfee MVISION Cloud", "MVISION Cloud"]
+    },
+    {
       "name": "Abnormal Security",
       "category": "email",
       "aliases": ["Abnormal Security"]
+    },
+    {
+      "name": "Agari",
+      "category": "email",
+      "aliases": ["Agari"]
+    },
+    {
+      "name": "Barracuda",
+      "category": "email",
+      "aliases": ["Barracuda Networks", "Barracuda Email Security Gateway", "Barracuda Email Protection"]
+    },
+    {
+      "name": "Check Point Harmony Email",
+      "category": "email",
+      "aliases": ["Check Point Harmony", "Harmony Email", "Avanan"]
+    },
+    {
+      "name": "Cloudflare Area 1",
+      "category": "email",
+      "aliases": ["Cloudflare Area 1"]
+    },
+    {
+      "name": "IRONSCALES",
+      "category": "email",
+      "aliases": ["IRONSCALES"]
     },
     {
       "name": "Microsoft Defender for Office 365",
@@ -289,6 +629,16 @@
       "aliases": ["Proofpoint"]
     },
     {
+      "name": "Arista NDR",
+      "category": "network",
+      "aliases": ["Arista NDR", "Awake Security"]
+    },
+    {
+      "name": "Cisco Secure Network Analytics",
+      "category": "network",
+      "aliases": ["Cisco Secure Network Analytics", "Stealthwatch"]
+    },
+    {
       "name": "Corelight",
       "category": "network",
       "aliases": ["Corelight"]
@@ -304,6 +654,21 @@
       "aliases": ["ExtraHop"]
     },
     {
+      "name": "Fortinet FortiNDR",
+      "category": "network",
+      "aliases": ["FortiNDR"]
+    },
+    {
+      "name": "Stamus Networks",
+      "category": "network",
+      "aliases": ["Stamus Networks"]
+    },
+    {
+      "name": "Suricata (open source)",
+      "category": "network",
+      "aliases": ["Suricata"]
+    },
+    {
       "name": "Vectra AI",
       "category": "network",
       "aliases": ["Vectra AI", "Vectra Networks"]
@@ -312,6 +677,11 @@
       "name": "Zeek (open source)",
       "category": "network",
       "aliases": ["Zeek"]
+    },
+    {
+      "name": "DriveLock",
+      "category": "device-control",
+      "aliases": ["DriveLock"]
     },
     {
       "name": "Endpoint Protector",
@@ -330,9 +700,29 @@
       "aliases": ["Ivanti Device Control", "Lumension Device Control", "Lumension"]
     },
     {
+      "name": "ManageEngine Device Control Plus",
+      "category": "device-control",
+      "aliases": ["ManageEngine Device Control"]
+    },
+    {
       "name": "PaperCut",
       "category": "device-control",
       "aliases": ["PaperCut"]
+    },
+    {
+      "name": "Safetica",
+      "category": "device-control",
+      "aliases": ["Safetica"]
+    },
+    {
+      "name": "Avigilon",
+      "category": "physical",
+      "aliases": ["Avigilon", "Openpath"]
+    },
+    {
+      "name": "Brivo",
+      "category": "physical",
+      "aliases": ["Brivo"]
     },
     {
       "name": "Genetec",
@@ -345,6 +735,11 @@
       "aliases": ["HID Global", "HID badge", "HID proximity", "HID access card"]
     },
     {
+      "name": "Honeywell Pro-Watch",
+      "category": "physical",
+      "aliases": ["Honeywell Pro-Watch"]
+    },
+    {
       "name": "Lenel",
       "category": "physical",
       "aliases": ["Lenel", "LenelS2"]
@@ -355,9 +750,20 @@
       "aliases": ["Verkada"]
     },
     {
+      "name": "Accurate Background",
+      "category": "screening-hr",
+      "aliases": [],
+      "no_safe_alias": "'Accurate Background' cannot be matched safely: 'accurate background check/screening/investigation' is everyday court prose about the screening process itself, and any qualified compound ('Accurate Background screening') reads identically to the generic phrase — so this entry must never count."
+    },
+    {
       "name": "Checkr",
       "category": "screening-hr",
       "aliases": ["Checkr"]
+    },
+    {
+      "name": "Cisive",
+      "category": "screening-hr",
+      "aliases": ["Cisive"]
     },
     {
       "name": "First Advantage",
@@ -375,6 +781,11 @@
       "aliases": ["Sterling Talent Solutions", "Sterling Infosystems", "Sterling background check"]
     },
     {
+      "name": "Cofense",
+      "category": "training",
+      "aliases": ["Cofense", "PhishMe"]
+    },
+    {
       "name": "Hoxhunt",
       "category": "training",
       "aliases": ["Hoxhunt"]
@@ -383,6 +794,11 @@
       "name": "KnowBe4",
       "category": "training",
       "aliases": ["KnowBe4"]
+    },
+    {
+      "name": "NINJIO",
+      "category": "training",
+      "aliases": ["NINJIO"]
     },
     {
       "name": "Proofpoint Security Awareness",
@@ -395,9 +811,29 @@
       "aliases": ["SANS Institute"]
     },
     {
+      "name": "SoSafe",
+      "category": "training",
+      "aliases": ["SoSafe"]
+    },
+    {
+      "name": "Acalvio",
+      "category": "deception",
+      "aliases": ["Acalvio"]
+    },
+    {
       "name": "CounterCraft",
       "category": "deception",
       "aliases": ["CounterCraft"]
+    },
+    {
+      "name": "Fidelis Deception",
+      "category": "deception",
+      "aliases": ["Fidelis Deception"]
+    },
+    {
+      "name": "Illusive Networks",
+      "category": "deception",
+      "aliases": ["Illusive Networks"]
     },
     {
       "name": "SentinelOne (Attivo)",
@@ -408,6 +844,21 @@
       "name": "Thinkst Canary",
       "category": "deception",
       "aliases": ["Thinkst Canary", "Thinkst"]
+    },
+    {
+      "name": "Zscaler Deception",
+      "category": "deception",
+      "aliases": ["Zscaler Deception", "Smokescreen Technologies"]
+    },
+    {
+      "name": "Casepoint",
+      "category": "ediscovery",
+      "aliases": ["Casepoint"]
+    },
+    {
+      "name": "DISCO",
+      "category": "ediscovery",
+      "aliases": ["CS Disco", "DISCO eDiscovery"]
     },
     {
       "name": "Everlaw",
@@ -425,9 +876,24 @@
       "aliases": ["Microsoft Purview eDiscovery", "Purview eDiscovery"]
     },
     {
+      "name": "Nuix",
+      "category": "ediscovery",
+      "aliases": ["Nuix"]
+    },
+    {
+      "name": "OpenText Axcelerate",
+      "category": "ediscovery",
+      "aliases": ["Axcelerate", "Recommind"]
+    },
+    {
       "name": "Relativity",
       "category": "ediscovery",
       "aliases": ["RelativityOne", "kCura", "Relativity platform", "Relativity database", "Relativity eDiscovery"]
+    },
+    {
+      "name": "Reveal (Brainspace)",
+      "category": "ediscovery",
+      "aliases": ["Brainspace", "Logikcull", "Reveal eDiscovery"]
     },
     {
       "name": "Archer",
@@ -440,9 +906,34 @@
       "aliases": ["AuditBoard"]
     },
     {
+      "name": "Diligent One Platform",
+      "category": "governance",
+      "aliases": ["Diligent One Platform", "Diligent HighBond", "Diligent GRC", "HighBond"]
+    },
+    {
       "name": "LogicGate",
       "category": "governance",
       "aliases": ["LogicGate"]
+    },
+    {
+      "name": "MetricStream",
+      "category": "governance",
+      "aliases": ["MetricStream"]
+    },
+    {
+      "name": "NAVEX One",
+      "category": "governance",
+      "aliases": ["NAVEX"]
+    },
+    {
+      "name": "OneTrust",
+      "category": "governance",
+      "aliases": ["OneTrust"]
+    },
+    {
+      "name": "Riskonnect",
+      "category": "governance",
+      "aliases": ["Riskonnect"]
     },
     {
       "name": "ServiceNow GRC",
@@ -460,9 +951,24 @@
       "aliases": ["Group Policy Object", "Windows Group Policy", "Active Directory Group Policy"]
     },
     {
+      "name": "HCL BigFix",
+      "category": "hardening",
+      "aliases": ["BigFix"]
+    },
+    {
       "name": "Jamf",
       "category": "hardening",
       "aliases": ["Jamf"]
+    },
+    {
+      "name": "Kandji",
+      "category": "hardening",
+      "aliases": ["Kandji"]
+    },
+    {
+      "name": "ManageEngine Endpoint Central",
+      "category": "hardening",
+      "aliases": ["ManageEngine Endpoint Central", "Desktop Central"]
     },
     {
       "name": "Microsoft Intune",
@@ -470,9 +976,24 @@
       "aliases": ["Microsoft Intune", "Intune"]
     },
     {
+      "name": "NinjaOne",
+      "category": "hardening",
+      "aliases": ["NinjaOne", "NinjaRMM"]
+    },
+    {
+      "name": "Omnissa Workspace ONE",
+      "category": "hardening",
+      "aliases": ["Workspace ONE", "AirWatch"]
+    },
+    {
       "name": "Tanium",
       "category": "hardening",
       "aliases": ["Tanium"]
+    },
+    {
+      "name": "Binalyze AIR",
+      "category": "dfir",
+      "aliases": ["Binalyze"]
     },
     {
       "name": "Cellebrite",
@@ -485,14 +1006,29 @@
       "aliases": ["Guidance Software", "OpenText EnCase", "EnCase software", "EnCase forensic", "EnCase image"]
     },
     {
+      "name": "Exterro FTK",
+      "category": "dfir",
+      "aliases": ["Exterro FTK", "AccessData", "FTK Imager"]
+    },
+    {
       "name": "Magnet AXIOM",
       "category": "dfir",
       "aliases": ["Magnet AXIOM", "Magnet Forensics"]
     },
     {
+      "name": "Oxygen Forensics",
+      "category": "dfir",
+      "aliases": ["Oxygen Forensics", "Oxygen Forensic Detective"]
+    },
+    {
       "name": "Velociraptor (open source)",
       "category": "dfir",
       "aliases": ["Velociraptor"]
+    },
+    {
+      "name": "X-Ways Forensics",
+      "category": "dfir",
+      "aliases": ["X-Ways Forensics", "X-Ways"]
     }
   ]
 }
