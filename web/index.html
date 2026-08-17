@@ -872,70 +872,17 @@
             <h2>ABOUT</h2>
           </div>
           <div class="pane-body ii-about">
-            <p class="evp-sub">What this site is, where its data comes from, and who runs it.</p>
-
-            <p class="ii-about-lede">
-              Insider-threat intelligence built from real court cases. Every claim traces to a
-              cited filing. The corpus refreshes every 6 hours, automatically.
-            </p>
-            <p
-              class="ii-about-counts"
-              id="about-counts"
-              aria-live="polite"
-              data-tip="Recomputed from the stored corpus on every refresh — nothing on this page is typed in by hand"
-            >Live corpus counts appear here once the data loads.</p>
-
-            <p class="evp-section-head">WHERE THE DATA COMES FROM</p>
             <p>
-              US court records are the backbone: CourtListener and its RECAP archive (public
-              copies of federal court filings), with targeted PACER pulls for filings the free
-              archive lacks. Agency press releases and the security press fill in around the
-              court record. First-person social posts and long-form publications are carried as
-              their own channels, labeled as such.
-            </p>
-
-            <p class="evp-section-head">HOW FINDINGS ARE MADE</p>
-            <p>
-              Deterministic scanning does most of the work. Each qualifying case then gets one
-              AI enrichment, and the model that wrote it is stamped on the card ("Enriched
-              by …"). Adjudications are append-only — new model generations are added to the
-              record, never written over it — and re-checked as models improve. Every quoted
-              line carries a verbatim-verified stamp: a mechanical check that the quote appears
-              word-for-word in the document the model read.
-            </p>
-
-            <p class="evp-section-head">WHAT THE NUMBERS CAN'T SAY</p>
-            <p>
-              Court data counts insiders who were caught and litigated, not insider behavior at
-              large. Detection stats reflect what courts document — not everything that happens.
-            </p>
-
-            <p class="evp-section-head">WHO RUNS IT</p>
-            <p>
+              Built and run by
               <a href="https://github.com/Scubber/insider-intel" target="_blank" rel="noopener"
-                >Built and run by Tim Carreira.</a
-              >
-              The code and data pipeline are public. Questions or corrections:
-              <a href="https://github.com/Scubber/insider-intel/issues" target="_blank" rel="noopener"
-                >open a GitHub issue</a
-              >. Follow the corpus: <a href="#" id="about-feed-link">FEED.XML</a>.
+                >Tim Carreira</a
+              >. Code and data are public. Insider case corpus from US court records, updated
+              every 6 hours. Follow it: <a href="#" id="about-feed-link">FEED.XML</a>.
             </p>
-
-            <p class="evp-section-head">READING THE SITE</p>
-            <dl class="ii-about-facts">
-              <dt>SIG</dt><dd>Insider-confidence score, 0–100, assigned at ingest. The stream floor defaults to 30.</dd>
-              <dt>PROOF STANDARD</dt><dd>Every count separates CONFIRMED IN COURT (a judge ruled it happened, or the insider admitted it) from ALLEGED (claimed in a filing, not yet decided) from REPORTED (press or social only). They are never conflated.</dd>
-              <dt>READ PATH</dt><dd>No model runs at read time. Everything on screen is a projection of stored, append-only forensic records.</dd>
-              <dt>PRIVACY</dt><dd>Roles, never individuals — no persona graphs, no entity resolution across cases.</dd>
-              <dt>EDITORIAL</dt><dd>Findings publish by merge to main. The GitOps trail is the editorial record.</dd>
-            </dl>
-
-            <p class="evp-section-head">ATTRIBUTION</p>
-            <p>
-              Insider Threat Matrix™ © Forscie Limited. This project is not affiliated with or
-              endorsed by Forscie. Court records via
+            <p class="ii-about-attrib">
+              Insider Threat Matrix™ © Forscie Limited — not affiliated. Court records via
               <a href="https://www.courtlistener.com/" target="_blank" rel="noopener">CourtListener</a>
-              and RECAP, services of the non-profit Free Law Project.
+              / Free Law Project.
             </p>
           </div>
         </section>

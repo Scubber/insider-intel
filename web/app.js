@@ -4795,7 +4795,6 @@
   }
 
   function renderCorpusStats(data) {
-    renderAboutCounts(data);
     const el = document.getElementById("corpus-stats");
     if (!el || !data || !data.enriched_cases) return;
     const s = data.strength_totals || {};
@@ -4806,26 +4805,6 @@
     el.textContent = bits.join(" · ");
   }
 
-  /** ABOUT page corpus line — the same live ledger read the masthead stats
-   *  use, never a checked-in number (sweep-dynamic invariant). Renders from
-   *  the freshest data seen this session: the /evidence/ledger payload plus
-   *  the indexed total from /health or the boot snapshot. With no data yet
-   *  the static teaching text in index.html stands. */
-  function renderAboutCounts(data) {
-    const el = document.getElementById("about-counts");
-    const ledger = data || state.evidenceLedger;
-    if (!el || !ledger || !ledger.enriched_cases) return;
-    const s = ledger.strength_totals || {};
-    const bits = [];
-    if (state.lastTotalIndexed) {
-      bits.push(`TRACKING ${state.lastTotalIndexed.toLocaleString()} DOCUMENTS`);
-    }
-    bits.push(`METHODS EXTRACTED IN ${ledger.enriched_cases.toLocaleString()} CASES`);
-    if (s.adjudicated_admitted) {
-      bits.push(`${Number(s.adjudicated_admitted).toLocaleString()} CONFIRMED IN COURT`);
-    }
-    el.textContent = bits.join(" · ");
-  }
 
   function renderEvidencePage(data) {
     renderCorpusStats(data);
@@ -5083,7 +5062,6 @@
   function openAboutView() {
     setActivePane("about");
     navigate("/about");
-    renderAboutCounts();
     try {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
