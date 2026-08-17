@@ -51,7 +51,7 @@
           <button type="button" class="masthead-nav-item active" data-pane="articles" data-tip="Live case stream with filters" data-tip-pos="bottom">STREAM</button>
           <button type="button" class="masthead-nav-item" data-pane="matrix" data-tip="Browse the Insider Threat Matrix" data-tip-pos="bottom">MATRIX</button>
           <button type="button" class="masthead-nav-item" data-pane="evidence" data-tip="What real cases actually left behind — corpus-wide evidence research" data-tip-pos="bottom">EVIDENCE</button>
-          <button type="button" class="masthead-nav-item" data-pane="tooling" data-tip="Tool categories ranked by ITM control coverage of observed cases · NAMED TOOLS directory with case receipts" data-tip-pos="bottom">TOOLING</button>
+          <button type="button" class="masthead-nav-item" data-pane="tooling" data-tip="Enterprise tools for insider-threat programs — each product's court-filing record" data-tip-pos="bottom">TOOLING</button>
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
@@ -264,7 +264,7 @@
               <dt>EVIDENCE</dt>
               <dd>What proof real cases actually produce. Tap a technique row for its stage detail.</dd>
               <dt>TOOLING</dt>
-              <dd>Which controls pay off first — tool categories ranked by what caught real insiders. Expand a row for the ITM controls behind its score; tap a category name for its coverage dossier. NAMED TOOLS flips to the product directory: every vendor case documents actually name, with the naming cases one tap away. Technique dossiers list their relevant tooling too.</dd>
+              <dd>Which enterprise tools show up in real cases — and in what role. Click a tool for the filings that name it.</dd>
               <dt>WORKBENCH</dt>
               <dd>What your flagged insiders actually did. Flag cases on STREAM, then hit MODUS OPERANDI.</dd>
               <dt>SETTINGS</dt>
@@ -768,40 +768,37 @@
           </div>
         </section>
 
-        <section class="pane pane-tooling-page" data-pane-panel="tooling" aria-label="Tooling coverage rankings and named tools">
+        <section class="pane pane-tooling-page" data-pane-panel="tooling" aria-label="Enterprise tooling court-filing record">
           <div class="pane-head">
-            <h2>TOOLING — CONTROL CLASSES RANKED BY OBSERVED-CASE COVERAGE</h2>
+            <h2>Tooling</h2>
           </div>
           <div class="pane-body">
-            <!-- Segmented view switch: CATEGORIES (#/tooling, ranked control
-                 classes) | NAMED TOOLS (#/tools, vendor directory). Both are
-                 deep-linkable hash routes; the switch hides while a detail
-                 view (category dossier or vendor sheet) is open. -->
-            <div class="tlp-switch" id="tlp-switch" role="group" aria-label="Tooling views">
-              <button type="button" class="pill" data-tooling-view="categories" data-tip="Control classes ranked by how much observed insider-case volume their mapped ITM controls cover">CATEGORIES</button>
-              <button type="button" class="pill" data-tooling-view="tools" data-tip="Every named product across the categories — documented case-mention receipts, never endorsements">NAMED TOOLS</button>
-            </div>
+            <!-- ONE grouped table (operator rebuild 2026-08-17): category group
+                 rows (plain labels linking to the category dossier) over tool
+                 rows with bare counts. Column definitions ride the header
+                 tooltips; this page carries NO footer/basis line by operator
+                 call — the ITM attribution lives in METHODOLOGY & COLOPHON. -->
             <div id="tlp-list-view">
-            <p class="evp-sub">
-              Security tool categories ranked by how much of the observed insider-case volume
-              their mapped ITM controls can detect and prevent. Categories, never vendors, are
-              what the ranking scores — vendors inside a row's detail are ordered only by
-              documented case mentions (presence in court documents, not an effectiveness
-              score), with unmentioned examples trailing as illustrations. Expand a row for
-              the exact DT/PV entries behind its score and the observed techniques it covers,
-              or tap a category name to open its full coverage dossier.
-            </p>
-            <div class="evp-legend">
-              <span><i class="evp-lg-all"></i>DETECT / PREVENT — share of observed technique-case volume the category's controls cover</span>
-              <span><i class="evp-lg-corr"></i>CORROBORATED — cases whose evidence record classes name this control class</span>
-            </div>
-            <div id="tlp-list" class="tlp-list" aria-live="polite"></div>
-            <!-- One muted citation line (operator call 2026-08-17): live basis
-                 count + stamp, METHODOLOGY tooltip carrying the compressed
-                 caveats, visible ITM trademark tail. Built by
-                 renderToolingBasis() — the old vendor-note and READ BEFORE
-                 BUYING blocks are folded into the tooltip. -->
-            <p class="tlp-basis" id="tlp-basis" hidden></p>
+              <p class="evp-sub">
+                Enterprise tools for insider-threat programs — with each product's
+                court-filing record.
+              </p>
+              <div class="tlt-controls">
+                <input
+                  type="search"
+                  id="tlt-filter"
+                  placeholder="Filter tools…"
+                  aria-label="Filter tools"
+                  data-tip="Instant text filter over tool and category names"
+                />
+                <label class="tlt-toggle" data-tip="Show only tools named in at least one court filing">
+                  <input type="checkbox" id="tlt-court-only" />
+                  IN COURT FILINGS
+                </label>
+              </div>
+              <div class="evp-scroll">
+                <table class="evp-table tlt-table" id="tlt-table" aria-live="polite"></table>
+              </div>
             </div>
             <div id="tlc-view" class="tlc-view" hidden>
               <div class="tlc-head">
@@ -831,52 +828,22 @@
               </div>
               <p class="tlp-basis" id="tlc-basis" hidden></p>
             </div>
-            <!-- NAMED TOOLS directory (#/tools): one card per vendor across
-                 every category, built client-side from the same session-cached
-                 /tooling payload. Counts are documented case mentions —
-                 presence in the record, never effectiveness. -->
-            <div id="tld-view" class="tld-view" hidden>
-              <p class="evp-sub">
-                Every named product across the tool categories — one card per vendor, ranked
-                by NAMED ×N: distinct stored case documents whose text names the product.
-                Presence in the court record, never an effectiveness score or an endorsement.
-                Tap a card for the actual cases that name it.
-              </p>
-              <div class="tld-controls">
-                <span class="filter-label">Sort</span>
-                <div class="pill-group" id="tld-sort" role="group" aria-label="Sort named tools">
-                  <button type="button" class="pill active" data-tld-sort="named" data-tip="Most-named first — distinct case documents naming the product">NAMED ×N</button>
-                  <button type="button" class="pill" data-tld-sort="az" data-tip="Alphabetical by product name">A–Z</button>
-                </div>
-                <label class="filter-label" for="tld-category">Category</label>
-                <select id="tld-category" data-tip="Show only one tool category's products" aria-label="Filter by category"></select>
-                <input type="search" id="tld-filter" placeholder="Filter by name…" data-tip="Instant text filter over product names and category labels" aria-label="Filter named tools" />
-              </div>
-              <div id="tld-grid" class="tld-grid" aria-live="polite"></div>
-              <p class="tlp-basis" id="tld-basis" hidden></p>
-            </div>
             <!-- Vendor sheet (#/tools/<slug>): one named product against the
-                 stored case record — categories, NAMED ×N, and the actual
-                 naming cases (capped at the 25 most recent). -->
+                 stored case record — its category's coverage context on one
+                 sub-line, its own counts, and the actual naming filings
+                 (capped at the 25 most recent). -->
             <div id="tlv-view" class="tlv-view" hidden>
               <div class="tlc-head">
-                <button type="button" id="tlv-back" class="ghost dossier-back">← All named tools</button>
+                <button type="button" id="tlv-back" class="ghost dossier-back">← TOOLING</button>
                 <h3 id="tlv-title"></h3>
-                <p class="evp-sub">
-                  One named product against the stored case record — the tool categories it
-                  illustrates, how many distinct case documents name it, and the actual naming
-                  cases with verdict flags. Presence in the record, never an effectiveness
-                  score; all numbers recompute from the live corpus on every sweep.
-                </p>
+                <p class="evp-sub" id="tlv-sub"></p>
               </div>
               <div class="evp-stats tlc-stats" id="tlv-stats" aria-live="polite"></div>
               <div class="tlc-block">
-                <p class="evp-section-head" data-tip="The authored tool categories this product illustrates — tap one for its coverage dossier (the coverage numbers are the category's, never the product's)">IN CATEGORIES</p>
-                <div id="tlv-cats"></div>
-              </div>
-              <div class="tlc-block">
-                <p class="evp-section-head" data-tip="Distinct stored case documents whose text names this product, newest first, capped at the 25 most recent — presence in the record, not effectiveness">NAMED IN THESE CASES</p>
-                <div id="tlv-cases"></div>
+                <p class="evp-section-head" data-tip="Distinct stored case documents whose text names this product, newest first, capped at the 25 most recent — presence in the record, not effectiveness">NAMED IN THESE FILINGS</p>
+                <div class="evp-scroll">
+                  <table class="evp-table" id="tlv-cases"></table>
+                </div>
               </div>
               <p class="tlp-basis" id="tlv-basis" hidden></p>
             </div>
