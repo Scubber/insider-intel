@@ -168,10 +168,8 @@ def select_goldset(
     ]
     entries = [_case_entry(row, baseline_prefix=baseline_prefix) for row in eligible]
 
-    # Cell = one point on every stratification axis. Round-robin over cells
-    # (sorted by key, so iteration order is data-determined, not dict-order)
-    # spreads picks across all axes at once; inside a cell, baseline-backed
-    # rows first, then the seeded hash order.
+    # Cell = one point on every stratification axis. Inside a cell,
+    # baseline-backed rows first, then the seeded hash order.
     cells: dict[tuple, list[dict]] = {}
     for entry in entries:
         key = (
@@ -184,27 +182,48 @@ def select_goldset(
     for members in cells.values():
         members.sort(key=lambda e: (e["baseline"] is None, order_key(seed, e["link"])))
 
+    # Picks strictly alternate the verdict axis, each verdict rotating through
+    # its own sorted cell list. A plain sorted-cells round-robin starved
+    # verdict=True out of the ENTIRE gold set on the real corpus: str-sorting
+    # puts every (False, ...) cell first, and with >= n non-empty False cells
+    # round one fills n before reaching a single True cell. Alternation
+    # guarantees an even verdict split whenever supply allows, degrading to
+    # whatever remains when one side runs dry.
+    keys_by_verdict = {
+        True: sorted((k for k in cells if k[0]), key=str),
+        False: sorted((k for k in cells if not k[0]), key=str),
+    }
+    cursors = {True: 0, False: 0}
+
+    def pop_next(verdict: bool) -> tuple | None:
+        keys = keys_by_verdict[verdict]
+        for j in range(len(keys)):
+            key = keys[(cursors[verdict] + j) % len(keys)]
+            if cells[key]:
+                cursors[verdict] = (cursors[verdict] + j + 1) % len(keys)
+                return key
+        return None
+
     picked: list[dict] = []
-    round_no = 0
+    turn = True  # insider-true first: the scarcer, higher-stakes axis
     while len(picked) < n and any(cells.values()):
-        round_no += 1
-        for key in sorted(cells, key=str):
-            members = cells[key]
-            if not members or len(picked) >= n:
-                continue
-            entry = members.pop(0)
-            verdict, mbucket, lbucket, posture = key
-            entry["rationale"] = (
-                f"round {round_no} pick for cell verdict={verdict} "
-                f"methods={mbucket}({entry['methods_count']}) "
-                f"length={lbucket}({entry['clean_text_chars']}ch) posture={posture}; "
-                + (
-                    f"strong baseline {entry['baseline']['model']} present"
-                    if entry["baseline"]
-                    else "no strong baseline"
-                )
+        key = pop_next(turn) or pop_next(not turn)
+        if key is None:
+            break
+        entry = cells[key].pop(0)
+        verdict, mbucket, lbucket, posture = key
+        entry["rationale"] = (
+            f"pick {len(picked) + 1} for cell verdict={verdict} "
+            f"methods={mbucket}({entry['methods_count']}) "
+            f"length={lbucket}({entry['clean_text_chars']}ch) posture={posture}; "
+            + (
+                f"strong baseline {entry['baseline']['model']} present"
+                if entry["baseline"]
+                else "no strong baseline"
             )
-            picked.append(entry)
+        )
+        picked.append(entry)
+        turn = not turn
 
     strata = {
         "verdict_true": sum(1 for e in picked if e["is_insider_case"]),

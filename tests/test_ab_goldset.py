@@ -121,3 +121,38 @@ def test_iter_processed_is_read_only_and_dedupes(tmp_path: Path) -> None:
     assert corpus.read_bytes() == before
     assert len(rows) == 1 and rows[0].forensics.is_insider_case is True  # last line wins
     assert iter_processed(tmp_path / "missing.jsonl") == []
+
+
+def test_verdict_axis_never_starved_by_cell_count() -> None:
+    """Regression: on the real corpus, >= n non-empty verdict-False cells meant
+    a sorted-cells round-robin filled the whole gold set before reaching a
+    single verdict-True cell (0/40 insider-true picks). Picks must alternate
+    the verdict axis, splitting ~evenly whenever both sides have supply."""
+    rows = []
+    # 45 distinct False cells (unique posture strings force distinct cells).
+    for i in range(45):
+        rows.append(
+            make_row(
+                f"https://x.test/false-{i}",
+                insider=False,
+                methods_n=2,
+                text_chars=8_000,
+                posture=f"posture-{i}",
+            )
+        )
+    # Ample True supply concentrated in few cells.
+    for i in range(30):
+        rows.append(
+            make_row(
+                f"https://x.test/true-{i}",
+                insider=True,
+                methods_n=5,
+                text_chars=25_000,
+                posture="conviction",
+            )
+        )
+    manifest = select_goldset(rows, n=40)
+    true_n = manifest["strata_counts"]["verdict_true"]
+    false_n = manifest["strata_counts"]["verdict_false"]
+    assert true_n + false_n == 40
+    assert true_n == 20, f"expected an even verdict split, got {true_n}/{false_n}"
