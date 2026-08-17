@@ -285,6 +285,17 @@ legacy fallback.
   case count"); methodology lives one hover away in the tooltip, not
   inline; runbook voice, no marketing adjectives. Modern-site UX polish is
   a requirement of done, not gold-plating.
+- **UI changes pass the browser smoke before merge** (operator directive
+  2026-08-17, after a broken deploy shipped). The `ui-smoke` job in `ci.yml`
+  is the floor: it serves `web/` statically (no API, no snapshot) and drives
+  it headless in Chromium at 390 and 1280 via `scripts/ui_smoke_ci.py` —
+  zero uncaught page errors, zero console errors beyond the expected-offline
+  allowlist, every masthead tab renders its pane, the GUIDE opens, TOOLING
+  renders its table or its honest offline note, and deep links (`#/tooling`,
+  `#/technique/<ID>`, legacy `#/tools`) don't crash. Agents with a working
+  browser also run `scripts/ui_smoke.py` locally (the full journey suite
+  against the preview bundle); a UI PR that can't demonstrate browser
+  validation says so explicitly in its body.
 - **Voice: executive-plain, never AI slop** (operator directive 2026-08-17).
   The reader is a mixed executive audience — security, business, HR, legal,
   corporate special investigations. Assume intelligence, not vocabulary.
@@ -359,7 +370,10 @@ legacy fallback.
   drive/screenshot** — including the responsive widths it touches (phone ~390,
   iPad portrait 768 / landscape 1024, desktop) — plus `scripts/ui_smoke.py`;
   a code change gets `pytest`/`ruff`; a workflow change gets a dry-run or
-  dispatch. Skipping a check is fine, saying so is not optional.
+  dispatch. Skipping a check is fine, saying so is not optional. CI runs
+  `scripts/ui_smoke_ci.py` (the `ui-smoke` job) on every `web/**` PR as the
+  required browser floor — local sandboxes often lack browsers, so the gate
+  lives where a browser always exists.
 - `.mcp.json` provides **Playwright MCP** (official Docker image,
   `--network=host`) — use it to drive/screenshot local (:5500/:8000) or prod
   UI — and the **Cloudflare MCP servers** (`mcp.cloudflare.com` full API via

@@ -20,3 +20,4 @@ ds-bundle/
 design-system/node_modules/
 design-system/dist/
 web/data/
+ui-smoke-artifacts/
