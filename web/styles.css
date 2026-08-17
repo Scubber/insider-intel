@@ -4742,41 +4742,14 @@ body[data-pane="about"] .panels-row {
   line-height: 1.65;
   max-width: 72ch;
 }
-.ii-about-facts {
-  max-width: 80ch;
-  margin: 1rem 0 0;
-}
-.ii-about-facts dt {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--muted);
-  margin-top: 0.8rem;
-}
-.ii-about-facts dd {
-  margin: 0.15rem 0 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-.ii-about .evp-section-head {
-  margin-top: 1.4rem;
-}
-.ii-about-lede {
-  font-size: 1.05rem;
-  font-weight: 500;
-  max-width: 72ch;
-}
 /* The one live element on ABOUT: corpus counts from the ledger read. */
-.ii-about-counts {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin: 0.35rem 0 0;
-}
 .ii-about a {
   color: var(--accent);
+}
+
+.ii-about-attrib {
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 /* --- Redesign fidelity pass (2026-08-10): match the prototype's chrome --- */

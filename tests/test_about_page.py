@@ -49,47 +49,33 @@ def _about_pane() -> str:
 # ── 1. The ABOUT page itself ────────────────────────────────────────────────
 
 
-def test_about_pane_present_with_required_sections() -> None:
-    raw = _about_pane()
-    # Source lines wrap; prose assertions run against collapsed whitespace.
-    pane = " ".join(raw.split())
+def test_about_pane_is_minimal() -> None:
+    """Operator call (2026-08-17): ABOUT is name + GitHub + attribution, nothing
+    else — no briefing sections, no lede, no live counts."""
+    pane = " ".join(_about_pane().split())
     assert 'data-pane-panel="about"' in pane
     assert "<h2>ABOUT</h2>" in pane
-    # Purpose sub-line (every page teaches itself).
-    assert "What this site is, where its data comes from" in pane
-    # The five briefing sections, verbatim heads.
-    for head in (
+    assert "Built and run by" in pane and "Tim Carreira" in pane
+    for gone in (
         "WHERE THE DATA COMES FROM",
         "HOW FINDINGS ARE MADE",
-        "WHAT THE NUMBERS CAN'T SAY",
-        "WHO RUNS IT",
-        "ATTRIBUTION",
+        "READING THE SITE",
+        "evp-section-head",
+        "about-counts",
+        "ii-about-facts",
     ):
-        assert head in pane, f"ABOUT section head {head!r} missing"
-    # What-this-is lede + the refresh cadence promise.
-    assert "Insider-threat intelligence built from real court cases." in pane
-    assert "Every claim traces to a cited filing." in pane
-    assert "refreshes every 6 hours, automatically" in pane
-    # Method claims: model stamp, append-only adjudications, verbatim quotes.
-    assert "Enriched" in pane
-    assert "append-only" in pane
-    assert "verbatim-verified" in pane
-    # Litigated-case bias, plainly.
-    assert "caught and litigated, not insider behavior at large" in pane
-    assert "what courts document" in pane
+        assert gone not in pane, f"ABOUT still carries {gone!r} — operator wants it minimal"
+
 
 
 def test_about_byline_and_contact_are_github_only() -> None:
     pane = _about_pane()
+    assert "Built and run by" in pane
     byline = re.search(
-        r'<a href="https://github\.com/Scubber/insider-intel"[^>]*>\s*'
-        r"Built and run by Tim Carreira\.",
+        r'<a href="https://github\.com/Scubber/insider-intel"[^>]*>\s*Tim Carreira',
         pane,
     )
-    assert byline, "byline link 'Built and run by Tim Carreira.' missing or mislinked"
-    assert "https://github.com/Scubber/insider-intel/issues" in pane, (
-        "contact must be the GitHub issues link"
-    )
+    assert byline, "name must link to the public GitHub repo"
     # NO email address anywhere in the shipped UI (operator requirement).
     for blob in (_index(), _app()):
         assert "mailto:" not in blob
@@ -105,32 +91,15 @@ def test_about_carries_the_attribution_lines() -> None:
     assert "not affiliated" in pane
     assert "CourtListener" in pane
     assert "Free Law Project" in pane
-    # The colophon's surviving reading rules folded in with it.
-    for dt in ("SIG", "PROOF STANDARD", "READ PATH", "PRIVACY", "EDITORIAL"):
-        assert f"<dt>{dt}</dt>" in pane, f"colophon fact {dt} lost in the fold"
 
 
-def test_about_counts_are_live_never_hardcoded() -> None:
-    """Sweep-dynamic invariant: the only numbers on ABOUT render at runtime
-    into #about-counts from the session's /evidence/ledger read. The static
-    markup may carry authored config facts (6h cadence, SIG 0–100, floor 30)
-    but no corpus-derived count."""
-    pane = _about_pane()
-    assert 'id="about-counts"' in pane
-    # Honest empty state before data lands.
-    assert "once the data loads" in pane
-    allowed = {"6", "0", "100", "30"}
-    digits = set(re.findall(r"\d+", re.sub(r"<[^>]+>", " ", pane)))
-    assert digits <= allowed, (
-        f"hardcoded number(s) {digits - allowed} in ABOUT markup — corpus counts "
-        "must render from the live ledger into #about-counts"
-    )
-    body = _fn_body(_app(), "renderAboutCounts")
-    assert "state.evidenceLedger" in body and "state.lastTotalIndexed" in body
-    assert "fetch(" not in body, "ABOUT counts must reuse session state, not fetch"
-    # The ledger read behind it is api()-only (no static-file side channel).
-    ledger = _fn_body(_app(), "loadEvidenceLedger")
-    assert 'api("/evidence/ledger"' in ledger
+def test_about_carries_no_corpus_numbers() -> None:
+    """Sweep-dynamic invariant, minimal form: the static ABOUT markup may state
+    the 6h cadence and nothing numeric about the corpus."""
+    pane = re.sub(r"<[^>]+>", " ", _about_pane())
+    digits = set(re.findall(r"\d+", pane))
+    assert digits <= {"6"}, f"hardcoded number(s) {digits - {'6'}} in ABOUT markup"
+
 
 
 def test_about_route_wiring() -> None:
@@ -150,7 +119,6 @@ def test_about_route_wiring() -> None:
     opener = _fn_body(app, "openAboutView")
     assert 'setActivePane("about")' in opener
     assert 'navigate("/about")' in opener
-    assert "renderAboutCounts()" in opener
     assert "fetch(" not in opener
 
 
