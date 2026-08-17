@@ -2,7 +2,9 @@
 
 How to use an NVIDIA DGX Spark (GB10, 128GB unified memory, ARM64) with this
 repo: as a Cursor remote dev machine, and as a local LLM endpoint for the
-enrichment chain in **local dev**. Nothing here touches production.
+enrichment chain in **local dev**. Sections 1–3 never touch production; §4
+(the corpus tenant) is production's data path — **LIVE since the 2026-08-16
+cutover** (operating state at the end of §4).
 
 **Security ground rules (this repo is public):**
 
@@ -167,3 +169,30 @@ and select-best over `enrichment_history` keeps the richer record either way.
 
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
 the Spark.
+
+### Operating state (cutover complete 2026-08-16)
+
+The steps above were executed 2026-08-16; the Spark is the production
+refresh tenant. What is running now:
+
+- **Cron** (sparky user crontab): `0 4,10,16,22 * * *` UTC with the
+  `PATH=$HOME/google-cloud-sdk/bin:$PATH` prefix, logging to
+  `~/insider-intel/logs/spark_refresh.log`. First unattended cycle
+  2026-08-17 00:00→00:31:51Z verified end-to-end (corpus 7,193 rows /
+  1,839 enriched, API reloaded).
+- **Caps**: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`,
+  `SUMMARIZER_BACKFILL_RESERVE=30` — operator-approved raise from the cloud
+  trickle's 25/15, affordable because the chain is $0.
+- **Chain**: `SUMMARIZER_LLM_PROVIDER=sparky` alone (local
+  `Qwen/Qwen3.8-27B-FP8` via vLLM, `model: auto` probe,
+  `OPENAI_COMPAT_TIMEOUT_SECONDS=900`); `forensics.model` is stamped from
+  each completion. $0 LLM spend, 0 Anthropic calls.
+- **PACER**: creds live in `.env.spark` on sparky (moved at cutover);
+  purchases stay capped at 5/run.
+- **Rollback**: `crontab -r` on sparky, resume Cloud Scheduler
+  `corpus-refresh-schedule` (paused 2026-08-16 ~19:45Z, retained),
+  optionally `gcloud run jobs execute corpus-refresh` once.
+- **Known-accepted issues**: hunt synthesis fails under Qwen thinking mode
+  (fix = `OPENAI_COMPAT_ENABLE_THINKING` knob, merged; activation gated on a
+  gold-set A/B); occasional Qwen JSON parse failures (guided-JSON work
+  queued); vLLM API key rotation scheduled for the next restart window.

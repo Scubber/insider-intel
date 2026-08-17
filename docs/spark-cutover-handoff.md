@@ -1,5 +1,38 @@
 # Spark corpus-tenant cutover — session handoff (2026-08-16)
 
+**CUT OVER COMPLETE — 2026-08-16.** The DGX Spark is now the **production**
+refresh tenant. How it landed:
+
+- Cloud Scheduler `corpus-refresh-schedule` **paused ~19:45Z** (kept as the
+  rollback path: `crontab -r` on sparky, resume the scheduler, optionally
+  `gcloud run jobs execute corpus-refresh` once).
+- Real-prefix run 1, manual + watched (**19:44Z–21:36Z**), passed all gates:
+  prod `processed/articles.jsonl` generation advanced, `/reload` 200,
+  **0 timeouts, 0 Anthropic calls**.
+- Cron installed: `0 4,10,16,22 * * *` UTC (user crontab, PATH prefix),
+  logging to `~/insider-intel/logs/spark_refresh.log`.
+- Caps raised to **40/30** (`SUMMARIZER_MAX_ARTICLES_PER_RUN=40`,
+  `SUMMARIZER_BACKFILL_RESERVE=30`) — operator-approved; the chain is $0.
+- First **unattended** cron cycle 2026-08-17 00:00→00:31:51Z verified
+  end-to-end: corpus **7,193 rows / 1,839 enriched**, API reloaded.
+
+Operating shape: chain is **sparky-only** (`SUMMARIZER_LLM_PROVIDER=sparky`,
+local `Qwen/Qwen3.8-27B-FP8`, $0 LLM spend), `OPENAI_COMPAT_TIMEOUT_SECONDS=900`,
+`model: auto` probe stamps `forensics.model`. PACER creds moved into
+`.env.spark` on sparky at cutover (purchases still capped 5/run).
+
+Known-accepted issues (not blockers): hunt synthesis fails under Qwen
+thinking mode (fix = `OPENAI_COMPAT_ENABLE_THINKING` knob, **merged**;
+activation gated on a gold-set A/B); occasional Qwen JSON parse failures
+(guided-JSON work queued); vLLM API key rotation scheduled for the next
+restart window.
+
+Everything below is the **historical ops log** of the sessions that got here
+— kept as the record; env values quoted mid-log are what was on the box *at
+that point*, not the operating state above.
+
+---
+
 **For the next agent (Claude).** This is the live ops log of the 2026-08-16
 Cursor session that stood up the DGX Spark as the ingest/enrichment tenant.
 Architecture is already merged (`docs/dgx-spark.md` §4, sparky
@@ -21,7 +54,7 @@ fail-closed); the checklist below was corrected accordingly.
 ## Topology (already decided — do not reopen)
 
 ```
-sparky cron (not enabled yet):
+sparky cron (LIVE since 2026-08-16 — 0 4,10,16,22 * * * UTC):
   pull GCS → docker compose -f docker-compose.spark.yml run --rm refresh
     (python -m apps.aggregator all, vLLM first)
   → push GCS → POST /reload
@@ -153,38 +186,50 @@ Intended fix (started, **not landed** — kill interrupted):
 
 ---
 
-## What has NOT been done (cutover checklist)
+## ~~What has NOT been done~~ Cutover checklist — EXECUTED 2026-08-16
 
-From `docs/dgx-spark.md` §4. Do in this order:
+From `docs/dgx-spark.md` §4. Kept as the record; per-item outcomes annotated:
 
-1. **Stop the current staging job** (urgent — credits)
-2. Retune `.env.spark` (timeout 900, no anthropic, optional thinking-off after code)
-3. Rebuild Spark image if code changed (`docker compose -f docker-compose.spark.yml build`)
-4. Re-run `scripts/spark_refresh.sh` against **`spark-staging`** until
-   `spark_refresh: done`. Confirm staging `processed/articles.jsonl` grew and
-   `forensics.model` is the served Qwen id (or Haiku only if fallback still on)
+1. ~~**Stop the current staging job** (urgent — credits)~~ **DONE 12:55Z**
+   (see the RESOLVED banner above — 6 billed Haiku calls total damage)
+2. ~~Retune `.env.spark` (timeout 900, no anthropic, optional thinking-off
+   after code)~~ **DONE** — `OPENAI_COMPAT_TIMEOUT_SECONDS=900`,
+   `SUMMARIZER_LLM_PROVIDER=sparky` (thinking-off knob merged separately,
+   activation gated on a gold-set A/B)
+3. ~~Rebuild Spark image if code changed~~ **DONE** — the wrapper passes
+   `--build`, so each cycle picks up pulled code
+4. ~~Re-run `scripts/spark_refresh.sh` against **`spark-staging`** until
+   `spark_refresh: done`…~~ **DONE** — staging proved before the real-prefix
+   run
 5. **Do not** treat a staging `/reload` as “the site shows Spark rows” — Cloud
-   Run reads prod prefixes, not `spark-staging/`
-6. **Pause Cloud Scheduler job `corpus-refresh-schedule` (us-east1) FIRST** —
-   after the tick's in-flight run completes, so the bucket has zero writers
-7. Only then point `SPARK_CORPUS_BUCKET` at `gs://insider-intel-502413-corpus`
-   (no suffix) and set `SPARK_RELOAD_URL` (empty while on staging — PR #190
-   skips the reload when it is unset)
-8. Enable a 6h timer/cron on sparky matching `0 */6 ET` =
-   `0 4,10,16,22 * * *` UTC in August. No unit file exists in either repo yet.
-   User crontab is easier than systemd --user (no linger/sudo). Wrapper must
-   export `PATH=$HOME/google-cloud-sdk/bin:$PATH`
-9. Merge #189 before relying on `model: auto` / response tagging
+   Run reads prod prefixes, not `spark-staging/` *(still true; kept for the
+   next tenant)*
+6. ~~**Pause Cloud Scheduler job `corpus-refresh-schedule` (us-east1)
+   FIRST**~~ **DONE ~19:45Z** — paused (not deleted); it is the rollback path
+7. ~~Only then point `SPARK_CORPUS_BUCKET` at
+   `gs://insider-intel-502413-corpus` (no suffix) and set
+   `SPARK_RELOAD_URL`~~ **DONE** — real run 1 (19:44Z–21:36Z, manual +
+   watched) passed all gates: prod object advanced, `/reload` 200,
+   0 timeouts, 0 Anthropic calls
+8. ~~Enable a 6h timer/cron on sparky…~~ **DONE** — user crontab
+   `0 4,10,16,22 * * *` UTC with the PATH prefix, logging to
+   `~/insider-intel/logs/spark_refresh.log`; first unattended cycle
+   2026-08-17 00:00→00:31:51Z verified end-to-end
+9. ~~Merge #189 before relying on `model: auto` / response tagging~~
+   **DONE** — merged; `forensics.model` is stamped from the completion
 10. Update sparky `docs/insider-intel-integration.md` so it no longer pins
-    Qwen 3.6 (second repo; local dirty tree on `~/sparky`)
+    Qwen 3.6 (second repo; local dirty tree on `~/sparky`) — **still open**
 11. Reddit OAuth if the Spark residential-IP win is wanted (this run 403'd
-    without `REDDIT_CLIENT_ID`/`SECRET`)
-12. PACER secrets only when taking over **prod** writes, never on staging
+    without `REDDIT_CLIENT_ID`/`SECRET`) — **still open**
+12. ~~PACER secrets only when taking over **prod** writes, never on
+    staging~~ **DONE at cutover** — PACER creds moved into `.env.spark`
+    (purchases capped 5/run)
 
-**Prod is still:** Cloud Run job `corpus-refresh` every 6h, Haiku trickle
-(25/run), last prod `processed/articles.jsonl` write **2026-08-16T10:17:40Z**,
-API `last_indexed_at=2026-08-16T10:08:39Z`, `indexed_articles=7174`.
-No Spark rows on intel.thederpweb.com.
+**Prod ~~is still~~ was, until this cutover:** Cloud Run job `corpus-refresh`
+every 6h, Haiku trickle (25/run), last prod `processed/articles.jsonl` write
+**2026-08-16T10:17:40Z**, API `last_indexed_at=2026-08-16T10:08:39Z`,
+`indexed_articles=7174`. *(Historical — since 2026-08-16 the writer is the
+sparky cron; see the banner at the top.)*
 
 ---
 
