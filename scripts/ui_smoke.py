@@ -140,19 +140,21 @@ def run(base_url: str, headed: bool) -> int:
         )
 
         # Redesign shell (2026-08): no intro panel — the masthead carries the
-        # corpus stats line and the status band carries lanes + UTC clock;
-        # the footer carries the theme picker with neutral labels.
+        # corpus stats line and the status band carries lanes + UTC clock.
+        # The footer is GONE (operator call 2026-08-17): the SETTINGS picker
+        # is the one theme control, with neutral labels.
         checks.check("no intro panel in the shell", not page.query_selector("#intro-panel"))
         checks.check(
             "status band shows lanes + clock",
             bool(page.query_selector("#lane-status"))
             and bool((page.text_content("#utc-clock") or "").strip()),
         )
-        footer_theme = page.query_selector("#footer-theme-select")
-        checks.check("footer theme picker present", bool(footer_theme))
-        if footer_theme:
+        checks.check("no site footer in the shell", not page.query_selector(".site-footer"))
+        settings_theme = page.query_selector("#theme-select")
+        checks.check("settings theme picker present", bool(settings_theme))
+        if settings_theme:
             labels = page.eval_on_selector(
-                "#footer-theme-select",
+                "#theme-select",
                 "el => Array.from(el.options).map(o => o.textContent)",
             )
             checks.check(
@@ -343,17 +345,18 @@ def run(base_url: str, headed: bool) -> int:
         checks.check("themes apply from Settings (incl. midnight + cnn-lite)", theme_ok)
         page.select_option("#theme-select", "cnn-lite")
 
-        # Settings pane is slimmed (2026-08-16): theme + STREAM DEFAULTS only.
-        # The source-manager sections (sources/social/pubs) and the appearance
-        # extras are gone.
+        # Settings pane is slimmed (2026-08-16): theme + STREAM DEFAULTS, plus
+        # the DATA SOURCES lane-health line ("lanes", home since the footer
+        # removal 2026-08-17). The old source-manager sections (sources/social/
+        # pubs) and the appearance extras stay gone.
         section_keys = page.evaluate(
             """() => [...document.querySelectorAll('.pane-settings .settings-section')]
                  .map((s) => s.dataset.panelKey)"""
         )
-        expected = ["look", "defaults"]
+        expected = ["look", "defaults", "lanes"]
         removed = ("sources", "social", "pubs", "notify")
         checks.check(
-            "settings pane renders only theme + stream defaults",
+            "settings pane renders theme + stream defaults + lane health",
             all(k in section_keys for k in expected)
             and not any(k in section_keys for k in removed),
             f"got {section_keys}",
@@ -484,10 +487,8 @@ def run(base_url: str, headed: bool) -> int:
                 """() => {
                   const it = document.querySelector('#article-list .article-item');
                   const r = it.getBoundingClientRect();
-                  const f = document.querySelector('.site-footer');
                   return { top: Math.round(r.top), h: Math.round(r.height),
-                           innerH: window.innerHeight,
-                           footerShown: f ? f.getBoundingClientRect().height > 0 : false };
+                           innerH: window.innerHeight };
                 }"""
             )
             visible = geo["top"] < geo["innerH"] and geo["h"] > 60
@@ -496,7 +497,6 @@ def run(base_url: str, headed: bool) -> int:
                 visible,
                 f"top={geo['top']} h={geo['h']} innerH={geo['innerH']}",
             )
-            checks.check(f"landscape {tag}: footer hidden", not geo["footerShown"])
             lp.close()
 
         # Mid-width (~900–1000px): the masthead must not force horizontal

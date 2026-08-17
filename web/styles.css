@@ -1307,7 +1307,8 @@ a.tlv-case-title:focus-visible {
 
 .mobile-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 7 tabs (6 panes + GUIDE) — 4 columns keeps it to two rows. */
+  grid-template-columns: repeat(4, 1fr);
   position: sticky;
   top: 0;
   z-index: 40;
@@ -2882,6 +2883,13 @@ a.tlv-case-title:focus-visible {
   border-color: var(--accent);
 }
 
+.board-badge[hidden] {
+  /* display beats the hidden attribute otherwise — an empty accent pill
+     rendered under WORKBENCH on every phone view (caught in the footer-
+     removal browser drive, 2026-08-17). */
+  display: none;
+}
+
 .board-badge {
   display: inline-flex;
   align-items: center;
@@ -3180,23 +3188,6 @@ a.itm-chip:hover {
   filter: brightness(1.12);
 }
 
-.site-footer {
-  border-top: 1px solid var(--line);
-  padding: 1rem clamp(1rem, 3vw, 2.5rem) 1.5rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.site-footer a {
-  color: var(--accent);
-}
-
-.site-footer p {
-  margin: 0;
-  max-width: 52rem;
-}
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -3400,10 +3391,6 @@ a.itm-chip:hover {
 
   .panel {
     border: 0;
-  }
-
-  .site-footer {
-    flex: 0 0 auto;
   }
 
   .tagline {
@@ -3676,8 +3663,7 @@ button.chip.itm-chip {
 
   .hunt-usecases,
   .intro-panel,
-  .panels-row,
-  .site-footer {
+  .panels-row {
     display: none;
   }
 
@@ -4581,7 +4567,9 @@ body[data-pane="settings"] .panels-row,
 body[data-pane="evidence"] .refine-panel,
 body[data-pane="evidence"] .panels-row,
 body[data-pane="tooling"] .refine-panel,
-body[data-pane="tooling"] .panels-row {
+body[data-pane="tooling"] .panels-row,
+body[data-pane="about"] .refine-panel,
+body[data-pane="about"] .panels-row {
   display: none;
 }
 
@@ -4663,7 +4651,7 @@ body[data-pane="tooling"] .panels-row {
   color: var(--muted);
 }
 
-/* --- Redesign shell (2026-08): corpus stats, status band, footer --- */
+/* --- Redesign shell (2026-08): corpus stats + status band --- */
 .ii-corpus {
   margin: 0.2rem 0 0;
   font-family: var(--font-mono);
@@ -4687,79 +4675,31 @@ body[data-pane="tooling"] .panels-row {
 .ii-clock {
   margin-left: auto;
 }
-.ii-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--line);
-  padding: 1rem clamp(1rem, 3vw, 2.5rem) 1.4rem;
-}
-.ii-foot-left {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+/* Source-health homes (footer removal, 2026-08-17). The masthead chip
+   renders ONLY while a lane is broken — signal color, click opens SETTINGS,
+   where the full DATA SOURCES line lives. */
+.lane-warn {
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--signal);
+  background: none;
+  border: 1px solid var(--signal);
+  border-radius: var(--radius, 2px);
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-lane-health {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
   letter-spacing: 0.05em;
   color: var(--muted);
 }
-.ii-foot-links a {
-  color: var(--muted);
-  text-decoration: none;
-  border-bottom: 1px solid var(--line);
-}
-.ii-foot-links a:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-/* Source-health line (refresh-job lane telemetry via /lanes/health). Muted
-   when everything is healthy; accent-colored when lanes are broken. */
-.ii-foot-lanes.lane-health-broken {
-  color: var(--accent);
-}
-.ii-foot-btn {
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-.ii-foot-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.ii-kbd {
-  font-size: 0.6rem;
-  letter-spacing: 0.08em;
-}
-.ii-foot-theme {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.ii-foot-theme select {
-  background: var(--input-bg);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: var(--radius, 2px);
-  font: inherit;
-  padding: 0.25rem 0.4rem;
-}
-
-/* Short phone-landscape viewports hide chrome (matches .site-footer rule
-   above — re-stated because .ii-footer's flex display lands later). */
-@media (max-height: 520px) and (max-width: 960px) {
-  .ii-footer {
-    display: none;
-  }
+.settings-lane-health.lane-health-broken {
+  color: var(--signal);
 }
 
 /* --- Redesign regrid (2026-08): stream = content + one right rail --- */
@@ -4818,6 +4758,25 @@ body[data-pane="tooling"] .panels-row {
   margin: 0.15rem 0 0;
   font-size: 0.85rem;
   line-height: 1.5;
+}
+.ii-about .evp-section-head {
+  margin-top: 1.4rem;
+}
+.ii-about-lede {
+  font-size: 1.05rem;
+  font-weight: 500;
+  max-width: 72ch;
+}
+/* The one live element on ABOUT: corpus counts from the ledger read. */
+.ii-about-counts {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0.35rem 0 0;
+}
+.ii-about a {
+  color: var(--accent);
 }
 
 /* --- Redesign fidelity pass (2026-08-10): match the prototype's chrome --- */
@@ -4891,8 +4850,8 @@ body[data-pane="tooling"] .panels-row {
 }
 
 /* Fidelity: kill the legacy SEARCH button for real (specificity), and strip
-   the stream header's window chrome + inline kbd hint — the prototype keeps
-   shortcuts in the footer only. */
+   the stream header's window chrome + inline kbd hint — shortcuts are taught
+   in the GUIDE cheat sheet (STREAM line) since the footer's removal. */
 .search-bar button.hunt-submit {
   display: none;
 }
@@ -4917,7 +4876,7 @@ body[data-pane="tooling"] .panels-row {
   color: #ffffff;
 }
 
-/* ── Site guide: first-visit intro + GUIDE reopener (masthead + footer). ──
+/* ── Site guide: first-visit intro + GUIDE reopener (masthead + mobile tab). ──
    Follows the retired .intro-panel strip: a full-width bordered panel between
    the masthead and the pane grid, mono uppercase labels, theme tokens only.
    Unlike .intro-panel it is NOT hidden on phones — mobile users gave the
@@ -5036,6 +4995,17 @@ body[data-pane="tooling"] .panels-row {
   max-width: 88ch;
 }
 
+.guide-about-line {
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 88ch;
+}
+
+.guide-about-line a {
+  color: var(--accent);
+}
+
 .guide-actions {
   margin: 0.9rem 0 0;
   display: flex;
@@ -5067,8 +5037,9 @@ body[data-pane="tooling"] .panels-row {
   }
 }
 
-/* GUIDE in the masthead — mirrors .masthead-nav-item styling without joining
-   its selector: that class's shared click handler switches panes. */
+/* ABOUT + GUIDE in the masthead — mirror .masthead-nav-item styling without
+   joining its selector: that class's shared click handler switches panes.
+   Covers both the GUIDE <button> and the ABOUT <a>. */
 .masthead-nav-guide {
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -5081,6 +5052,7 @@ body[data-pane="tooling"] .panels-row {
   padding: 0 0 2px;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 

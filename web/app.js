@@ -491,6 +491,11 @@
     if (path === "/tooling" || path === "/tooling/") {
       return { view: "tooling" };
     }
+    if (path === "/about" || path === "/about/") {
+      // ABOUT absorbed the old METHODOLOGY & COLOPHON pane (footer removal,
+      // 2026-08-17) — the pane itself keeps the "about" pane id it always had.
+      return { view: "about" };
+    }
     if (path.startsWith("/tooling/")) {
       // Category dossier deep link: ids are the tooling_map's lowercase slugs.
       const id = decodeURIComponent(path.slice("/tooling/".length)).trim();
@@ -538,6 +543,10 @@
     }
     if (route.view === "tooling") {
       openToolingView();
+      return;
+    }
+    if (route.view === "about") {
+      openAboutView();
       return;
     }
     if (route.view === "tooling-category" && route.id) {
@@ -692,48 +701,31 @@
     ChatGPT: "Slate",
   };
   const themeLabel = (v) => THEME_LABELS[v] || v.charAt(0).toUpperCase() + v.slice(1);
-  const footerThemeSelect = document.getElementById("footer-theme-select");
   function syncThemeSelects(theme) {
     if (themeSelect) themeSelect.value = theme;
-    if (footerThemeSelect) footerThemeSelect.value = theme;
   }
   if (themeSelect) {
-    // Relabel the settings options in place (values unchanged).
+    // Relabel the settings options in place (values unchanged). The SETTINGS
+    // picker is the only theme control — the footer twin died with the footer.
     Array.from(themeSelect.options).forEach((o) => {
       o.textContent = themeLabel(o.value);
     });
-    if (footerThemeSelect) {
-      Array.from(themeSelect.options).forEach((o) => {
-        const opt = document.createElement("option");
-        opt.value = o.value;
-        opt.textContent = o.textContent;
-        footerThemeSelect.appendChild(opt);
-      });
-      footerThemeSelect.addEventListener("change", () =>
-        applyTheme(footerThemeSelect.value),
-      );
-    }
     applyTheme(localStorage.getItem(THEME_KEY) || DEFAULT_THEME);
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
-  // Shell chrome: footer actions + the status band's UTC clock.
-  const footerSettings = document.getElementById("footer-settings");
-  if (footerSettings) {
-    footerSettings.addEventListener("click", () => {
+  // Shell chrome: the ABOUT page's feed link, the masthead source-health
+  // chip, and the status band's UTC clock.
+  const aboutFeed = document.getElementById("about-feed-link");
+  if (aboutFeed) aboutFeed.href = `${apiBase}/feed.xml`;
+  const laneWarnChip = document.getElementById("lane-warn");
+  if (laneWarnChip) {
+    laneWarnChip.addEventListener("click", () => {
+      // The full DATA SOURCES line lives in SETTINGS.
       setActivePane("settings");
       window.scrollTo({ top: 0 });
     });
   }
-  const footerAbout = document.getElementById("footer-about");
-  if (footerAbout) {
-    footerAbout.addEventListener("click", () => {
-      setActivePane("about");
-      window.scrollTo({ top: 0 });
-    });
-  }
-  const footerFeed = document.getElementById("footer-feed-link");
-  if (footerFeed) footerFeed.href = `${apiBase}/feed.xml`;
   const utcClock = document.getElementById("utc-clock");
   function tickClock() {
     if (!utcClock) return;
@@ -4591,26 +4583,56 @@
     }
   }
 
-  /** Source-health footer: "DATA SOURCES: X HEALTHY / Y BROKEN (names)".
-   *  summary is /lanes/health `summary` (live) or meta.json `lane_health`
-   *  (boot snapshot). Fail-soft: no data → the line simply stays hidden. */
-  function renderLaneHealth(summary) {
-    const el = document.getElementById("footer-lane-health");
-    if (!el) return;
-    if (!summary || !summary.total) {
-      el.hidden = true;
-      return;
-    }
+  /** Source-health presentation (pure, node-unit-tested): the SETTINGS line
+   *  always tells the full story — "DATA SOURCES: X HEALTHY / Y BROKEN
+   *  (names)" — and the masthead chip exists ONLY while something is broken.
+   *  Zero broken means zero chip: the call-out that matters, with no
+   *  permanent chrome. Returns null when there is no telemetry at all. */
+  function laneHealthPresentation(summary) {
+    if (!summary || !summary.total) return null;
     const broken = summary.broken || 0;
     const healthy = typeof summary.healthy === "number" ? summary.healthy : summary.total - broken;
-    let text = `DATA SOURCES: ${healthy} HEALTHY`;
+    let line = `DATA SOURCES: ${healthy} HEALTHY`;
     if (broken) {
       const names = (summary.broken_lanes || []).join(", ");
-      text += ` / ${broken} BROKEN${names ? ` (${names.toUpperCase()})` : ""}`;
+      line += ` / ${broken} BROKEN${names ? ` (${names.toUpperCase()})` : ""}`;
     }
-    el.textContent = text;
-    el.classList.toggle("lane-health-broken", broken > 0);
-    el.hidden = false;
+    const chip =
+      broken > 0
+        ? {
+            text: `▲ ${broken} SOURCE${broken === 1 ? "" : "S"} BROKEN`,
+            tip: `${line} — a lane counts as BROKEN after 3 failed or empty refresh cycles. Details in SETTINGS.`,
+          }
+        : null;
+    return { line, broken, chip };
+  }
+
+  /** Source-health homes (footer removal, 2026-08-17): the full line renders
+   *  into SETTINGS (#settings-lane-health); the masthead #lane-warn chip
+   *  appears only when broken > 0. summary is /lanes/health `summary` (live)
+   *  or meta.json `lane_health` (boot snapshot). Fail-soft: no data → the
+   *  SETTINGS line keeps its teaching text and the chip stays hidden. */
+  function renderLaneHealth(summary) {
+    const line = document.getElementById("settings-lane-health");
+    const chip = document.getElementById("lane-warn");
+    const view = laneHealthPresentation(summary);
+    if (!view) {
+      if (chip) chip.hidden = true;
+      return;
+    }
+    if (line) {
+      line.textContent = view.line;
+      line.classList.toggle("lane-health-broken", view.broken > 0);
+    }
+    if (chip) {
+      if (view.chip) {
+        chip.textContent = view.chip.text;
+        chip.dataset.tip = view.chip.tip;
+        chip.hidden = false;
+      } else {
+        chip.hidden = true;
+      }
+    }
   }
 
   async function loadLaneHealth() {
@@ -4773,6 +4795,7 @@
   }
 
   function renderCorpusStats(data) {
+    renderAboutCounts(data);
     const el = document.getElementById("corpus-stats");
     if (!el || !data || !data.enriched_cases) return;
     const s = data.strength_totals || {};
@@ -4780,6 +4803,27 @@
     if (state.lastTotalIndexed) bits.push(`CORPUS ${state.lastTotalIndexed.toLocaleString()}`);
     bits.push(`METHOD-BEARING ${data.enriched_cases.toLocaleString()}`);
     if (s.adjudicated_admitted) bits.push(`CONFIRMED IN COURT ${s.adjudicated_admitted}`);
+    el.textContent = bits.join(" · ");
+  }
+
+  /** ABOUT page corpus line — the same live ledger read the masthead stats
+   *  use, never a checked-in number (sweep-dynamic invariant). Renders from
+   *  the freshest data seen this session: the /evidence/ledger payload plus
+   *  the indexed total from /health or the boot snapshot. With no data yet
+   *  the static teaching text in index.html stands. */
+  function renderAboutCounts(data) {
+    const el = document.getElementById("about-counts");
+    const ledger = data || state.evidenceLedger;
+    if (!el || !ledger || !ledger.enriched_cases) return;
+    const s = ledger.strength_totals || {};
+    const bits = [];
+    if (state.lastTotalIndexed) {
+      bits.push(`TRACKING ${state.lastTotalIndexed.toLocaleString()} DOCUMENTS`);
+    }
+    bits.push(`METHODS EXTRACTED IN ${ledger.enriched_cases.toLocaleString()} CASES`);
+    if (s.adjudicated_admitted) {
+      bits.push(`${Number(s.adjudicated_admitted).toLocaleString()} CONFIRMED IN COURT`);
+    }
     el.textContent = bits.join(" · ");
   }
 
@@ -5030,6 +5074,22 @@
       /* ignore */
     }
     setStatus("Insider Evidence Matrix");
+  }
+
+  /* ── ABOUT takeover page (#/about): static prose + one live corpus line.
+     The prose ships in index.html; the only data on the page is the
+     #about-counts line, re-rendered from the session's /evidence/ledger read
+     (api() only — no static fetch, no hardcoded numbers). ──────────────── */
+  function openAboutView() {
+    setActivePane("about");
+    navigate("/about");
+    renderAboutCounts();
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus("About this site");
   }
 
   /* ── TOOLING takeover page (#/tooling): ONE grouped table — category group
@@ -6853,6 +6913,9 @@
           openToolingCategoryView(early.id).catch(() => {});
         } else if (early.view === "tools-vendor" && early.id) {
           openVendorToolView(early.id).catch(() => {});
+        } else if (early.view === "about") {
+          // ABOUT is static prose — it must not wait out the API probe either.
+          openAboutView();
         }
       }
 
@@ -6898,6 +6961,9 @@
         // rule applies ONLY to the bare site root — every deep link lands
         // where it says, EVIDENCE included, same as #/technique/<ID>.
         openEvidenceView();
+      } else if (route.view === "about") {
+        // Re-run after the probe so the live corpus line fills in.
+        openAboutView();
       } else if (route.view === "board") {
         await loadArticles();
         await importBoardFromRoute(route);
@@ -6992,12 +7058,12 @@
     if (!panel) return;
     [
       document.getElementById("guide-open"),
-      document.getElementById("footer-guide"),
+      document.getElementById("mobile-guide"),
     ].forEach((btn) => {
       if (!btn) return;
       btn.addEventListener("click", () => {
-        // The masthead button toggles; the footer one always opens (it sits
-        // a full page below the panel, so "close" would look like a no-op).
+        // The masthead button toggles; the mobile-tab one always opens (the
+        // panel may sit off-screen, so "close" would look like a no-op).
         if (btn.id === "guide-open" && !panel.hidden) {
           closeGuide();
           return;
@@ -7010,6 +7076,10 @@
         }
       });
     });
+    // The guide's ABOUT line routes via its href (#/about); dismiss the
+    // panel so the page it opens isn't hidden underneath it.
+    const aboutLink = document.getElementById("guide-about-link");
+    if (aboutLink) aboutLink.addEventListener("click", () => closeGuide());
     const dismiss = document.getElementById("guide-dismiss");
     if (dismiss) dismiss.addEventListener("click", () => closeGuide());
     const gotit = document.getElementById("guide-gotit");

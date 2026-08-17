@@ -57,9 +57,15 @@
           </button>
           <button type="button" class="masthead-nav-item" data-pane="settings" data-tip="Theme and stream defaults" data-tip-pos="bottom-end">SETTINGS ⚙</button>
           <!-- Deliberately NOT .masthead-nav-item: that class's shared click
-               handler switches panes; GUIDE toggles the guide panel instead. -->
+               handler switches panes; ABOUT routes via the hash and GUIDE
+               toggles the guide panel instead. -->
+          <a class="masthead-nav-guide" id="about-open" href="#/about" data-tip="What this site is, where the data comes from, who runs it" data-tip-pos="bottom-end">ABOUT</a>
           <button type="button" class="masthead-nav-guide" id="guide-open" aria-expanded="false" aria-controls="guide-panel" data-tip="How to use this site — per-tab cheat sheet" data-tip-pos="bottom-end">GUIDE</button>
         </nav>
+        <!-- Source-health warning: rendered ONLY while a lane is broken —
+             healthy corpora carry zero extra chrome. Click opens SETTINGS,
+             where the full DATA SOURCES line lives. -->
+        <button type="button" class="lane-warn" id="lane-warn" hidden data-tip-pos="bottom-end"></button>
         <span class="live-status" id="live-status">LIVE</span>
       </div>
 
@@ -218,12 +224,16 @@
           Workbench<span class="board-badge" id="board-badge" hidden></span>
         </button>
         <button type="button" class="mobile-tab" data-pane="settings">Settings</button>
+        <!-- No data-pane on purpose: GUIDE opens the guide panel, it never
+             switches panes. This is the phone-width reopener — the masthead
+             nav (and its GUIDE button) is display:none under 960px. -->
+        <button type="button" class="mobile-tab mobile-tab-guide" id="mobile-guide" aria-controls="guide-panel">Guide</button>
       </nav>
 
       <!-- Site guide: auto-shows once per browser (dismiss persisted under
            insider-intel-guide-dismissed), then only on demand via GUIDE in the
-           masthead or footer. Static content — no data dependency, works in
-           snapshot-only mode. Wired at the bottom of app.js. -->
+           masthead or the mobile tab row. Static content — no data dependency,
+           works in snapshot-only mode. Wired at the bottom of app.js. -->
       <section class="guide-panel" id="guide-panel" hidden aria-label="How to use this site">
         <div class="guide-head">
           <h2 class="guide-title">HOW TO USE THIS SITE</h2>
@@ -258,7 +268,7 @@
             <p class="guide-section-head">TAB CHEAT SHEET</p>
             <dl class="guide-jobs guide-tabs">
               <dt>STREAM</dt>
-              <dd>What is happening in insider risk now. Press / to search a scenario, then + FLAG a case worth hunting.</dd>
+              <dd>What is happening in insider risk now. Press / to search a scenario, then + FLAG a case worth hunting. Keys: j/k move · x flag · d dismiss · ⏎ open.</dd>
               <dt>MATRIX</dt>
               <dd>What techniques exist and what catches them. Click a technique to open its case dossier.</dd>
               <dt>EVIDENCE</dt>
@@ -275,6 +285,10 @@
               are never conflated. Enrichment provenance is stamped on each card.
             </p>
           </div>
+          <p class="guide-about-line">
+            ABOUT — what this site is, where the data comes from, and who runs it.
+            <a href="#/about" id="guide-about-link">Open ABOUT →</a>
+          </p>
           <p class="guide-actions">
             <button type="button" id="guide-more" class="copy-btn">FULL GUIDE →</button>
             <button type="button" id="guide-gotit" class="copy-btn copy-btn-primary">GOT IT</button>
@@ -850,27 +864,79 @@
           </div>
         </section>
 
-        <section class="pane pane-about-page" data-pane-panel="about" aria-label="Methodology and colophon">
+        <!-- ABOUT (#/about) absorbed the old METHODOLOGY & COLOPHON pane
+             (footer removal, 2026-08-17). Corpus counts render into
+             #about-counts from the live ledger — NEVER hardcoded here. -->
+        <section class="pane pane-about-page" data-pane-panel="about" aria-label="About this site">
           <div class="pane-head">
-            <h2>METHODOLOGY &amp; COLOPHON</h2>
+            <h2>ABOUT</h2>
           </div>
           <div class="pane-body ii-about">
-            <p>
-              insider-intel is an open OSINT research instrument for discovering novel insider
-              techniques — tradecraft that shows up in real cases before it shows up in any
-              framework. It ingests litigated insider cases, insider-relevant news, first-person
-              social confessions, and long-form publications; forensically enriches each case at
-              ingest; and aggregates the corpus into evidence about how insider incidents actually
-              happen and what record classes actually prove them.
+            <p class="evp-sub">What this site is, where its data comes from, and who runs it.</p>
+
+            <p class="ii-about-lede">
+              Insider-threat intelligence built from real court cases. Every claim traces to a
+              cited filing. The corpus refreshes every 6 hours, automatically.
             </p>
+            <p
+              class="ii-about-counts"
+              id="about-counts"
+              aria-live="polite"
+              data-tip="Recomputed from the stored corpus on every refresh — nothing on this page is typed in by hand"
+            >Live corpus counts appear here once the data loads.</p>
+
+            <p class="evp-section-head">WHERE THE DATA COMES FROM</p>
+            <p>
+              US court records are the backbone: CourtListener and its RECAP archive (public
+              copies of federal court filings), with targeted PACER pulls for filings the free
+              archive lacks. Agency press releases and the security press fill in around the
+              court record. First-person social posts and long-form publications are carried as
+              their own channels, labeled as such.
+            </p>
+
+            <p class="evp-section-head">HOW FINDINGS ARE MADE</p>
+            <p>
+              Deterministic scanning does most of the work. Each qualifying case then gets one
+              AI enrichment, and the model that wrote it is stamped on the card ("Enriched
+              by …"). Adjudications are append-only — new model generations are added to the
+              record, never written over it — and re-checked as models improve. Every quoted
+              line carries a verbatim-verified stamp: a mechanical check that the quote appears
+              word-for-word in the document the model read.
+            </p>
+
+            <p class="evp-section-head">WHAT THE NUMBERS CAN'T SAY</p>
+            <p>
+              Court data counts insiders who were caught and litigated, not insider behavior at
+              large. Detection stats reflect what courts document — not everything that happens.
+            </p>
+
+            <p class="evp-section-head">WHO RUNS IT</p>
+            <p>
+              <a href="https://github.com/Scubber/insider-intel" target="_blank" rel="noopener"
+                >Built and run by Tim Carreira.</a
+              >
+              The code and data pipeline are public. Questions or corrections:
+              <a href="https://github.com/Scubber/insider-intel/issues" target="_blank" rel="noopener"
+                >open a GitHub issue</a
+              >. Follow the corpus: <a href="#" id="about-feed-link">FEED.XML</a>.
+            </p>
+
+            <p class="evp-section-head">READING THE SITE</p>
             <dl class="ii-about-facts">
               <dt>SIG</dt><dd>Insider-confidence score, 0–100, assigned at ingest. The stream floor defaults to 30.</dd>
               <dt>PROOF STANDARD</dt><dd>Every count separates CONFIRMED IN COURT (a judge ruled it happened, or the insider admitted it) from ALLEGED (claimed in a filing, not yet decided) from REPORTED (press or social only). They are never conflated.</dd>
               <dt>READ PATH</dt><dd>No model runs at read time. Everything on screen is a projection of stored, append-only forensic records.</dd>
               <dt>PRIVACY</dt><dd>Roles, never individuals — no persona graphs, no entity resolution across cases.</dd>
               <dt>EDITORIAL</dt><dd>Findings publish by merge to main. The GitOps trail is the editorial record.</dd>
-              <dt>ATTRIBUTION</dt><dd>Insider Threat Matrix™ © Forscie Limited. This project is not affiliated with or endorsed by Forscie.</dd>
             </dl>
+
+            <p class="evp-section-head">ATTRIBUTION</p>
+            <p>
+              Insider Threat Matrix™ © Forscie Limited. This project is not affiliated with or
+              endorsed by Forscie. Court records via
+              <a href="https://www.courtlistener.com/" target="_blank" rel="noopener">CourtListener</a>
+              and RECAP, services of the non-profit Free Law Project.
+            </p>
           </div>
         </section>
         <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">
@@ -959,29 +1025,30 @@
                 </p>
               </div>
             </section>
+
+            <!-- Source-health home (footer removal, 2026-08-17): the full
+                 DATA SOURCES line lives here; the masthead #lane-warn chip
+                 appears only while a lane is broken and points here. -->
+            <section class="settings-section" data-panel-key="lanes" aria-label="Data sources">
+              <div class="settings-head">
+                <h3>DATA SOURCES</h3>
+                <span class="head-spacer"></span>
+                <button type="button" class="panel-collapse" data-panel="lanes" aria-label="Collapse Data sources" data-tip="Collapse to header bar" data-tip-pos="bottom-end">−</button>
+              </div>
+              <div class="settings-body">
+                <p class="kw-hint">
+                  Every ingestion lane is smoke-tested each refresh cycle. A lane counts as
+                  BROKEN after three failed or empty cycles in a row.
+                </p>
+                <p class="settings-lane-health" id="settings-lane-health">
+                  No lane telemetry yet — the health line fills when the corpus data loads.
+                </p>
+              </div>
+            </section>
           </div>
         </section>
       </div>
     </main>
-
-    <footer class="site-footer ii-footer">
-      <div class="ii-foot-left">
-        <span>insider-intel — evidence-based insider-threat research, built from what actually reaches court.</span>
-        <span class="ii-foot-links">
-          <button type="button" class="ii-foot-btn" id="footer-guide">GUIDE</button>
-          · <button type="button" class="ii-foot-btn" id="footer-about">METHODOLOGY &amp; COLOPHON</button>
-          · <a href="https://insiderthreatmatrix.org/" target="_blank" rel="noopener">ITM™ © FORSCIE LTD — NOT AFFILIATED</a>
-          · <a href="#" id="footer-feed-link">FEED.XML</a>
-          · <button type="button" class="ii-foot-btn" id="footer-settings">SETTINGS</button>
-        </span>
-        <span class="ii-kbd">j/k move · x flag · ⏎ open · / search</span>
-        <span class="ii-foot-lanes" id="footer-lane-health" hidden></span>
-      </div>
-      <label class="ii-foot-theme" for="footer-theme-select">
-        <span>Theme</span>
-        <select id="footer-theme-select" aria-label="Color theme"></select>
-      </label>
-    </footer>
 
     <script src="./config.js"></script>
     <script src="./ttp-packs.js"></script>
