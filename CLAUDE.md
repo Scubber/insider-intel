@@ -272,6 +272,21 @@ legacy fallback.
   case count"); methodology lives one hover away in the tooltip, not
   inline; runbook voice, no marketing adjectives. Modern-site UX polish is
   a requirement of done, not gold-plating.
+- **Voice: executive-plain, never AI slop** (operator directive 2026-08-17).
+  The reader is a mixed executive audience — security, business, HR, legal,
+  corporate special investigations. Assume intelligence, not vocabulary.
+  Short, plain sentences; one idea per sentence; concrete subject + verb
+  ("the employee copied 4,000 files", not "data exfiltration was
+  conducted"). Banned tells: delve, leverage, robust, comprehensive,
+  seamless, holistic, landscape, utilize, "it's important to note",
+  "in today's world", rhetorical-question headers, stacked qualifier
+  chains. Security jargon gets a plain gloss on first use or a tooltip
+  (ITM ids, DT/PV, UEBA, RECAP). Findings and analyst-facing prose read
+  like a briefing memo — what happened, what it means, what to do next —
+  and every generated-text template (findings slots, hunt patterns, ai
+  summaries) must be written and reviewed against this bar. The read-aloud
+  test: if a sentence would sound wrong spoken to a general counsel,
+  rewrite it.
 - **Corpus lives in the bucket, never in images.** The Dockerfile's final
   stage must stay the Cloud Run `runtime` stage (plain `docker build .`
   produces it; the deploy workflow and legacy script rely on that).
