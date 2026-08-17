@@ -45,7 +45,10 @@ Every refresh cycle smoke-tests each configured lane:
 the per-source outcomes into `data/state/lane_health.json` (consecutive-failure
 counts carry across cycles; ≥3 failed/empty cycles = broken, logged as
 `[LANE-BROKEN]`), and the API serves it at `GET /lanes/health` for the UI's
-source-health footer.
+source-health surfaces: the DATA SOURCES line in SETTINGS plus a masthead
+warning chip that renders only while a lane is broken (the site footer that
+used to carry the line was removed 2026-08-17; the ABOUT page at `#/about`
+absorbed the old METHODOLOGY & COLOPHON pane in the same change).
 
 CourtListener flagging is query-driven, not a local scan: the hand-authored
 insider lexicon in `courtlistener.py::DEFAULT_QUERIES` (projected from ITM

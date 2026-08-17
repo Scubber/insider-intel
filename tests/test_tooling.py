@@ -684,8 +684,8 @@ def test_table_page_is_footer_free_and_kept_surfaces_keep_their_basis() -> None:
     line at all — no BASED ON / METHODOLOGY / ITM™ tail; the column-header
     tooltips are the page's entire methodology surface. The category dossier
     and vendor sheet keep their existing basis lines, and the ITM attribution
-    lives in METHODOLOGY & COLOPHON (plus the site footer), never on the
-    TOOLING pane's table view."""
+    lives on the ABOUT page (which absorbed METHODOLOGY & COLOPHON when the
+    site footer was removed), never on the TOOLING pane's table view."""
     html = _index_html()
     src = _app_js()
     # The table view has no basis element and the renderer never cites one.
@@ -703,7 +703,7 @@ def test_table_page_is_footer_free_and_kept_surfaces_keep_their_basis() -> None:
     basis = _fn_body(src, "renderToolingBasis")
     assert '"METHODOLOGY"' in basis
     assert "ITM™ Forscie Ltd (not affiliated)" in basis
-    # ITM attribution home: the colophon (and site footer), not the table.
+    # ITM attribution home: the ABOUT page, not the table.
     assert "Insider Threat Matrix™ © Forscie Limited" in html
 
 

@@ -49,9 +49,23 @@ def test_guide_reopen_affordances_present() -> None:
     assert guide_btn, "masthead GUIDE button missing"
     assert "masthead-nav-item" not in guide_btn.group(0)
     assert 'aria-controls="guide-panel"' in guide_btn.group(0)
-    # Footer reopener keeps the guide reachable on phones, where the masthead
-    # nav is display:none.
-    assert 'id="footer-guide"' in html, "footer GUIDE button missing"
+    # Mobile reopener keeps the guide reachable on phones, where the masthead
+    # nav is display:none: a GUIDE button in the mobile tab row (the footer
+    # reopener died with the footer, 2026-08-17). It must NOT carry data-pane —
+    # the shared mobile-tab click handler switches panes.
+    mobile = re.search(r'<nav class="mobile-tabs".*?</nav>', html, re.DOTALL)
+    assert mobile, "mobile tab row not found"
+    mobile_guide = re.search(r'<button[^>]*id="mobile-guide"[^>]*>', mobile.group(0))
+    assert mobile_guide, "mobile GUIDE tab missing from the mobile tab row"
+    assert "data-pane" not in mobile_guide.group(0), (
+        "mobile GUIDE must not carry data-pane — it opens the guide, not a pane"
+    )
+    # And app.js must wire it alongside the masthead button.
+    app = _app()
+    wire = re.search(r"function wireGuide\(\).*?\}\)\(\);", app, re.DOTALL)
+    assert wire and 'getElementById("mobile-guide")' in wire.group(0), (
+        "wireGuide() lost the mobile-tab GUIDE reopener"
+    )
 
 
 def test_guide_cheat_sheet_covers_every_masthead_tab() -> None:

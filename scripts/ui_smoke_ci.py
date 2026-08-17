@@ -10,11 +10,13 @@ live API and (unless the checkout carries web/data/) no boot snapshot:
   API and the absent web/data/ snapshot),
 - every masthead tab renders its pane without throwing
   (STREAM / MATRIX / EVIDENCE / TOOLING / WORKBENCH / SETTINGS),
-- the GUIDE opens and dismisses,
+- the GUIDE opens and dismisses — via the masthead button on desktop and the
+  mobile tab row's GUIDE button on phone widths (the footer reopener is gone),
 - TOOLING renders its table — snapshot rows when web/data/tooling.json is
   present, else the honest "payload unreachable" teaching note,
-- hash deep links (#/tooling, #/technique/IF002, #/tools) don't crash, and
-  legacy #/tools re-navigates to #/tooling,
+- hash deep links (#/tooling, #/technique/IF002, #/tools, #/about) don't
+  crash, legacy #/tools re-navigates to #/tooling, and #/about renders the
+  ABOUT pane with its byline,
 - all of it at two viewports: 1280 desktop and 390 mobile.
 
 On failure each viewport screenshots into ui-smoke-artifacts/ for the CI
@@ -133,6 +135,15 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
                 page.is_visible("#guide-panel"),
             )
             page.keyboard.press("Escape")
+        else:
+            # Phone widths: the masthead nav is display:none — the mobile tab
+            # row's GUIDE button is the reopener (footer removal, 2026-08-17).
+            page.click("#mobile-guide")
+            checks.check(
+                f"{tag}: mobile GUIDE tab reopens the guide",
+                page.is_visible("#guide-panel"),
+            )
+            page.keyboard.press("Escape")
 
         # Every tab renders its pane without throwing.
         layout = "desktop" if width > 960 else "mobile"
@@ -165,7 +176,7 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
 
         # Hash deep links via the in-page router: none may crash, and legacy
         # #/tools must re-navigate to the one TOOLING table.
-        for link in ("#/technique/IF002", "#/tools", "#/"):
+        for link in ("#/technique/IF002", "#/tools", "#/about", "#/"):
             page.evaluate(f"() => {{ location.hash = '{link}'; }}")
             page.wait_for_timeout(400)
             checks.check(
@@ -178,10 +189,22 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
                     f"{tag}: legacy #/tools lands on #/tooling",
                     page.evaluate("() => location.hash") == "#/tooling",
                 )
+            if link == "#/about":
+                # ABOUT is static prose + one live counts line: the pane must
+                # render offline, byline included, with no hardcoded numbers
+                # replacing the honest empty state.
+                about_text = page.text_content(".pane-about-page") or ""
+                checks.check(
+                    f"{tag}: #/about renders the ABOUT pane with its byline",
+                    page.is_visible(".pane-about-page")
+                    and "Built and run by Tim Carreira" in about_text
+                    and "Forscie" in about_text,
+                    f"text={about_text[:80]!r}",
+                )
 
         # Cold-load deep links: a fresh boot straight onto each route (via
         # about:blank — a same-document hash hop would skip the reload).
-        for link in ("#/tooling", "#/technique/IF002"):
+        for link in ("#/tooling", "#/technique/IF002", "#/about"):
             page.goto("about:blank")
             page.goto(f"{base_url}/{link}")
             page.wait_for_selector(".app-shell", state="attached", timeout=15000)
