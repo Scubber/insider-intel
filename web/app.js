@@ -4980,6 +4980,14 @@
 
       const detail = evpEl("div", "tlp-detail");
       if (c.rationale) detail.appendChild(evpEl("p", "evp-note", c.rationale));
+      // Vendor examples live in the expanded detail ONLY — the collapsed
+      // ranking row stays category-and-numbers (rankings never see vendors).
+      if ((c.examples || []).length) {
+        const eg = evpEl("p", "tlp-examples", `e.g. ${c.examples.join(" · ")}`);
+        eg.dataset.tip =
+          "Common products in this category — not endorsements, not derived from case data";
+        detail.appendChild(eg);
+      }
       const controlBlock = (head, refs) => {
         if (!refs || !refs.length) return;
         detail.appendChild(evpEl("p", "evp-section-head", `${head} (${refs.length})`));

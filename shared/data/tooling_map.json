@@ -13,7 +13,11 @@
     "(they are what device-control tooling monitors). PV001 ('No Ready",
     "System-Level Mitigation') is deliberately unmapped - it is the absence of",
     "a control. tests/test_tooling.py validates every id against",
-    "shared/data/itm_index.json so ITM catalog refreshes flag drift."
+    "shared/data/itm_index.json so ITM catalog refreshes flag drift.",
+    "The 'examples' arrays are operator-curated ILLUSTRATIONS: common",
+    "products in each category, not endorsements and not derived from case",
+    "data. They are carried verbatim to the page detail and never enter the",
+    "ranking math (tests/test_tooling.py pins both)."
   ],
   "categories": [
     {
@@ -22,7 +26,8 @@
       "kind": "product",
       "rationale": "Content inspection and label telemetry at egress: the DLP solution controls themselves, MIP label activity, Defender print alerts, and watermark attribution of leaked media.",
       "detections": ["DT048", "DT110", "DT139", "DT153"],
-      "preventions": ["PV020", "PV047", "PV088"]
+      "preventions": ["PV020", "PV047", "PV088"],
+      "examples": ["Forcepoint DLP", "Microsoft Purview DLP", "Netskope", "Symantec DLP"]
     },
     {
       "id": "edr",
@@ -30,7 +35,8 @@
       "kind": "product",
       "rationale": "Agents watching endpoint process/file behavior: EDR and AV agents, Sysmon process telemetry, anti-tamper alerting, file integrity monitoring, shadow-copy deletion.",
       "detections": ["DT043", "DT046", "DT081", "DT105", "DT146"],
-      "preventions": ["PV005", "PV033"]
+      "preventions": ["PV005", "PV033"],
+      "examples": ["CrowdStrike Falcon", "Microsoft Defender for Endpoint", "Palo Alto Cortex XDR", "SentinelOne"]
     },
     {
       "id": "siem",
@@ -42,7 +48,8 @@
         "DT064", "DT065", "DT066", "DT082", "DT094", "DT095", "DT109", "DT115",
         "DT116", "DT117", "DT118", "DT126", "DT156", "DT157"
       ],
-      "preventions": []
+      "preventions": [],
+      "examples": ["Elastic Security", "Google SecOps", "IBM QRadar", "Microsoft Sentinel", "Splunk"]
     },
     {
       "id": "ueba",
@@ -50,7 +57,8 @@
       "kind": "product",
       "rationale": "Anomaly scoring over identity and endpoint telemetry: UBA/UEBA engines, impossible travel, performance-baseline profiling.",
       "detections": ["DT047", "DT050", "DT101", "DT102", "DT114"],
-      "preventions": []
+      "preventions": [],
+      "examples": ["Exabeam", "Gurucul", "Securonix", "Splunk UBA"]
     },
     {
       "id": "irm",
@@ -58,7 +66,8 @@
       "kind": "product",
       "rationale": "Purpose-built insider-risk workflow: user activity monitoring agents, leaver watchlists, policy-violation patterning, communication compliance, insider-focused threat intel.",
       "detections": ["DT045", "DT104", "DT113", "DT125", "DT154"],
-      "preventions": ["PV059"]
+      "preventions": ["PV059"],
+      "examples": ["DTEX", "Microsoft Purview IRM", "Proofpoint ITM", "Teramind"]
     },
     {
       "id": "pam",
@@ -66,7 +75,8 @@
       "kind": "product",
       "rationale": "Vaulting and brokering of privileged identities plus privileged-change telemetry: PIM audit, privileged-group membership changes, admin-privilege restriction, service-account scoping.",
       "detections": ["DT106", "DT121"],
-      "preventions": ["PV002", "PV048", "PV078"]
+      "preventions": ["PV002", "PV048", "PV078"],
+      "examples": ["BeyondTrust", "CyberArk", "Delinea"]
     },
     {
       "id": "iam",
@@ -74,7 +84,8 @@
       "kind": "product",
       "rationale": "Authentication events and identity lifecycle: sign-in logs, logon/logoff, account deletion, MFA, conditional access (incl. geographic), access reviews, account-ownership validation, identity verification at the service desk.",
       "detections": ["DT056", "DT062", "DT063", "DT068"],
-      "preventions": ["PV023", "PV055", "PV056", "PV069", "PV070", "PV076", "PV089"]
+      "preventions": ["PV023", "PV055", "PV056", "PV069", "PV070", "PV076", "PV089"],
+      "examples": ["Microsoft Entra ID", "Okta", "SailPoint", "Saviynt"]
     },
     {
       "id": "casb",
@@ -82,7 +93,8 @@
       "kind": "product",
       "rationale": "SaaS-app audit surfaces: Teams call history, Defender external-sharing alerts. Thin by catalog design - most cloud audit trails home under SIEM, retention under eDiscovery.",
       "detections": ["DT107", "DT142"],
-      "preventions": []
+      "preventions": [],
+      "examples": ["AppOmni", "Microsoft Defender for Cloud Apps", "Netskope", "Obsidian"]
     },
     {
       "id": "email",
@@ -90,7 +102,8 @@
       "kind": "product",
       "rationale": "Mail-flow telemetry and egress rules: message trace, gateway logs, forwarding-rule and mailbox-permission alerts, auto-forward restriction, recipient-domain restriction.",
       "detections": ["DT040", "DT041", "DT140", "DT141", "DT145"],
-      "preventions": ["PV017", "PV045"]
+      "preventions": ["PV017", "PV045"],
+      "examples": ["Abnormal Security", "Microsoft Defender for Office 365", "Mimecast", "Proofpoint"]
     },
     {
       "id": "network",
@@ -101,7 +114,8 @@
         "DT039", "DT042", "DT051", "DT096", "DT097", "DT098", "DT100", "DT122",
         "DT147", "DT150"
       ],
-      "preventions": ["PV006", "PV018", "PV021", "PV032", "PV034", "PV040", "PV072", "PV074"]
+      "preventions": ["PV006", "PV018", "PV021", "PV032", "PV034", "PV040", "PV072", "PV074"],
+      "examples": ["Corelight", "Darktrace", "ExtraHop", "Vectra AI", "Zeek (open source)"]
     },
     {
       "id": "device-control",
@@ -112,7 +126,8 @@
         "DT005", "DT006", "DT007", "DT020", "DT021", "DT022", "DT023", "DT024",
         "DT025", "DT087", "DT149"
       ],
-      "preventions": ["PV014", "PV035", "PV036", "PV037", "PV083", "PV084", "PV093"]
+      "preventions": ["PV014", "PV035", "PV036", "PV037", "PV083", "PV084", "PV093"],
+      "examples": ["Endpoint Protector", "Intune device control", "Ivanti Device Control", "PaperCut"]
     },
     {
       "id": "physical",
@@ -120,7 +135,8 @@
       "kind": "product",
       "rationale": "Facility-side control plane: badge logs, CCTV, patrols, photo-ID comparison, badge-vs-auth discrepancy checks, tamper seals, thermal/visual baseline scans, zoning and escorts, device prohibitions on-site.",
       "detections": ["DT008", "DT033", "DT103", "DT137", "DT143", "DT162", "DT163"],
-      "preventions": ["PV009", "PV011", "PV094", "PV095"]
+      "preventions": ["PV009", "PV011", "PV094", "PV095"],
+      "examples": ["Genetec", "HID", "Lenel", "Verkada"]
     },
     {
       "id": "screening-hr",
@@ -131,7 +147,8 @@
       "preventions": [
         "PV013", "PV024", "PV039", "PV042", "PV050", "PV051", "PV052", "PV053",
         "PV054", "PV065", "PV071", "PV082", "PV092", "PV096"
-      ]
+      ],
+      "examples": ["Checkr", "First Advantage", "HireRight", "Sterling"]
     },
     {
       "id": "training",
@@ -139,7 +156,8 @@
       "kind": "program",
       "rationale": "Training program controls: end-user security awareness, insider-threat awareness, regulation awareness. Prevention-only class - no DT maps here.",
       "detections": [],
-      "preventions": ["PV012", "PV038", "PV046"]
+      "preventions": ["PV012", "PV038", "PV046"],
+      "examples": ["Hoxhunt", "KnowBe4", "Proofpoint Security Awareness", "SANS"]
     },
     {
       "id": "deception",
@@ -147,7 +165,8 @@
       "kind": "product",
       "rationale": "Tripwire assets whose only legitimate access count is zero: file canaries, honeypots, honey users, honey SPNs. Replaces the requested SOAR row - no ITM control maps to orchestration.",
       "detections": ["DT009", "DT010", "DT011", "DT111"],
-      "preventions": []
+      "preventions": [],
+      "examples": ["CounterCraft", "SentinelOne (Attivo)", "Thinkst Canary"]
     },
     {
       "id": "ediscovery",
@@ -155,7 +174,8 @@
       "kind": "product",
       "rationale": "Preservation and review tooling the legal record depends on: Purview eDiscovery and holds, litigation hold, Slack retention/holds and export analysis.",
       "detections": ["DT128", "DT155", "DT158", "DT159", "DT160", "DT161"],
-      "preventions": ["PV068"]
+      "preventions": ["PV068"],
+      "examples": ["Everlaw", "Exterro", "Microsoft Purview eDiscovery", "Relativity"]
     },
     {
       "id": "governance",
@@ -167,7 +187,8 @@
         "PV003", "PV004", "PV016", "PV027", "PV028", "PV049", "PV057", "PV058",
         "PV073", "PV075", "PV077", "PV079", "PV080", "PV081", "PV085", "PV086",
         "PV090"
-      ]
+      ],
+      "examples": ["Archer", "AuditBoard", "LogicGate", "ServiceNow GRC"]
     },
     {
       "id": "hardening",
@@ -178,7 +199,8 @@
       "preventions": [
         "PV007", "PV008", "PV015", "PV025", "PV026", "PV029", "PV031", "PV041",
         "PV043", "PV044", "PV060", "PV061", "PV062", "PV063", "PV064", "PV091"
-      ]
+      ],
+      "examples": ["CIS Build Kits", "Group Policy (native)", "Jamf", "Microsoft Intune", "Tanium"]
     },
     {
       "id": "dfir",
@@ -193,7 +215,8 @@
         "DT120", "DT123", "DT124", "DT127", "DT129", "DT130", "DT131", "DT132",
         "DT133", "DT135", "DT138", "DT148"
       ],
-      "preventions": []
+      "preventions": [],
+      "examples": ["Cellebrite", "EnCase", "Magnet AXIOM", "Velociraptor (open source)"]
     }
   ]
 }

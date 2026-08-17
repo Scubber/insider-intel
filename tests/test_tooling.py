@@ -16,6 +16,7 @@ Three contracts pinned here:
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from collections import Counter
@@ -75,6 +76,19 @@ def test_mapping_validates_against_itm_catalog() -> None:
     dup_pv = {k for k, n in Counter(mapped_pvs).items() if n > 1}
     assert not dup_dt, f"DT ids mapped to more than one category: {dup_dt}"
     assert not dup_pv, f"PV ids mapped to more than one category: {dup_pv}"
+
+
+def test_every_category_has_two_to_six_vendor_examples() -> None:
+    """Vendor examples contract: every category carries 2–6 distinct,
+    non-empty example product names (display-only illustrations)."""
+    for cat in load_tooling_map()["categories"]:
+        ex = cat.get("examples")
+        assert isinstance(ex, list), f"{cat['id']}: examples must be a list"
+        assert 2 <= len(ex) <= 6, f"{cat['id']}: needs 2-6 examples, has {len(ex or [])}"
+        assert all(isinstance(v, str) and v.strip() for v in ex), (
+            f"{cat['id']}: examples must be non-empty strings"
+        )
+        assert len(set(ex)) == len(ex), f"{cat['id']}: duplicate examples"
 
 
 # ── 2. Ranking math (synthetic, deterministic) ───────────────────────────────
@@ -157,6 +171,43 @@ def test_ranking_empty_corpus() -> None:
     )
     assert out["technique_case_volume"] == 0
     assert out["categories"][0]["detection_coverage_pct"] is None
+
+
+def test_examples_carried_verbatim_and_never_a_ranking_input() -> None:
+    """Vendor examples are a display-only passthrough: each row carries its
+    category's list verbatim, and stripping every examples array from the map
+    leaves the ranking output byte-identical (regression against any future
+    change that lets vendors influence scores or sort order)."""
+    categories = [
+        {
+            "id": "a",
+            "label": "Cat A",
+            "detections": ["DT020"],
+            "preventions": ["PV900"],
+            "examples": ["Vendor One", "Vendor Two", "Vendor Three"],
+        },
+        {
+            "id": "b",
+            "label": "Cat B",
+            "detections": ["DTX2"],
+            "preventions": [],
+            "examples": ["Vendor Four", "Vendor Five"],
+        },
+    ]
+    out = rank_tool_categories(categories, _COUNTS, _CATALOG, _DETECTED_BY)
+    by_id = {c["id"]: c for c in out["categories"]}
+    assert by_id["a"]["examples"] == ["Vendor One", "Vendor Two", "Vendor Three"]
+    assert by_id["b"]["examples"] == ["Vendor Four", "Vendor Five"]
+
+    stripped = copy.deepcopy(categories)
+    for cat in stripped:
+        del cat["examples"]
+    out_stripped = rank_tool_categories(stripped, _COUNTS, _CATALOG, _DETECTED_BY)
+    assert all(row["examples"] == [] for row in out_stripped["categories"])
+    for result in (out, out_stripped):
+        for row in result["categories"]:
+            row.pop("examples")
+    assert out == out_stripped, "stripping examples changed the ranking output"
 
 
 # ── 3. GET /tooling — sweep-fresh endpoint over the in-memory index ──────────
@@ -244,6 +295,10 @@ def test_tooling_endpoint_ranks_against_verdict_true_cases(tmp_path, monkeypatch
         assert dc["top_techniques"][0]["covers"] == "detect"
         # Control refs are spelled out for the page.
         assert {"id", "title"} <= set(dc["detections"][0])
+        # Vendor examples thread through the payload verbatim from the map.
+        map_examples = {c["id"]: c["examples"] for c in load_tooling_map()["categories"]}
+        assert dc["examples"] == map_examples["device-control"]
+        assert all(c["examples"] == map_examples[c["id"]] for c in data["categories"])
         # IF002 preventions (PV003/PV016) live in governance.
         assert cats["governance"]["prevent_volume"] == 2
         # Small-n law: 2 cases < floor → percentages suppressed, volumes shown.
@@ -329,6 +384,32 @@ def test_tooling_path_reads_only_the_live_api() -> None:
     assert "VERDICT-TRUE CASES" in render and "generated_at" in render
     # Route registered.
     assert '"/tooling"' in _fn_body(src, "parseRoute")
+
+
+def test_examples_render_in_expanded_detail_never_in_collapsed_row() -> None:
+    """Vendor examples appear inside the expanded category detail ONLY — the
+    collapsed ranking row (everything renderToolingPage builds before the
+    tlp-detail container) must never touch the examples string."""
+    render = _fn_body(_app_js(), "renderToolingPage")
+    marker = 'const detail = evpEl("div", "tlp-detail")'
+    assert marker in render, "tlp-detail construction moved — update this contract test"
+    collapsed, detail = render.split(marker, 1)
+    assert "examples" not in collapsed, "vendor examples leaked into the collapsed ranking row"
+    assert "c.examples" in detail and "tlp-examples" in detail
+    assert '"e.g. "' in detail or "`e.g. " in detail
+
+
+def test_vendor_disclaimer_rendered_once_near_basis_line() -> None:
+    """The vendor disclaimer ships once, muted (tlp-basis treatment),
+    directly after the ledger basis line."""
+    html = _index_html()
+    disclaimer = "Examples are common products in each category, not endorsements and not derived"
+    assert html.count(disclaimer) == 1
+    assert "Rankings never consider vendors." in html
+    assert re.search(
+        r'id="tlp-basis" hidden></p>\s*<p class="tlp-basis tlp-vendor-note">',
+        html,
+    ), "vendor disclaimer must sit next to the basis line with the muted treatment"
 
 
 def test_live_refresh_busts_tooling_session_cache() -> None:
