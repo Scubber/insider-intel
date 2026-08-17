@@ -247,6 +247,17 @@ legacy fallback.
   vendor aliases); a checked-in file holding corpus-derived numbers is a
   bug. Pin each new surface with contract tests in the style of
   `tests/test_matrix_data_sources.py`.
+- **Every page teaches itself** (operator directive 2026-08-17). A
+  user-facing surface ships WITH its explanation, in the same PR: a GUIDE
+  cheat-sheet line (contract-enforced — `tests/test_site_guide.py` fails a
+  bare tab), a one-line purpose sub-line on the pane itself ("what question
+  does this answer"), `data-tip` tooltips on every metric, abbreviation, or
+  control whose meaning isn't self-evident, and an empty state that says
+  what will appear and how to make it appear. Display doctrine: numbers get
+  verbs ("CAUGHT ×12", "DETECTS 64%"), never noun phrases ("corroborated
+  case count"); methodology lives one hover away in the tooltip, not
+  inline; runbook voice, no marketing adjectives. Modern-site UX polish is
+  a requirement of done, not gold-plating.
 - **Corpus lives in the bucket, never in images.** The Dockerfile's final
   stage must stay the Cloud Run `runtime` stage (plain `docker build .`
   produces it; the deploy workflow and legacy script rely on that).
