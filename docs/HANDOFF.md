@@ -5,9 +5,11 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-16 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-17 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
-(`intel.thederpweb.com`), corpus in GCS, corpus-refresh job every 6h.
+(`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
+(cron 4×/day since the 2026-08-16 cutover; Cloud Scheduler paused as
+rollback).
 **Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
 working design, blessed before the next UI redesign — restore `web/**` from
 here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
@@ -19,8 +21,9 @@ prod).
 
 | Area | State |
 |---|---|
-| **Corpus** | ≈ **7,000 rows**, **1,477 enriched** (forensics present), **540 LLM-adjudicated insider cases**. Writes land 4×/day (~04:1x/10:1x/16:1x/22:1x UTC generations on `processed/articles.jsonl`). |
-| **Enrichment** | **ON, trickle mode** (2026-07-26): `SUMMARIZER_MAX_ARTICLES_PER_RUN=25`, `RESERVE=15`, `DISCOVERER=3`, `COURTLISTENER_BACKFILL_MAX_DOCKETS=10`. Haiku 4.5. Spend ≈ $1–2/day worst case. Spend gates live (see CLAUDE.md) — but see open thread #10: the filings gate leaks. |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 4,10,16,22 * * *` UTC runs `scripts/spark_refresh.sh` (pull → pipeline → push → `/reload`), log `~/insider-intel/logs/spark_refresh.log`. Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
+| **Corpus** | **7,193 rows**, **1,839 enriched** (forensics present; 2026-08-17 00:31Z cycle), **540 LLM-adjudicated insider cases** (2026-08 count). Writes land 4×/day (04/10/16/22 UTC generations on `processed/articles.jsonl`). |
+| **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM `Qwen/Qwen3.8-27B-FP8`, `model: auto`, timeout 900s) — **$0 LLM spend**. Caps raised operator-approved: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`, `RESERVE=30` (cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact on a 6h schedule; UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
@@ -29,7 +32,7 @@ prod).
 | **ITM** | **v2.11.0** (562 techniques; picked up with the description-clamp fix, 2026-08-08). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). Technique descriptions now clamp at 900 chars on sentence boundaries (was 320, mid-word). |
 | **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report; run artifacts (download on the run page) + `gs://…/export/traffic-{report.md,log.csv}`. ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
-| **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). |
+| **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
 | **UI redesign (2026-08-10)** | Claude Design redesign ported: no intro panel; masthead corpus-stats line + status band (lanes, UTC clock); provenance meta lines (SOURCE · FILED · RETRIEVED · SIG · proof); plain-language proof standard (CONFIRMED IN COURT / ALLEGED / REPORTED, from forensics claim_status); stream = content + one right rail (techniques tally + ledger), board on WORKBENCH takeover only; footer with methodology/about pane + neutral theme labels. Redesign source in `design/redesign/`. |
 | **UI honesty** | Settings is reader-safe (no TODO / stub ADD / Notifications chrome). Empty board offers **TRY EXAMPLE HUNT**. Default theme **Wire Light** (cnn-lite; was Dossier Sage until 2026-08-11); desktop rail JS breakpoint matches CSS at **1024px**. |
@@ -53,8 +56,10 @@ prod).
 | #140 | **Snapshot-first boot** (CACHED→LIVE, web/data via Pages artifact) |
 | #141 | deploy-pages 20min timeout |
 | #142–#145 | DIY traffic analytics: weekly→**daily**, forensic CSV + GeoIP (+ column fix) |
-| #188 | **Spark corpus-tenant mode** (compose + `spark_refresh.sh` + timeout knob). Cutover not done — see thread #5. |
-| #189 | OPEN: stamp `forensics.model` from served OpenAI-compat id; `model: auto` |
+| #188 | **Spark corpus-tenant mode** (compose + `spark_refresh.sh` + timeout knob). Cutover **DONE 2026-08-16** — see thread #5. |
+| #189 | Stamp `forensics.model` from served OpenAI-compat id; `model: auto` (merged; live in the Spark tenant) |
+| #190 | `spark_refresh.sh` wrapper hardening (post-incident: flock, cycle bound, `--build`, reload skip when `SPARK_RELOAD_URL` empty) |
+| #196–#197 | **octoDNS: thederpweb.com zone live on Cloudflare** (zone reconciled; null MX + SPF `-all` + DMARC reject added; `insider-intel.net` apex/www stay Worker-owned behind a `NameRejectlistFilter`) — see thread #13 |
 
 ---
 
@@ -87,20 +92,16 @@ prod).
 3. **PACER activation** — DONE 2026-07-24.
 4. **Discovery lanes** — (a) FLP tech-cases-bot feed; (b) ITM-derived query
    generator. Not built.
-5. **Spark as the corpus tenant (ACTIVE 2026-08-16 — hand to next agent).**
-   Architecture SHIPPED (#188): Spark runs the whole ingest+enrich job and
-   syncs the private bucket; Cloud Run never dials home (`docs/dgx-spark.md`
-   §4). **Cutover is not done.** Full ops log, IAM, env knobs, vLLM timeout
-   diagnosis, and kill/retry commands:
-   [`docs/spark-cutover-handoff.md`](spark-cutover-handoff.md).
-   **Do this first:** the staging `spark_refresh.sh` on sparky is still
-   running with `sparky,anthropic` and a 300s timeout — rich filings miss
-   Qwen (~15 tok/s, need ~800s for 12k JSON) and **spend Haiku credits**.
-   Kill the container, drop Anthropic from the Spark chain, raise timeout
-   to 900s, then prove staging before pausing `corpus-refresh-schedule`.
-   Open PR: [#189](https://github.com/Scubber/insider-intel/pull/189)
-   (dynamic `forensics.model` / `model: auto`). Prod site has **no** Spark
-   rows; bucket writer is still the Cloud Run job.
+5. **Spark as the corpus tenant — DONE 2026-08-16 (cutover complete).**
+   Architecture shipped (#188, hardened by #190, `model: auto` via #189);
+   sparky is the production refresh tenant: cron `0 4,10,16,22 * * *` UTC,
+   sparky-only Qwen chain ($0 LLM spend), caps 40/30, PACER creds on the
+   box, first unattended cycle verified 2026-08-17 00:31Z. Cloud Scheduler
+   `corpus-refresh-schedule` paused as rollback. Full record + operating
+   state: [`docs/spark-cutover-handoff.md`](spark-cutover-handoff.md) and
+   `docs/dgx-spark.md` §4. Remaining follow-ups: thinking-mode knob
+   activation (gold-set A/B), guided-JSON for Qwen parse failures, vLLM key
+   rotation at next restart, sparky-repo doc de-pin, Reddit OAuth.
 6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
    still a one-line deferred change.
 7. **Cold-start UX** — **DONE 2026-08-06** (#140/#141): snapshot-first boot
@@ -141,7 +142,9 @@ prod).
     540 insider rows to measure the false-negative cost first.
 11. **Admin page** — direction discussed, not decided: Cloudflare Access in
     front of an `/admin` route (free, auth at edge) vs Google IAP (needs LB,
-    ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? A public
+    ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? —
+    **answered YES 2026-08-16** (thread #13), so Cloudflare Access is now
+    unblocked. A public
     unauthenticated admin subdomain was rejected (adds scan surface).
 12. **Misc parked**: EXPORT CASES full-filing-text plan (unbuilt);
     README byline + LICENSE (operator undecided); landscape-iPhone smoke
@@ -159,8 +162,18 @@ prod).
     (`dns-plan` on PR/dispatch, `dns-apply` on merge; `CLOUDFLARE_API_TOKEN`
     repo secret — Zone:Read + DNS:Edit, all zones — is set). Zones stay
     `{}` in `dns/config.yaml` until they exist on Cloudflare; activation
-    checklist in `dns/README.md`. Operator to-dos: register the .net,
-    start the transfer. Also unblocks thread #11's Cloudflare Access.
+    checklist in `dns/README.md`. Also unblocks thread #11's Cloudflare
+    Access.
+    **Status 2026-08-16:** `insider-intel.net` **registered** (2026-08-11)
+    and **serving the site** via the park-redirect Worker; its apex/www DNS
+    are Worker-owned and guarded by a `NameRejectlistFilter` in the octoDNS
+    config. thederpweb.com **nameservers flipped to Cloudflare**
+    (lina/matteo) 21:00Z via the Route 53 Domains API, after octoDNS
+    reconciled the zone (PRs #196/#197; null MX + SPF `-all` + DMARC reject
+    added). Registrar transfer to Cloudflare **initiated 21:06Z**,
+    auto-completes by **2026-08-21**. Route 53 hosted zone retained as
+    rollback. Remaining: transfer auto-completion, then the .net aging
+    clock before the prod cutover.
 
 ---
 
