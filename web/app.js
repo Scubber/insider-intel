@@ -6836,13 +6836,16 @@
       // badge only ever says LIVE once /health has actually answered.
       const painted = await paintFromSnapshot();
 
-      // TOOLING deep links paint the same way: dispatch them BEFORE the
-      // probe below so the snapshot-first ensureTooling() serves the table /
-      // category dossier / vendor sheet instantly while the API wakes (its
-      // background refresh repaints when live lands). The post-probe
-      // dispatch below re-runs the same opener — idempotent. Snapshot-less
-      // deploys skip and keep today's live-only, post-probe flow.
-      if (painted) {
+      // TOOLING deep links dispatch BEFORE the probe below, UNCONDITIONALLY:
+      // the pane must switch immediately (its own loading/empty state) even
+      // when the stream snapshot fetch is slow or absent — a #/tooling
+      // visitor parked on the stream while the API wakes reads as "the page
+      // doesn't load" (caught by a real-browser check, 2026-08-17: cold CDN
+      // + probe 503 left the guard unpainted and the route never fired).
+      // ensureTooling() inside the opener is itself snapshot-first and
+      // repaints when data lands; the post-probe dispatch below re-runs the
+      // same opener — idempotent.
+      {
         const early = parseRoute();
         if (early.view === "tooling") {
           openToolingView();
