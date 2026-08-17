@@ -499,9 +499,10 @@ def test_mention_ranked_vendor_line_only_in_expanded_detail() -> None:
     unmentioned vendors trailing in the muted e.g. style."""
     render = _fn_body(_app_js(), "renderToolingPage")
     _, detail = render.split('const detail = evpEl("div", "tlp-detail")', 1)
-    assert (
-        "NAMED IN CASE RECORDS — presence in court documents, not an effectiveness score." in detail
-    )
+    # Short verb-doctrine head; the presence-not-effectiveness framing rides
+    # the tooltip (every-page-teaches-itself invariant).
+    assert '"NAMED IN CASE RECORDS"' in detail
+    assert "not an effectiveness score" in detail
     assert "c.vendors" in detail and "tlp-vendors" in detail
     # "Name ×N" chips, counts from mentions_cases, tooltip splits the counts.
     assert "×${m.total}" in detail

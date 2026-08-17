@@ -4950,7 +4950,7 @@
       const meters = evpEl("span", "tlp-meters");
       meters.appendChild(
         tlpMeter(
-          "DETECT",
+          "DETECTS",
           c.detection_coverage_pct,
           volume ? (100 * c.detect_volume) / volume : 0,
           c.detect_volume
@@ -4958,21 +4958,24 @@
       );
       meters.appendChild(
         tlpMeter(
-          "PREVENT",
+          "PREVENTS",
           c.prevention_coverage_pct,
           volume ? (100 * c.prevent_volume) / volume : 0,
           c.prevent_volume
         )
       );
+      // Verb labels (UX doctrine): "CAUGHT ×N" — court records credit this
+      // control class with the catch in N distinct cases; methodology rides
+      // the tooltip, never inline.
       const corr = evpEl(
         "span",
         c.corroborated_cases ? "tlp-corr" : "tlp-corr tlp-corr-none",
-        c.corroborated_cases
-          ? `corroborated in ${c.corroborated_cases} case${c.corroborated_cases === 1 ? "" : "s"}`
-          : "no case corroboration"
+        `CAUGHT ×${c.corroborated_cases || 0}`
       );
       corr.dataset.tip = (c.corroborated_via || []).length
-        ? `Evidence record classes naming this control class: ${c.corroborated_via.join("; ")}`
+        ? `Court records credit this control class with the detection in ` +
+          `${c.corroborated_cases} distinct case${c.corroborated_cases === 1 ? "" : "s"}. ` +
+          `Record classes: ${c.corroborated_via.join("; ")}`
         : "No case in the corpus produced evidence in this category's record classes";
       meters.appendChild(corr);
       sum.appendChild(meters);
@@ -4987,13 +4990,13 @@
       const vendorRows = c.vendors || [];
       const named = vendorRows.filter((v) => v.mentions_cases && v.mentions_cases.total > 0);
       if (named.length) {
-        detail.appendChild(
-          evpEl(
-            "p",
-            "evp-section-head",
-            "NAMED IN CASE RECORDS — presence in court documents, not an effectiveness score."
-          )
-        );
+        // Short head; the "presence, not effectiveness" framing lives in the
+        // tooltip per the every-page-teaches-itself doctrine.
+        const namedHead = evpEl("p", "evp-section-head", "NAMED IN CASE RECORDS");
+        namedHead.dataset.tip =
+          "Presence in court documents, not an effectiveness score — " +
+          "ranked by distinct cases naming the product, verdict-true first.";
+        detail.appendChild(namedHead);
         const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
         named.forEach((v) => {
           const m = v.mentions_cases;
