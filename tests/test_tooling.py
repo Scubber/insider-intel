@@ -499,138 +499,167 @@ def test_tooling_tab_pane_and_guide_line_present() -> None:
     mobile = re.search(r'<nav class="mobile-tabs".*?</nav>', html, re.DOTALL)
     assert mobile and 'data-pane="tooling"' in mobile.group(0), "mobile TOOLING tab missing"
     assert 'data-pane-panel="tooling"' in html, "TOOLING takeover pane missing"
-    assert 'id="tlp-list"' in html and 'id="tlp-basis"' in html
+    # ONE grouped table (operator rebuild 2026-08-17) in the EVIDENCE table
+    # idiom, with the instant filter + IN COURT FILINGS toggle above it.
+    assert 'id="tlt-table"' in html
+    assert re.search(r'class="evp-table tlt-table" id="tlt-table"', html)
+    assert 'id="tlt-filter"' in html and 'id="tlt-court-only"' in html
+    assert "IN COURT FILINGS" in html
+    # House heading + purpose sub-line.
+    pane = re.search(r'<section class="pane pane-tooling-page".*?</section>', html, re.DOTALL)
+    assert pane and "<h2>Tooling</h2>" in pane.group(0)
+    assert "Enterprise tools for insider-threat programs" in pane.group(0)
+    assert "court-filing record" in pane.group(0)
     # Cheat-sheet line (test_site_guide enforces existence; pin the promise).
     cheat = re.search(r'id="guide-cheat".*?</dl>', html, re.DOTALL)
     assert cheat and "<dt>TOOLING</dt>" in cheat.group(0)
-    assert "ranked by what caught real insiders" in cheat.group(0)
-    # No vendor endorsements on the page shell.
-    assert "Categories, never vendors" in html
+    assert "Which enterprise tools show up in real cases" in cheat.group(0)
+    assert "Click a tool for the filings that name it" in cheat.group(0)
     # Takeover CSS wired like EVIDENCE.
     css = Path("web/styles.css").read_text(encoding="utf-8")
     assert '.app-shell[data-pane="tooling"] .pane-tooling-page' in css
 
 
 def test_tooling_path_reads_only_the_live_api() -> None:
-    """renderToolingPage/loadToolingPage/openToolingView never fetch() outside
-    the api() helper — the ranking must come from the live corpus (sweep +
-    /reload propagates), never a checked-in static file."""
+    """The table page never fetch()es outside the api() helper — the counts
+    must come from the live corpus (sweep + /reload propagates), never a
+    checked-in static file."""
     src = _app_js()
-    for name in ("tlpMeter", "renderToolingPage", "loadToolingPage", "openToolingView"):
+    for name in (
+        "toolingColumnSpecs",
+        "toolingCountText",
+        "buildToolingTableGroups",
+        "renderToolingPage",
+        "loadToolingPage",
+        "openToolingView",
+    ):
         assert "fetch(" not in _fn_body(src, name), f"{name}() fetches outside api()"
     # The one live read: the session-cached ensureTooling (state.candidates
     # pattern) that loadToolingPage, the category dossiers, and the technique
     # dossiers' RELEVANT TOOLING join all share.
     assert 'api("/tooling"' in _fn_body(src, "ensureTooling")
     assert "ensureTooling(" in _fn_body(src, "loadToolingPage")
-    # Techniques deep-link into the existing MATRIX dossier route.
-    assert "selectTechnique(" in _fn_body(src, "renderToolingPage")
-    # Basis line cites the ledger stamp, not a hardcoded date — one shared
-    # builder so every TOOLING surface cites the same run.
-    basis = _fn_body(src, "toolingBasisText")
-    assert "VERDICT-TRUE CASES" in basis and "generated_at" in basis
-    assert "renderToolingBasis(" in _fn_body(src, "renderToolingPage")
     # Route registered.
     assert '"/tooling"' in _fn_body(src, "parseRoute")
 
 
-def test_examples_render_in_expanded_detail_never_in_collapsed_row() -> None:
-    """Vendor lines appear inside the expanded category detail ONLY — the
-    collapsed ranking row (everything renderToolingPage builds before the
-    tlp-detail container) must never touch the examples string, the vendors
-    block, or the mention-ranked line."""
+def test_table_structure_group_rows_precede_tool_rows() -> None:
+    """The table renders category GROUP rows (EVIDENCE .evp-theme-row idiom,
+    plain label linking to the category dossier, NO stats) before that
+    category's tool rows; the header and count cells are driven by the one
+    swappable column-spec structure."""
     render = _fn_body(_app_js(), "renderToolingPage")
-    marker = 'const detail = evpEl("div", "tlp-detail")'
-    assert marker in render, "tlp-detail construction moved — update this contract test"
-    collapsed, detail = render.split(marker, 1)
-    assert "examples" not in collapsed, "vendor examples leaked into the collapsed ranking row"
-    assert "vendors" not in collapsed, "the vendors block leaked into the collapsed ranking row"
-    assert "mentions_cases" not in collapsed, "mention counts leaked into the collapsed row"
-    assert "NAMED IN CASE RECORDS" not in collapsed
-    assert "c.examples" in detail and "tlp-examples" in detail
-    assert '"e.g. "' in detail or "`e.g. " in detail
+    # Column layer: header ths and count cells both come from the spec.
+    assert "toolingColumnSpecs()" in render
+    assert "buildToolingTableGroups(" in render
+    # Group row before tool rows, in source order inside the groups loop.
+    group_at = render.index('evpEl("tr", "evp-theme-row")')
+    tools_at = render.index("g.tools.forEach")
+    assert group_at < tools_at, "group row must render before its tool rows"
+    # Group rows are PLAIN labels: no counts, no meters, no CAUGHT — the only
+    # interactive bit is the category-dossier link.
+    group_half = render[group_at:tools_at]
+    assert "openToolingCategory(" in group_half
+    for leaked in ("mentions_cases", "col.value", "CAUGHT", "detect_volume"):
+        assert leaked not in group_half, f"group row carries stats: {leaked!r}"
+    # Tool rows route into the vendor sheet.
+    assert "openVendorTool(vendorToolSlug(" in render
 
 
-def test_mention_ranked_vendor_line_only_in_expanded_detail() -> None:
-    """The ranked vendor line renders in the expanded detail half only, with
-    the operator's exact framing (presence in the record, not effectiveness):
-    mentioned vendors as "Name ×N" chips with a verdict-true/total tooltip,
-    unmentioned vendors trailing in the muted e.g. style."""
-    render = _fn_body(_app_js(), "renderToolingPage")
-    _, detail = render.split('const detail = evpEl("div", "tlp-detail")', 1)
-    # Short verb-doctrine head; the presence-not-effectiveness framing rides
-    # the tooltip (every-page-teaches-itself invariant).
-    assert '"NAMED IN CASE RECORDS"' in detail
-    assert "not an effectiveness score" in detail
-    assert "c.vendors" in detail and "tlp-vendors" in detail
-    # "Name ×N" chips, counts from mentions_cases, tooltip splits the counts.
-    assert "×${m.total}" in detail
-    assert "mentions_cases" in detail and "verdict_true" in detail
-    assert "not effectiveness" in detail
-    # Unmentioned vendors trail in the existing muted illustrative style.
-    assert "tlp-examples" in detail
-
-
-def test_single_basis_line_replaces_caveat_stack() -> None:
-    """Operator call (2026-08-17): the TOOLING footer is ONE muted line —
-    `BASED ON <N> VERDICT-TRUE CASES · AS OF <date>Z · METHODOLOGY · ITM™
-    Forscie Ltd (not affiliated)` — with the old vendor-disclaimer and READ
-    BEFORE BUYING paragraphs folded into the METHODOLOGY tooltip. Same
-    rigor, new shape: the caveats must exist in the tooltip, never inline."""
-    html = _index_html()
-    # The removed inline blocks stay removed.
-    assert "Vendor mention counts are corpus-derived receipts" not in html
-    tooling_pane = re.search(
-        r'<section class="pane pane-tooling-page".*?</section>', html, re.DOTALL
-    )
-    assert tooling_pane, "tooling pane not found"
-    assert "READ BEFORE BUYING" not in tooling_pane.group(0)
-    assert "tlp-vendor-note" not in tooling_pane.group(0)
-    # One shared builder renders the line for every TOOLING surface.
+def test_no_dangling_multiplication_sign_on_table_or_sheet() -> None:
+    """The dangling-× regression: the table page and vendor sheet render BARE
+    numbers through the toolingCountText guard — never `×0`, never a `×${...}`
+    interpolation. Zero/missing renders as the muted em dash."""
     src = _app_js()
+    for name in ("renderToolingPage", "renderVendorSheet", "tlvCaseRow", "toolingColumnSpecs"):
+        body = _fn_body(src, name)
+        assert "×${" not in body, f"{name}() interpolates a × count — dangling-× regression"
+    guard = _fn_body(src, "toolingCountText")
+    assert '"—"' in guard, "zero/missing counts must render as the muted em dash"
+    # Both surfaces render counts through the one guard.
+    assert "toolingCountText(" in _fn_body(src, "renderToolingPage")
+    assert "toolingCountText(" in _fn_body(src, "renderVendorSheet")
+
+
+def test_column_layer_is_swappable() -> None:
+    """One column-spec structure (label / statLabel / tip / value / colorClass)
+    drives the header AND the cells, so the post-sweep role columns (enum
+    caught|bypassed|misused|traced) replace CASES|INSIDER by swapping specs,
+    never table code."""
+    specs = _fn_body(_app_js(), "toolingColumnSpecs")
+    for field in ("key:", "label:", "statLabel:", "tip:", "value:", "colorClass:"):
+        assert field in specs, f"column spec lost its {field} field"
+    assert '"CASES"' in specs and '"INSIDER"' in specs
+    # Header tooltips: the operator's exact definitions.
+    assert "Distinct case documents that name this product" in specs
+    assert "Of those, cases adjudicated as insider incidents" in specs
+    # INSIDER colors via a theme-token class; the future enum is named.
+    assert "tlt-signal" in specs
+    assert "caught|bypassed|misused|traced" in specs
+    css = Path("web/styles.css").read_text(encoding="utf-8")
+    assert re.search(r"\.tlt-signal\s*\{[^}]*var\(--signal\)", css)
+
+
+def test_table_page_is_footer_free_and_kept_surfaces_keep_their_basis() -> None:
+    """Operator call (2026-08-17): the TOOLING table page carries NO footer
+    line at all — no BASED ON / METHODOLOGY / ITM™ tail; the column-header
+    tooltips are the page's entire methodology surface. The category dossier
+    and vendor sheet keep their existing basis lines, and the ITM attribution
+    lives in METHODOLOGY & COLOPHON (plus the site footer), never on the
+    TOOLING pane's table view."""
+    html = _index_html()
+    src = _app_js()
+    # The table view has no basis element and the renderer never cites one.
+    assert 'id="tlp-basis"' not in html
+    render = _fn_body(src, "renderToolingPage")
+    assert "renderToolingBasis(" not in render
+    assert "BASED ON" not in render and "METHODOLOGY" not in render
+    list_view = re.search(r'<div id="tlp-list-view">.*?id="tlc-view"', html, re.DOTALL)
+    assert list_view, "tlp-list-view markup not found"
+    assert "tlp-basis" not in list_view.group(0), "the table view grew a footer line back"
+    # The kept surfaces still cite the shared ledger line.
+    for fn in ("renderToolingCategory", "renderVendorSheet"):
+        assert "renderToolingBasis(" in _fn_body(src, fn), f"{fn}() lost its basis line"
+    assert 'id="tlc-basis"' in html and 'id="tlv-basis"' in html
     basis = _fn_body(src, "renderToolingBasis")
-    assert "BASED ON" in _fn_body(src, "toolingBasisText")
     assert '"METHODOLOGY"' in basis
     assert "ITM™ Forscie Ltd (not affiliated)" in basis
-    # The compressed caveats live in the METHODOLOGY tooltip: coverage
-    # meaning, CAUGHT/NAMED verb definitions, no-endorsement, litigated-case
-    # bias pointer, authored-mapping + sweep-fresh recompute — plus the
-    # observed-technique/volume counts the old long line carried.
-    for phrase in (
-        "not proof that control caught the insider",
-        "CAUGHT ×N",
-        "NAMED ×N",
-        "never an endorsement",
-        "vendors never affect category rankings",
-        "EVIDENCE › LIMITATIONS",
-        "recompute from the corpus every sweep",
-        "observed techniques",
-        "technique-case observations",
-    ):
-        assert phrase in basis, f"METHODOLOGY tooltip lost: {phrase!r}"
-    # All four surfaces cite through the one builder.
-    for fn in (
-        "renderToolingPage",
-        "renderToolingCategory",
-        "renderToolsDirectory",
-        "renderVendorSheet",
-    ):
-        assert "renderToolingBasis(" in _fn_body(src, fn), f"{fn}() bypasses the shared basis"
+    # ITM attribution home: the colophon (and site footer), not the table.
+    assert "Insider Threat Matrix™ © Forscie Limited" in html
+
+
+def test_filter_and_toggle_wiring_rerenders_from_session_cache() -> None:
+    """The filter input and IN COURT FILINGS checkbox re-render the table from
+    the session-cached payload — instant, no network on keystroke."""
+    src = _app_js()
+    wiring = re.search(
+        r'const tltFilterInput = document\.getElementById\("tlt-filter"\).*?'
+        r"renderToolingPage\(state\.tooling\);\s*\}\);\s*\}",
+        src,
+        re.DOTALL,
+    )
+    assert wiring, "tlt-filter wiring missing"
+    assert 'getElementById("tlt-court-only")' in src
+    toggle = re.search(
+        r'tltCourtOnly\.addEventListener\("change".*?renderToolingPage\(state\.tooling\)',
+        src,
+        re.DOTALL,
+    )
+    assert toggle, "IN COURT FILINGS toggle wiring missing"
+    assert "toolingTableState.text" in src and "toolingTableState.courtOnly" in src
 
 
 def test_live_refresh_busts_tooling_session_cache() -> None:
     """The LIVE refresh button re-primes the TOOLING pane after POST /reload —
     same contract as the matrix/evidence session caches. The cached /tooling
-    payload itself must drop too: it also feeds the category dossiers and the
-    technique dossiers' RELEVANT TOOLING join."""
+    payload itself must drop too: it also feeds the category dossiers, the
+    vendor sheets, and the technique dossiers' RELEVANT TOOLING join."""
     body = _fn_body(_app_js(), "refreshStream")
     assert "state.tooling = null" in body
     assert "toolingPageLoaded = false" in body
     assert "loadToolingPage(true)" in body
-    # The NAMED TOOLS directory rides the same payload — its render cache
-    # drops with the rest.
-    assert "toolsDirectoryLoaded = false" in body
-    assert "loadToolsDirectory(true)" in body
+    # An open vendor sheet re-renders from the same fresh payload.
+    assert "renderVendorSheet(state.toolsVendorSlug, state.tooling)" in body
 
 
 # ── 5. Matrix–tooling alignment: category dossier + dossier RELEVANT TOOLING ─
@@ -814,10 +843,12 @@ def test_dossier_relevant_tooling_section_wired() -> None:
     assert "ensureTooling()" in _fn_body(src, "loadDossierTooling")
 
 
-def test_tooling_list_row_opens_category_dossier() -> None:
-    """The ranked list click-through: category names (collapsed row) and the
-    FULL CATEGORY DOSSIER button (expanded detail) both route to the dossier."""
+def test_tooling_table_group_row_opens_category_dossier() -> None:
+    """The table click-through: the category group-row label routes to the
+    category dossier (depth lives in the dossier only — the table carries no
+    expandable detail)."""
     render = _fn_body(_app_js(), "renderToolingPage")
-    assert render.count("openToolingCategory(") >= 2
-    collapsed, _detail = render.split('const detail = evpEl("div", "tlp-detail")', 1)
-    assert "openToolingCategory(" in collapsed
+    assert "openToolingCategory(" in render
+    # The expandable <details> rows are gone for good.
+    assert "tlp-detail" not in render
+    assert 'document.createElement("details")' not in render

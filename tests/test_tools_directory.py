@@ -1,10 +1,9 @@
-"""NAMED TOOLS directory (#/tools) + vendor sheet (#/tools/<slug>) contracts.
+"""Vendor sheet (#/tools/<slug>) + TOOLING table helper contracts.
 
-Operator decision (2026-08-17): named tooling gets a first-class directory
-view inside the TOOLING pane — a modern card grid, one card per vendor across
-every category — with the existing NAMED ×N chips on category/technique
-dossiers routing into it, and a vendor sheet whose receipts are the ACTUAL
-cases naming the product.
+Operator rebuild (2026-08-17): the NAMED TOOLS card-grid directory is GONE —
+#/tooling is ONE grouped table (category group rows over tool rows with bare
+counts), bare #/tools redirects to it, and #/tools/<slug> vendor sheets stay
+as each product's court-filing record.
 
 Four contracts pinned here:
 
@@ -17,13 +16,14 @@ Four contracts pinned here:
 2. Vendor slugs: the JS slug rule (lowercase, non-alphanumeric runs → "-")
    yields a unique, non-empty slug for every display name in the checked-in
    aliases file — a new vendor whose name collides fails CI, not a router.
-3. The web layer stays api()-only and both views are deep-linkable hash
-   routes (regex checks in the test_tooling style over the shipped web/
-   files), with the every-page-teaches-itself furniture: purpose sub-lines,
-   tooltips, teaching empty states, GUIDE cheat line.
-4. The pure client helpers (slug/build/sort/filter/covers) are executed
-   under node with synthetic fixtures (skipped when no node runtime exists —
-   CI runners carry one).
+3. The web layer stays api()-only, the vendor sheet keeps its receipts shape
+   (date | linked case title | INSIDER/CONTEXT badge, +N past the cap,
+   teaching empty state), the sheet is deep-linkable, and bare #/tools
+   redirects to the table (regex checks in the test_tooling style).
+4. The pure client helpers (slug / directory build / table group + filter +
+   toggle / count guard / column specs) are executed under node with
+   synthetic fixtures (skipped when no node runtime exists — CI runners
+   carry one).
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def test_every_alias_file_vendor_name_slugs_uniquely() -> None:
         slugs[slug] = name
 
 
-# ── 3. Web contracts: routes, api()-only path, markup, chips, guide ──────────
+# ── 3. Web contracts: routes, api()-only path, markup, chips ─────────────────
 
 
 def _index_html() -> str:
@@ -193,43 +193,44 @@ def _fn_body(source: str, name: str) -> str:
     return match.group(0)
 
 
-def test_tools_routes_registered_and_deep_linkable() -> None:
-    """#/tools (directory) and #/tools/<slug> (vendor sheet) parse, apply,
-    and hash-navigate — browser back walks sheet → directory → categories."""
+def test_tools_routes_vendor_sheet_stays_and_bare_tools_redirects() -> None:
+    """#/tools/<slug> (vendor sheet) parses, applies, and hash-navigates;
+    bare #/tools parses to the TOOLING table view (openToolingView then
+    re-navigates to #/tooling) — the directory route is gone."""
     src = _app_js()
     parse = _fn_body(src, "parseRoute")
-    assert '"/tools"' in parse and '"/tools/"' in parse
-    assert '"tools"' in parse and "tools-vendor" in parse
+    assert '"/tools/"' in parse and "tools-vendor" in parse
+    # Bare #/tools → the one table.
+    bare = re.search(
+        r'if \(path === "/tools" \|\| path === "/tools/"\) \{.*?\}',
+        parse,
+        re.DOTALL,
+    )
+    assert bare and 'view: "tooling"' in bare.group(0), "bare #/tools must redirect to #/tooling"
+    assert '{ view: "tools" }' not in parse
     apply_route = _fn_body(src, "applyRoute")
-    assert "openToolsView" in apply_route and "openVendorToolView" in apply_route
-    # Opening either view navigates (hash history entry), never renders in
-    # place — that's what makes browser back work.
-    assert 'navigate("/tools")' in _fn_body(src, "openToolsView")
+    assert "openVendorToolView" in apply_route
+    assert "openToolsView" not in src, "the NAMED TOOLS directory view survived the rebuild"
+    # Opening a sheet navigates (hash history entry), never renders in place.
     assert "navigate(`/tools/" in _fn_body(src, "openVendorToolView")
-    # A vendor-sheet deep link is honored at boot (specific shared content);
-    # a bare #/tools takeover reverts to the stream like #/tooling does.
+    # Cold-load rule (narrowed 2026-08-17): every deep link lands where it
+    # says — vendor sheet, category dossier, the table itself — and only the
+    # BARE site root always starts on the stream.
     boot = _fn_body(src, "boot")
-    assert "tools-vendor" in boot
-    assert 'route.view === "tools"' in boot
+    assert "tools-vendor" in boot and "openVendorToolView" in boot
+    assert 'route.view === "tooling"' in boot and "openToolingView()" in boot
+    assert 'navigate("/")' not in boot.split('route.view === "tooling"')[1].split("} else if")[0]
 
 
-def test_directory_path_reads_only_the_live_api() -> None:
-    """Every function on the directory / vendor-sheet path renders from the
-    session-cached /tooling payload — api() only, never fetch(); one live
-    read (ensureTooling) serves categories, directory, and sheets alike."""
+def test_vendor_sheet_path_reads_only_the_live_api() -> None:
+    """Every function on the vendor-sheet path renders from the session-cached
+    /tooling payload — api() only, never fetch(); one live read
+    (ensureTooling) serves the table, the dossiers, and the sheets alike."""
     src = _app_js()
     for name in (
         "vendorToolSlug",
         "buildVendorDirectory",
-        "sortVendorDirectory",
-        "filterVendorDirectory",
-        "tldCoverBit",
-        "tldCoversSummary",
-        "syncTldCategoryOptions",
-        "tldCard",
-        "renderToolsDirectory",
-        "loadToolsDirectory",
-        "openToolsView",
+        "tlvCoverPhrase",
         "tlvCaseRow",
         "renderVendorSheet",
         "openVendorToolView",
@@ -238,89 +239,80 @@ def test_directory_path_reads_only_the_live_api() -> None:
         "renderToolingBasis",
     ):
         assert "fetch(" not in _fn_body(src, name), f"{name}() fetches outside api()"
-    assert "ensureTooling()" in _fn_body(src, "loadToolsDirectory")
     assert "ensureTooling()" in _fn_body(src, "openVendorToolView")
-    # The directory is built from the payload's category rows client-side —
+    # The sheet is built from the payload's category rows client-side —
     # no second endpoint, no static file.
-    assert "buildVendorDirectory(" in _fn_body(src, "renderToolsDirectory")
     assert "buildVendorDirectory(" in _fn_body(src, "renderVendorSheet")
 
 
-def test_segmented_switch_and_directory_markup_present() -> None:
+def test_vendor_sheet_markup_reshaped() -> None:
     html = _index_html()
-    # Segmented switch: house pill idiom, both views labeled, tooltips on.
-    switch = re.search(r'<div class="tlp-switch" id="tlp-switch".*?</div>', html, re.DOTALL)
-    assert switch, "CATEGORIES | NAMED TOOLS switch missing"
-    assert 'data-tooling-view="categories"' in switch.group(0)
-    assert 'data-tooling-view="tools"' in switch.group(0)
-    assert ">CATEGORIES<" in switch.group(0) and ">NAMED TOOLS<" in switch.group(0)
-    assert switch.group(0).count("data-tip=") == 2
-    # Directory view: purpose sub-line, sort pills, category select, text
-    # filter, grid, basis line.
-    for el_id in ("tld-view", "tld-sort", "tld-category", "tld-filter", "tld-grid", "tld-basis"):
+    # Back affordance goes to the one table, spelled that way.
+    assert "← TOOLING" in html
+    # Sheet shell: title, JS-built category context sub-line, stat row,
+    # receipts TABLE, basis line.
+    for el_id in ("tlv-view", "tlv-back", "tlv-title", "tlv-sub", "tlv-stats", "tlv-basis"):
         assert f'id="{el_id}"' in html, f"#{el_id} missing from the tooling pane"
-    assert 'data-tld-sort="named"' in html and 'data-tld-sort="az"' in html
-    # Vendor sheet: back affordance, title, stats, category links, receipts.
-    for el_id in (
-        "tlv-view",
-        "tlv-back",
-        "tlv-title",
-        "tlv-stats",
-        "tlv-cats",
-        "tlv-cases",
-        "tlv-basis",
-    ):
-        assert f'id="{el_id}"' in html, f"#{el_id} missing from the tooling pane"
-    assert "NAMED IN THESE CASES" in html
-    # Purpose sub-lines say what question each view answers.
-    assert "one card per vendor" in html
-    assert "One named product against the stored case record" in html
-    # Presence-not-effectiveness framing rides both views' shells.
-    assert "never an effectiveness score" in html
+    assert re.search(r'<table class="evp-table" id="tlv-cases">', html), (
+        "vendor-sheet receipts must be an EVIDENCE-idiom table"
+    )
+    assert "NAMED IN THESE FILINGS" in html
+    # The card grid, its controls, and the segmented switch are GONE.
+    for gone in ("tld-view", "tld-grid", "tld-sort", "tld-category", "tld-filter", "tlp-switch"):
+        assert f'id="{gone}"' not in html, f"deleted element #{gone} is back"
+    assert "tld-card" not in html
+    # The sheet's category context line + stat row are JS-built from the
+    # payload: category label links to the dossier, coverage numbers are the
+    # category's, the record below is the product's own.
+    sheet = _fn_body(_app_js(), "renderVendorSheet")
+    assert "category detects" in sheet
+    assert "of observed insider behavior" in sheet
+    assert "own court-filing record" in sheet
+    assert "openToolingCategory(" in sheet
+    # Stats come from the same swappable column-spec layer as the table.
+    assert "toolingColumnSpecs()" in sheet
 
 
-def test_directory_teaches_itself() -> None:
-    """Teaching furniture: ×0 vendors dim under an honest divider, empty
-    states say what appears and how, tooltips carry the methodology."""
+def test_vendor_sheet_receipts_pins() -> None:
+    """Receipts shape (kept across the rebuild): source-linked case titles
+    (target=_blank rel=noopener), INSIDER/CONTEXT badge, +N more past the
+    25-ref cap, teaching empty state."""
     src = _app_js()
-    render = _fn_body(src, "renderToolsDirectory")
-    assert '"NOT YET NAMED IN CASES"' in render  # honest, not hidden
-    assert "tld-dim" in _fn_body(src, "tldCard")
-    assert "No product matches this filter" in render  # teaching empty state
     sheet = _fn_body(src, "renderVendorSheet")
     assert "No case document names this product yet" in sheet
     assert "it appears here when one does" in sheet
-    # Receipts rows: verdict badge + source-link idiom + cap explainer.
     case_row = _fn_body(src, "tlvCaseRow")
-    assert '"VERDICT-TRUE"' in case_row and '"CONTEXT"' in case_row
+    assert '"INSIDER"' in case_row and '"CONTEXT"' in case_row
     assert 'rel = "noopener"' in case_row
+    assert 'target = "_blank"' in case_row
+    # Receipt rows are table rows: date | linked title | badge.
+    assert 'evpEl("tr")' in case_row
     assert "more named case" in sheet  # +N more beyond the 25-cap, spelled out
     assert "25 most recent" in sheet
 
 
-def test_dossier_and_category_chips_route_into_vendor_sheets() -> None:
-    """The NAMED ×N chips — TOOLING list detail, category dossier, technique
-    dossier — are links into #/tools/<slug>, not inert spans."""
+def test_table_dossier_and_technique_chips_route_into_vendor_sheets() -> None:
+    """Tool rows on the TOOLING table and the NAMED chips on category /
+    technique dossiers are links into #/tools/<slug>, not inert spans."""
     src = _app_js()
     for name in ("renderToolingPage", "renderToolingCategory", "renderDossierTooling"):
         body = _fn_body(src, name)
         assert "openVendorTool(vendorToolSlug(v.name))" in body, (
-            f"{name}() vendor chips do not route into the directory"
+            f"{name}() vendor links do not route into the sheet"
         )
 
 
-def test_guide_and_switch_cover_both_views() -> None:
-    html = _index_html()
-    cheat = re.search(r'id="guide-cheat".*?</dl>', html, re.DOTALL)
-    assert cheat and "NAMED TOOLS" in cheat.group(0), (
-        "GUIDE cheat line no longer teaches the NAMED TOOLS view"
-    )
-    # Sub-view bookkeeping: exactly one of the four views shows; the switch
-    # hides on detail views (category dossier / vendor sheet).
-    sub = _fn_body(_app_js(), "showToolingSubview")
-    for view_id in ("tlp-list-view", "tlc-view", "tld-view", "tlv-view"):
-        assert view_id in _app_js(), f"{view_id} missing"
-    assert 'which === "category" || which === "vendor"' in sub
+def test_subview_bookkeeping_covers_exactly_three_views() -> None:
+    """The TOOLING pane hosts exactly three sub-views now — table, category
+    dossier, vendor sheet; the segmented switch and its bookkeeping are gone."""
+    src = _app_js()
+    subviews = re.search(r"const TOOLING_SUBVIEWS = \{.*?\};", src, re.DOTALL)
+    assert subviews, "TOOLING_SUBVIEWS missing"
+    block = subviews.group(0)
+    for view_id in ("tlp-list-view", "tlc-view", "tlv-view"):
+        assert view_id in block, f"{view_id} missing from TOOLING_SUBVIEWS"
+    assert "tld-view" not in block
+    assert "tlp-switch" not in src and "data-tooling-view" not in src
 
 
 # ── 4. Pure client helpers under node (synthetic fixtures) ───────────────────
@@ -442,39 +434,107 @@ def test_js_build_dedupes_dual_homed_vendors() -> None:
     assert net["more_cases"] == 0
 
 
-def test_js_sort_modes() -> None:
-    fns = ["vendorToolSlug", "buildVendorDirectory", "sortVendorDirectory"]
-    named = _run_js(fns, f'sortVendorDirectory(buildVendorDirectory({json.dumps(_CATS)}), "named")')
-    # NAMED ×N default: total desc, verdict-true desc, then A–Z — ×0 last.
-    assert [e["name"] for e in named] == ["Netskope", "Beta CASB", "Alpha DLP"]
-    az = _run_js(fns, f'sortVendorDirectory(buildVendorDirectory({json.dumps(_CATS)}), "az")')
-    assert [e["name"] for e in az] == ["Alpha DLP", "Beta CASB", "Netskope"]
+# TOOLING table fixture: named tools carry mentions; DLP's counts are chosen
+# so INSIDER desc dominates CASES desc (Mid DLP has the most CASES but the
+# fewest INSIDER); EDR is entirely unnamed.
+_TABLE_CATS = [
+    {
+        "id": "dlp",
+        "label": "DLP",
+        "vendors": [
+            {"name": "Alpha Guard", "mentions_cases": {"verdict_true": 0, "total": 0}},
+            {"name": "Netskope", "mentions_cases": {"verdict_true": 2, "total": 3}},
+            {"name": "Zeta DLP", "mentions_cases": {"verdict_true": 2, "total": 5}},
+            {"name": "Mid DLP", "mentions_cases": {"verdict_true": 1, "total": 9}},
+        ],
+    },
+    {
+        "id": "casb",
+        "label": "CASB",
+        "vendors": [
+            {"name": "Beta CASB", "mentions_cases": {"verdict_true": 1, "total": 1}},
+            {"name": "Cloudlock", "mentions_cases": {"verdict_true": 0, "total": 0}},
+        ],
+    },
+    {
+        "id": "edr",
+        "label": "EDR",
+        "vendors": [
+            {"name": "Watcher One", "mentions_cases": {"verdict_true": 0, "total": 0}},
+        ],
+    },
+]
+
+_TABLE_FNS = ["buildToolingTableGroups"]
 
 
-def test_js_filter_by_category_and_text() -> None:
-    fns = ["vendorToolSlug", "buildVendorDirectory", "filterVendorDirectory"]
-    base = f"buildVendorDirectory({json.dumps(_CATS)})"
-    only_casb = _run_js(fns, f'filterVendorDirectory({base}, "casb", "")')
-    assert sorted(e["name"] for e in only_casb) == ["Beta CASB", "Netskope"]
-    # Text matches product names AND category labels, case-insensitively.
-    text_name = _run_js(fns, f'filterVendorDirectory({base}, "", "netsk")')
-    assert [e["name"] for e in text_name] == ["Netskope"]
-    text_label = _run_js(fns, f'filterVendorDirectory({base}, "", "dlp")')
-    assert sorted(e["name"] for e in text_label) == ["Alpha DLP", "Netskope"]
-    both = _run_js(fns, f'filterVendorDirectory({base}, "dlp", "beta")')
-    assert both == []
+def test_js_table_groups_named_first_insider_desc_then_cases_then_az() -> None:
+    """Group rows keep the payload's category order; within a category the
+    named tools lead (INSIDER desc, then CASES desc, then A–Z) and unnamed
+    tools trail alphabetically — undimmed, but last."""
+    got = _run_js(_TABLE_FNS, f'buildToolingTableGroups({json.dumps(_TABLE_CATS)}, "", false)')
+    assert [g["id"] for g in got] == ["dlp", "casb", "edr"]
+    dlp = got[0]
+    assert dlp["label"] == "DLP"
+    # Zeta (2 ins, 5 cases) > Netskope (2 ins, 3 cases) > Mid (1 ins, 9 cases
+    # — INSIDER desc dominates CASES) > Alpha Guard (unnamed, alphabetical).
+    assert [t["name"] for t in dlp["tools"]] == ["Zeta DLP", "Netskope", "Mid DLP", "Alpha Guard"]
+    assert [t["name"] for t in got[1]["tools"]] == ["Beta CASB", "Cloudlock"]
+    assert [t["name"] for t in got[2]["tools"]] == ["Watcher One"]
 
 
-def test_js_covers_summary_obeys_small_n_law() -> None:
-    """The card's covers line: percentages when the floor is met, ×N obs.
-    when suppressed — per category, joined for dual-homed vendors."""
+def test_js_table_text_filter_matches_tool_and_category_names() -> None:
+    """The instant filter matches tool names AND category labels,
+    case-insensitively; categories left with no matching tool drop out
+    entirely (no orphan group rows)."""
+    base = json.dumps(_TABLE_CATS)
+    by_tool = _run_js(_TABLE_FNS, f'buildToolingTableGroups({base}, "netsk", false)')
+    assert [(g["id"], [t["name"] for t in g["tools"]]) for g in by_tool] == [("dlp", ["Netskope"])]
+    # A category-label hit keeps the whole group.
+    by_label = _run_js(_TABLE_FNS, f'buildToolingTableGroups({base}, "casb", false)')
+    assert [(g["id"], [t["name"] for t in g["tools"]]) for g in by_label] == [
+        ("casb", ["Beta CASB", "Cloudlock"])
+    ]
+    assert _run_js(_TABLE_FNS, f'buildToolingTableGroups({base}, "no-such-tool", false)') == []
+
+
+def test_js_table_court_filings_toggle_drops_unnamed_tools_and_empty_groups() -> None:
+    """IN COURT FILINGS keeps only tools with ≥1 naming case; a category left
+    with none (EDR) disappears with its group row."""
+    got = _run_js(_TABLE_FNS, f'buildToolingTableGroups({json.dumps(_TABLE_CATS)}, "", true)')
+    assert [(g["id"], [t["name"] for t in g["tools"]]) for g in got] == [
+        ("dlp", ["Zeta DLP", "Netskope", "Mid DLP"]),
+        ("casb", ["Beta CASB"]),
+    ]
+    # Toggle + filter compose.
+    both = _run_js(_TABLE_FNS, f'buildToolingTableGroups({json.dumps(_TABLE_CATS)}, "dlp", true)')
+    assert [(g["id"], [t["name"] for t in g["tools"]]) for g in both] == [
+        ("dlp", ["Zeta DLP", "Netskope", "Mid DLP"])
+    ]
+
+
+def test_js_count_guard_zero_and_missing_render_as_em_dash() -> None:
+    """The dangling-× regression, executed: zero/missing counts render as the
+    muted em dash — never ×0, never a bare 0 formatted with a stray ×."""
     got = _run_js(
-        ["vendorToolSlug", "buildVendorDirectory", "tldCoverBit", "tldCoversSummary"],
-        f"buildVendorDirectory({json.dumps(_CATS)}).map((e) => [e.name, tldCoversSummary(e)])",
+        ["toolingCountText"],
+        '[0, null, undefined, "", 3, 25].map((n) => toolingCountText(n))',
     )
-    lines = dict(got)
-    assert lines["Alpha DLP"] == "DLP: DETECTS 64% · PREVENTS 41%"
-    assert lines["Beta CASB"] == "CASB: DETECTS ×3 obs. · PREVENTS ×0 obs."
-    assert lines["Netskope"] == (
-        "DLP: DETECTS 64% · PREVENTS 41%  /  CASB: DETECTS ×3 obs. · PREVENTS ×0 obs."
+    assert got == ["—", "—", "—", "—", "3", "25"]
+
+
+def test_js_column_specs_read_live_counts_and_guard_missing_shapes() -> None:
+    """The swappable column layer: CASES reads mentions_cases.total, INSIDER
+    reads mentions_cases.verdict_true, both fall back to 0 on missing shapes;
+    INSIDER carries the --signal color class, CASES stays plain."""
+    got = _run_js(
+        ["toolingColumnSpecs"],
+        "toolingColumnSpecs().map((c) => ["
+        "c.key, c.label, c.statLabel, c.colorClass, "
+        "c.value({mentions_cases: {total: 5, verdict_true: 2}}), "
+        "c.value({mentions_cases: {}}), c.value({}), c.value(null)])",
     )
+    assert got == [
+        ["cases", "CASES", "NAMED", "", 5, 0, 0, 0],
+        ["insider", "INSIDER", "INSIDER", "tlt-signal", 2, 0, 0, 0],
+    ]
