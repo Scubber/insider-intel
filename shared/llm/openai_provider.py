@@ -47,6 +47,21 @@ class ChatResult(NamedTuple):
     model: str | None = None
 
 
+# Usage block ({prompt,completion,total}_tokens) from the most recent chat
+# completion on this base_url stack, or None. Observability side-channel for
+# the thinking A/B harness (scripts/ab_thinking_run.py): the provider
+# contracts return only the parsed JSON reply, so per-call token counts are
+# surfaced here instead of widening every Protocol. Reset at the start of
+# each call; read it immediately after the call returns. Deliberately not
+# thread-safe — the callers that read it are sequential eval loops.
+_LAST_USAGE: dict | None = None
+
+
+def get_last_usage() -> dict | None:
+    """Usage dict from the most recent chat completion, or None."""
+    return _LAST_USAGE
+
+
 def reset_served_model_cache() -> None:
     """Test hook — GET /v1/models is cached per base_url."""
     _SERVED_MODEL_CACHE.clear()
@@ -139,6 +154,8 @@ def _chat_completion(
     enable_thinking: bool = True,
 ) -> ChatResult | None:
     """POST a JSON-mode chat completion; returns content + served model, or None."""
+    global _LAST_USAGE
+    _LAST_USAGE = None
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -173,6 +190,8 @@ def _chat_completion(
         response.raise_for_status()
         body = response.json()
         content = body["choices"][0]["message"]["content"]
+        usage = body.get("usage")
+        _LAST_USAGE = usage if isinstance(usage, dict) else None
         served = body.get("model")
         served_model = served.strip() if isinstance(served, str) and served.strip() else None
         return ChatResult(content=content, model=served_model)
