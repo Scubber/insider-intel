@@ -259,6 +259,57 @@ def _synthesized_hunts(tech_id: str) -> dict:
     }
 
 
+def tooling_rankings(path: str | Path | None = None) -> dict:
+    """TOOLING page payload: curated tool categories ranked by real-case coverage.
+
+    Taxonomy from shared/data/tooling_map.json (checked in, sweep-stable);
+    numbers from the verdict-gated evidence ledger recomputed off the
+    in-memory index (per-technique case counts + detected_by record classes),
+    so every /reload after a sweep re-ranks on the next call — no snapshot,
+    no redeploy. Percentages obey the ledger's small-n law.
+    """
+    from apps.search.tooling import load_tooling_map, rank_tool_categories
+    from shared.utils.evidence import SMALL_N_FLOOR
+
+    ledger = _raw_evidence_ledger(path, top=50)
+    catalog = {
+        tech.id.upper(): {
+            "title": tech.title,
+            "detections": [d.id for d in tech.detections],
+            "preventions": [p.id for p in tech.preventions],
+        }
+        for tech in load_itm_index().techniques
+    }
+    ranked = rank_tool_categories(
+        load_tooling_map()["categories"],
+        ledger.get("technique_counts", {}),
+        catalog,
+        ledger.get("detected_by", []),
+        suppress_pct=ledger["enriched_cases"] < SMALL_N_FLOOR,
+    )
+    # Spell out control titles for the page (the ranking core stays id-only).
+    from shared.itm.controls import list_detection_catalog, list_prevention_catalog
+
+    dt_titles = {c.id: c.title for c in list_detection_catalog()}
+    pv_titles = {c.id: c.title for c in list_prevention_catalog()}
+    for cat in ranked["categories"]:
+        cat["detections"] = [{"id": i, "title": dt_titles.get(i, i)} for i in cat["detections"]]
+        cat["preventions"] = [{"id": i, "title": pv_titles.get(i, i)} for i in cat["preventions"]]
+    return {
+        # Same staleness stamp + basis block the EVIDENCE page renders — the
+        # TOOLING basis line cites them verbatim.
+        "generated_at": ledger["generated_at"],
+        "basis": ledger["basis"],
+        "enriched_cases": ledger["enriched_cases"],
+        "small_n_floor": SMALL_N_FLOOR,
+        **ranked,
+        "attribution": (
+            "Insider Threat Matrix™ is owned by Forscie Limited. "
+            "Insider Threat Matrix is a trademark of Forscie Limited."
+        ),
+    }
+
+
 def list_articles(
     *,
     limit: int = 50,
