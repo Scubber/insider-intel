@@ -4950,7 +4950,7 @@
       const meters = evpEl("span", "tlp-meters");
       meters.appendChild(
         tlpMeter(
-          "DETECT",
+          "DETECTS",
           c.detection_coverage_pct,
           volume ? (100 * c.detect_volume) / volume : 0,
           c.detect_volume
@@ -4958,21 +4958,24 @@
       );
       meters.appendChild(
         tlpMeter(
-          "PREVENT",
+          "PREVENTS",
           c.prevention_coverage_pct,
           volume ? (100 * c.prevent_volume) / volume : 0,
           c.prevent_volume
         )
       );
+      // Verb labels (UX doctrine): "CAUGHT ×N" — court records credit this
+      // control class with the catch in N distinct cases; methodology rides
+      // the tooltip, never inline.
       const corr = evpEl(
         "span",
         c.corroborated_cases ? "tlp-corr" : "tlp-corr tlp-corr-none",
-        c.corroborated_cases
-          ? `corroborated in ${c.corroborated_cases} case${c.corroborated_cases === 1 ? "" : "s"}`
-          : "no case corroboration"
+        `CAUGHT ×${c.corroborated_cases || 0}`
       );
       corr.dataset.tip = (c.corroborated_via || []).length
-        ? `Evidence record classes naming this control class: ${c.corroborated_via.join("; ")}`
+        ? `Court records credit this control class with the detection in ` +
+          `${c.corroborated_cases} distinct case${c.corroborated_cases === 1 ? "" : "s"}. ` +
+          `Record classes: ${c.corroborated_via.join("; ")}`
         : "No case in the corpus produced evidence in this category's record classes";
       meters.appendChild(corr);
       sum.appendChild(meters);
@@ -4980,12 +4983,41 @@
 
       const detail = evpEl("div", "tlp-detail");
       if (c.rationale) detail.appendChild(evpEl("p", "evp-note", c.rationale));
-      // Vendor examples live in the expanded detail ONLY — the collapsed
-      // ranking row stays category-and-numbers (rankings never see vendors).
-      if ((c.examples || []).length) {
-        const eg = evpEl("p", "tlp-examples", `e.g. ${c.examples.join(" · ")}`);
+      // Vendor lines live in the expanded detail ONLY — the collapsed
+      // ranking row stays category-and-numbers (category rankings never see
+      // vendors). Mentioned vendors are ranked by documented case mentions;
+      // unmentioned ones trail in the muted illustrative style.
+      const vendorRows = c.vendors || [];
+      const named = vendorRows.filter((v) => v.mentions_cases && v.mentions_cases.total > 0);
+      if (named.length) {
+        // Short head; the "presence, not effectiveness" framing lives in the
+        // tooltip per the every-page-teaches-itself doctrine.
+        const namedHead = evpEl("p", "evp-section-head", "NAMED IN CASE RECORDS");
+        namedHead.dataset.tip =
+          "Presence in court documents, not an effectiveness score — " +
+          "ranked by distinct cases naming the product, verdict-true first.";
+        detail.appendChild(namedHead);
+        const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
+        named.forEach((v) => {
+          const m = v.mentions_cases;
+          const chip = evpEl("span", "evp-chip tlp-vendor", `${v.name} ×${m.total}`);
+          chip.dataset.tip =
+            `Named in ${m.total} distinct case document${m.total === 1 ? "" : "s"}, ` +
+            `${m.verdict_true} adjudicated verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
+            "order ranks verdict-true first; presence in the record, not effectiveness";
+          chips.appendChild(chip);
+        });
+        detail.appendChild(chips);
+      }
+      const trailing = named.length
+        ? vendorRows.filter((v) => !v.mentions_cases || !v.mentions_cases.total).map((v) => v.name)
+        : vendorRows.length
+          ? vendorRows.map((v) => v.name)
+          : c.examples || [];
+      if (trailing.length) {
+        const eg = evpEl("p", "tlp-examples", `e.g. ${trailing.join(" · ")}`);
         eg.dataset.tip =
-          "Common products in this category — not endorsements, not derived from case data";
+          "Common products in this category not named in any stored case document — not endorsements, not derived from case data";
         detail.appendChild(eg);
       }
       const controlBlock = (head, refs) => {

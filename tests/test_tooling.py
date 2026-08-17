@@ -27,8 +27,10 @@ from fastapi.testclient import TestClient
 
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from apps.search import service
+from apps.search import vendor_mentions as vendor_mentions_module
 from apps.search.api import app
 from apps.search.tooling import load_tooling_map, rank_tool_categories
+from apps.search.vendor_mentions import attach_vendor_mentions, scan_vendor_mentions
 from shared.agents import process_article
 from shared.schemas import RawArticle
 from shared.schemas.forensics import CaseMethod, CaseObservable, PerCaseForensics
@@ -128,9 +130,7 @@ def test_ranking_math_synthetic() -> None:
     # Cat A: T1 both detected and prevented → 6 of 10 on both axes, "both".
     assert a["detect_volume"] == 6 and a["detection_coverage_pct"] == 60
     assert a["prevent_volume"] == 6 and a["prevention_coverage_pct"] == 60
-    assert a["top_techniques"] == [
-        {"id": "T1", "title": "USB exfil", "cases": 6, "covers": "both"}
-    ]
+    assert a["top_techniques"] == [{"id": "T1", "title": "USB exfil", "cases": 6, "covers": "both"}]
     # Corroborated via the USB record-class family (DT020 crosswalks there).
     assert a["corroborated_cases"] == 3
     assert a["corroborated_via"] == ["removable-media (USB) logs"]
@@ -156,9 +156,7 @@ def test_corroboration_takes_max_across_families_never_sum() -> None:
     """A category naming two record classes reports the MAX family count —
     a floor on distinct cases; summing would double-count cases that left
     evidence in both classes."""
-    categories = [
-        {"id": "x", "label": "X", "detections": ["DT020", "DT040"], "preventions": []}
-    ]
+    categories = [{"id": "x", "label": "X", "detections": ["DT020", "DT040"], "preventions": []}]
     out = rank_tool_categories(categories, _COUNTS, _CATALOG, _DETECTED_BY)
     row = out["categories"][0]
     assert row["corroborated_cases"] == 3  # max(3, 2)
@@ -209,6 +207,33 @@ def test_examples_carried_verbatim_and_never_a_ranking_input() -> None:
             row.pop("examples")
     assert out == out_stripped, "stripping examples changed the ranking output"
 
+    # Vendor MENTIONS are the same contract one layer up: the ranking core
+    # never even sees the aliases file (no "vendors" key in its output), and
+    # attaching mention counts — real scan or aliases-stripped empty scan —
+    # changes NOTHING but the vendors block (category scores/sort identical).
+    out_full = rank_tool_categories(categories, _COUNTS, _CATALOG, _DETECTED_BY)
+    assert all("vendors" not in row for row in out_full["categories"])
+    vendor_cfg = [{"name": "Vendor One", "category": "a", "aliases": ["Vendor One"]}]
+    scan = scan_vendor_mentions(
+        [{"link": "https://ex.com/v1", "clean_text": "the Vendor One agent", "verdict_true": True}],
+        vendor_cfg,
+    )
+    with_mentions = copy.deepcopy(out_full)
+    attach_vendor_mentions(with_mentions["categories"], scan)
+    without_aliases = copy.deepcopy(out_full)
+    attach_vendor_mentions(without_aliases["categories"], {"mentions": {}})
+    by_id = {c["id"]: c for c in with_mentions["categories"]}
+    assert by_id["a"]["vendors"][0] == {
+        "name": "Vendor One",
+        "mentions_cases": {"verdict_true": 1, "total": 1},
+    }
+    for result in (with_mentions, without_aliases):
+        for row in result["categories"]:
+            row.pop("vendors")
+    assert with_mentions == without_aliases == out_full, (
+        "the aliases file influenced category ranking output"
+    )
+
 
 # ── 3. GET /tooling — sweep-fresh endpoint over the in-memory index ──────────
 
@@ -243,7 +268,12 @@ def _client(tmp_path, monkeypatch) -> TestClient:
             title=f"Case {n}",
             link=f"https://ex.com/case-{n}",
             summary="Departing employee used removable media.",
-            content="Insider data exfiltration via USB drive by departing employee.",
+            content=(
+                "Insider data exfiltration via USB drive by departing employee."
+                # Case 0's stored text NAMES a vendor product (word-boundary,
+                # court-prose style) so /tooling's mention counts are exercised.
+                + (" The employer's CrowdStrike Falcon agent recorded the copy." if n == 0 else "")
+            ),
             published=NOW,
             source_id="example",
             source_name="Example",
@@ -299,6 +329,25 @@ def test_tooling_endpoint_ranks_against_verdict_true_cases(tmp_path, monkeypatch
         map_examples = {c["id"]: c["examples"] for c in load_tooling_map()["categories"]}
         assert dc["examples"] == map_examples["device-control"]
         assert all(c["examples"] == map_examples[c["id"]] for c in data["categories"])
+        # Mention-ranked vendors: every category carries its full examples set
+        # with mentions_cases counts; case 0's text names CrowdStrike Falcon,
+        # so it leads the edr row with 1 verdict-true of 1 total distinct case.
+        assert all(
+            {v["name"] for v in c["vendors"]} == set(map_examples[c["id"]])
+            for c in data["categories"]
+        )
+        edr = cats["edr"]
+        assert edr["vendors"][0] == {
+            "name": "CrowdStrike Falcon",
+            "mentions_cases": {"verdict_true": 1, "total": 1},
+        }
+        assert all(
+            v["mentions_cases"] == {"verdict_true": 0, "total": 0} for v in edr["vendors"][1:]
+        )
+        # Unmentioned vendors trail in alphabetical order.
+        assert [v["name"] for v in edr["vendors"][1:]] == sorted(
+            (n for n in map_examples["edr"] if n != "CrowdStrike Falcon"), key=str.lower
+        )
         # IF002 preventions (PV003/PV016) live in governance.
         assert cats["governance"]["prevent_volume"] == 2
         # Small-n law: 2 cases < floor → percentages suppressed, volumes shown.
@@ -314,18 +363,58 @@ def test_tooling_endpoint_ranks_against_verdict_true_cases(tmp_path, monkeypatch
 def test_tooling_endpoint_recomputes_per_reload(tmp_path, monkeypatch) -> None:
     """A sweep that rewrites the corpus re-ranks on the call after /reload —
     the payload is never a checked-in snapshot."""
+
+    def _edr_lead(payload: dict) -> dict:
+        return next(c for c in payload["categories"] if c["id"] == "edr")["vendors"][0]
+
     with _client(tmp_path, monkeypatch) as client:
-        assert client.get("/tooling").json()["technique_case_volume"] == 2
-        # The "sweep": one case is re-adjudicated non-insider on disk.
+        first = client.get("/tooling").json()
+        assert first["technique_case_volume"] == 2
+        assert _edr_lead(first)["mentions_cases"] == {"verdict_true": 1, "total": 1}
+        # The "sweep": case 0 (the one whose text names CrowdStrike Falcon)
+        # is re-adjudicated non-insider on disk.
         settings_path = service.get_settings().processed_articles_path
         store = JsonlProcessedStore(settings_path)
         rows = store.load_all()
+        assert rows[0].link == "https://ex.com/case-0"
         rows[0] = rows[0].model_copy(
             update={"forensics": rows[0].forensics.model_copy(update={"is_insider_case": False})}
         )
         store.replace_all(rows)
         client.post("/reload")
-        assert client.get("/tooling").json()["technique_case_volume"] == 1
+        after = client.get("/tooling").json()
+        assert after["technique_case_volume"] == 1
+        # The mention scan was invalidated with the index swap: the document
+        # still NAMES the product (total mention stands) but its verdict-true
+        # mention is gone — same gate, recomputed, no stale cache.
+        assert _edr_lead(after) == {
+            "name": "CrowdStrike Falcon",
+            "mentions_cases": {"verdict_true": 0, "total": 1},
+        }
+
+
+def test_mention_scan_runs_once_per_index_generation(tmp_path, monkeypatch) -> None:
+    """The corpus scan is lazy and cached on the index object: repeated
+    /tooling calls never rescan; /reload's index swap forces exactly one
+    fresh scan on the next call (7k-doc per-request rescans are the failure
+    mode this pins)."""
+    calls = {"n": 0}
+    real_scan = vendor_mentions_module.scan_vendor_mentions
+
+    def counting_scan(rows, vendors):
+        calls["n"] += 1
+        return real_scan(rows, vendors)
+
+    monkeypatch.setattr(vendor_mentions_module, "scan_vendor_mentions", counting_scan)
+    with _client(tmp_path, monkeypatch) as client:
+        client.get("/tooling")
+        client.get("/tooling")
+        client.get("/tooling")
+        assert calls["n"] == 1, "per-request rescan — the index-generation cache is broken"
+        client.post("/reload")
+        client.get("/tooling")
+        client.get("/tooling")
+        assert calls["n"] == 2, "the /reload index swap must invalidate exactly once"
 
 
 # ── 4. Web contract: TOOLING tab, pane, and api()-only data path ─────────────
@@ -387,25 +476,51 @@ def test_tooling_path_reads_only_the_live_api() -> None:
 
 
 def test_examples_render_in_expanded_detail_never_in_collapsed_row() -> None:
-    """Vendor examples appear inside the expanded category detail ONLY — the
+    """Vendor lines appear inside the expanded category detail ONLY — the
     collapsed ranking row (everything renderToolingPage builds before the
-    tlp-detail container) must never touch the examples string."""
+    tlp-detail container) must never touch the examples string, the vendors
+    block, or the mention-ranked line."""
     render = _fn_body(_app_js(), "renderToolingPage")
     marker = 'const detail = evpEl("div", "tlp-detail")'
     assert marker in render, "tlp-detail construction moved — update this contract test"
     collapsed, detail = render.split(marker, 1)
     assert "examples" not in collapsed, "vendor examples leaked into the collapsed ranking row"
+    assert "vendors" not in collapsed, "the vendors block leaked into the collapsed ranking row"
+    assert "mentions_cases" not in collapsed, "mention counts leaked into the collapsed row"
+    assert "NAMED IN CASE RECORDS" not in collapsed
     assert "c.examples" in detail and "tlp-examples" in detail
     assert '"e.g. "' in detail or "`e.g. " in detail
 
 
+def test_mention_ranked_vendor_line_only_in_expanded_detail() -> None:
+    """The ranked vendor line renders in the expanded detail half only, with
+    the operator's exact framing (presence in the record, not effectiveness):
+    mentioned vendors as "Name ×N" chips with a verdict-true/total tooltip,
+    unmentioned vendors trailing in the muted e.g. style."""
+    render = _fn_body(_app_js(), "renderToolingPage")
+    _, detail = render.split('const detail = evpEl("div", "tlp-detail")', 1)
+    # Short verb-doctrine head; the presence-not-effectiveness framing rides
+    # the tooltip (every-page-teaches-itself invariant).
+    assert '"NAMED IN CASE RECORDS"' in detail
+    assert "not an effectiveness score" in detail
+    assert "c.vendors" in detail and "tlp-vendors" in detail
+    # "Name ×N" chips, counts from mentions_cases, tooltip splits the counts.
+    assert "×${m.total}" in detail
+    assert "mentions_cases" in detail and "verdict_true" in detail
+    assert "not effectiveness" in detail
+    # Unmentioned vendors trail in the existing muted illustrative style.
+    assert "tlp-examples" in detail
+
+
 def test_vendor_disclaimer_rendered_once_near_basis_line() -> None:
     """The vendor disclaimer ships once, muted (tlp-basis treatment),
-    directly after the ledger basis line."""
+    directly after the ledger basis line — updated for mention counts:
+    corpus-derived receipts, documented appearances only, no endorsements."""
     html = _index_html()
-    disclaimer = "Examples are common products in each category, not endorsements and not derived"
+    disclaimer = "Vendor mention counts are corpus-derived receipts"
     assert html.count(disclaimer) == 1
-    assert "Rankings never consider vendors." in html
+    assert "presence in the record, not effectiveness" in html
+    assert "category rankings never consider vendors" in " ".join(html.split())
     assert re.search(
         r'id="tlp-basis" hidden></p>\s*<p class="tlp-basis tlp-vendor-note">',
         html,

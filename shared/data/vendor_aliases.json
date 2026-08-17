@@ -1,0 +1,498 @@
+{
+  "version": 1,
+  "notes": [
+    "Vendor alias map for the TOOLING page's documented-case-mention counts:",
+    "every vendor named in a tooling_map.json 'examples' array gets one entry",
+    "per category it appears in — canonical display name (verbatim the",
+    "examples string), category id, and the alias strings that identify the",
+    "product in prose. The scanner (apps/search/vendor_mentions.py) counts",
+    "DISTINCT case documents whose stored text matches any alias — presence",
+    "in the record, never an effectiveness score, and NEVER an input to the",
+    "category ranking math (tests pin byte-identity).",
+    "",
+    "MATCHING SEMANTICS: case-insensitive, word-boundary — an alias matches",
+    "only when not butted against another letter/digit on either side, and",
+    "multi-word aliases tolerate any whitespace run between words. Matching",
+    "is one compiled alternation, longest alias first, so a more specific",
+    "product name shadows a shorter prefix at the same position ('Proofpoint",
+    "ITM' credits the ITM entry, not the bare 'Proofpoint' email entry —",
+    "unqualified 'Proofpoint' elsewhere in the text still counts for email).",
+    "",
+    "ALIAS SAFETY RULES (tests/test_vendor_mentions.py enforces):",
+    "1. An alias must be specific enough that a match in a court filing",
+    "   almost certainly refers to the product. Single common English words",
+    "   are FORBIDDEN as bare aliases — court prose is full of 'sterling',",
+    "   'archer', 'relativity', 'hid', 'sans', 'purview' ('within the purview",
+    "   of'), 'sentinel', 'falcon', 'canary', 'encase' (the verb), 'group",
+    "   policy' (group insurance policies). Those vendors use compound",
+    "   aliases ('RSA Archer', 'HID Global', 'Sterling background check',",
+    "   'Windows Group Policy', 'Purview eDiscovery') instead.",
+    "2. Single-token aliases are allowed ONLY from single_token_allowlist",
+    "   below: coined brand names with no common-English collision",
+    "   (CrowdStrike, Teramind, ObserveIT, Okta, ...). 'Velociraptor' is a",
+    "   documented judgment call: a species name, but implausible as",
+    "   non-product prose in an insider-case corpus. Multi-word aliases must",
+    "   be at least 6 characters.",
+    "3. When no safe alias exists, the entry keeps an EMPTY alias list plus a",
+    "   'no_safe_alias' note so the vendor can never miscount ('Intune device",
+    "   control': any real mention says 'Intune', which names the platform —",
+    "   claimed by the Microsoft Intune entry under hardening).",
+    "4. A company token shared across category entries belongs to its",
+    "   flagship entry only (bare 'Proofpoint' -> email; bare 'SentinelOne'",
+    "   -> edr; bare 'Splunk' -> siem; bare 'Intune' -> hardening); sibling",
+    "   entries use product-qualified compounds or well-known former product",
+    "   names (ObserveIT, Wombat Security, Attivo, Splunk UBA).",
+    "5. Well-known FORMER names count as aliases (ObserveIT, Websense, Vontu,",
+    "   Azure Active Directory, Google Chronicle, Bomgar, Thycotic, Centrify,",
+    "   Lumension, kCura, Guidance Software, Attivo, Wombat Security) — old",
+    "   court records name products by the name of their era.",
+    "6. Same product legitimately homed in two categories (Netskope: dlp and",
+    "   casb) carries the same aliases in both entries; a mention counts for",
+    "   both homes."
+  ],
+  "single_token_allowlist": [
+    "AppOmni",
+    "Attivo",
+    "AuditBoard",
+    "BeyondTrust",
+    "Bomgar",
+    "Cellebrite",
+    "Centrify",
+    "Checkr",
+    "Corelight",
+    "CoSoSys",
+    "CounterCraft",
+    "CrowdStrike",
+    "CyberArk",
+    "Darktrace",
+    "Delinea",
+    "DTEX",
+    "Everlaw",
+    "Exabeam",
+    "Exterro",
+    "ExtraHop",
+    "Forcepoint",
+    "Genetec",
+    "Gurucul",
+    "HireRight",
+    "Hoxhunt",
+    "Intune",
+    "Jamf",
+    "kCura",
+    "KnowBe4",
+    "Lenel",
+    "LenelS2",
+    "LogicGate",
+    "Lumension",
+    "Mimecast",
+    "Netskope",
+    "ObserveIT",
+    "Okta",
+    "PaperCut",
+    "Proofpoint",
+    "QRadar",
+    "RelativityOne",
+    "SailPoint",
+    "Saviynt",
+    "Securonix",
+    "SentinelOne",
+    "Splunk",
+    "Tanium",
+    "Teramind",
+    "Thinkst",
+    "Thycotic",
+    "Velociraptor",
+    "Verkada",
+    "Vontu",
+    "Websense",
+    "Zeek"
+  ],
+  "vendors": [
+    {
+      "name": "Forcepoint DLP",
+      "category": "dlp",
+      "aliases": ["Forcepoint DLP", "Forcepoint", "Websense"]
+    },
+    {
+      "name": "Microsoft Purview DLP",
+      "category": "dlp",
+      "aliases": ["Microsoft Purview DLP", "Purview DLP", "Purview Data Loss Prevention"]
+    },
+    {
+      "name": "Netskope",
+      "category": "dlp",
+      "aliases": ["Netskope"]
+    },
+    {
+      "name": "Symantec DLP",
+      "category": "dlp",
+      "aliases": ["Symantec DLP", "Symantec Data Loss Prevention", "Vontu"]
+    },
+    {
+      "name": "CrowdStrike Falcon",
+      "category": "edr",
+      "aliases": ["CrowdStrike Falcon", "CrowdStrike"]
+    },
+    {
+      "name": "Microsoft Defender for Endpoint",
+      "category": "edr",
+      "aliases": ["Defender for Endpoint", "Microsoft Defender ATP", "Defender ATP"]
+    },
+    {
+      "name": "Palo Alto Cortex XDR",
+      "category": "edr",
+      "aliases": ["Cortex XDR", "Palo Alto Cortex"]
+    },
+    {
+      "name": "SentinelOne",
+      "category": "edr",
+      "aliases": ["SentinelOne"]
+    },
+    {
+      "name": "Elastic Security",
+      "category": "siem",
+      "aliases": ["Elastic Security", "Elastic SIEM"]
+    },
+    {
+      "name": "Google SecOps",
+      "category": "siem",
+      "aliases": ["Google SecOps", "Google Chronicle", "Chronicle Security"]
+    },
+    {
+      "name": "IBM QRadar",
+      "category": "siem",
+      "aliases": ["IBM QRadar", "QRadar"]
+    },
+    {
+      "name": "Microsoft Sentinel",
+      "category": "siem",
+      "aliases": ["Microsoft Sentinel", "Azure Sentinel"]
+    },
+    {
+      "name": "Splunk",
+      "category": "siem",
+      "aliases": ["Splunk"]
+    },
+    {
+      "name": "Exabeam",
+      "category": "ueba",
+      "aliases": ["Exabeam"]
+    },
+    {
+      "name": "Gurucul",
+      "category": "ueba",
+      "aliases": ["Gurucul"]
+    },
+    {
+      "name": "Securonix",
+      "category": "ueba",
+      "aliases": ["Securonix"]
+    },
+    {
+      "name": "Splunk UBA",
+      "category": "ueba",
+      "aliases": ["Splunk UBA", "Splunk User Behavior Analytics"]
+    },
+    {
+      "name": "DTEX",
+      "category": "irm",
+      "aliases": ["DTEX", "DTEX Systems"]
+    },
+    {
+      "name": "Microsoft Purview IRM",
+      "category": "irm",
+      "aliases": ["Microsoft Purview IRM", "Purview IRM", "Purview Insider Risk"]
+    },
+    {
+      "name": "Proofpoint ITM",
+      "category": "irm",
+      "aliases": ["Proofpoint ITM", "ObserveIT", "Proofpoint Insider Threat Management"]
+    },
+    {
+      "name": "Teramind",
+      "category": "irm",
+      "aliases": ["Teramind"]
+    },
+    {
+      "name": "BeyondTrust",
+      "category": "pam",
+      "aliases": ["BeyondTrust", "Bomgar"]
+    },
+    {
+      "name": "CyberArk",
+      "category": "pam",
+      "aliases": ["CyberArk"]
+    },
+    {
+      "name": "Delinea",
+      "category": "pam",
+      "aliases": ["Delinea", "Thycotic", "Centrify"]
+    },
+    {
+      "name": "Microsoft Entra ID",
+      "category": "iam",
+      "aliases": ["Entra ID", "Microsoft Entra", "Azure Active Directory", "Azure AD"]
+    },
+    {
+      "name": "Okta",
+      "category": "iam",
+      "aliases": ["Okta"]
+    },
+    {
+      "name": "SailPoint",
+      "category": "iam",
+      "aliases": ["SailPoint"]
+    },
+    {
+      "name": "Saviynt",
+      "category": "iam",
+      "aliases": ["Saviynt"]
+    },
+    {
+      "name": "AppOmni",
+      "category": "casb",
+      "aliases": ["AppOmni"]
+    },
+    {
+      "name": "Microsoft Defender for Cloud Apps",
+      "category": "casb",
+      "aliases": ["Defender for Cloud Apps", "Microsoft Cloud App Security"]
+    },
+    {
+      "name": "Netskope",
+      "category": "casb",
+      "aliases": ["Netskope"]
+    },
+    {
+      "name": "Obsidian",
+      "category": "casb",
+      "aliases": ["Obsidian Security"]
+    },
+    {
+      "name": "Abnormal Security",
+      "category": "email",
+      "aliases": ["Abnormal Security"]
+    },
+    {
+      "name": "Microsoft Defender for Office 365",
+      "category": "email",
+      "aliases": ["Defender for Office 365", "Office 365 ATP", "Office 365 Advanced Threat Protection"]
+    },
+    {
+      "name": "Mimecast",
+      "category": "email",
+      "aliases": ["Mimecast"]
+    },
+    {
+      "name": "Proofpoint",
+      "category": "email",
+      "aliases": ["Proofpoint"]
+    },
+    {
+      "name": "Corelight",
+      "category": "network",
+      "aliases": ["Corelight"]
+    },
+    {
+      "name": "Darktrace",
+      "category": "network",
+      "aliases": ["Darktrace"]
+    },
+    {
+      "name": "ExtraHop",
+      "category": "network",
+      "aliases": ["ExtraHop"]
+    },
+    {
+      "name": "Vectra AI",
+      "category": "network",
+      "aliases": ["Vectra AI", "Vectra Networks"]
+    },
+    {
+      "name": "Zeek (open source)",
+      "category": "network",
+      "aliases": ["Zeek"]
+    },
+    {
+      "name": "Endpoint Protector",
+      "category": "device-control",
+      "aliases": ["Endpoint Protector", "CoSoSys"]
+    },
+    {
+      "name": "Intune device control",
+      "category": "device-control",
+      "aliases": [],
+      "no_safe_alias": "Any real mention says 'Intune', which names the platform, not its device-control feature; the bare token is claimed by the Microsoft Intune entry (hardening), so this entry must never count."
+    },
+    {
+      "name": "Ivanti Device Control",
+      "category": "device-control",
+      "aliases": ["Ivanti Device Control", "Lumension Device Control", "Lumension"]
+    },
+    {
+      "name": "PaperCut",
+      "category": "device-control",
+      "aliases": ["PaperCut"]
+    },
+    {
+      "name": "Genetec",
+      "category": "physical",
+      "aliases": ["Genetec"]
+    },
+    {
+      "name": "HID",
+      "category": "physical",
+      "aliases": ["HID Global", "HID badge", "HID proximity", "HID access card"]
+    },
+    {
+      "name": "Lenel",
+      "category": "physical",
+      "aliases": ["Lenel", "LenelS2"]
+    },
+    {
+      "name": "Verkada",
+      "category": "physical",
+      "aliases": ["Verkada"]
+    },
+    {
+      "name": "Checkr",
+      "category": "screening-hr",
+      "aliases": ["Checkr"]
+    },
+    {
+      "name": "First Advantage",
+      "category": "screening-hr",
+      "aliases": ["First Advantage Corporation", "First Advantage background", "First Advantage screening"]
+    },
+    {
+      "name": "HireRight",
+      "category": "screening-hr",
+      "aliases": ["HireRight"]
+    },
+    {
+      "name": "Sterling",
+      "category": "screening-hr",
+      "aliases": ["Sterling Talent Solutions", "Sterling Infosystems", "Sterling background check"]
+    },
+    {
+      "name": "Hoxhunt",
+      "category": "training",
+      "aliases": ["Hoxhunt"]
+    },
+    {
+      "name": "KnowBe4",
+      "category": "training",
+      "aliases": ["KnowBe4"]
+    },
+    {
+      "name": "Proofpoint Security Awareness",
+      "category": "training",
+      "aliases": ["Proofpoint Security Awareness", "Wombat Security"]
+    },
+    {
+      "name": "SANS",
+      "category": "training",
+      "aliases": ["SANS Institute"]
+    },
+    {
+      "name": "CounterCraft",
+      "category": "deception",
+      "aliases": ["CounterCraft"]
+    },
+    {
+      "name": "SentinelOne (Attivo)",
+      "category": "deception",
+      "aliases": ["Attivo Networks", "Attivo"]
+    },
+    {
+      "name": "Thinkst Canary",
+      "category": "deception",
+      "aliases": ["Thinkst Canary", "Thinkst"]
+    },
+    {
+      "name": "Everlaw",
+      "category": "ediscovery",
+      "aliases": ["Everlaw"]
+    },
+    {
+      "name": "Exterro",
+      "category": "ediscovery",
+      "aliases": ["Exterro"]
+    },
+    {
+      "name": "Microsoft Purview eDiscovery",
+      "category": "ediscovery",
+      "aliases": ["Microsoft Purview eDiscovery", "Purview eDiscovery"]
+    },
+    {
+      "name": "Relativity",
+      "category": "ediscovery",
+      "aliases": ["RelativityOne", "kCura", "Relativity platform", "Relativity database", "Relativity eDiscovery"]
+    },
+    {
+      "name": "Archer",
+      "category": "governance",
+      "aliases": ["RSA Archer", "Archer IRM", "Archer GRC"]
+    },
+    {
+      "name": "AuditBoard",
+      "category": "governance",
+      "aliases": ["AuditBoard"]
+    },
+    {
+      "name": "LogicGate",
+      "category": "governance",
+      "aliases": ["LogicGate"]
+    },
+    {
+      "name": "ServiceNow GRC",
+      "category": "governance",
+      "aliases": ["ServiceNow GRC", "ServiceNow IRM"]
+    },
+    {
+      "name": "CIS Build Kits",
+      "category": "hardening",
+      "aliases": ["CIS Build Kits"]
+    },
+    {
+      "name": "Group Policy (native)",
+      "category": "hardening",
+      "aliases": ["Group Policy Object", "Windows Group Policy", "Active Directory Group Policy"]
+    },
+    {
+      "name": "Jamf",
+      "category": "hardening",
+      "aliases": ["Jamf"]
+    },
+    {
+      "name": "Microsoft Intune",
+      "category": "hardening",
+      "aliases": ["Microsoft Intune", "Intune"]
+    },
+    {
+      "name": "Tanium",
+      "category": "hardening",
+      "aliases": ["Tanium"]
+    },
+    {
+      "name": "Cellebrite",
+      "category": "dfir",
+      "aliases": ["Cellebrite"]
+    },
+    {
+      "name": "EnCase",
+      "category": "dfir",
+      "aliases": ["Guidance Software", "OpenText EnCase", "EnCase software", "EnCase forensic", "EnCase image"]
+    },
+    {
+      "name": "Magnet AXIOM",
+      "category": "dfir",
+      "aliases": ["Magnet AXIOM", "Magnet Forensics"]
+    },
+    {
+      "name": "Velociraptor (open source)",
+      "category": "dfir",
+      "aliases": ["Velociraptor"]
+    }
+  ]
+}

@@ -766,9 +766,10 @@
             <p class="evp-sub">
               Security tool categories ranked by how much of the observed insider-case volume
               their mapped ITM controls can detect and prevent. Categories, never vendors, are
-              what the ranking scores — the example products inside a row's detail are
-              illustrative only. Expand a row for the exact DT/PV entries behind its score
-              and the observed techniques it covers.
+              what the ranking scores — vendors inside a row's detail are ordered only by
+              documented case mentions (presence in court documents, not an effectiveness
+              score), with unmentioned examples trailing as illustrations. Expand a row for
+              the exact DT/PV entries behind its score and the observed techniques it covers.
             </p>
             <div class="evp-legend">
               <span><i class="evp-lg-all"></i>DETECT / PREVENT — share of observed technique-case volume the category's controls cover</span>
@@ -777,8 +778,11 @@
             <div id="tlp-list" class="tlp-list" aria-live="polite"></div>
             <p class="tlp-basis" id="tlp-basis" hidden></p>
             <p class="tlp-basis tlp-vendor-note">
-              Examples are common products in each category, not endorsements and not derived
-              from case data. Rankings never consider vendors.
+              Vendor mention counts are corpus-derived receipts: distinct stored case documents
+              whose text names the product. Order within a category reflects documented
+              appearances only — presence in the record, not effectiveness — and is still no
+              endorsement. Unmentioned examples stay illustrative, and category rankings never
+              consider vendors.
             </p>
             <div class="evp-limits">
               <p class="evp-section-head">READ BEFORE BUYING</p>
