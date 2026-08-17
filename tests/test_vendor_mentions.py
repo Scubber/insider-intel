@@ -49,7 +49,10 @@ def test_alias_file_covers_every_examples_vendor_exactly() -> None:
 # Court-prose collisions that must never match as a product mention: common
 # English words (incl. legal boilerplate like 'purview', the verb 'encase',
 # 'hid' under case-insensitive matching) and generic phrases with a
-# non-product reading ('group policy' = group insurance policy).
+# non-product reading ('group policy' = group insurance policy, 'carbon
+# black' = the industrial material, 'area 1' = a numbered facility zone,
+# 'one identity' = 'used more than one identity', 'accurate background' =
+# everyday screening prose).
 FORBIDDEN_ALIASES = {
     "sterling",
     "archer",
@@ -71,6 +74,34 @@ FORBIDDEN_ALIASES = {
     "abnormal",
     "first advantage",
     "group policy",
+    "barracuda",
+    "carbon black",
+    "nightfall",
+    "keeper",
+    "duo",
+    "vault",
+    "area 1",
+    "area 1 security",
+    "one identity",
+    "accurate background",
+    "illusive",
+    "smokescreen",
+    "reveal",
+    "disco",
+    "diligent",
+    "guardian",
+    "awake",
+    "endgame",
+    "aperture",
+    "harmony",
+    "trend",
+    "ping",
+    "sumo",
+    "oxygen",
+    "safeguard",
+    "skyhigh",
+    "mvision",
+    "apex one",
 }
 
 
@@ -119,6 +150,97 @@ def test_alias_safety_rules() -> None:
     assert allowed == used_single_tokens, (
         f"allowlist tokens not used by any alias: {allowed - used_single_tokens}"
     )
+
+
+# ── 1b. Real alias file vs. court-style prose ────────────────────────────────
+#
+# The REAL matcher (the checked-in aliases, the real compiled alternation) run
+# over court-filing-style sentences built around the known danger words —
+# 'barracuda' the fish, 'carbon black' the industrial material, 'nightfall',
+# 'keeper', 'vault', 'duo', numbered facility areas, 'more than one identity',
+# 'accurate background check', plus the original sterling-class collisions.
+# A future alias edit that reintroduces any of these collisions fails HERE,
+# on prose, not just on the denylist.
+
+# Non-product court/business prose: the grown alias file must stay silent on
+# every sentence — zero vendors credited across the whole file.
+_COURT_PROSE_NEGATIVE = [
+    "By nightfall the defendant had copied the customer files to a personal drive.",
+    "The plant produced carbon black for tire manufacturing, a process the"
+    " indictment describes as a trade secret.",
+    "He was the keeper of the branch vault combination and hid the ledger at home.",
+    "The duo left the building before the security guards completed their rounds.",
+    "Surveillance footage from area 1 of the warehouse showed the loading dock.",
+    "A mounted barracuda above his desk was seized along with the laptops.",
+    "Counsel called the licensing story a smokescreen and the promised royalties illusive.",
+    "Witnesses described his sterling reputation and diligent work within the"
+    " purview of the compliance office.",
+    "The complaint does not reveal whether more than one identity was used to access the vault.",
+    "An accurate background check would have surfaced the prior conviction.",
+    "At the disco he told a co-conspirator that the first advantage of the deal was speed.",
+    "The guardian ad litem reviewed the trust accounts after the archer tournament.",
+    "Investigators moved to encase the drives in evidence bags sans any delay.",
+    "He stayed awake monitoring the oxygen sensors as the trend in shipments continued.",
+    "Group policy at the insurer required a canary trap for leaked documents.",
+    "The technician would ping the server nightly to keep the harmony of the backup schedule.",
+]
+
+# Product mentions in the same court-prose register: each sentence must credit
+# EXACTLY the (category, vendor) entries listed — compound aliases defuse the
+# danger word without losing the real product mention.
+_COURT_PROSE_POSITIVE = [
+    (
+        "The employer's VMware Carbon Black sensor logged the mass file copy.",
+        [("edr", "Carbon Black")],
+    ),
+    ("Nightfall AI flagged credentials pasted into the support ticket.", [("dlp", "Nightfall")]),
+    ("Cisco Duo records showed push approvals from an unfamiliar device.", [("iam", "Cisco Duo")]),
+    ("The shared admin credential lived in a Keeper Security vault.", [("pam", "Keeper Security")]),
+    ("A Barracuda Networks gateway quarantined the outbound message.", [("email", "Barracuda")]),
+    (
+        "The company retained Cloudflare Area 1 for inbound mail filtering.",
+        [("email", "Cloudflare Area 1")],
+    ),
+    ("Graylog retained eighteen months of VPN logs.", [("siem", "Graylog")]),
+    ("Sterling Infosystems produced the pre-employment report.", [("screening-hr", "Sterling")]),
+    (
+        "Session recordings from Syteca, formerly marketed as Ekran System, captured the export.",
+        [("irm", "Syteca")],
+    ),
+    (
+        "Proofpoint DLP blocked the upload, and Proofpoint quarantined the message.",
+        [("dlp", "Proofpoint DLP"), ("email", "Proofpoint")],
+    ),
+    (
+        "One Identity Safeguard session logs recorded the privileged transfer.",
+        [("pam", "One Identity Safeguard")],
+    ),
+    (
+        "Logs pulled from Exabeam corroborated the badge records.",
+        [("siem", "Exabeam"), ("ueba", "Exabeam")],
+    ),
+]
+
+
+def test_real_alias_file_stays_silent_on_court_prose() -> None:
+    vendors = load_vendor_aliases()["vendors"]
+    rows = [
+        {"link": f"https://c/neg-{n}", "clean_text": text, "verdict_true": True}
+        for n, text in enumerate(_COURT_PROSE_NEGATIVE)
+    ]
+    scan = scan_vendor_mentions(rows, vendors)
+    hits = {key: slot["total"] for key, slot in scan["mentions"].items() if slot["total"]}
+    assert not hits, f"court-prose false positives: {hits}"
+
+
+def test_real_alias_file_credits_product_mentions_in_court_prose() -> None:
+    vendors = load_vendor_aliases()["vendors"]
+    for text, expected in _COURT_PROSE_POSITIVE:
+        scan = scan_vendor_mentions(
+            [{"link": "https://c/pos", "clean_text": text, "verdict_true": True}], vendors
+        )
+        hits = sorted(key for key, slot in scan["mentions"].items() if slot["total"])
+        assert hits == sorted(expected), f"{text!r}: matched {hits}, expected {expected}"
 
 
 # ── 2. Scanner core (synthetic, deterministic) ───────────────────────────────

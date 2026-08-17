@@ -83,13 +83,14 @@ def test_mapping_validates_against_itm_catalog() -> None:
     assert not dup_pv, f"PV ids mapped to more than one category: {dup_pv}"
 
 
-def test_every_category_has_two_to_six_vendor_examples() -> None:
-    """Vendor examples contract: every category carries 2–6 distinct,
-    non-empty example product names (display-only illustrations)."""
+def test_every_category_has_two_to_sixteen_vendor_examples() -> None:
+    """Vendor examples contract: every category carries 2–16 distinct,
+    non-empty example product names (display-only enterprise-market rosters;
+    smaller categories stay honest rather than padding to the cap)."""
     for cat in load_tooling_map()["categories"]:
         ex = cat.get("examples")
         assert isinstance(ex, list), f"{cat['id']}: examples must be a list"
-        assert 2 <= len(ex) <= 6, f"{cat['id']}: needs 2-6 examples, has {len(ex or [])}"
+        assert 2 <= len(ex) <= 16, f"{cat['id']}: needs 2-16 examples, has {len(ex or [])}"
         assert all(isinstance(v, str) and v.strip() for v in ex), (
             f"{cat['id']}: examples must be non-empty strings"
         )
