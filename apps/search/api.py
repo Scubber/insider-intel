@@ -769,4 +769,11 @@ def reload_index(_auth: None = Depends(_require_admin_token)) -> dict[str, objec
         index = service.get_index(settings.processed_articles_path, reload=True)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"status": "reloaded", "indexed_articles": index.size}
+    response: dict[str, object] = {"status": "reloaded", "indexed_articles": index.size}
+    # Eagerly warm the vendor-mention scan for the swapped-in index so the
+    # next /tooling answers hot instead of paying the full aliases × corpus
+    # scan. Inline by design: the 6h refresh job is the only caller and can
+    # afford the seconds. Runs after the response above is prepared and never
+    # fails the reload (wrapped + logged in the service layer).
+    service.warm_vendor_scan(index)
+    return response
