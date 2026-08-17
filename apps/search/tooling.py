@@ -30,6 +30,11 @@ that touch two families).
 Small-n law: percentages are suppressed (None) when the contributing-case
 base is under the ledger's SMALL_N_FLOOR; volumes are always reported.
 Sort: detect_volume desc, prevent_volume desc, corroborated_cases desc, label.
+
+Vendor ``examples`` are a display-only passthrough: each category's curated
+list is carried verbatim onto its row (like label/rationale) and NEVER enters
+the ranking math above — tests pin that stripping every examples array from
+the map leaves the ranking output byte-identical.
 """
 
 from __future__ import annotations
@@ -110,6 +115,9 @@ def rank_tool_categories(
                 "label": cat.get("label"),
                 "kind": cat.get("kind"),
                 "rationale": cat.get("rationale"),
+                # Display-only vendor illustrations, carried verbatim — never
+                # an input to any volume/percentage/sort computation below.
+                "examples": list(cat.get("examples") or []),
                 "detections": sorted(dt_ids),
                 "preventions": sorted(pv_ids),
                 "detect_volume": detect_volume,
