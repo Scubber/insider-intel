@@ -267,8 +267,15 @@ def tooling_rankings(path: str | Path | None = None) -> dict:
     in-memory index (per-technique case counts + detected_by record classes),
     so every /reload after a sweep re-ranks on the next call — no snapshot,
     no redeploy. Percentages obey the ledger's small-n law.
+
+    Vendor rows: each category's example vendors are decorated with documented
+    case-mention counts (distinct stored documents whose text names the
+    product — apps/search/vendor_mentions.py). The scan is computed once per
+    index generation (weak-keyed on the index object, so /reload's index swap
+    invalidates it) and NEVER enters the category ranking math above.
     """
     from apps.search.tooling import load_tooling_map, rank_tool_categories
+    from apps.search.vendor_mentions import attach_vendor_mentions, mentions_for_index
     from shared.utils.evidence import SMALL_N_FLOOR
 
     ledger = _raw_evidence_ledger(path, top=50)
@@ -295,6 +302,9 @@ def tooling_rankings(path: str | Path | None = None) -> dict:
     for cat in ranked["categories"]:
         cat["detections"] = [{"id": i, "title": dt_titles.get(i, i)} for i in cat["detections"]]
         cat["preventions"] = [{"id": i, "title": pv_titles.get(i, i)} for i in cat["preventions"]]
+    # Mention-ranked vendor rows — decoration only, after every ranking field
+    # is final (attach never reads or writes category scores/sort).
+    attach_vendor_mentions(ranked["categories"], mentions_for_index(get_index(path)))
     return {
         # Same staleness stamp + basis block the EVIDENCE page renders — the
         # TOOLING basis line cites them verbatim.

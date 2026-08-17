@@ -34,7 +34,10 @@ Sort: detect_volume desc, prevent_volume desc, corroborated_cases desc, label.
 Vendor ``examples`` are a display-only passthrough: each category's curated
 list is carried verbatim onto its row (like label/rationale) and NEVER enters
 the ranking math above — tests pin that stripping every examples array from
-the map leaves the ranking output byte-identical.
+the map leaves the ranking output byte-identical. The mention-ranked vendor
+rows the payload also carries (documented case-mention counts) are attached
+AFTER ranking by apps/search/vendor_mentions.py under the same never-an-input
+contract.
 """
 
 from __future__ import annotations

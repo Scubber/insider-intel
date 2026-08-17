@@ -4980,12 +4980,41 @@
 
       const detail = evpEl("div", "tlp-detail");
       if (c.rationale) detail.appendChild(evpEl("p", "evp-note", c.rationale));
-      // Vendor examples live in the expanded detail ONLY — the collapsed
-      // ranking row stays category-and-numbers (rankings never see vendors).
-      if ((c.examples || []).length) {
-        const eg = evpEl("p", "tlp-examples", `e.g. ${c.examples.join(" · ")}`);
+      // Vendor lines live in the expanded detail ONLY — the collapsed
+      // ranking row stays category-and-numbers (category rankings never see
+      // vendors). Mentioned vendors are ranked by documented case mentions;
+      // unmentioned ones trail in the muted illustrative style.
+      const vendorRows = c.vendors || [];
+      const named = vendorRows.filter((v) => v.mentions_cases && v.mentions_cases.total > 0);
+      if (named.length) {
+        detail.appendChild(
+          evpEl(
+            "p",
+            "evp-section-head",
+            "NAMED IN CASE RECORDS — presence in court documents, not an effectiveness score."
+          )
+        );
+        const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
+        named.forEach((v) => {
+          const m = v.mentions_cases;
+          const chip = evpEl("span", "evp-chip tlp-vendor", `${v.name} ×${m.total}`);
+          chip.dataset.tip =
+            `Named in ${m.total} distinct case document${m.total === 1 ? "" : "s"}, ` +
+            `${m.verdict_true} adjudicated verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
+            "order ranks verdict-true first; presence in the record, not effectiveness";
+          chips.appendChild(chip);
+        });
+        detail.appendChild(chips);
+      }
+      const trailing = named.length
+        ? vendorRows.filter((v) => !v.mentions_cases || !v.mentions_cases.total).map((v) => v.name)
+        : vendorRows.length
+          ? vendorRows.map((v) => v.name)
+          : c.examples || [];
+      if (trailing.length) {
+        const eg = evpEl("p", "tlp-examples", `e.g. ${trailing.join(" · ")}`);
         eg.dataset.tip =
-          "Common products in this category — not endorsements, not derived from case data";
+          "Common products in this category not named in any stored case document — not endorsements, not derived from case data";
         detail.appendChild(eg);
       }
       const controlBlock = (head, refs) => {

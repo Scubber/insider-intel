@@ -194,7 +194,14 @@ per-technique counts + `detected_by` record classes
 (`apps/search/tooling.py::rank_tool_categories`, pure and deterministic), so
 a sweep + `/reload` re-ranks with no redeploy. Same small-n law and color law
 as EVIDENCE; the page's basis line cites the ledger's `generated_at` +
-`basis` verbatim.
+`basis` verbatim. Inside a category's expanded detail, vendors ARE named and
+ranked — but only by **documented case mentions**: distinct stored documents
+whose text names the product (`apps/search/vendor_mentions.py` scanning the
+checked-in `shared/data/vendor_aliases.json`; alias safety rules in the file
+— no common-English bare aliases, `no_safe_alias` entries never count).
+Presence in the record, never effectiveness, computed once per index
+generation (weak-keyed on the index object; `/reload` invalidates), and
+never an input to the category ranking (byte-identity test-pinned).
 
 ## Everyday commands
 
