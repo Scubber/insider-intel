@@ -280,10 +280,10 @@
   // Match styles.css desktop rail breakpoint (1024px) — tablet landscape keeps
   // the three-column layout and parks matrix takeover back to the stream.
   const WIDE_MQ = window.matchMedia("(min-width: 1024px)");
-  const PANES = new Set(["articles", "matrix", "evidence", "workbench", "settings", "about"]);
+  const PANES = new Set(["articles", "matrix", "evidence", "tooling", "workbench", "settings", "about"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
-  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "about"]);
+  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "tooling", "about"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -487,6 +487,9 @@
     if (path === "/evidence" || path === "/evidence/") {
       return { view: "evidence" };
     }
+    if (path === "/tooling" || path === "/tooling/") {
+      return { view: "tooling" };
+    }
     if (path.startsWith("/board/")) {
       const rest = path.slice("/board/".length);
       const slash = rest.indexOf("/");
@@ -515,6 +518,10 @@
     }
     if (route.view === "evidence") {
       openEvidenceView();
+      return;
+    }
+    if (route.view === "tooling") {
+      openToolingView();
       return;
     }
     if (route.view === "board") {
@@ -4892,6 +4899,165 @@
     setStatus("Insider Evidence Matrix");
   }
 
+  /* ── TOOLING takeover page (#/tooling): curated tool CATEGORIES (never
+     vendors) ranked by how much observed insider-case volume their mapped
+     ITM DT/PV controls cover. Pure read of /tooling — the API recomputes
+     from the loaded corpus per call, so a sweep + /reload re-ranks on the
+     next visit with no redeploy. Color law: --signal = observed-volume
+     coverage, --accent = corroborated count (the legend carries the words). */
+  function tlpMeter(label, pct, volumeShare, suppressedVolume) {
+    const meter = evpEl("span", "tlp-meter");
+    meter.appendChild(evpEl("span", "tlp-meter-label", label));
+    const bar = evpEl("span", "tlp-bar");
+    const fill = evpEl("span", "tlp-bar-fill");
+    fill.style.width = `${volumeShare > 0 ? Math.max(2, Math.min(100, volumeShare)) : 0}%`;
+    bar.appendChild(fill);
+    meter.appendChild(bar);
+    const num = evpEl("span", "tlp-meter-num", pct != null ? `${pct}%` : `${suppressedVolume} obs.`);
+    if (pct == null) {
+      num.dataset.tip = "Below the small-sample floor — counts only, no percentage";
+    }
+    meter.appendChild(num);
+    return meter;
+  }
+
+  function renderToolingPage(data) {
+    const list = document.getElementById("tlp-list");
+    const basisLine = document.getElementById("tlp-basis");
+    if (!list) return;
+    list.innerHTML = "";
+    if (basisLine) basisLine.hidden = true;
+    if (!data || !data.technique_case_volume) {
+      list.appendChild(
+        evpEl(
+          "p",
+          "evp-note",
+          "No verdict-true cases with extracted methods yet — rankings fill as the corpus enriches."
+        )
+      );
+      return;
+    }
+    const volume = data.technique_case_volume;
+    (data.categories || []).forEach((c, i) => {
+      const row = document.createElement("details");
+      row.className = "tlp-row";
+      const sum = document.createElement("summary");
+      sum.className = "tlp-sum";
+      sum.appendChild(evpEl("span", "tlp-rank", String(i + 1).padStart(2, "0")));
+      const name = evpEl("span", "tlp-name", c.label);
+      if (c.kind === "program") name.appendChild(evpEl("span", "tlp-kind", "PROGRAM"));
+      sum.appendChild(name);
+      const meters = evpEl("span", "tlp-meters");
+      meters.appendChild(
+        tlpMeter(
+          "DETECT",
+          c.detection_coverage_pct,
+          volume ? (100 * c.detect_volume) / volume : 0,
+          c.detect_volume
+        )
+      );
+      meters.appendChild(
+        tlpMeter(
+          "PREVENT",
+          c.prevention_coverage_pct,
+          volume ? (100 * c.prevent_volume) / volume : 0,
+          c.prevent_volume
+        )
+      );
+      const corr = evpEl(
+        "span",
+        c.corroborated_cases ? "tlp-corr" : "tlp-corr tlp-corr-none",
+        c.corroborated_cases
+          ? `corroborated in ${c.corroborated_cases} case${c.corroborated_cases === 1 ? "" : "s"}`
+          : "no case corroboration"
+      );
+      corr.dataset.tip = (c.corroborated_via || []).length
+        ? `Evidence record classes naming this control class: ${c.corroborated_via.join("; ")}`
+        : "No case in the corpus produced evidence in this category's record classes";
+      meters.appendChild(corr);
+      sum.appendChild(meters);
+      row.appendChild(sum);
+
+      const detail = evpEl("div", "tlp-detail");
+      if (c.rationale) detail.appendChild(evpEl("p", "evp-note", c.rationale));
+      const controlBlock = (head, refs) => {
+        if (!refs || !refs.length) return;
+        detail.appendChild(evpEl("p", "evp-section-head", `${head} (${refs.length})`));
+        const chips = evpEl("div", "evp-chips tlp-chips");
+        refs.forEach((r) => {
+          const chip = evpEl("span", "evp-chip", r.id);
+          if (r.title) chip.dataset.tip = r.title;
+          chips.appendChild(chip);
+        });
+        detail.appendChild(chips);
+      };
+      controlBlock("DETECTS VIA — ITM DT ENTRIES", c.detections);
+      controlBlock("PREVENTS VIA — ITM PV ENTRIES", c.preventions);
+      if ((c.top_techniques || []).length) {
+        detail.appendChild(
+          evpEl("p", "evp-section-head", "TOP OBSERVED TECHNIQUES IT COVERS")
+        );
+        const techs = evpEl("div", "tlp-techs");
+        c.top_techniques.forEach((t) => {
+          const btn = evpEl("button", "evp-tech-name");
+          btn.type = "button";
+          btn.appendChild(evpEl("span", "evp-tech-title", t.title));
+          btn.appendChild(
+            evpEl(
+              "span",
+              "evp-tech-code",
+              `${t.id} · ${t.cases} case${t.cases === 1 ? "" : "s"} · ${t.covers}`
+            )
+          );
+          btn.dataset.tip = "Open the technique dossier";
+          btn.addEventListener("click", () => {
+            selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
+          });
+          techs.appendChild(btn);
+        });
+        detail.appendChild(techs);
+      }
+      row.appendChild(detail);
+      list.appendChild(row);
+    });
+    if (basisLine) {
+      const b = data.basis || {};
+      const when = String(data.generated_at || "").slice(0, 16).replace("T", " ");
+      basisLine.textContent =
+        `COVERAGE COMPUTED AGAINST ${b.contributing_cases || 0} VERDICT-TRUE CASES ` +
+        `(${data.observed_techniques} OBSERVED TECHNIQUES · ` +
+        `${volume} TECHNIQUE-CASE OBS.)` +
+        (when ? ` AS OF ${when}Z` : "");
+      basisLine.hidden = false;
+    }
+  }
+
+  let toolingPageLoaded = false;
+
+  async function loadToolingPage(force) {
+    if (!document.getElementById("tlp-list")) return;
+    if (toolingPageLoaded && !force) return;
+    try {
+      renderToolingPage(await api("/tooling", {}, { timeoutMs: 15000 }));
+      toolingPageLoaded = true;
+    } catch (err) {
+      console.warn("Tooling page unavailable", err);
+      renderToolingPage(null);
+    }
+  }
+
+  function openToolingView() {
+    setActivePane("tooling");
+    navigate("/tooling");
+    loadToolingPage();
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus("Tooling coverage rankings");
+  }
+
   /* Dossier OBSERVED EVIDENCE section: per-technique detail (case-scoped),
      fail-soft — a sleeping API or unobserved technique just hides the block. */
   function buildHuntPrompt(tech, d) {
@@ -5171,6 +5337,10 @@
       loadEvidenceLedger();
       evidencePageLoaded = false;
       if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
+      // TOOLING is session-cached like the evidence page: re-rank after the
+      // sweep-driven /reload, immediately when the pane is open.
+      toolingPageLoaded = false;
+      if (els.appWorkbench && els.appWorkbench.dataset.pane === "tooling") loadToolingPage(true);
       await reapplyActiveFilters();
       if (state.dataState) {
         state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
@@ -5411,6 +5581,10 @@
         openEvidenceView();
         return;
       }
+      if (pane === "tooling") {
+        openToolingView();
+        return;
+      }
       if (pane === "articles" && state.view !== "stream") setView("stream");
       setActivePane(pane);
       try {
@@ -5506,6 +5680,10 @@
       if (!btn) return;
       if (btn.dataset.pane === "evidence") {
         openEvidenceView();
+        return;
+      }
+      if (btn.dataset.pane === "tooling") {
+        openToolingView();
         return;
       }
       setActivePane(btn.dataset.pane || "articles");
@@ -5825,11 +6003,11 @@
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);
-      } else if (route.view === "evidence") {
+      } else if (route.view === "evidence" || route.view === "tooling") {
         // Operator call (2026-08-10): the site always STARTS on the stream.
         // Mobile browsers restore the last URL, so a lingering #/evidence
-        // from a prior visit was making EVIDENCE the de-facto start page.
-        // In-session navigation to EVIDENCE still routes normally.
+        // (or #/tooling) from a prior visit was making a takeover pane the
+        // de-facto start page. In-session navigation still routes normally.
         navigate("/");
         await loadArticles();
       } else if (route.view === "board") {

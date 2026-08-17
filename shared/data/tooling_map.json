@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "notes": [
+    "Curated taxonomy: tool CATEGORIES (never vendor brands) mapped to the ITM",
+    "DT*/PV* control ids each category implements. Authored knowledge, stable",
+    "across corpus sweeps; the RANKING against real cases is computed at read",
+    "time by the API (GET /tooling), never stored here.",
+    "Boundary rules (single-homing): every control id lives in exactly ONE",
+    "category, the one whose product class most squarely ships it, so category",
+    "scores never double-count a control. Collected-by-default OS/cloud event",
+    "logs -> SIEM; on-disk artifacts recovered at exam time -> DFIR readiness;",
+    "identity sign-in telemetry -> IAM; USB/print artifacts -> device control",
+    "(they are what device-control tooling monitors). PV001 ('No Ready",
+    "System-Level Mitigation') is deliberately unmapped - it is the absence of",
+    "a control. tests/test_tooling.py validates every id against",
+    "shared/data/itm_index.json so ITM catalog refreshes flag drift."
+  ],
+  "categories": [
+    {
+      "id": "dlp",
+      "label": "DLP / data egress control",
+      "kind": "product",
+      "rationale": "Content inspection and label telemetry at egress: the DLP solution controls themselves, MIP label activity, Defender print alerts, and watermark attribution of leaked media.",
+      "detections": ["DT048", "DT110", "DT139", "DT153"],
+      "preventions": ["PV020", "PV047", "PV088"]
+    },
+    {
+      "id": "edr",
+      "label": "EDR / endpoint protection",
+      "kind": "product",
+      "rationale": "Agents watching endpoint process/file behavior: EDR and AV agents, Sysmon process telemetry, anti-tamper alerting, file integrity monitoring, shadow-copy deletion.",
+      "detections": ["DT043", "DT046", "DT081", "DT105", "DT146"],
+      "preventions": ["PV005", "PV033"]
+    },
+    {
+      "id": "siem",
+      "label": "SIEM / central log management",
+      "kind": "product",
+      "rationale": "Central collection and retention of OS, audit-subsystem, and cloud control-plane event logs (Windows event logs, auditd, PowerShell logging, M365 UAL, AWS/GCP/Azure/OCI activity). Detection-side class: the catalog has no SIEM prevention.",
+      "detections": [
+        "DT003", "DT004", "DT014", "DT016", "DT030", "DT037", "DT052", "DT055",
+        "DT064", "DT065", "DT066", "DT082", "DT094", "DT095", "DT109", "DT115",
+        "DT116", "DT117", "DT118", "DT126", "DT156", "DT157"
+      ],
+      "preventions": []
+    },
+    {
+      "id": "ueba",
+      "label": "UEBA / behavior analytics",
+      "kind": "product",
+      "rationale": "Anomaly scoring over identity and endpoint telemetry: UBA/UEBA engines, impossible travel, performance-baseline profiling.",
+      "detections": ["DT047", "DT050", "DT101", "DT102", "DT114"],
+      "preventions": []
+    },
+    {
+      "id": "irm",
+      "label": "Insider-risk platform / UAM",
+      "kind": "product",
+      "rationale": "Purpose-built insider-risk workflow: user activity monitoring agents, leaver watchlists, policy-violation patterning, communication compliance, insider-focused threat intel.",
+      "detections": ["DT045", "DT104", "DT113", "DT125", "DT154"],
+      "preventions": ["PV059"]
+    },
+    {
+      "id": "pam",
+      "label": "Privileged access management",
+      "kind": "product",
+      "rationale": "Vaulting and brokering of privileged identities plus privileged-change telemetry: PIM audit, privileged-group membership changes, admin-privilege restriction, service-account scoping.",
+      "detections": ["DT106", "DT121"],
+      "preventions": ["PV002", "PV048", "PV078"]
+    },
+    {
+      "id": "iam",
+      "label": "IAM / identity governance",
+      "kind": "product",
+      "rationale": "Authentication events and identity lifecycle: sign-in logs, logon/logoff, account deletion, MFA, conditional access (incl. geographic), access reviews, account-ownership validation, identity verification at the service desk.",
+      "detections": ["DT056", "DT062", "DT063", "DT068"],
+      "preventions": ["PV023", "PV055", "PV056", "PV069", "PV070", "PV076", "PV089"]
+    },
+    {
+      "id": "casb",
+      "label": "SaaS / cloud collaboration security",
+      "kind": "product",
+      "rationale": "SaaS-app audit surfaces: Teams call history, Defender external-sharing alerts. Thin by catalog design - most cloud audit trails home under SIEM, retention under eDiscovery.",
+      "detections": ["DT107", "DT142"],
+      "preventions": []
+    },
+    {
+      "id": "email",
+      "label": "Email security",
+      "kind": "product",
+      "rationale": "Mail-flow telemetry and egress rules: message trace, gateway logs, forwarding-rule and mailbox-permission alerts, auto-forward restriction, recipient-domain restriction.",
+      "detections": ["DT040", "DT041", "DT140", "DT141", "DT145"],
+      "preventions": ["PV017", "PV045"]
+    },
+    {
+      "id": "network",
+      "label": "Network monitoring / NDR",
+      "kind": "product",
+      "rationale": "Wire-level visibility and enforcement: NIDS/NIPS, DNS logging+filtering, DPI, NetFlow, VPN and proxy logs, remote-access-platform traffic, NAC and network-access agents, segmentation, NGFW, protocol allow-listing, rogue IP-KVM discovery.",
+      "detections": [
+        "DT039", "DT042", "DT051", "DT096", "DT097", "DT098", "DT100", "DT122",
+        "DT147", "DT150"
+      ],
+      "preventions": ["PV006", "PV018", "PV021", "PV032", "PV034", "PV040", "PV072", "PV074"]
+    },
+    {
+      "id": "device-control",
+      "label": "Removable media / print control",
+      "kind": "product",
+      "rationale": "What device-control tooling monitors and blocks: the USB artifact set (registry, shellbags, setupapi, event logs, HID connections), print artifacts, mount restrictions, peripheral allow-listing, port security, print restriction.",
+      "detections": [
+        "DT005", "DT006", "DT007", "DT020", "DT021", "DT022", "DT023", "DT024",
+        "DT025", "DT087", "DT149"
+      ],
+      "preventions": ["PV014", "PV035", "PV036", "PV037", "PV083", "PV084", "PV093"]
+    },
+    {
+      "id": "physical",
+      "label": "Physical security / access control",
+      "kind": "product",
+      "rationale": "Facility-side control plane: badge logs, CCTV, patrols, photo-ID comparison, badge-vs-auth discrepancy checks, tamper seals, thermal/visual baseline scans, zoning and escorts, device prohibitions on-site.",
+      "detections": ["DT008", "DT033", "DT103", "DT137", "DT143", "DT162", "DT163"],
+      "preventions": ["PV009", "PV011", "PV094", "PV095"]
+    },
+    {
+      "id": "screening-hr",
+      "label": "Screening / HR & legal controls",
+      "kind": "program",
+      "rationale": "People-channel program controls: background/reference/criminal checks, ID verification, social-media screening+monitoring, HR early-threat collaboration, support programs, off-boarding, leave-contact rules, whistleblowing intake, NDAs, IP and exclusivity agreements, conflict-of-interest disclosure.",
+      "detections": ["DT049", "DT151"],
+      "preventions": [
+        "PV013", "PV024", "PV039", "PV042", "PV050", "PV051", "PV052", "PV053",
+        "PV054", "PV065", "PV071", "PV082", "PV092", "PV096"
+      ]
+    },
+    {
+      "id": "training",
+      "label": "Awareness & insider training",
+      "kind": "program",
+      "rationale": "Training program controls: end-user security awareness, insider-threat awareness, regulation awareness. Prevention-only class - no DT maps here.",
+      "detections": [],
+      "preventions": ["PV012", "PV038", "PV046"]
+    },
+    {
+      "id": "deception",
+      "label": "Cyber deception",
+      "kind": "product",
+      "rationale": "Tripwire assets whose only legitimate access count is zero: file canaries, honeypots, honey users, honey SPNs. Replaces the requested SOAR row - no ITM control maps to orchestration.",
+      "detections": ["DT009", "DT010", "DT011", "DT111"],
+      "preventions": []
+    },
+    {
+      "id": "ediscovery",
+      "label": "Retention / eDiscovery & legal hold",
+      "kind": "product",
+      "rationale": "Preservation and review tooling the legal record depends on: Purview eDiscovery and holds, litigation hold, Slack retention/holds and export analysis.",
+      "detections": ["DT128", "DT155", "DT158", "DT159", "DT160", "DT161"],
+      "preventions": ["PV068"]
+    },
+    {
+      "id": "governance",
+      "label": "Policy / process governance",
+      "kind": "program",
+      "rationale": "Process controls and audits outside any sensor: acceptable-use/social-media/AI/classification policies, approval and enforcement processes, asset/data/software inventories, change management, spending limits, financial auditing (the record class courts convict on when org telemetry saw nothing).",
+      "detections": ["DT112", "DT144", "DT152"],
+      "preventions": [
+        "PV003", "PV004", "PV016", "PV027", "PV028", "PV049", "PV057", "PV058",
+        "PV073", "PV075", "PV077", "PV079", "PV080", "PV081", "PV085", "PV086",
+        "PV090"
+      ]
+    },
+    {
+      "id": "hardening",
+      "label": "Endpoint hardening / MDM & GPO",
+      "kind": "product",
+      "rationale": "Managed-configuration surface: registry/file permissions, app whitelisting, disk encryption, MDM and clipboard policy, managed browsers and isolation, bootloader password, time-modification restriction and sync, proxy/snipping-tool disablement, DNS sinkholes, CI/CD static analysis. Prevention-only class.",
+      "detections": [],
+      "preventions": [
+        "PV007", "PV008", "PV015", "PV025", "PV026", "PV029", "PV031", "PV041",
+        "PV043", "PV044", "PV060", "PV061", "PV062", "PV063", "PV064", "PV091"
+      ]
+    },
+    {
+      "id": "dfir",
+      "label": "Forensics readiness / DFIR",
+      "kind": "product",
+      "rationale": "On-disk artifacts recovered at exam time, not collected live: browser history/cookies/extensions, LNK/prefetch/jump lists/shellbags, MFT and timestamp analysis, shell histories, WSL and RDP traces, snipping-tool caches, OneDrive SafeDelete, EXIF/metadata, hosts-file and registry footprints. Covers the requested backup/forensics row.",
+      "detections": [
+        "DT001", "DT002", "DT013", "DT017", "DT018", "DT019", "DT026", "DT027",
+        "DT028", "DT029", "DT032", "DT034", "DT036", "DT038", "DT044", "DT053",
+        "DT054", "DT057", "DT058", "DT059", "DT060", "DT083", "DT084", "DT085",
+        "DT086", "DT088", "DT090", "DT091", "DT092", "DT093", "DT108", "DT119",
+        "DT120", "DT123", "DT124", "DT127", "DT129", "DT130", "DT131", "DT132",
+        "DT133", "DT135", "DT138", "DT148"
+      ],
+      "preventions": []
+    }
+  ]
+}

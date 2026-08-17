@@ -613,6 +613,19 @@ def evidence_ledger(top: int = Query(10, ge=1, le=50)) -> dict:
     return service.evidence_ledger(top=top)
 
 
+@app.get("/tooling")
+def tooling() -> dict:
+    """Tool categories ranked by ITM DT/PV coverage of observed cases (TOOLING page).
+
+    Curated category → DT*/PV* taxonomy (shared/data/tooling_map.json, no
+    vendor brands) scored against the verdict-gated evidence ledger's
+    per-technique case counts and detected_by record classes — pure
+    aggregation over the in-memory index (no LLM, no extra I/O), refreshed
+    with every /reload.
+    """
+    return service.tooling_rankings()
+
+
 @app.get("/evidence/technique/{tech_id}")
 def evidence_technique(tech_id: str) -> dict:
     """Per-technique observed-evidence detail for the Matrix dossier.

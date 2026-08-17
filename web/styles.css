@@ -560,6 +560,137 @@ body {
   display: block;
 }
 
+/* TOOLING takeover page: same contract as EVIDENCE. */
+.pane-tooling-page {
+  display: none;
+}
+
+.app-shell[data-pane="tooling"] .pane-tooling-page {
+  display: block;
+}
+
+.app-shell[data-pane="tooling"] .pane-grid {
+  grid-template-columns: 1fr;
+}
+
+.app-shell[data-pane="tooling"] .left-rail,
+.app-shell[data-pane="tooling"] .pane-articles,
+.app-shell[data-pane="tooling"] .pane-workbench,
+.app-shell[data-pane="tooling"] .pane-settings {
+  display: none !important;
+}
+
+/* Ranked category rows: rank · name · DETECT/PREVENT meters · corroboration.
+   Color law holds — --signal = observed-volume coverage, --accent =
+   corroborated-in-court-record count; the page legend carries the words. */
+.tlp-row {
+  border-top: 1px solid var(--line);
+  padding: 0.35rem 0;
+}
+.tlp-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.7rem;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.25rem 0;
+}
+.tlp-sum::-webkit-details-marker {
+  display: none;
+}
+.tlp-rank {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+.tlp-name {
+  font-weight: 700;
+  font-size: 0.86rem;
+  flex: 0 1 15rem;
+}
+.tlp-kind {
+  margin-left: 0.4rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0.02rem 0.3rem;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.tlp-meters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.9rem;
+  flex: 1 1 22rem;
+  font-variant-numeric: tabular-nums;
+}
+.tlp-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 9rem;
+}
+.tlp-meter-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.tlp-bar {
+  display: inline-block;
+  flex: 1 1 4rem;
+  height: 8px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.tlp-bar-fill {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.tlp-meter-num {
+  font-size: 0.72rem;
+  min-width: 3ch;
+  text-align: right;
+}
+.tlp-corr {
+  font-size: 0.66rem;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.tlp-corr-none {
+  color: var(--muted);
+}
+.tlp-detail {
+  padding: 0.2rem 0 0.6rem 1.6rem;
+}
+.tlp-chips {
+  margin-top: 0.15rem;
+  margin-bottom: 0.55rem;
+}
+.tlp-techs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+.tlp-basis {
+  margin-top: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+@media (max-width: 860px) {
+  .tlp-detail {
+    padding-left: 0.4rem;
+  }
+  .tlp-corr {
+    white-space: normal;
+  }
+}
+
 /* Color law (holds in every theme): --accent = court-proven / corroborated,
    --signal = observed/alleged volume. The legend carries the words. */
 .evp-sub,
@@ -4333,7 +4464,9 @@ body[data-pane="workbench"] .panels-row,
 body[data-pane="settings"] .refine-panel,
 body[data-pane="settings"] .panels-row,
 body[data-pane="evidence"] .refine-panel,
-body[data-pane="evidence"] .panels-row {
+body[data-pane="evidence"] .panels-row,
+body[data-pane="tooling"] .refine-panel,
+body[data-pane="tooling"] .panels-row {
   display: none;
 }
 
@@ -4516,15 +4649,15 @@ body[data-pane="evidence"] .panels-row {
 
 /* --- Redesign regrid (2026-08): stream = content + one right rail --- */
 @media (min-width: 1024px) {
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .pane-grid {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .pane-grid {
     grid-template-columns: minmax(0, 1fr) 300px;
   }
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .pane-articles {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .pane-articles {
     order: 1;
     border-right: 0;
     border-left: 0;
   }
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .left-rail {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .left-rail {
     order: 2;
     border-left: 1px solid var(--line);
   }
@@ -4610,7 +4743,7 @@ body[data-pane="evidence"] .panels-row {
 /* Stream rail (redesign): no per-panel window chrome, no TRENDING pane —
    the rail is the techniques tally + the evidence ledger only. */
 @media (min-width: 1024px) {
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="about"]) .left-rail .pane-trending {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .left-rail .pane-trending {
     display: none;
   }
   .left-rail .panel-collapse {

@@ -182,6 +182,18 @@ below `SMALL_N_FLOOR`; the evidence→ITM detection crosswalk
 map only to DT152 (Financial Auditing; DT067 before ITM 2.9). Color law: `--accent` = court-proven, `--signal` =
 observed/alleged, always with an explicit legend.
 
+**TOOLING** (`#/tooling`, `GET /tooling`) ranks security-tool **categories —
+never vendor brands** — by how much observed insider-case volume their mapped
+ITM DT/PV controls cover. The category→control taxonomy is authored and
+checked in (`shared/data/tooling_map.json`, ids single-homed, validated
+against the ITM catalog by `tests/test_tooling.py` so ITM refreshes flag
+drift); the ranking recomputes per call from the verdict-gated ledger's
+per-technique counts + `detected_by` record classes
+(`apps/search/tooling.py::rank_tool_categories`, pure and deterministic), so
+a sweep + `/reload` re-ranks with no redeploy. Same small-n law and color law
+as EVIDENCE; the page's basis line cites the ledger's `generated_at` +
+`basis` verbatim.
+
 ## Everyday commands
 
 ```bash

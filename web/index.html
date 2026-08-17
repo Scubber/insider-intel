@@ -51,6 +51,7 @@
           <button type="button" class="masthead-nav-item active" data-pane="articles" data-tip="Live case stream with filters" data-tip-pos="bottom">STREAM</button>
           <button type="button" class="masthead-nav-item" data-pane="matrix" data-tip="Browse the Insider Threat Matrix" data-tip-pos="bottom">MATRIX</button>
           <button type="button" class="masthead-nav-item" data-pane="evidence" data-tip="What real cases actually left behind — corpus-wide evidence research" data-tip-pos="bottom">EVIDENCE</button>
+          <button type="button" class="masthead-nav-item" data-pane="tooling" data-tip="Tool categories ranked by ITM control coverage of observed cases" data-tip-pos="bottom">TOOLING</button>
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
@@ -212,6 +213,7 @@
         <button type="button" class="mobile-tab active" data-pane="articles">Articles</button>
         <button type="button" class="mobile-tab" data-pane="matrix">Insights</button>
         <button type="button" class="mobile-tab" data-pane="evidence">Evidence</button>
+        <button type="button" class="mobile-tab" data-pane="tooling">Tooling</button>
         <button type="button" class="mobile-tab" data-pane="workbench">
           Workbench<span class="board-badge" id="board-badge" hidden></span>
         </button>
@@ -261,6 +263,8 @@
               <dd>What techniques exist and what catches them. Click a technique to open its case dossier.</dd>
               <dt>EVIDENCE</dt>
               <dd>What proof real cases actually produce. Tap a technique row for its stage detail.</dd>
+              <dt>TOOLING</dt>
+              <dd>Which controls pay off first — tool categories ranked by what caught real insiders. Expand a row for the ITM controls behind its score.</dd>
               <dt>WORKBENCH</dt>
               <dd>What your flagged insiders actually did. Flag cases on STREAM, then hit MODUS OPERANDI.</dd>
               <dt>SETTINGS</dt>
@@ -749,6 +753,38 @@
                 the corpus reflects our own query lexicon and sweep history. Records are
                 machine-extracted from filings and normalized; confirmed-in-court and alleged
                 are never conflated. ITM™ owned by Forscie Limited — not affiliated.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="pane pane-tooling-page" data-pane-panel="tooling" aria-label="Tooling coverage rankings">
+          <div class="pane-head">
+            <h2>TOOLING — CONTROL CLASSES RANKED BY OBSERVED-CASE COVERAGE</h2>
+          </div>
+          <div class="pane-body">
+            <p class="evp-sub">
+              Security tool categories ranked by how much of the observed insider-case volume
+              their mapped ITM controls can detect and prevent. Categories, never vendors —
+              nothing here names or endorses a product. Expand a row for the exact DT/PV
+              entries behind its score and the observed techniques it covers.
+            </p>
+            <div class="evp-legend">
+              <span><i class="evp-lg-all"></i>DETECT / PREVENT — share of observed technique-case volume the category's controls cover</span>
+              <span><i class="evp-lg-corr"></i>CORROBORATED — cases whose evidence record classes name this control class</span>
+            </div>
+            <div id="tlp-list" class="tlp-list" aria-live="polite"></div>
+            <p class="tlp-basis" id="tlp-basis" hidden></p>
+            <div class="evp-limits">
+              <p class="evp-section-head">READ BEFORE BUYING</p>
+              <p>
+                Coverage means an ITM control mapped to this category exists for an observed
+                technique — not that any product implements it well, nor that it was the
+                control that caught the insider. CORROBORATED counts only cases whose
+                evidence record classes name this category's control class. Litigated-case
+                bias applies (see EVIDENCE › LIMITATIONS). The category → DT/PV mapping is
+                authored and versioned in the repo; the ranking recomputes from the corpus
+                on every sweep. ITM™ owned by Forscie Limited — not affiliated.
               </p>
             </div>
           </div>
