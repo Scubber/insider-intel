@@ -250,6 +250,17 @@ def test_examples_carried_verbatim_and_never_a_ranking_input() -> None:
     assert by_id["a"]["vendors"][0] == {
         "name": "Vendor One",
         "mentions_cases": {"verdict_true": 1, "total": 1},
+        # Case receipts ride along (title falls back to the link when the
+        # scan rows carry none; unpublished sorts as undated).
+        "cases": [
+            {
+                "link": "https://ex.com/v1",
+                "title": "https://ex.com/v1",
+                "verdict_true": True,
+                "published": None,
+            }
+        ],
+        "more_cases": 0,
     }
     for result in (with_mentions, without_aliases):
         for row in result["categories"]:
@@ -363,12 +374,23 @@ def test_tooling_endpoint_ranks_against_verdict_true_cases(tmp_path, monkeypatch
             for c in data["categories"]
         )
         edr = cats["edr"]
-        assert edr["vendors"][0] == {
-            "name": "CrowdStrike Falcon",
-            "mentions_cases": {"verdict_true": 1, "total": 1},
-        }
+        lead = edr["vendors"][0]
+        assert lead["name"] == "CrowdStrike Falcon"
+        assert lead["mentions_cases"] == {"verdict_true": 1, "total": 1}
+        # Case receipts: the actual naming case rides the payload — link,
+        # title, verdict flag, published stamp — for the vendor sheet.
+        assert lead["more_cases"] == 0
+        assert len(lead["cases"]) == 1
+        ref = lead["cases"][0]
+        assert ref["link"] == "https://ex.com/case-0"
+        assert ref["title"] == "Case 0"
+        assert ref["verdict_true"] is True
+        assert ref["published"] and ref["published"].startswith(NOW.date().isoformat())
         assert all(
-            v["mentions_cases"] == {"verdict_true": 0, "total": 0} for v in edr["vendors"][1:]
+            v["mentions_cases"] == {"verdict_true": 0, "total": 0}
+            and v["cases"] == []
+            and v["more_cases"] == 0
+            for v in edr["vendors"][1:]
         )
         # Unmentioned vendors trail in alphabetical order.
         assert [v["name"] for v in edr["vendors"][1:]] == sorted(
@@ -397,6 +419,7 @@ def test_tooling_endpoint_recomputes_per_reload(tmp_path, monkeypatch) -> None:
         first = client.get("/tooling").json()
         assert first["technique_case_volume"] == 2
         assert _edr_lead(first)["mentions_cases"] == {"verdict_true": 1, "total": 1}
+        assert _edr_lead(first)["cases"][0]["verdict_true"] is True
         # The "sweep": case 0 (the one whose text names CrowdStrike Falcon)
         # is re-adjudicated non-insider on disk.
         settings_path = service.get_settings().processed_articles_path
@@ -412,11 +435,14 @@ def test_tooling_endpoint_recomputes_per_reload(tmp_path, monkeypatch) -> None:
         assert after["technique_case_volume"] == 1
         # The mention scan was invalidated with the index swap: the document
         # still NAMES the product (total mention stands) but its verdict-true
-        # mention is gone — same gate, recomputed, no stale cache.
-        assert _edr_lead(after) == {
-            "name": "CrowdStrike Falcon",
-            "mentions_cases": {"verdict_true": 0, "total": 1},
-        }
+        # mention is gone — same gate, recomputed, no stale cache. The case
+        # receipt's verdict flag flips with it.
+        lead = _edr_lead(after)
+        assert lead["name"] == "CrowdStrike Falcon"
+        assert lead["mentions_cases"] == {"verdict_true": 0, "total": 1}
+        assert [(r["link"], r["verdict_true"]) for r in lead["cases"]] == [
+            ("https://ex.com/case-0", False)
+        ]
 
 
 def test_mention_scan_runs_once_per_index_generation(tmp_path, monkeypatch) -> None:
@@ -499,10 +525,10 @@ def test_tooling_path_reads_only_the_live_api() -> None:
     # Techniques deep-link into the existing MATRIX dossier route.
     assert "selectTechnique(" in _fn_body(src, "renderToolingPage")
     # Basis line cites the ledger stamp, not a hardcoded date — one shared
-    # string so the list and every category dossier cite the same run.
+    # builder so every TOOLING surface cites the same run.
     basis = _fn_body(src, "toolingBasisText")
     assert "VERDICT-TRUE CASES" in basis and "generated_at" in basis
-    assert "toolingBasisText(" in _fn_body(src, "renderToolingPage")
+    assert "renderToolingBasis(" in _fn_body(src, "renderToolingPage")
     # Route registered.
     assert '"/tooling"' in _fn_body(src, "parseRoute")
 
@@ -544,19 +570,51 @@ def test_mention_ranked_vendor_line_only_in_expanded_detail() -> None:
     assert "tlp-examples" in detail
 
 
-def test_vendor_disclaimer_rendered_once_near_basis_line() -> None:
-    """The vendor disclaimer ships once, muted (tlp-basis treatment),
-    directly after the ledger basis line — updated for mention counts:
-    corpus-derived receipts, documented appearances only, no endorsements."""
+def test_single_basis_line_replaces_caveat_stack() -> None:
+    """Operator call (2026-08-17): the TOOLING footer is ONE muted line —
+    `BASED ON <N> VERDICT-TRUE CASES · AS OF <date>Z · METHODOLOGY · ITM™
+    Forscie Ltd (not affiliated)` — with the old vendor-disclaimer and READ
+    BEFORE BUYING paragraphs folded into the METHODOLOGY tooltip. Same
+    rigor, new shape: the caveats must exist in the tooltip, never inline."""
     html = _index_html()
-    disclaimer = "Vendor mention counts are corpus-derived receipts"
-    assert html.count(disclaimer) == 1
-    assert "presence in the record, not effectiveness" in html
-    assert "category rankings never consider vendors" in " ".join(html.split())
-    assert re.search(
-        r'id="tlp-basis" hidden></p>\s*<p class="tlp-basis tlp-vendor-note">',
-        html,
-    ), "vendor disclaimer must sit next to the basis line with the muted treatment"
+    # The removed inline blocks stay removed.
+    assert "Vendor mention counts are corpus-derived receipts" not in html
+    tooling_pane = re.search(
+        r'<section class="pane pane-tooling-page".*?</section>', html, re.DOTALL
+    )
+    assert tooling_pane, "tooling pane not found"
+    assert "READ BEFORE BUYING" not in tooling_pane.group(0)
+    assert "tlp-vendor-note" not in tooling_pane.group(0)
+    # One shared builder renders the line for every TOOLING surface.
+    src = _app_js()
+    basis = _fn_body(src, "renderToolingBasis")
+    assert "BASED ON" in _fn_body(src, "toolingBasisText")
+    assert '"METHODOLOGY"' in basis
+    assert "ITM™ Forscie Ltd (not affiliated)" in basis
+    # The compressed caveats live in the METHODOLOGY tooltip: coverage
+    # meaning, CAUGHT/NAMED verb definitions, no-endorsement, litigated-case
+    # bias pointer, authored-mapping + sweep-fresh recompute — plus the
+    # observed-technique/volume counts the old long line carried.
+    for phrase in (
+        "not proof that control caught the insider",
+        "CAUGHT ×N",
+        "NAMED ×N",
+        "never an endorsement",
+        "vendors never affect category rankings",
+        "EVIDENCE › LIMITATIONS",
+        "recompute from the corpus every sweep",
+        "observed techniques",
+        "technique-case observations",
+    ):
+        assert phrase in basis, f"METHODOLOGY tooltip lost: {phrase!r}"
+    # All four surfaces cite through the one builder.
+    for fn in (
+        "renderToolingPage",
+        "renderToolingCategory",
+        "renderToolsDirectory",
+        "renderVendorSheet",
+    ):
+        assert "renderToolingBasis(" in _fn_body(src, fn), f"{fn}() bypasses the shared basis"
 
 
 def test_live_refresh_busts_tooling_session_cache() -> None:
@@ -568,6 +626,10 @@ def test_live_refresh_busts_tooling_session_cache() -> None:
     assert "state.tooling = null" in body
     assert "toolingPageLoaded = false" in body
     assert "loadToolingPage(true)" in body
+    # The NAMED TOOLS directory rides the same payload — its render cache
+    # drops with the rest.
+    assert "toolsDirectoryLoaded = false" in body
+    assert "loadToolsDirectory(true)" in body
 
 
 # ── 5. Matrix–tooling alignment: category dossier + dossier RELEVANT TOOLING ─
@@ -698,7 +760,7 @@ def test_category_dossier_renders_from_api_data_only() -> None:
     assert '"DETECTS"' in render and '"PREVENTS"' in render and '"CAUGHT"' in render
     assert "covered_techniques" in render
     assert "selectTechnique(" in render  # deep link to #/technique/<ID>
-    assert "toolingBasisText(" in render  # same citation the list renders
+    assert "renderToolingBasis(" in render  # same citation the list renders
     assert "No observed technique yet" in render  # teaching empty state
     assert "No stored case document names a product" in render
     # Both-sides labeling is shared with the dossier section via one map.

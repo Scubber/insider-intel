@@ -209,6 +209,19 @@ category row carries its full covered-technique list (`covered_techniques`;
 TOOLING section — both are client-side joins of the session-cached
 `/tooling` read with the `/itm` catalog (`web/app.js::dossierToolingJoin`,
 node-executed unit tests + api()-only contracts in `tests/test_tooling.py`).
+The **NAMED TOOLS directory** (2026-08-17) is the pane's second list-level
+view: a `CATEGORIES | NAMED TOOLS` segmented switch flips `#/tooling` ↔
+`#/tools` (card grid, one card per vendor across categories, dual-homed
+vendors deduped; ×0 vendors dim under a NOT YET NAMED IN CASES divider), and
+`#/tools/<vendor-slug>` is the vendor sheet whose receipts are the actual
+naming cases — the payload's vendor rows carry `cases` (link/title/
+verdict_true/published, capped at the `VENDOR_CASE_REFS_CAP = 25` most
+recent by published date) + `more_cases`. All of it renders from the one
+session-cached `/tooling` read; NAMED ×N chips on category/technique
+dossiers route into the sheets. Every TOOLING surface cites one muted basis
+line (`BASED ON <N> VERDICT-TRUE CASES · AS OF <date>Z · METHODOLOGY ·
+ITM™ Forscie Ltd`); the caveat prose lives in the METHODOLOGY tooltip
+(operator call 2026-08-17). Contracts: `tests/test_tools_directory.py`.
 
 ## Everyday commands
 

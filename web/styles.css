@@ -766,6 +766,184 @@ body {
   margin: 0;
 }
 
+/* CATEGORIES | NAMED TOOLS segmented switch (house pill idiom). */
+.tlp-switch {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+/* METHODOLOGY affordance inside the single muted citation line — the
+   compressed caveats live in its tooltip, one hover away, never inline. */
+.tlp-methodology {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* Vendor chips double as links into the NAMED TOOLS sheet. */
+button.evp-chip {
+  font-family: inherit;
+  font-size: 0.62rem;
+  background: transparent;
+  cursor: pointer;
+}
+button.evp-chip:hover,
+button.evp-chip:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* NAMED TOOLS directory (#/tools): card grid in the case-file idiom —
+   panel card, hairline border, soft shadow. auto-fill handles 390→1440px. */
+.tld-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.8rem;
+  margin: 0.7rem 0 0.9rem;
+}
+.tld-controls select,
+.tld-controls input {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.28rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+}
+.tld-controls input {
+  flex: 1 1 10rem;
+  max-width: 18rem;
+}
+.tld-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.tld-span {
+  grid-column: 1 / -1;
+}
+.tld-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(33, 29, 22, 0.12);
+  color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tld-card:hover,
+.tld-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 2px 6px rgba(33, 29, 22, 0.16);
+}
+.tld-card-name {
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+.tld-card-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.tld-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+.tld-card-named {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+.tld-card-named-zero {
+  color: var(--muted);
+}
+.tld-card-covers {
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+.tld-card.tld-dim {
+  opacity: 0.6;
+}
+.tld-divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.tld-divider::before,
+.tld-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 640px) {
+  .tld-grid {
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  }
+}
+
+/* Vendor sheet (#/tools/<slug>): case receipts list. */
+.tlv-case {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.6rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--line);
+}
+.tlv-case:first-child {
+  border-top: 0;
+}
+.tlv-case-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+a.tlv-case-title:hover,
+a.tlv-case-title:focus-visible {
+  color: var(--accent);
+}
+.tlv-verdict {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}
+.tlv-verdict-none {
+  color: var(--muted);
+}
+.tlv-case-date {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
 /* Color law (holds in every theme): --accent = court-proven / corroborated,
    --signal = observed/alleged volume. The legend carries the words. */
 .evp-sub,
