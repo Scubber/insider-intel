@@ -63,6 +63,20 @@ jobs:
           else
             echo "corpus copy failed — deploying without boot cache"
           fi
+      - name: Stamp asset versions (cache busting)
+        # Browsers hold ./app.js etc. for the Pages cache window (~10 min), so
+        # back-to-back deploys can pair a fresh index.html with stale JS/CSS —
+        # a broken, inconsistent page (observed 2026-08-17 after 5 same-day
+        # deploys). Stamping the references with the commit SHA makes every
+        # index.html fetch exactly the assets it shipped with.
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_SHA::8}"
+          sed -i -E \
+            -e "s#src=\"\./(app|config|ttp-packs|board-share)\.js\"#src=\"./\1.js?v=${stamp}\"#g" \
+            -e "s#href=\"\./(styles|themes)\.css\"#href=\"./\1.css?v=${stamp}\"#g" \
+            web/index.html
+          grep -c "?v=${stamp}" web/index.html
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
