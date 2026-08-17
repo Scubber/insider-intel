@@ -496,6 +496,15 @@
       const id = decodeURIComponent(path.slice("/tooling/".length)).trim();
       if (id) return { view: "tooling-category", id: id.toLowerCase() };
     }
+    if (path === "/tools" || path === "/tools/") {
+      // NAMED TOOLS directory — the TOOLING pane's second list-level view.
+      return { view: "tools" };
+    }
+    if (path.startsWith("/tools/")) {
+      // Vendor sheet deep link: slugified product display names.
+      const id = decodeURIComponent(path.slice("/tools/".length)).trim();
+      if (id) return { view: "tools-vendor", id: id.toLowerCase() };
+    }
     if (path.startsWith("/board/")) {
       const rest = path.slice("/board/".length);
       const slash = rest.indexOf("/");
@@ -534,6 +543,16 @@
       // Browser back from a technique dossier (or forward from the list)
       // lands here — re-render the category from the session-cached payload.
       await openToolingCategoryView(route.id);
+      return;
+    }
+    if (route.view === "tools") {
+      openToolsView();
+      return;
+    }
+    if (route.view === "tools-vendor" && route.id) {
+      // Browser back/forward across vendor sheets re-renders from the same
+      // session-cached /tooling payload the directory uses.
+      await openVendorToolView(route.id);
       return;
     }
     if (route.view === "board") {
@@ -5034,11 +5053,18 @@
         const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
         named.forEach((v) => {
           const m = v.mentions_cases;
-          const chip = evpEl("span", "evp-chip tlp-vendor", `${v.name} ×${m.total}`);
+          const chip = evpEl("button", "evp-chip tlp-vendor", `${v.name} ×${m.total}`);
+          chip.type = "button";
           chip.dataset.tip =
             `Named in ${m.total} distinct case document${m.total === 1 ? "" : "s"}, ` +
             `${m.verdict_true} adjudicated verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
-            "order ranks verdict-true first; presence in the record, not effectiveness";
+            "order ranks verdict-true first; presence in the record, not effectiveness. " +
+            "Tap for the product's sheet and its naming cases";
+          chip.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openVendorTool(vendorToolSlug(v.name));
+          });
           chips.appendChild(chip);
         });
         detail.appendChild(chips);
@@ -5100,23 +5126,46 @@
       row.appendChild(detail);
       list.appendChild(row);
     });
-    if (basisLine) {
-      basisLine.textContent = toolingBasisText(data);
-      basisLine.hidden = false;
-    }
+    renderToolingBasis(basisLine, data);
   }
 
-  // Ledger citation shared by the TOOLING list and every category dossier —
-  // one string, so both surfaces cite the same generated_at + basis verbatim.
+  // Ledger citation shared by every TOOLING surface (ranked list, category
+  // dossier, NAMED TOOLS directory, vendor sheet) — one string, so all four
+  // cite the same generated_at + basis verbatim. Short by operator call
+  // (2026-08-17): count + stamp only; the observed-technique/volume detail
+  // moved into the METHODOLOGY tooltip renderToolingBasis() appends.
   function toolingBasisText(data) {
     const b = (data && data.basis) || {};
     const when = String((data && data.generated_at) || "").slice(0, 16).replace("T", " ");
     return (
-      `COVERAGE COMPUTED AGAINST ${b.contributing_cases || 0} VERDICT-TRUE CASES ` +
-      `(${(data && data.observed_techniques) || 0} OBSERVED TECHNIQUES · ` +
-      `${(data && data.technique_case_volume) || 0} TECHNIQUE-CASE OBS.)` +
-      (when ? ` AS OF ${when}Z` : "")
+      `BASED ON ${b.contributing_cases || 0} VERDICT-TRUE CASES` +
+      (when ? ` · AS OF ${when}Z` : "")
     );
+  }
+
+  // The ONE muted citation line every TOOLING surface renders (operator call
+  // 2026-08-17, replacing the stacked basis + vendor-disclaimer + READ BEFORE
+  // BUYING blocks): live basis text, a METHODOLOGY affordance whose tooltip
+  // carries the compressed caveats (methodology lives one hover away, never
+  // inline), and the visible ITM trademark tail.
+  function renderToolingBasis(el, data) {
+    if (!el) return;
+    el.innerHTML = "";
+    el.appendChild(document.createTextNode(`${toolingBasisText(data)} · `));
+    const meth = evpEl("span", "tlp-methodology", "METHODOLOGY");
+    meth.dataset.tip =
+      `Coverage = a mapped ITM control exists for an observed technique ` +
+      `(${(data && data.observed_techniques) || 0} observed techniques · ` +
+      `${(data && data.technique_case_volume) || 0} technique-case observations) — not ` +
+      "product quality, and not proof that control caught the insider. CAUGHT ×N counts " +
+      "cases whose court-documented evidence names this control class. NAMED ×N = distinct " +
+      "case documents naming the product — presence in the record, not effectiveness, " +
+      "never an endorsement; vendors never affect category rankings. Litigated-case bias " +
+      "applies — see EVIDENCE › LIMITATIONS. Category→control mapping is authored and " +
+      "versioned; rankings recompute from the corpus every sweep.";
+    el.appendChild(meth);
+    el.appendChild(document.createTextNode(" · ITM™ Forscie Ltd (not affiliated)"));
+    el.hidden = false;
   }
 
   let toolingPageLoaded = false;
@@ -5133,13 +5182,34 @@
     }
   }
 
-  // The TOOLING pane hosts two views: the ranked category list and the
-  // per-category dossier (#/tooling/<id>). Exactly one is visible.
+  // The TOOLING pane hosts four sub-views — ranked categories (#/tooling),
+  // category dossier (#/tooling/<id>), NAMED TOOLS directory (#/tools), and
+  // vendor sheet (#/tools/<slug>). Exactly one is visible; the CATEGORIES |
+  // NAMED TOOLS segmented switch shows on the two list-level views only.
+  const TOOLING_SUBVIEWS = {
+    categories: "tlp-list-view",
+    category: "tlc-view",
+    directory: "tld-view",
+    vendor: "tlv-view",
+  };
+
+  function showToolingSubview(which) {
+    Object.entries(TOOLING_SUBVIEWS).forEach(([name, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = name !== which;
+    });
+    const switchRow = document.getElementById("tlp-switch");
+    if (switchRow) {
+      switchRow.hidden = which === "category" || which === "vendor";
+      const activeView = which === "directory" ? "tools" : "categories";
+      switchRow.querySelectorAll("[data-tooling-view]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.toolingView === activeView);
+      });
+    }
+  }
+
   function showToolingList() {
-    const listView = document.getElementById("tlp-list-view");
-    const catView = document.getElementById("tlc-view");
-    if (listView) listView.hidden = false;
-    if (catView) catView.hidden = true;
+    showToolingSubview("categories");
   }
 
   function openToolingView() {
@@ -5177,10 +5247,8 @@
 
   function renderToolingCategory(categoryId, data) {
     const view = document.getElementById("tlc-view");
-    const listView = document.getElementById("tlp-list-view");
     if (!view) return null;
-    if (listView) listView.hidden = true;
-    view.hidden = false;
+    showToolingSubview("category");
     const title = document.getElementById("tlc-title");
     const rationale = document.getElementById("tlc-rationale");
     const stats = document.getElementById("tlc-stats");
@@ -5262,11 +5330,13 @@
         const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
         named.forEach((v) => {
           const m = v.mentions_cases;
-          const chip = evpEl("span", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+          const chip = evpEl("button", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+          chip.type = "button";
           chip.dataset.tip =
             `Named in ${m.total} distinct case document${m.total === 1 ? "" : "s"}, ` +
             `${m.verdict_true} verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
-            "presence in the record, not effectiveness";
+            "presence in the record, not effectiveness. Tap for its naming cases";
+          chip.addEventListener("click", () => openVendorTool(vendorToolSlug(v.name)));
           chips.appendChild(chip);
         });
         vendorsBox.appendChild(chips);
@@ -5356,10 +5426,7 @@
       }
     }
 
-    if (basis) {
-      basis.textContent = toolingBasisText(data);
-      basis.hidden = false;
-    }
+    renderToolingBasis(basis, data);
     return cat;
   }
 
@@ -5383,6 +5450,396 @@
 
   function openToolingCategory(categoryId) {
     openToolingCategoryView(categoryId).catch((err) => setStatus(`Load failed: ${err.message}`));
+  }
+
+  /* ── NAMED TOOLS directory (#/tools) + vendor sheet (#/tools/<slug>):
+     one card per vendor across every category, built CLIENT-SIDE from the
+     same session-cached /tooling payload (ensureTooling) the category views
+     render — no second endpoint, no static file; a sweep + /reload re-primes
+     it. Counts and case receipts are documented case mentions: presence in
+     the record, never an effectiveness score, never a ranking input. The
+     build/sort/filter/slug helpers are pure (node-unit-tested). ─────────── */
+  function vendorToolSlug(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function buildVendorDirectory(categories) {
+    const byName = new Map();
+    (categories || []).forEach((cat) => {
+      (cat.vendors || []).forEach((v) => {
+        const name = String(v.name || "");
+        if (!name) return;
+        let entry = byName.get(name);
+        if (!entry) {
+          entry = {
+            name,
+            slug: vendorToolSlug(name),
+            categories: [],
+            mentions: { verdict_true: 0, total: 0 },
+            cases: [],
+            more_cases: 0,
+          };
+          byName.set(name, entry);
+        }
+        entry.categories.push({
+          id: cat.id,
+          label: cat.label,
+          detection_coverage_pct: cat.detection_coverage_pct,
+          prevention_coverage_pct: cat.prevention_coverage_pct,
+          detect_volume: cat.detect_volume,
+          prevent_volume: cat.prevent_volume,
+        });
+        // A dual-homed vendor (Netskope lives in dlp AND casb) carries the
+        // same alias set in both homes, so both rows report the same distinct
+        // cases — merge with MAX and link-dedupe, never sum.
+        const m = v.mentions_cases || {};
+        entry.mentions.verdict_true = Math.max(entry.mentions.verdict_true, m.verdict_true || 0);
+        entry.mentions.total = Math.max(entry.mentions.total, m.total || 0);
+        (v.cases || []).forEach((ref) => {
+          if (!entry.cases.some((c) => c.link === ref.link)) entry.cases.push(ref);
+        });
+        entry.more_cases = Math.max(entry.more_cases, v.more_cases || 0);
+      });
+    });
+    return [...byName.values()];
+  }
+
+  function sortVendorDirectory(entries, mode) {
+    const az = (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    const sorted = [...(entries || [])];
+    if (mode === "az") {
+      sorted.sort(az);
+    } else {
+      // Default: NAMED ×N — total naming cases desc, verdict-true desc, name.
+      sorted.sort(
+        (a, b) =>
+          b.mentions.total - a.mentions.total ||
+          b.mentions.verdict_true - a.mentions.verdict_true ||
+          az(a, b),
+      );
+    }
+    return sorted;
+  }
+
+  function filterVendorDirectory(entries, categoryId, text) {
+    const needle = String(text || "").trim().toLowerCase();
+    return (entries || []).filter((e) => {
+      if (categoryId && !e.categories.some((c) => c.id === categoryId)) return false;
+      if (!needle) return true;
+      const hay = [e.name, ...e.categories.map((c) => c.label || c.id)].join(" ").toLowerCase();
+      return hay.includes(needle);
+    });
+  }
+
+  function tldCoverBit(verb, pct, vol) {
+    // Verb-label doctrine + small-n law: percentage when the floor is met,
+    // observation count otherwise (mirrors tlpMeter / the dossier stats).
+    return pct != null ? `${verb} ${pct}%` : `${verb} ×${vol || 0} obs.`;
+  }
+
+  function tldCoversSummary(entry) {
+    return (entry.categories || [])
+      .map(
+        (c) =>
+          `${c.label}: ${tldCoverBit("DETECTS", c.detection_coverage_pct, c.detect_volume)}` +
+          ` · ${tldCoverBit("PREVENTS", c.prevention_coverage_pct, c.prevent_volume)}`,
+      )
+      .join("  /  ");
+  }
+
+  const toolsDirState = { sort: "named", category: "", text: "" };
+
+  function syncTldCategoryOptions(data) {
+    const select = document.getElementById("tld-category");
+    if (!select || select.dataset.filled === "1") return;
+    select.dataset.filled = "1";
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "ALL CATEGORIES";
+    select.appendChild(all);
+    [...((data && data.categories) || [])]
+      .sort((a, b) => String(a.label).localeCompare(String(b.label)))
+      .forEach((c) => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.label;
+        select.appendChild(opt);
+      });
+  }
+
+  function tldCard(entry, dim) {
+    const card = evpEl("button", dim ? "tld-card tld-dim" : "tld-card");
+    card.type = "button";
+    card.dataset.tip =
+      "Open this product's sheet — its categories, NAMED count, and the actual cases naming it";
+    card.appendChild(evpEl("span", "tld-card-name", entry.name));
+    const cats = evpEl("span", "tld-card-cats");
+    entry.categories.forEach((c) => cats.appendChild(evpEl("span", "tld-tag", c.label)));
+    card.appendChild(cats);
+    const m = entry.mentions;
+    const named = evpEl(
+      "span",
+      m.total ? "tld-card-named" : "tld-card-named tld-card-named-zero",
+      `NAMED ×${m.total}`,
+    );
+    named.dataset.tip = m.total
+      ? `Named in ${m.total} distinct stored case document${m.total === 1 ? "" : "s"}, ` +
+        `${m.verdict_true} adjudicated verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
+        "presence in the record, not effectiveness"
+      : "No stored case document names this product yet — the card fills in the first time " +
+        "a court record entering the corpus mentions it by name";
+    card.appendChild(named);
+    const covers = evpEl("span", "tld-card-covers", tldCoversSummary(entry));
+    covers.dataset.tip =
+      "What its CATEGORY's mapped ITM controls cover of observed insider-case volume — " +
+      "category numbers, never this product's";
+    card.appendChild(covers);
+    card.addEventListener("click", () => openVendorTool(entry.slug));
+    return card;
+  }
+
+  function renderToolsDirectory(data) {
+    const grid = document.getElementById("tld-grid");
+    const basis = document.getElementById("tld-basis");
+    if (!grid) return;
+    grid.innerHTML = "";
+    if (basis) basis.hidden = true;
+    if (!data || !((data.categories || []).length)) {
+      grid.appendChild(
+        evpEl(
+          "p",
+          "evp-note tld-span",
+          "The live payload is unreachable (the API may be waking up) — " +
+            "hit LIVE to retry, or come back in a minute.",
+        ),
+      );
+      return;
+    }
+    syncTldCategoryOptions(data);
+    const all = buildVendorDirectory(data.categories);
+    const sorted = sortVendorDirectory(
+      filterVendorDirectory(all, toolsDirState.category, toolsDirState.text),
+      toolsDirState.sort,
+    );
+    if (!sorted.length) {
+      grid.appendChild(
+        evpEl(
+          "p",
+          "evp-note tld-span",
+          "No product matches this filter — clear the text or pick ALL CATEGORIES. " +
+            "Cards come from the authored category examples; a new product joins by repo PR.",
+        ),
+      );
+    }
+    const named = sorted.filter((e) => e.mentions.total > 0);
+    const unnamed = sorted.filter((e) => !e.mentions.total);
+    named.forEach((e) => grid.appendChild(tldCard(e, false)));
+    if (unnamed.length) {
+      // Honest, not hidden: ×0 vendors trail dimmed under their own divider.
+      const divider = evpEl("div", "tld-divider", "NOT YET NAMED IN CASES");
+      divider.dataset.tip =
+        "No stored case document names these products yet — a card moves up the moment a " +
+        "court record entering the corpus mentions one by name. Authored illustrations, " +
+        "not endorsements.";
+      grid.appendChild(divider);
+      unnamed.forEach((e) => grid.appendChild(tldCard(e, true)));
+    }
+    renderToolingBasis(basis, data);
+  }
+
+  let toolsDirectoryLoaded = false;
+
+  async function loadToolsDirectory(force) {
+    if (!document.getElementById("tld-grid")) return;
+    if (toolsDirectoryLoaded && !force) return;
+    try {
+      // Same session-cached payload the category views render (one live
+      // read; refreshStream nulls the cache, so force never double-fetches).
+      renderToolsDirectory(await ensureTooling());
+      toolsDirectoryLoaded = true;
+    } catch (err) {
+      console.warn("Named tools directory unavailable", err);
+      renderToolsDirectory(null);
+    }
+  }
+
+  function openToolsView() {
+    setActivePane("tooling");
+    navigate("/tools");
+    showToolingSubview("directory");
+    loadToolsDirectory();
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus("Named tools directory");
+  }
+
+  /* Vendor sheet: name + category links + NAMED ×N + the case receipts. */
+  function tlvCaseRow(ref) {
+    const row = evpEl("div", "tlv-case");
+    if (ref.link) {
+      // Case links open the stored source document — the same idiom the
+      // workbench MODUS OPERANDI report uses for its case titles.
+      const a = document.createElement("a");
+      a.className = "tlv-case-title";
+      a.href = ref.link;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = ref.title || ref.link;
+      a.dataset.tip = "Open the stored case document at its source";
+      row.appendChild(a);
+    } else {
+      row.appendChild(evpEl("span", "tlv-case-title", ref.title || ""));
+    }
+    const badge = evpEl(
+      "span",
+      ref.verdict_true ? "tlv-verdict" : "tlv-verdict tlv-verdict-none",
+      ref.verdict_true ? "VERDICT-TRUE" : "CONTEXT",
+    );
+    badge.dataset.tip = ref.verdict_true
+      ? "Stored forensics adjudicate this as a true insider case — the same gate the " +
+        "evidence ledger applies"
+      : "Names the product but is not an adjudicated insider case (context coverage, or " +
+        "not yet enriched)";
+    row.appendChild(badge);
+    if (ref.published) {
+      row.appendChild(evpEl("span", "tlv-case-date", `FILED ${String(ref.published).slice(0, 10)}`));
+    }
+    return row;
+  }
+
+  function renderVendorSheet(slug, data) {
+    const view = document.getElementById("tlv-view");
+    if (!view) return null;
+    showToolingSubview("vendor");
+    const title = document.getElementById("tlv-title");
+    const stats = document.getElementById("tlv-stats");
+    const catsBox = document.getElementById("tlv-cats");
+    const casesBox = document.getElementById("tlv-cases");
+    const basis = document.getElementById("tlv-basis");
+    [stats, catsBox, casesBox].forEach((el) => {
+      if (el) el.innerHTML = "";
+    });
+    if (basis) basis.hidden = true;
+    const entry = buildVendorDirectory((data && data.categories) || []).find(
+      (e) => e.slug === String(slug || "").toLowerCase(),
+    );
+    if (!entry) {
+      if (title) title.textContent = String(slug || "").toUpperCase();
+      if (casesBox) {
+        casesBox.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            data
+              ? "Unknown product — pick a card from ← All named tools."
+              : "The live payload is unreachable (the API may be waking up) — " +
+                "go back to NAMED TOOLS and retry.",
+          ),
+        );
+      }
+      return null;
+    }
+    if (title) title.textContent = entry.name;
+    const m = entry.mentions;
+    if (stats) {
+      stats.append(
+        tlcStat(
+          `×${m.total}`,
+          "NAMED",
+          `Named in ${m.total} distinct stored case document${m.total === 1 ? "" : "s"} — ` +
+            "presence in the record, never an effectiveness score, never a ranking input",
+          m.total ? "evp-adj" : "",
+        ),
+        tlcStat(
+          `×${m.verdict_true}`,
+          "VERDICT-TRUE",
+          "Of the naming cases, how many stored forensics adjudicate as a true insider " +
+            "case — the same gate the evidence ledger applies",
+        ),
+      );
+    }
+    if (catsBox) {
+      const chips = evpEl("div", "evp-chips tlp-chips");
+      entry.categories.forEach((c) => {
+        const chip = evpEl("button", "tlc-cat-chip");
+        chip.type = "button";
+        chip.appendChild(evpEl("span", "tlc-cat-name", c.label));
+        chip.appendChild(
+          evpEl(
+            "span",
+            "tlc-cat-side",
+            `${tldCoverBit("DETECTS", c.detection_coverage_pct, c.detect_volume)} · ` +
+              `${tldCoverBit("PREVENTS", c.prevention_coverage_pct, c.prevent_volume)}`,
+          ),
+        );
+        chip.dataset.tip =
+          "Open this category's coverage dossier — the numbers are the category's, " +
+          "never this product's";
+        chip.addEventListener("click", () => openToolingCategory(c.id));
+        chips.appendChild(chip);
+      });
+      catsBox.appendChild(chips);
+    }
+    if (casesBox) {
+      if (!entry.cases.length) {
+        casesBox.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            "No case document names this product yet — it appears here when one does. " +
+              "Mentions are matched word-boundary against the authored alias map in stored " +
+              "court text; the corpus refresh sweeps every 6 hours.",
+          ),
+        );
+      } else {
+        entry.cases.forEach((ref) => casesBox.appendChild(tlvCaseRow(ref)));
+        if (entry.more_cases) {
+          const more = evpEl(
+            "p",
+            "tlp-examples",
+            `+${entry.more_cases} more named case${entry.more_cases === 1 ? "" : "s"}`,
+          );
+          more.dataset.tip =
+            "The sheet carries the 25 most recent naming cases by published date; " +
+            "the NAMED ×N count above is the full distinct-case count.";
+          casesBox.appendChild(more);
+        }
+      }
+    }
+    renderToolingBasis(basis, data);
+    return entry;
+  }
+
+  async function openVendorToolView(slug) {
+    setActivePane("tooling");
+    navigate(`/tools/${encodeURIComponent(String(slug || "").toLowerCase())}`);
+    state.toolsVendorSlug = String(slug || "").toLowerCase();
+    // Take the sheet over immediately — the payload await below must not
+    // leave a stale sub-view (or an empty category list) on screen.
+    showToolingSubview("vendor");
+    let data = null;
+    try {
+      data = await ensureTooling();
+    } catch (err) {
+      console.warn("Tooling payload unavailable", err);
+    }
+    const entry = renderVendorSheet(slug, data);
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus(entry ? `Named tools · ${entry.name}` : `Unknown product “${slug}”`);
+  }
+
+  function openVendorTool(slug) {
+    openVendorToolView(slug).catch((err) => setStatus(`Load failed: ${err.message}`));
   }
 
   /* ── Technique dossier RELEVANT TOOLING section: the categories whose
@@ -5475,10 +5932,13 @@
       );
       named.forEach((v) => {
         const m = v.mentions_cases;
-        const vc = evpEl("span", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+        const vc = evpEl("button", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+        vc.type = "button";
         vc.dataset.tip =
           `Named in ${m.total} distinct stored case document${m.total === 1 ? "" : "s"} ` +
-          `(${m.verdict_true} verdict-true) — presence in the record, not effectiveness`;
+          `(${m.verdict_true} verdict-true) — presence in the record, not effectiveness. ` +
+          "Tap for the product's sheet and its naming cases";
+        vc.addEventListener("click", () => openVendorTool(vendorToolSlug(v.name)));
         row.appendChild(vc);
       });
       const trailing = (category.vendors || [])
@@ -5788,12 +6248,25 @@
       evidencePageLoaded = false;
       if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
       // TOOLING is session-cached like the evidence page: drop the cached
-      // /tooling payload (it also feeds category dossiers and the technique
-      // dossiers' RELEVANT TOOLING join) and re-rank after the sweep-driven
-      // /reload, immediately when the pane is open.
+      // /tooling payload (it also feeds category dossiers, the NAMED TOOLS
+      // directory + vendor sheets, and the technique dossiers' RELEVANT
+      // TOOLING join) and re-rank after the sweep-driven /reload, immediately
+      // when the pane is open. Sequenced so ensureTooling() fetches once and
+      // every open sub-view re-renders from the same fresh payload.
       state.tooling = null;
       toolingPageLoaded = false;
-      if (els.appWorkbench && els.appWorkbench.dataset.pane === "tooling") loadToolingPage(true);
+      toolsDirectoryLoaded = false;
+      if (els.appWorkbench && els.appWorkbench.dataset.pane === "tooling") {
+        loadToolingPage(true)
+          .then(() => loadToolsDirectory(true))
+          .then(() => {
+            const tlv = document.getElementById("tlv-view");
+            if (tlv && !tlv.hidden) renderVendorSheet(state.toolsVendorSlug, state.tooling);
+          })
+          .catch(() => {
+            /* loaders fail soft internally */
+          });
+      }
       await reapplyActiveFilters();
       if (state.dataState) {
         state.dataState.indexed = reload.indexed_articles ?? state.dataState.indexed;
@@ -6131,6 +6604,51 @@
   const tlcBackBtn = document.getElementById("tlc-back");
   if (tlcBackBtn) tlcBackBtn.addEventListener("click", () => openToolingView());
 
+  // CATEGORIES | NAMED TOOLS segmented switch — both routes hash-navigate,
+  // so browser back walks between the two views.
+  const tlpSwitch = document.getElementById("tlp-switch");
+  if (tlpSwitch) {
+    tlpSwitch.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-tooling-view]");
+      if (!btn) return;
+      if (btn.dataset.toolingView === "tools") openToolsView();
+      else openToolingView();
+    });
+  }
+
+  // Vendor sheet → back to the directory.
+  const tlvBackBtn = document.getElementById("tlv-back");
+  if (tlvBackBtn) tlvBackBtn.addEventListener("click", () => openToolsView());
+
+  // Directory sort/filter controls: pure client-side over the session-cached
+  // payload — instant, no network.
+  const tldSort = document.getElementById("tld-sort");
+  if (tldSort) {
+    tldSort.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-tld-sort]");
+      if (!btn) return;
+      toolsDirState.sort = btn.dataset.tldSort === "az" ? "az" : "named";
+      tldSort.querySelectorAll("[data-tld-sort]").forEach((pill) => {
+        pill.classList.toggle("active", pill === btn);
+      });
+      renderToolsDirectory(state.tooling);
+    });
+  }
+  const tldCategorySelect = document.getElementById("tld-category");
+  if (tldCategorySelect) {
+    tldCategorySelect.addEventListener("change", () => {
+      toolsDirState.category = tldCategorySelect.value || "";
+      renderToolsDirectory(state.tooling);
+    });
+  }
+  const tldFilterInput = document.getElementById("tld-filter");
+  if (tldFilterInput) {
+    tldFilterInput.addEventListener("input", () => {
+      toolsDirState.text = tldFilterInput.value || "";
+      renderToolsDirectory(state.tooling);
+    });
+  }
+
   if (els.mobileTabs) {
     els.mobileTabs.addEventListener("click", (event) => {
       const btn = event.target.closest(".mobile-tab[data-pane]");
@@ -6464,11 +6982,15 @@
         // Deep link to one category's dossier — honored like a technique
         // dossier link (specific shared content, not a lingering takeover).
         await openToolingCategoryView(route.id);
-      } else if (route.view === "evidence" || route.view === "tooling") {
+      } else if (route.view === "tools-vendor" && route.id) {
+        // Deep link to one vendor's sheet — specific shared content, honored.
+        await openVendorToolView(route.id);
+      } else if (route.view === "evidence" || route.view === "tooling" || route.view === "tools") {
         // Operator call (2026-08-10): the site always STARTS on the stream.
         // Mobile browsers restore the last URL, so a lingering #/evidence
-        // (or #/tooling) from a prior visit was making a takeover pane the
-        // de-facto start page. In-session navigation still routes normally.
+        // (or #/tooling, #/tools) from a prior visit was making a takeover
+        // pane the de-facto start page. In-session navigation still routes
+        // normally.
         navigate("/");
         await loadArticles();
       } else if (route.view === "board") {

@@ -24,6 +24,12 @@ Mechanics (zero LLM, deterministic):
 - Counts are DISTINCT case links, split into verdict-true (rows whose stored
   forensics adjudicated ``is_insider_case is True`` — the same gate the
   evidence ledger applies) and total mentions (any indexed document).
+- Case RECEIPTS: alongside the counts, each vendor carries the actual case
+  references (link, title, verdict flag, published date) for the NAMED TOOLS
+  directory's vendor sheet — capped at the ``VENDOR_CASE_REFS_CAP`` most
+  recent by published date (undated rows sort last), with ``more_cases``
+  carrying the count beyond the cap. Receipts are display-only decoration
+  under the same never-a-ranking-input contract as the counts.
 - Cache contract: computed lazily ONCE per index generation.
   ``mentions_for_index`` keys a WeakKeyDictionary on the ArticleSearchIndex
   object itself — the same lifecycle as the service's index singleton — so
@@ -43,6 +49,13 @@ from weakref import WeakKeyDictionary
 VENDOR_ALIASES_PATH = (
     Path(__file__).resolve().parents[2] / "shared" / "data" / "vendor_aliases.json"
 )
+
+# Vendor-sheet receipts cap: each vendor's payload carries at most this many
+# case references (the most recent by published date); ``more_cases`` reports
+# how many further naming cases exist beyond the cap. Keeps the /tooling
+# payload bounded (77 vendors × 25 refs worst case) while the sheet stays a
+# real receipts list, not a bare count.
+VENDOR_CASE_REFS_CAP = 25
 
 
 @lru_cache(maxsize=1)
@@ -94,14 +107,17 @@ def compile_alias_matcher(
 def scan_vendor_mentions(rows: Iterable[dict], vendors: list[dict]) -> dict:
     """Pure scanner core (deterministic; unit-tested with synthetic rows).
 
-    ``rows`` — {"link", "clean_text", "verdict_true"} dicts; ``verdict_true``
-    mirrors the ledger's gate (stored forensics say ``is_insider_case is
-    True`` — False and missing both fail it).
+    ``rows`` — {"link", "clean_text", "verdict_true"} dicts (optionally
+    "title" and "published", an ISO date string, for the case receipts);
+    ``verdict_true`` mirrors the ledger's gate (stored forensics say
+    ``is_insider_case is True`` — False and missing both fail it).
     ``vendors`` — vendor_aliases.json ``vendors`` entries.
 
     Returns ``{"scanned_articles": n, "mentions": {(category, name):
-    {"total": set(links), "verdict_true": set(links)}}}`` — distinct case
-    links, never occurrence counts.
+    {"total": set(links), "verdict_true": set(links)}}, "cases": {link:
+    {"title", "verdict_true", "published"}}}`` — distinct case links, never
+    occurrence counts; ``cases`` holds display metadata for rows that
+    matched at least one vendor (the vendor-sheet receipts).
     """
     pattern, homes = compile_alias_matcher(vendors)
     mentions: dict[tuple[str, str], dict[str, set[str]]] = {
@@ -111,6 +127,7 @@ def scan_vendor_mentions(rows: Iterable[dict], vendors: list[dict]) -> dict:
         }
         for v in vendors
     }
+    cases: dict[str, dict] = {}
     scanned = 0
     for row in rows:
         scanned += 1
@@ -124,12 +141,18 @@ def scan_vendor_mentions(rows: Iterable[dict], vendors: list[dict]) -> dict:
         # (cheaper than an IGNORECASE alternation over the whole corpus).
         for match in pattern.finditer(text.lower()):
             hit.update(homes.get(_normalize(match.group(0)), ()))
+        if hit:
+            cases[link] = {
+                "title": str(row.get("title") or "") or link,
+                "verdict_true": verdict_true,
+                "published": row.get("published") or None,
+            }
         for key in hit:
             slot = mentions[key]
             slot["total"].add(link)
             if verdict_true:
                 slot["verdict_true"].add(link)
-    return {"scanned_articles": scanned, "mentions": mentions}
+    return {"scanned_articles": scanned, "mentions": mentions, "cases": cases}
 
 
 # One scan per index generation: keyed weakly on the index object (the
@@ -146,7 +169,9 @@ def mentions_for_index(index) -> dict:
         rows = (
             {
                 "link": article.link,
+                "title": article.title,
                 "clean_text": article.clean_text,
+                "published": (article.published.isoformat() if article.published else None),
                 "verdict_true": (
                     article.forensics is not None and article.forensics.is_insider_case is True
                 ),
@@ -158,21 +183,47 @@ def mentions_for_index(index) -> dict:
     return scan
 
 
+def vendor_case_refs(links: set[str] | frozenset[str], case_meta: dict) -> tuple[list[dict], int]:
+    """Capped, ordered case receipts for one vendor.
+
+    Orders the vendor's distinct naming cases most-recent-published first
+    (undated cases last; equal dates tie-break by link ascending, so the
+    order is deterministic), keeps the head ``VENDOR_CASE_REFS_CAP`` and
+    returns ``(refs, more)`` where ``more`` counts the cases beyond the cap.
+    """
+    refs = [
+        {
+            "link": link,
+            "title": str(meta.get("title") or "") or link,
+            "verdict_true": meta.get("verdict_true") is True,
+            "published": meta.get("published") or None,
+        }
+        for link in links
+        for meta in (case_meta.get(link) or {"title": link},)
+    ]
+    refs.sort(key=lambda r: r["link"])  # deterministic tie-break (stable sort below)
+    refs.sort(key=lambda r: str(r["published"] or ""), reverse=True)  # newest first, undated last
+    return refs[:VENDOR_CASE_REFS_CAP], max(0, len(refs) - VENDOR_CASE_REFS_CAP)
+
+
 def attach_vendor_mentions(category_rows: list[dict], scan: dict) -> None:
     """Decorate ranked /tooling category rows with mention-ranked vendors.
 
     Adds a ``vendors`` list to each row — every ``examples`` vendor with its
     ``mentions_cases`` counts, ordered verdict-true mentions desc, then total
-    mentions desc, then name — and touches NOTHING else: the category ranking
-    fields stay byte-identical whether the aliases file exists or not
-    (test-pinned).
+    mentions desc, then name, each carrying its capped case receipts
+    (``cases`` + ``more_cases``, see ``vendor_case_refs``) — and touches
+    NOTHING else: the category ranking fields stay byte-identical whether
+    the aliases file exists or not (test-pinned).
     """
     mentions = scan.get("mentions") or {}
+    case_meta = scan.get("cases") or {}
     for row in category_rows:
         category_id = str(row.get("id") or "")
         vendors = []
         for name in row.get("examples") or []:
             slot = mentions.get((category_id, str(name))) or {}
+            refs, more = vendor_case_refs(slot.get("total") or set(), case_meta)
             vendors.append(
                 {
                     "name": str(name),
@@ -180,6 +231,8 @@ def attach_vendor_mentions(category_rows: list[dict], scan: dict) -> None:
                         "verdict_true": len(slot.get("verdict_true") or ()),
                         "total": len(slot.get("total") or ()),
                     },
+                    "cases": refs,
+                    "more_cases": more,
                 }
             )
         vendors.sort(

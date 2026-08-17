@@ -260,4 +260,11 @@ def test_attach_orders_vendors_verdict_then_total_then_name() -> None:
 def test_attach_defaults_missing_scan_entries_to_zero() -> None:
     row = {"id": "irm", "examples": ["Ghost"]}
     attach_vendor_mentions([row], {"mentions": {}})
-    assert row["vendors"] == [{"name": "Ghost", "mentions_cases": {"verdict_true": 0, "total": 0}}]
+    assert row["vendors"] == [
+        {
+            "name": "Ghost",
+            "mentions_cases": {"verdict_true": 0, "total": 0},
+            "cases": [],
+            "more_cases": 0,
+        }
+    ]
