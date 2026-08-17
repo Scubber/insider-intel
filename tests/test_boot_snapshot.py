@@ -60,7 +60,7 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     _seed(tmp_path, monkeypatch)
     from scripts.export_boot_snapshot import build_snapshot
 
-    articles, meta = build_snapshot(limit=50)
+    articles, meta, _tooling = build_snapshot(limit=50)
 
     # UI-compatible: validates as the API's stream response model.
     parsed = ArticleListResponse.model_validate(articles)
@@ -120,6 +120,42 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     assert "quote_verbatim_share_pct" in basis
 
 
+def test_snapshot_tooling_is_the_exact_live_payload(tmp_path, monkeypatch) -> None:
+    """tooling.json carries the exact GET /tooling payload: the SAME
+    service.tooling_rankings() the API endpoint serves, run against the loaded
+    corpus — one source of truth, so the snapshot-first TOOLING paint can
+    never drift from what the live swap renders. Only the ledger's generation
+    stamp may differ between the export and a fresh live call."""
+    _seed(tmp_path, monkeypatch)
+    from apps.search.service import tooling_rankings
+    from scripts.export_boot_snapshot import build_snapshot
+
+    _articles, _meta, tooling = build_snapshot(limit=50)
+
+    # JSON-clean: the exporter writes this dict verbatim with json.dumps.
+    tooling = json.loads(json.dumps(tooling))
+
+    # Payload shape the TOOLING surfaces read (basis lines, small-n law,
+    # ranked categories with their mention-ranked vendor rows).
+    for key in (
+        "generated_at",
+        "basis",
+        "enriched_cases",
+        "small_n_floor",
+        "observed_techniques",
+        "technique_case_volume",
+        "categories",
+        "attribution",
+    ):
+        assert key in tooling, f"tooling snapshot lost the {key!r} field"
+    assert tooling["categories"]
+    assert all("vendors" in c for c in tooling["categories"])
+
+    live = json.loads(json.dumps(tooling_rankings()))
+    assert tooling.pop("generated_at") and live.pop("generated_at")
+    assert tooling == live
+
+
 def test_snapshot_cli_writes_files(tmp_path, monkeypatch) -> None:
     _seed(tmp_path, monkeypatch)
     import sys
@@ -132,6 +168,8 @@ def test_snapshot_cli_writes_files(tmp_path, monkeypatch) -> None:
     data = json.loads((out / "articles.json").read_text())
     assert data["results"]
     assert json.loads((out / "meta.json").read_text())["indexed_articles"] == 2
+    tooling = json.loads((out / "tooling.json").read_text())
+    assert tooling["generated_at"] and tooling["categories"]
 
 
 def test_snapshot_covers_stream_card_forensics_reads() -> None:

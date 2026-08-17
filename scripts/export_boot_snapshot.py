@@ -11,6 +11,11 @@ Writes to --out (default web/data/):
                    evidence_basis = the verdict-gated ledger's generation
                    stamp (row counts through the gate, model mix, verbatim
                    quote share) for the EVIDENCE-page staleness banner
+  tooling.json   — the exact GET /tooling payload (same tooling_rankings the
+                   API serves — one source of truth, no drift) so the
+                   snapshot-first ensureTooling() in web/app.js can paint the
+                   TOOLING page instantly while the API cold-starts, then
+                   swap to the live payload in the background
 
 Run from insider-intel/:
   python -m scripts.export_boot_snapshot --out web/data
@@ -24,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from apps.aggregator.lane_health import read_lane_health
-from apps.search.service import get_index
+from apps.search.service import get_index, tooling_rankings
 from shared.settings import get_settings
 from shared.utils.evidence import build_evidence_ledger
 
@@ -68,7 +73,7 @@ _KEEP_FORENSICS_KEYS = (
 _KEEP_METHOD_KEYS = ("action", "claim_status")
 
 
-def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict]:
+def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict]:
     settings = get_settings()
     index = get_index(settings.processed_articles_path, reload=True)
     listed = index.list_articles(
@@ -132,7 +137,13 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict]:
             "generated_at": lane_health["generated_at"],
             **(lane_health.get("summary") or {}),
         }
-    return articles, meta
+    # TOOLING first paint: the exact GET /tooling payload, computed by the
+    # SAME service function the API endpoint calls against the corpus loaded
+    # above — no second aggregation path, no drift. The payload carries its
+    # own generated_at + basis block, so the cached paint cites its true age
+    # on every basis line without meta.json involvement.
+    tooling = tooling_rankings(settings.processed_articles_path)
+    return articles, meta, tooling
 
 
 def main() -> None:
@@ -141,15 +152,18 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=SNAPSHOT_LIMIT)
     args = ap.parse_args()
 
-    articles, meta = build_snapshot(limit=args.limit)
+    articles, meta, tooling = build_snapshot(limit=args.limit)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     articles_path = out / "articles.json"
     meta_path = out / "meta.json"
+    tooling_path = out / "tooling.json"
     articles_path.write_text(json.dumps(articles, indent=None), encoding="utf-8")
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    tooling_path.write_text(json.dumps(tooling, indent=None), encoding="utf-8")
     print(f"Wrote {articles_path} ({articles_path.stat().st_size // 1024} KiB)")
     print(f"Wrote {meta_path}")
+    print(f"Wrote {tooling_path} ({tooling_path.stat().st_size // 1024} KiB)")
 
 
 if __name__ == "__main__":

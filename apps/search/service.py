@@ -44,6 +44,26 @@ def get_index(path: str | Path | None = None, *, reload: bool = False) -> Articl
     return _index
 
 
+def warm_vendor_scan(index: ArticleSearchIndex | None = None) -> None:
+    """Pre-warm the per-index vendor-mention scan (the /tooling hot path).
+
+    The scan cache is weak-keyed on the index object
+    (apps/search/vendor_mentions.py), so every index swap starts cold and the
+    FIRST /tooling request after it would pay the full aliases × corpus scan
+    (~164 aliases × 7k docs). /reload calls this right after the swap — its
+    only caller is the 6h refresh job, which can afford the extra seconds —
+    so the cache is hot before any user request. Best-effort by contract: a
+    scan failure is logged and swallowed, never breaking the reload (the
+    first /tooling call would simply rescan or surface the error itself).
+    """
+    from apps.search.vendor_mentions import mentions_for_index
+
+    try:
+        mentions_for_index(index if index is not None else get_index())
+    except Exception:
+        logger.exception("vendor-mention warm scan failed; first /tooling call will rescan")
+
+
 def list_sources(
     path: str | Path | None = None,
     *,

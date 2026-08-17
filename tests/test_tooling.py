@@ -9,9 +9,12 @@ Three contracts pinned here:
    deterministic function unit-tested with synthetic ledger/counts fixtures,
    and GET /tooling recomputes it from the in-memory index per call (same
    sweep-propagation contract the matrix data-source tests pin).
-3. The web layer stays api()-only: mechanical regex checks over the shipped
-   web/ files in the test_site_guide / test_matrix_data_sources style — a
-   static-file read creeping into the TOOLING path fails CI, not a review.
+3. The web layer's data path is the session-cached ensureTooling() read:
+   mechanical regex checks over the shipped web/ files in the test_site_guide
+   / test_matrix_data_sources style. The ONE sanctioned static read is the
+   snapshot-first paint inside ensureTooling itself (data/tooling.json — the
+   exporter-generated copy of the live payload, CACHED→LIVE like the stream);
+   any other static-file read creeping into the TOOLING path fails CI.
 """
 
 from __future__ import annotations
@@ -447,10 +450,11 @@ def test_tooling_endpoint_recomputes_per_reload(tmp_path, monkeypatch) -> None:
 
 
 def test_mention_scan_runs_once_per_index_generation(tmp_path, monkeypatch) -> None:
-    """The corpus scan is lazy and cached on the index object: repeated
-    /tooling calls never rescan; /reload's index swap forces exactly one
-    fresh scan on the next call (7k-doc per-request rescans are the failure
-    mode this pins)."""
+    """The corpus scan is cached on the index object: repeated /tooling calls
+    never rescan; /reload's index swap invalidates it exactly once (the swap
+    now warms the fresh scan eagerly — see the reload-warming test below), so
+    post-reload /tooling calls still serve from cache (7k-doc per-request
+    rescans are the failure mode this pins)."""
     calls = {"n": 0}
     real_scan = vendor_mentions_module.scan_vendor_mentions
 
@@ -468,6 +472,43 @@ def test_mention_scan_runs_once_per_index_generation(tmp_path, monkeypatch) -> N
         client.get("/tooling")
         client.get("/tooling")
         assert calls["n"] == 2, "the /reload index swap must invalidate exactly once"
+
+
+def test_reload_warms_mention_scan_before_first_request(tmp_path, monkeypatch) -> None:
+    """/reload eagerly re-runs the vendor-mention scan for the swapped-in
+    index, so the per-index cache is hot BEFORE any user request — the first
+    post-boot or post-sweep /tooling must never pay the full aliases × corpus
+    scan (the 20–40s cold-load the TOOLING page shipped with)."""
+    calls = {"n": 0}
+    real_scan = vendor_mentions_module.scan_vendor_mentions
+
+    def counting_scan(rows, vendors):
+        calls["n"] += 1
+        return real_scan(rows, vendors)
+
+    monkeypatch.setattr(vendor_mentions_module, "scan_vendor_mentions", counting_scan)
+    with _client(tmp_path, monkeypatch) as client:
+        resp = client.post("/reload")
+        assert resp.status_code == 200
+        assert calls["n"] == 1, "/reload must warm the scan before any /tooling request"
+        client.get("/tooling")
+        assert calls["n"] == 1, "the warmed cache must serve the first /tooling — no rescan"
+
+
+def test_reload_never_breaks_on_scan_failure(tmp_path, monkeypatch) -> None:
+    """The warm-up is best-effort by contract: a scan blow-up is logged and
+    swallowed in the service layer — /reload still answers 200 with the
+    reloaded index size."""
+
+    def broken_scan(rows, vendors):
+        raise RuntimeError("alias file corrupted")
+
+    monkeypatch.setattr(vendor_mentions_module, "scan_vendor_mentions", broken_scan)
+    with _client(tmp_path, monkeypatch) as client:
+        resp = client.post("/reload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "reloaded"
+        assert resp.json()["indexed_articles"] == 2
 
 
 # ── 4. Web contract: TOOLING tab, pane, and api()-only data path ─────────────
@@ -541,6 +582,44 @@ def test_tooling_path_reads_only_the_live_api() -> None:
     assert "ensureTooling(" in _fn_body(src, "loadToolingPage")
     # Route registered.
     assert '"/tooling"' in _fn_body(src, "parseRoute")
+
+
+def test_ensure_tooling_paints_snapshot_first_then_swaps_live() -> None:
+    """Cold-load contract (the STREAM CACHED→LIVE idiom, applied to TOOLING):
+    ensureTooling()'s first need tries the Pages boot snapshot
+    (data/tooling.json — exporter-generated, never committed) BEFORE its live
+    read, so the table / dossiers / sheets paint instantly while Cloud Run
+    wakes; the live api(\"/tooling\") still fires (in the background) and the
+    open tooling surface re-renders when it lands. A snapshot-less deploy
+    (local dev, first deploy) falls back to live-only exactly as before."""
+    src = _app_js()
+    body = _fn_body(src, "ensureTooling")
+    # Snapshot attempt precedes the live call inside ensureTooling, and the
+    # live read is still pinned (the snapshot can serve a paint, never
+    # replace the live API).
+    assert "fetchToolingSnapshot(" in body
+    assert body.index("fetchToolingSnapshot(") < body.index('api("/tooling"')
+    snap = _fn_body(src, "fetchToolingSnapshot")
+    # Relative same-origin path, exactly like data/articles.json; fail-soft
+    # null → callers fall through to the live api("/tooling").
+    assert '"data/tooling.json"' in snap
+    assert "return null" in snap
+    # Background CACHED→LIVE swap: the refresh reads the live endpoint and
+    # repaints whichever tooling surface is open — table in place, open
+    # category dossier, open vendor sheet, open dossier RELEVANT TOOLING.
+    refresh = _fn_body(src, "refreshToolingLive")
+    assert 'api("/tooling"' in refresh
+    assert "rerenderToolingSurfaces()" in refresh
+    rerender = _fn_body(src, "rerenderToolingSurfaces")
+    assert "renderToolingPage(state.tooling)" in rerender
+    assert "renderToolingCategory(" in rerender
+    assert "renderVendorSheet(state.toolsVendorSlug, state.tooling)" in rerender
+    assert "renderDossierTooling(" in rerender
+    # Deep links paint pre-probe: boot() dispatches tooling routes from the
+    # snapshot BEFORE waiting out the cold start (the stream's own
+    # paintFromSnapshot-then-probe ordering).
+    boot = _fn_body(src, "boot")
+    assert boot.index("openToolingView") < boot.index("probeLiveApi")
 
 
 def test_table_structure_group_rows_precede_tool_rows() -> None:

@@ -2375,12 +2375,105 @@
   }
 
   // /tooling payload, session-cached like the itm catalog / candidates and
-  // reset on LIVE refresh — one live read feeds the TOOLING page, the
-  // category dossiers, and every technique dossier's RELEVANT TOOLING join.
+  // reset on LIVE refresh — one read feeds the TOOLING page, the category
+  // dossiers, and every technique dossier's RELEVANT TOOLING join.
+  //
+  // Snapshot-first (the STREAM's CACHED→LIVE idiom): the first need paints
+  // instantly from the Pages boot snapshot (data/tooling.json — generated
+  // into the artifact, never in git) while the live api("/tooling") fires in
+  // the background; when it lands, whichever tooling surface is open
+  // re-renders from the live payload. Snapshot absent (local dev, first
+  // deploy) → live-only, exactly as before. Staleness stays honest without
+  // extra plumbing: every basis line cites the payload's OWN generated_at
+  // stamp, so a cached paint states its true age until the live swap.
+  let toolingIsLive = false; // false while state.tooling came from the snapshot
+  let toolingLiveInflight = null;
+
   async function ensureTooling(force = false) {
-    if (!force && state.tooling) return state.tooling;
+    if (!force && state.tooling) {
+      // A snapshot payload is on screen — keep chasing the live one (this
+      // retries after a failed background refresh, e.g. a still-cold API).
+      if (!toolingIsLive) refreshToolingLive();
+      return state.tooling;
+    }
+    if (!force && !toolingIsLive) {
+      const snap = await fetchToolingSnapshot();
+      if (snap) {
+        state.tooling = snap;
+        refreshToolingLive();
+        return state.tooling;
+      }
+    }
     state.tooling = await api("/tooling", {}, { timeoutMs: 15000 });
+    toolingIsLive = true;
+    toolingLiveInflight = null; // any pending background refresh is superseded
     return state.tooling;
+  }
+
+  /** TOOLING first-paint cache: same fail-soft contract as
+   *  paintFromSnapshot() — a same-origin file generated into the Pages
+   *  artifact (web/data/, never in git). Absent (local dev, snapshot-less
+   *  deploy) or malformed → null, and callers fall back to the live
+   *  api("/tooling") exactly as before. */
+  async function fetchToolingSnapshot() {
+    try {
+      const res = await fetch("data/tooling.json", { cache: "no-store" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !Array.isArray(data.categories) || !data.categories.length) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  // Background CACHED→LIVE swap for the tooling payload: single-flight; on
+  // land, replace the cached object and repaint the open surfaces. Failure
+  // keeps the snapshot on screen — the next ensureTooling() call retries.
+  // The generous timeout deliberately rides out a Cloud Run cold start (the
+  // request itself wakes the instance), matching probeLiveApi's ~75s ladder.
+  function refreshToolingLive() {
+    if (toolingIsLive || toolingLiveInflight) return toolingLiveInflight;
+    const inflight = api("/tooling", {}, { timeoutMs: 75000 })
+      .then((data) => {
+        if (toolingLiveInflight !== inflight) return; // superseded by LIVE refresh
+        state.tooling = data;
+        toolingIsLive = true;
+        rerenderToolingSurfaces();
+      })
+      .catch((err) => {
+        console.warn("Live tooling refresh failed — keeping cached payload", err);
+      })
+      .finally(() => {
+        if (toolingLiveInflight === inflight) toolingLiveInflight = null;
+      });
+    toolingLiveInflight = inflight;
+    return inflight;
+  }
+
+  // Repaint whatever tooling surface is on screen from the freshly-landed
+  // live payload — the table in place, plus the open category dossier or
+  // vendor sheet and an open technique dossier's RELEVANT TOOLING join (all
+  // read the same cached object). Mirrors the sequenced re-render the LIVE
+  // refresh (refreshStream) performs after busting this cache.
+  function rerenderToolingSurfaces() {
+    renderToolingPage(state.tooling);
+    toolingPageLoaded = true;
+    const tlc = document.getElementById("tlc-view");
+    if (tlc && !tlc.hidden) {
+      const route = parseRoute();
+      if (route.view === "tooling-category" && route.id) {
+        renderToolingCategory(route.id, state.tooling);
+      }
+    }
+    const tlv = document.getElementById("tlv-view");
+    if (tlv && !tlv.hidden) renderVendorSheet(state.toolsVendorSlug, state.tooling);
+    if (state.dossierTechniqueId && state.itmCatalog) {
+      const tech = (state.itmCatalog.techniques || []).find(
+        (t) => t.id === state.dossierTechniqueId,
+      );
+      if (tech) renderDossierTooling(tech, state.tooling);
+    }
   }
 
   const CANDIDATE_STATUS_LABELS = {
@@ -5417,10 +5510,12 @@
   /* ── Vendor sheet (#/tools/<slug>): one named product against the stored
      case record, built CLIENT-SIDE from the same session-cached /tooling
      payload (ensureTooling) the table and category views render — no second
-     endpoint, no static file; a sweep + /reload re-primes it. Counts and
-     case receipts are documented case mentions: presence in the record,
-     never an effectiveness score, never a ranking input. The build/slug
-     helpers are pure (node-unit-tested). ─────────────────────────────────── */
+     endpoint, no separate data path; a sweep + /reload re-primes it, and the
+     snapshot-first paint (data/tooling.json → live swap) is inherited from
+     ensureTooling automatically. Counts and case receipts are documented
+     case mentions: presence in the record, never an effectiveness score,
+     never a ranking input. The build/slug helpers are pure
+     (node-unit-tested). ──────────────────────────────────────────────────── */
   function vendorToolSlug(name) {
     return String(name || "")
       .toLowerCase()
@@ -5657,9 +5752,10 @@
 
   /* ── Technique dossier RELEVANT TOOLING section: the categories whose
      authored DT/PV mapping intersects THIS technique's catalog controls.
-     Client-side join of two live session-cached reads (/itm technique
-     controls × /tooling category mappings) — no static file, no new
-     endpoint; a sweep + /reload re-primes both sides. ─────────────────── */
+     Client-side join of two session-cached reads (/itm technique controls ×
+     /tooling category mappings) — no new endpoint; a sweep + /reload
+     re-primes both sides, and the tooling side inherits ensureTooling's
+     snapshot-first paint (live swap re-renders this section too). ─────── */
   function dossierToolingJoin(techDetections, techPreventions, categories) {
     const idSet = (list) =>
       new Set(
@@ -6739,6 +6835,23 @@
       // the Cloud Run instance wakes; live data replaces it below. The
       // badge only ever says LIVE once /health has actually answered.
       const painted = await paintFromSnapshot();
+
+      // TOOLING deep links paint the same way: dispatch them BEFORE the
+      // probe below so the snapshot-first ensureTooling() serves the table /
+      // category dossier / vendor sheet instantly while the API wakes (its
+      // background refresh repaints when live lands). The post-probe
+      // dispatch below re-runs the same opener — idempotent. Snapshot-less
+      // deploys skip and keep today's live-only, post-probe flow.
+      if (painted) {
+        const early = parseRoute();
+        if (early.view === "tooling") {
+          openToolingView();
+        } else if (early.view === "tooling-category" && early.id) {
+          openToolingCategoryView(early.id).catch(() => {});
+        } else if (early.view === "tools-vendor" && early.id) {
+          openVendorToolView(early.id).catch(() => {});
+        }
+      }
 
       const health = await probeLiveApi();
       state.snapshotMode = false;
