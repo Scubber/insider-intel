@@ -156,3 +156,24 @@ def test_verdict_axis_never_starved_by_cell_count() -> None:
     false_n = manifest["strata_counts"]["verdict_false"]
     assert true_n + false_n == 40
     assert true_n == 20, f"expected an even verdict split, got {true_n}/{false_n}"
+
+
+def test_cell_order_does_not_starve_a_bucket_value() -> None:
+    """Regression: str-sorted cells group by axis value, so a per-verdict
+    budget below the cell count starved whichever value sorts last (the real
+    corpus drew 0 method-rich picks). Hash-ordered cells must let every
+    method bucket through when each has ample supply."""
+    rows = []
+    for i in range(60):
+        rows.append(
+            make_row(
+                f"https://x.test/r-{i}",
+                insider=i % 2 == 0,
+                methods_n=(0, 2, 5)[i % 3],
+                text_chars=8_000,
+                posture=f"posture-{i % 10}",
+            )
+        )
+    manifest = select_goldset(rows, n=30)
+    buckets = manifest["strata_counts"]["method_buckets"]
+    assert set(buckets) == {"poor", "mid", "rich"}, buckets

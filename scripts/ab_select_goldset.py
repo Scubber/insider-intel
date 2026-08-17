@@ -183,15 +183,22 @@ def select_goldset(
         members.sort(key=lambda e: (e["baseline"] is None, order_key(seed, e["link"])))
 
     # Picks strictly alternate the verdict axis, each verdict rotating through
-    # its own sorted cell list. A plain sorted-cells round-robin starved
+    # its own cell list. A plain sorted-cells round-robin starved
     # verdict=True out of the ENTIRE gold set on the real corpus: str-sorting
     # puts every (False, ...) cell first, and with >= n non-empty False cells
     # round one fills n before reaching a single True cell. Alternation
     # guarantees an even verdict split whenever supply allows, degrading to
     # whatever remains when one side runs dry.
+    #
+    # Within a verdict, cells are ordered by seeded hash, NOT str sort: str
+    # order groups cells by the next axis value ('mid' < 'poor' < 'rich'), so
+    # when the per-verdict budget is smaller than the cell count the last
+    # axis value gets starved the same way (the real corpus drew 0
+    # method-rich picks). Hash order decorrelates iteration from every axis,
+    # spreading truncation evenly — and stays deterministic per seed.
     keys_by_verdict = {
-        True: sorted((k for k in cells if k[0]), key=str),
-        False: sorted((k for k in cells if not k[0]), key=str),
+        True: sorted((k for k in cells if k[0]), key=lambda k: order_key(seed, str(k))),
+        False: sorted((k for k in cells if not k[0]), key=lambda k: order_key(seed, str(k))),
     }
     cursors = {True: 0, False: 0}
 
