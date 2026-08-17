@@ -8,6 +8,9 @@ on:
       - "apps/**"
       - "shared/**"
       - "tests/**"
+      - "web/**"
+      - "scripts/ui_smoke.py"
+      - "scripts/ui_smoke_ci.py"
       - "pyproject.toml"
       - "Dockerfile"
       - "docker-compose.yml"
@@ -19,11 +22,15 @@ on:
       - "apps/**"
       - "shared/**"
       - "tests/**"
+      - "web/**"
+      - "scripts/ui_smoke.py"
+      - "scripts/ui_smoke_ci.py"
       - "pyproject.toml"
       - "Dockerfile"
       - "docker-compose.yml"
       - "Makefile"
       - ".dockerignore"
+      - ".github/workflows/ci.yml"
 
 jobs:
   build-test:
@@ -36,3 +43,29 @@ jobs:
         run: make lint
       - name: Test (against Postgres sidecar)
         run: make test
+
+  # Browser-floor gate (operator directive 2026-08-17, after a broken deploy
+  # shipped): the real web/ served statically, driven headless in Chromium at
+  # 390 and 1280. No API, no snapshot — the floor is zero script errors and
+  # every surface rendering. Extend branch protection to require this job
+  # alongside build-test (repo-admin step; see docs).
+  ui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Browser smoke (static web/, 390 + 1280)
+        run: python scripts/ui_smoke_ci.py
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui-smoke-failures
+          path: ui-smoke-artifacts/
+          if-no-files-found: ignore
