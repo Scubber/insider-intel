@@ -257,6 +257,7 @@
     itmCatalog: null,
     itmCatalogKey: "",
     candidates: null,
+    tooling: null,
     matrixQuery: "",
     matrixMode: "techniques",
     selectedTechniqueId: null,
@@ -490,6 +491,11 @@
     if (path === "/tooling" || path === "/tooling/") {
       return { view: "tooling" };
     }
+    if (path.startsWith("/tooling/")) {
+      // Category dossier deep link: ids are the tooling_map's lowercase slugs.
+      const id = decodeURIComponent(path.slice("/tooling/".length)).trim();
+      if (id) return { view: "tooling-category", id: id.toLowerCase() };
+    }
     if (path.startsWith("/board/")) {
       const rest = path.slice("/board/".length);
       const slash = rest.indexOf("/");
@@ -522,6 +528,12 @@
     }
     if (route.view === "tooling") {
       openToolingView();
+      return;
+    }
+    if (route.view === "tooling-category" && route.id) {
+      // Browser back from a technique dossier (or forward from the list)
+      // lands here — re-render the category from the session-cached payload.
+      await openToolingCategoryView(route.id);
       return;
     }
     if (route.view === "board") {
@@ -2346,6 +2358,15 @@
     return state.candidates;
   }
 
+  // /tooling payload, session-cached like the itm catalog / candidates and
+  // reset on LIVE refresh — one live read feeds the TOOLING page, the
+  // category dossiers, and every technique dossier's RELEVANT TOOLING join.
+  async function ensureTooling(force = false) {
+    if (!force && state.tooling) return state.tooling;
+    state.tooling = await api("/tooling", {}, { timeoutMs: 15000 });
+    return state.tooling;
+  }
+
   const CANDIDATE_STATUS_LABELS = {
     eligible: "Eligible for review",
     corroborated: "Corroborated",
@@ -3248,6 +3269,9 @@
     };
     const evidenceLoad = loadDossierEvidence(tech.id);
     evidenceLoad.finally(reanchor);
+    // RELEVANT TOOLING section: same async fail-soft contract as evidence.
+    const toolingLoad = loadDossierTooling(tech);
+    toolingLoad.finally(reanchor);
     const data = await api("/articles", {
       limit: 50,
       min_score: 0,
@@ -3264,8 +3288,8 @@
     renderDossierArticles(data);
     reanchor();
     // Stop watching for reader input once the last async render has had its
-    // re-anchor — whichever of the two loads finishes later.
-    evidenceLoad.finally(() => inputWatch.abort());
+    // re-anchor — whichever of the async loads finishes last.
+    Promise.allSettled([evidenceLoad, toolingLoad]).then(() => inputWatch.abort());
     setStatus(`${tech.id} · ${(data.clusters || data.results || []).length} related stories`);
   }
 
@@ -4944,7 +4968,17 @@
       const sum = document.createElement("summary");
       sum.className = "tlp-sum";
       sum.appendChild(evpEl("span", "tlp-rank", String(i + 1).padStart(2, "0")));
-      const name = evpEl("span", "tlp-name", c.label);
+      const name = evpEl("span", "tlp-name");
+      const nameBtn = evpEl("button", "tlp-name-link", c.label);
+      nameBtn.type = "button";
+      nameBtn.dataset.tip = "Open this category's coverage dossier";
+      nameBtn.addEventListener("click", (event) => {
+        // A button inside <summary> would otherwise toggle the row too.
+        event.preventDefault();
+        event.stopPropagation();
+        openToolingCategory(c.id);
+      });
+      name.appendChild(nameBtn);
       if (c.kind === "program") name.appendChild(evpEl("span", "tlp-kind", "PROGRAM"));
       sum.appendChild(name);
       const meters = evpEl("span", "tlp-meters");
@@ -5057,19 +5091,32 @@
         });
         detail.appendChild(techs);
       }
+      const openBtn = evpEl("button", "copy-btn tlc-open-btn", "FULL CATEGORY DOSSIER →");
+      openBtn.type = "button";
+      openBtn.dataset.tip =
+        "Everything about this category on one page — coverage, case receipts, and every observed technique it reaches";
+      openBtn.addEventListener("click", () => openToolingCategory(c.id));
+      detail.appendChild(openBtn);
       row.appendChild(detail);
       list.appendChild(row);
     });
     if (basisLine) {
-      const b = data.basis || {};
-      const when = String(data.generated_at || "").slice(0, 16).replace("T", " ");
-      basisLine.textContent =
-        `COVERAGE COMPUTED AGAINST ${b.contributing_cases || 0} VERDICT-TRUE CASES ` +
-        `(${data.observed_techniques} OBSERVED TECHNIQUES · ` +
-        `${volume} TECHNIQUE-CASE OBS.)` +
-        (when ? ` AS OF ${when}Z` : "");
+      basisLine.textContent = toolingBasisText(data);
       basisLine.hidden = false;
     }
+  }
+
+  // Ledger citation shared by the TOOLING list and every category dossier —
+  // one string, so both surfaces cite the same generated_at + basis verbatim.
+  function toolingBasisText(data) {
+    const b = (data && data.basis) || {};
+    const when = String((data && data.generated_at) || "").slice(0, 16).replace("T", " ");
+    return (
+      `COVERAGE COMPUTED AGAINST ${b.contributing_cases || 0} VERDICT-TRUE CASES ` +
+      `(${(data && data.observed_techniques) || 0} OBSERVED TECHNIQUES · ` +
+      `${(data && data.technique_case_volume) || 0} TECHNIQUE-CASE OBS.)` +
+      (when ? ` AS OF ${when}Z` : "")
+    );
   }
 
   let toolingPageLoaded = false;
@@ -5078,7 +5125,7 @@
     if (!document.getElementById("tlp-list")) return;
     if (toolingPageLoaded && !force) return;
     try {
-      renderToolingPage(await api("/tooling", {}, { timeoutMs: 15000 }));
+      renderToolingPage(await ensureTooling(force));
       toolingPageLoaded = true;
     } catch (err) {
       console.warn("Tooling page unavailable", err);
@@ -5086,9 +5133,19 @@
     }
   }
 
+  // The TOOLING pane hosts two views: the ranked category list and the
+  // per-category dossier (#/tooling/<id>). Exactly one is visible.
+  function showToolingList() {
+    const listView = document.getElementById("tlp-list-view");
+    const catView = document.getElementById("tlc-view");
+    if (listView) listView.hidden = false;
+    if (catView) catView.hidden = true;
+  }
+
   function openToolingView() {
     setActivePane("tooling");
     navigate("/tooling");
+    showToolingList();
     loadToolingPage();
     try {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -5096,6 +5153,359 @@
       /* ignore */
     }
     setStatus("Tooling coverage rankings");
+  }
+
+  /* ── Tool-category dossier (#/tooling/<category-id>): one category against
+     the observed case record. Composes the SAME session-cached /tooling
+     payload the list view renders — one live read, one ledger citation, no
+     second aggregation path. Verb labels + methodology tooltips throughout. */
+  const TLC_COVERS_LABELS = {
+    both: "DETECTS + PREVENTS",
+    detect: "DETECTS",
+    prevent: "PREVENTS",
+  };
+
+  function tlcStat(value, verb, tip, cls) {
+    const wrap = evpEl("span", cls ? `evp-stat ${cls}` : "evp-stat");
+    wrap.appendChild(evpEl("b", "", String(value)));
+    const sub = evpEl("span");
+    sub.appendChild(evpEl("span", "", verb));
+    wrap.appendChild(sub);
+    if (tip) wrap.dataset.tip = tip;
+    return wrap;
+  }
+
+  function renderToolingCategory(categoryId, data) {
+    const view = document.getElementById("tlc-view");
+    const listView = document.getElementById("tlp-list-view");
+    if (!view) return null;
+    if (listView) listView.hidden = true;
+    view.hidden = false;
+    const title = document.getElementById("tlc-title");
+    const rationale = document.getElementById("tlc-rationale");
+    const stats = document.getElementById("tlc-stats");
+    const vendorsBox = document.getElementById("tlc-vendors");
+    const controlsBox = document.getElementById("tlc-controls");
+    const techsBox = document.getElementById("tlc-techs");
+    const basis = document.getElementById("tlc-basis");
+    [stats, vendorsBox, controlsBox, techsBox].forEach((el) => {
+      if (el) el.innerHTML = "";
+    });
+    if (basis) basis.hidden = true;
+
+    const cat = ((data && data.categories) || []).find(
+      (c) => String(c.id || "").toLowerCase() === String(categoryId).toLowerCase(),
+    );
+    if (!cat) {
+      if (title) title.textContent = String(categoryId).toUpperCase();
+      if (rationale) {
+        rationale.textContent = data
+          ? "Unknown tooling category — pick one from the rankings via ← All categories."
+          : "The live rankings are unreachable (the API may be waking up) — " +
+            "go back to TOOLING and retry.";
+        rationale.hidden = false;
+      }
+      return null;
+    }
+    if (title) {
+      title.textContent = cat.label;
+      if (cat.kind === "program") title.appendChild(evpEl("span", "tlp-kind", "PROGRAM"));
+    }
+    if (rationale) {
+      rationale.textContent = cat.rationale || "";
+      rationale.hidden = !cat.rationale;
+    }
+
+    const volume = (data && data.technique_case_volume) || 0;
+    const floor = (data && data.small_n_floor) || 10;
+    const coverageStat = (verb, pct, vol, dtOrPv) => {
+      const suppressed = pct == null;
+      const tip = suppressed
+        ? `${verb} ${vol} of ${volume} observed technique-case observation(s) — below the ` +
+          `small-sample floor (${floor} cases), so counts only, no percentage`
+        : `${verb} ${vol} of ${volume} technique-case observations (${pct}%): observed ` +
+          `techniques whose catalog ${dtOrPv} entries this category implements, weighted by ` +
+          `case count. Recomputed from the verdict-gated evidence ledger on every sweep.`;
+      return tlcStat(suppressed ? `×${vol} obs.` : `${pct}%`, verb, tip);
+    };
+    if (stats) {
+      const caughtTip = (cat.corroborated_via || []).length
+        ? `Court records credit this control class with the detection in ` +
+          `${cat.corroborated_cases} distinct case${cat.corroborated_cases === 1 ? "" : "s"}. ` +
+          `Record classes: ${cat.corroborated_via.join("; ")}`
+        : "No case in the corpus produced evidence in this category's record classes yet";
+      const namedCount = (cat.vendors || []).filter(
+        (v) => v.mentions_cases && v.mentions_cases.total > 0,
+      ).length;
+      stats.append(
+        coverageStat("DETECTS", cat.detection_coverage_pct, cat.detect_volume, "DT"),
+        coverageStat("PREVENTS", cat.prevention_coverage_pct, cat.prevent_volume, "PV"),
+        tlcStat(
+          `×${cat.corroborated_cases || 0}`,
+          "CAUGHT",
+          caughtTip,
+          cat.corroborated_cases ? "evp-adj" : "",
+        ),
+        tlcStat(
+          `×${namedCount}`,
+          "NAMED",
+          "Vendors in this category that stored case documents name — " +
+            "presence in the record, never an effectiveness score",
+        ),
+      );
+    }
+
+    if (vendorsBox) {
+      const vendorRows = cat.vendors || [];
+      const named = vendorRows.filter((v) => v.mentions_cases && v.mentions_cases.total > 0);
+      if (named.length) {
+        const chips = evpEl("div", "evp-chips tlp-chips tlp-vendors");
+        named.forEach((v) => {
+          const m = v.mentions_cases;
+          const chip = evpEl("span", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+          chip.dataset.tip =
+            `Named in ${m.total} distinct case document${m.total === 1 ? "" : "s"}, ` +
+            `${m.verdict_true} verdict-true insider case${m.verdict_true === 1 ? "" : "s"} — ` +
+            "presence in the record, not effectiveness";
+          chips.appendChild(chip);
+        });
+        vendorsBox.appendChild(chips);
+      } else {
+        vendorsBox.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            "No stored case document names a product in this category yet — a vendor chip " +
+              "appears the first time a court record entering the corpus mentions one by name.",
+          ),
+        );
+      }
+      const trailing = vendorRows
+        .filter((v) => !v.mentions_cases || !v.mentions_cases.total)
+        .map((v) => v.name);
+      if (trailing.length) {
+        const eg = evpEl("p", "tlp-examples", `e.g. ${trailing.join(" · ")}`);
+        eg.dataset.tip =
+          "Common products in this category not named in any stored case document — " +
+          "illustrations, not endorsements, never ranked";
+        vendorsBox.appendChild(eg);
+      }
+    }
+
+    if (controlsBox) {
+      const controlGroup = (head, refs, tip) => {
+        if (!(refs || []).length) return;
+        controlsBox.appendChild(evpEl("p", "evp-axis-head", `${head} (${refs.length})`));
+        const chips = evpEl("div", "evp-chips tlp-chips");
+        refs.forEach((r) => {
+          const id = (r && r.id) || r;
+          const controlTitle = (r && r.title) || "";
+          const chip = evpEl(
+            "span",
+            "evp-chip",
+            controlTitle ? `${id} · ${controlTitle}` : String(id),
+          );
+          chip.dataset.tip = tip;
+          chips.appendChild(chip);
+        });
+        controlsBox.appendChild(chips);
+      };
+      controlGroup(
+        "DETECTS VIA — DT ENTRIES",
+        cat.detections,
+        "ITM detection entry this category implements — title from the ITM catalog",
+      );
+      controlGroup(
+        "PREVENTS VIA — PV ENTRIES",
+        cat.preventions,
+        "ITM prevention entry this category implements — title from the ITM catalog",
+      );
+    }
+
+    if (techsBox) {
+      const covered = cat.covered_techniques || cat.top_techniques || [];
+      if (!covered.length) {
+        techsBox.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            "No observed technique yet — one appears here the first time a verdict-true case " +
+              "with extracted methods exhibits a technique whose catalog controls intersect " +
+              "this category's mapping. The corpus refresh sweeps every 6 hours; coverage " +
+              "fills in as cases enrich.",
+          ),
+        );
+      } else {
+        covered.forEach((t) => {
+          const btn = evpEl("button", "evp-tech-name");
+          btn.type = "button";
+          btn.appendChild(evpEl("span", "evp-tech-title", t.title));
+          btn.appendChild(
+            evpEl(
+              "span",
+              "evp-tech-code",
+              `${t.id} · CASES ×${t.cases} · ${TLC_COVERS_LABELS[t.covers] || t.covers}`,
+            ),
+          );
+          btn.dataset.tip = "Open the technique's MATRIX dossier — cases, evidence, hunts";
+          btn.addEventListener("click", () => {
+            selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
+          });
+          techsBox.appendChild(btn);
+        });
+      }
+    }
+
+    if (basis) {
+      basis.textContent = toolingBasisText(data);
+      basis.hidden = false;
+    }
+    return cat;
+  }
+
+  async function openToolingCategoryView(categoryId) {
+    setActivePane("tooling");
+    navigate(`/tooling/${encodeURIComponent(String(categoryId).toLowerCase())}`);
+    let data = null;
+    try {
+      data = await ensureTooling();
+    } catch (err) {
+      console.warn("Tooling payload unavailable", err);
+    }
+    const cat = renderToolingCategory(categoryId, data);
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus(cat ? `Tooling · ${cat.label}` : `Unknown tooling category “${categoryId}”`);
+  }
+
+  function openToolingCategory(categoryId) {
+    openToolingCategoryView(categoryId).catch((err) => setStatus(`Load failed: ${err.message}`));
+  }
+
+  /* ── Technique dossier RELEVANT TOOLING section: the categories whose
+     authored DT/PV mapping intersects THIS technique's catalog controls.
+     Client-side join of two live session-cached reads (/itm technique
+     controls × /tooling category mappings) — no static file, no new
+     endpoint; a sweep + /reload re-primes both sides. ─────────────────── */
+  function dossierToolingJoin(techDetections, techPreventions, categories) {
+    const idSet = (list) =>
+      new Set(
+        (list || []).map((c) => String((c && c.id) || c || "").toUpperCase()).filter(Boolean),
+      );
+    const techDt = idSet(techDetections);
+    const techPv = idSet(techPreventions);
+    const rows = [];
+    (categories || []).forEach((cat) => {
+      const dtOverlap = [...idSet(cat.detections)].filter((id) => techDt.has(id)).sort();
+      const pvOverlap = [...idSet(cat.preventions)].filter((id) => techPv.has(id)).sort();
+      if (!dtOverlap.length && !pvOverlap.length) return;
+      rows.push({
+        category: cat,
+        dtOverlap,
+        pvOverlap,
+        helps:
+          dtOverlap.length && pvOverlap.length ? "both" : dtOverlap.length ? "detect" : "prevent",
+      });
+    });
+    rows.sort(
+      (a, b) =>
+        b.dtOverlap.length - a.dtOverlap.length ||
+        b.pvOverlap.length - a.pvOverlap.length ||
+        String(a.category.label || "").localeCompare(String(b.category.label || "")),
+    );
+    return rows;
+  }
+
+  function renderDossierTooling(tech, data) {
+    const box = document.getElementById("dossier-tooling");
+    const list = document.getElementById("dossier-tooling-list");
+    if (!box || !list) return;
+    list.innerHTML = "";
+    if (!data || !((data.categories || []).length)) {
+      box.hidden = true;
+      return;
+    }
+    const rows = dossierToolingJoin(tech.detections, tech.preventions, data.categories);
+    box.hidden = false;
+    const countEl = document.getElementById("dossier-tooling-count");
+    if (countEl) {
+      countEl.textContent = rows.length
+        ? `(${rows.length} categor${rows.length === 1 ? "y" : "ies"})`
+        : "";
+    }
+    if (!rows.length) {
+      list.appendChild(
+        evpEl(
+          "p",
+          "evp-note",
+          "No tool category maps to this technique's catalog controls yet — the category → " +
+            "control mapping is authored in the repo and grows by PR (an ITM refresh can also " +
+            "add controls here).",
+        ),
+      );
+      return;
+    }
+    rows.forEach(({ category, dtOverlap, pvOverlap, helps }) => {
+      const row = evpEl("div", "dossier-tooling-row");
+      const chip = evpEl("button", "tlc-cat-chip");
+      chip.type = "button";
+      chip.appendChild(evpEl("span", "tlc-cat-name", category.label));
+      chip.appendChild(evpEl("span", "tlc-cat-side", TLC_COVERS_LABELS[helps] || helps));
+      const bits = [];
+      if (dtOverlap.length) {
+        bits.push(
+          `implements ${dtOverlap.length} of this technique's DT entr` +
+            `${dtOverlap.length === 1 ? "y" : "ies"} (${dtOverlap.join(", ")})`,
+        );
+      }
+      if (pvOverlap.length) {
+        bits.push(
+          `${dtOverlap.length ? "and " : "implements "}${pvOverlap.length} of its PV entr` +
+            `${pvOverlap.length === 1 ? "y" : "ies"} (${pvOverlap.join(", ")})`,
+        );
+      }
+      chip.dataset.tip = `This category ${bits.join(" ")} — tap for its coverage dossier`;
+      chip.addEventListener("click", () => openToolingCategory(category.id));
+      row.appendChild(chip);
+      const named = (category.vendors || []).filter(
+        (v) => v.mentions_cases && v.mentions_cases.total > 0,
+      );
+      named.forEach((v) => {
+        const m = v.mentions_cases;
+        const vc = evpEl("span", "evp-chip tlp-vendor", `${v.name} NAMED ×${m.total}`);
+        vc.dataset.tip =
+          `Named in ${m.total} distinct stored case document${m.total === 1 ? "" : "s"} ` +
+          `(${m.verdict_true} verdict-true) — presence in the record, not effectiveness`;
+        row.appendChild(vc);
+      });
+      const trailing = (category.vendors || [])
+        .filter((v) => !v.mentions_cases || !v.mentions_cases.total)
+        .map((v) => v.name);
+      if (trailing.length) {
+        const eg = evpEl("span", "tlp-examples dossier-tooling-eg", `e.g. ${trailing.join(" · ")}`);
+        eg.dataset.tip =
+          "Products in this category not named in any stored case document — " +
+          "illustrations, not endorsements, never ranked";
+        row.appendChild(eg);
+      }
+      list.appendChild(row);
+    });
+  }
+
+  async function loadDossierTooling(tech) {
+    const box = document.getElementById("dossier-tooling");
+    if (!box) return;
+    box.hidden = true;
+    try {
+      renderDossierTooling(tech, await ensureTooling());
+    } catch (err) {
+      // Fail-soft like the OBSERVED EVIDENCE block: a sleeping API just
+      // hides the section; the next dossier open retries.
+      console.warn("Dossier tooling unavailable", err);
+    }
   }
 
   /* Dossier OBSERVED EVIDENCE section: per-technique detail (case-scoped),
@@ -5377,8 +5787,11 @@
       loadEvidenceLedger();
       evidencePageLoaded = false;
       if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
-      // TOOLING is session-cached like the evidence page: re-rank after the
-      // sweep-driven /reload, immediately when the pane is open.
+      // TOOLING is session-cached like the evidence page: drop the cached
+      // /tooling payload (it also feeds category dossiers and the technique
+      // dossiers' RELEVANT TOOLING join) and re-rank after the sweep-driven
+      // /reload, immediately when the pane is open.
+      state.tooling = null;
       toolingPageLoaded = false;
       if (els.appWorkbench && els.appWorkbench.dataset.pane === "tooling") loadToolingPage(true);
       await reapplyActiveFilters();
@@ -5714,6 +6127,10 @@
     });
   }
 
+  // Category dossier → back to the ranked list (same pane, list view).
+  const tlcBackBtn = document.getElementById("tlc-back");
+  if (tlcBackBtn) tlcBackBtn.addEventListener("click", () => openToolingView());
+
   if (els.mobileTabs) {
     els.mobileTabs.addEventListener("click", (event) => {
       const btn = event.target.closest(".mobile-tab[data-pane]");
@@ -6043,6 +6460,10 @@
       const route = parseRoute();
       if (route.view === "technique" && route.id) {
         await showDossier(route.id);
+      } else if (route.view === "tooling-category" && route.id) {
+        // Deep link to one category's dossier — honored like a technique
+        // dossier link (specific shared content, not a lingering takeover).
+        await openToolingCategoryView(route.id);
       } else if (route.view === "evidence" || route.view === "tooling") {
         // Operator call (2026-08-10): the site always STARTS on the stream.
         // Mobile browsers restore the last URL, so a lingering #/evidence
