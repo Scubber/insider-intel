@@ -235,6 +235,18 @@ legacy fallback.
 
 ## Invariants — do not break
 
+- **Everything corpus-derived is dynamic — no frozen numbers, ever**
+  (operator directive 2026-08-17). Any surface built on corpus data — a tab,
+  panel, finding, export — must recompute from refresh outputs: the live API
+  after `/reload`, the boot snapshot at its next build, or a `state/` file
+  the job rewrites each cycle. Every sweep/re-enrichment must propagate with
+  no redeploy. If a tab needs its own helper endpoint, reload-invalidated
+  scanner, or per-cycle state file to stay live (TOOLING's mention scanner;
+  future INSIGHTS), build the helper — that cost is accepted. Checked-in
+  data files are for AUTHORED taxonomy only (ITM catalog, tooling map,
+  vendor aliases); a checked-in file holding corpus-derived numbers is a
+  bug. Pin each new surface with contract tests in the style of
+  `tests/test_matrix_data_sources.py`.
 - **Corpus lives in the bucket, never in images.** The Dockerfile's final
   stage must stay the Cloud Run `runtime` stage (plain `docker build .`
   produces it; the deploy workflow and legacy script rely on that).
