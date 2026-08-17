@@ -19,10 +19,13 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
+import subprocess
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.aggregator.processed_storage import JsonlProcessedStore
@@ -131,6 +134,8 @@ def test_ranking_math_synthetic() -> None:
     assert a["detect_volume"] == 6 and a["detection_coverage_pct"] == 60
     assert a["prevent_volume"] == 6 and a["prevention_coverage_pct"] == 60
     assert a["top_techniques"] == [{"id": "T1", "title": "USB exfil", "cases": 6, "covers": "both"}]
+    # Full covered list == top list when the category reaches ≤ the head cap.
+    assert a["covered_techniques"] == a["top_techniques"]
     # Corroborated via the USB record-class family (DT020 crosswalks there).
     assert a["corroborated_cases"] == 3
     assert a["corroborated_via"] == ["removable-media (USB) logs"]
@@ -161,6 +166,25 @@ def test_corroboration_takes_max_across_families_never_sum() -> None:
     row = out["categories"][0]
     assert row["corroborated_cases"] == 3  # max(3, 2)
     assert row["corroborated_via"] == ["removable-media (USB) logs", "email logs / content"]
+
+
+def test_covered_techniques_full_list_and_top_is_its_head() -> None:
+    """`covered_techniques` carries EVERY observed technique the category's
+    controls reach, ranked by case count (the category dossier's COVERS THESE
+    OBSERVED TECHNIQUES section renders it whole); `top_techniques` is exactly
+    its head slice — same list, same order, one computation."""
+    catalog = {
+        f"T{n}": {"title": f"Tech {n}", "detections": ["DT020"], "preventions": []}
+        for n in range(8)
+    }
+    counts = {f"T{n}": {"cases": n + 1} for n in range(8)}
+    categories = [{"id": "a", "label": "A", "detections": ["DT020"], "preventions": []}]
+    row = rank_tool_categories(categories, counts, catalog, [])["categories"][0]
+    assert [t["id"] for t in row["covered_techniques"]] == [f"T{n}" for n in range(7, -1, -1)]
+    assert [t["cases"] for t in row["covered_techniques"]] == list(range(8, 0, -1))
+    assert all(t["covers"] == "detect" for t in row["covered_techniques"])
+    assert len(row["top_techniques"]) == 6
+    assert row["top_techniques"] == row["covered_techniques"][:6]
 
 
 def test_ranking_empty_corpus() -> None:
@@ -323,6 +347,8 @@ def test_tooling_endpoint_ranks_against_verdict_true_cases(tmp_path, monkeypatch
         assert dc["corroborated_via"] == ["removable-media (USB) logs"]
         assert dc["top_techniques"][0]["id"] == "IF002"
         assert dc["top_techniques"][0]["covers"] == "detect"
+        # The category dossier's full covered list rides the same payload.
+        assert dc["covered_techniques"] == dc["top_techniques"]
         # Control refs are spelled out for the page.
         assert {"id", "title"} <= set(dc["detections"][0])
         # Vendor examples thread through the payload verbatim from the map.
@@ -465,12 +491,18 @@ def test_tooling_path_reads_only_the_live_api() -> None:
     src = _app_js()
     for name in ("tlpMeter", "renderToolingPage", "loadToolingPage", "openToolingView"):
         assert "fetch(" not in _fn_body(src, name), f"{name}() fetches outside api()"
-    assert 'api("/tooling"' in _fn_body(src, "loadToolingPage")
+    # The one live read: the session-cached ensureTooling (state.candidates
+    # pattern) that loadToolingPage, the category dossiers, and the technique
+    # dossiers' RELEVANT TOOLING join all share.
+    assert 'api("/tooling"' in _fn_body(src, "ensureTooling")
+    assert "ensureTooling(" in _fn_body(src, "loadToolingPage")
     # Techniques deep-link into the existing MATRIX dossier route.
     assert "selectTechnique(" in _fn_body(src, "renderToolingPage")
-    # Basis line cites the ledger stamp, not a hardcoded date.
-    render = _fn_body(src, "renderToolingPage")
-    assert "VERDICT-TRUE CASES" in render and "generated_at" in render
+    # Basis line cites the ledger stamp, not a hardcoded date — one shared
+    # string so the list and every category dossier cite the same run.
+    basis = _fn_body(src, "toolingBasisText")
+    assert "VERDICT-TRUE CASES" in basis and "generated_at" in basis
+    assert "toolingBasisText(" in _fn_body(src, "renderToolingPage")
     # Route registered.
     assert '"/tooling"' in _fn_body(src, "parseRoute")
 
@@ -529,7 +561,200 @@ def test_vendor_disclaimer_rendered_once_near_basis_line() -> None:
 
 def test_live_refresh_busts_tooling_session_cache() -> None:
     """The LIVE refresh button re-primes the TOOLING pane after POST /reload —
-    same contract as the matrix/evidence session caches."""
+    same contract as the matrix/evidence session caches. The cached /tooling
+    payload itself must drop too: it also feeds the category dossiers and the
+    technique dossiers' RELEVANT TOOLING join."""
     body = _fn_body(_app_js(), "refreshStream")
+    assert "state.tooling = null" in body
     assert "toolingPageLoaded = false" in body
     assert "loadToolingPage(true)" in body
+
+
+# ── 5. Matrix–tooling alignment: category dossier + dossier RELEVANT TOOLING ─
+#
+# The join between a technique's catalog controls and the category → control
+# mapping runs CLIENT-SIDE (dossierToolingJoin in web/app.js) over two live
+# session-cached reads — /itm and /tooling — so there is no second server
+# aggregation path to drift. The function is pure by design; these unit tests
+# execute its extracted source under node with synthetic fixtures (skipped
+# when no node runtime exists — CI runners carry one).
+
+
+def _node() -> str | None:
+    for name in ("node", "node.exe", "nodejs"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def _run_join(tech_dts: list, tech_pvs: list, categories: list) -> list:
+    node = _node()
+    if node is None:
+        pytest.skip("no node runtime to execute the extracted join function")
+    harness = (
+        _fn_body(_app_js(), "dossierToolingJoin")
+        + f"\nconst rows = dossierToolingJoin({json.dumps(tech_dts)}, "
+        + f"{json.dumps(tech_pvs)}, {json.dumps(categories)});"
+        + "\nprocess.stdout.write(JSON.stringify(rows));"
+    )
+    proc = subprocess.run([node, "-"], input=harness, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"node failed: {proc.stderr}"
+    return json.loads(proc.stdout)
+
+
+def test_join_overlap_computation_and_exclusion() -> None:
+    """Categories join on DT/PV id intersection with THIS technique's catalog
+    controls; a category intersecting neither axis is excluded entirely."""
+    categories = [
+        {"id": "hit", "label": "Hit", "detections": ["DT001", "DT099"], "preventions": ["PV001"]},
+        {"id": "miss", "label": "Miss", "detections": ["DT098"], "preventions": ["PV098"]},
+    ]
+    rows = _run_join(["DT001", "DT002"], ["PV001"], categories)
+    assert [r["category"]["id"] for r in rows] == ["hit"]
+    assert rows[0]["dtOverlap"] == ["DT001"]  # only the intersecting id
+    assert rows[0]["pvOverlap"] == ["PV001"]
+
+
+def test_join_orders_by_detection_overlap_then_prevention_then_label() -> None:
+    categories = [
+        {"id": "pv-only", "label": "Alpha PV", "detections": [], "preventions": ["PV001"]},
+        {"id": "one-dt", "label": "One DT", "detections": ["DT001"], "preventions": []},
+        {"id": "two-dt", "label": "Two DT", "detections": ["DT001", "DT002"], "preventions": []},
+        {
+            "id": "one-dt-pv",
+            "label": "One DT plus PV",
+            "detections": ["DT002"],
+            "preventions": ["PV001"],
+        },
+        {"id": "pv-only-b", "label": "Beta PV", "detections": [], "preventions": ["PV002"]},
+    ]
+    rows = _run_join(["DT001", "DT002"], ["PV001", "PV002"], categories)
+    # Detections overlap first; prevention overlap breaks the tie; equal
+    # overlaps fall back to the label so the order is deterministic.
+    assert [r["category"]["id"] for r in rows] == [
+        "two-dt",
+        "one-dt-pv",
+        "one-dt",
+        "pv-only",
+        "pv-only-b",
+    ]
+
+
+def test_join_labels_sides_and_accepts_both_id_shapes() -> None:
+    """helps = detect | prevent | both — and the join accepts bare id strings
+    (the tooling map) AND {id,...} control objects (the /itm catalog and the
+    spelled-out /tooling payload), case-insensitively."""
+    categories = [
+        {"id": "b", "label": "B", "detections": [{"id": "dt001"}], "preventions": ["PV001"]},
+        {"id": "d", "label": "D", "detections": ["DT002"], "preventions": []},
+        {"id": "p", "label": "P", "detections": [], "preventions": [{"id": "PV002"}]},
+    ]
+    rows = _run_join(
+        [{"id": "DT001", "title": "x"}, {"id": "DT002"}],
+        [{"id": "PV001"}, {"id": "pv002"}],
+        categories,
+    )
+    helps = {r["category"]["id"]: r["helps"] for r in rows}
+    assert helps == {"b": "both", "d": "detect", "p": "prevent"}
+    both = next(r for r in rows if r["category"]["id"] == "b")
+    assert both["dtOverlap"] == ["DT001"] and both["pvOverlap"] == ["PV001"]
+
+
+def test_category_dossier_route_and_back_navigation() -> None:
+    """#/tooling/<category-id> routes to the category dossier; back must walk
+    technique dossier → category dossier → ranked list through hash history."""
+    src = _app_js()
+    parse = _fn_body(src, "parseRoute")
+    assert '"/tooling/"' in parse and "tooling-category" in parse
+    apply_route = _fn_body(src, "applyRoute")
+    assert "tooling-category" in apply_route and "openToolingCategoryView" in apply_route
+    # Opening a category navigates (hash history entry), never renders in place.
+    assert "navigate(`/tooling/" in _fn_body(src, "openToolingCategoryView")
+    # Returning to #/tooling restores the ranked list inside the same pane.
+    assert "showToolingList()" in _fn_body(src, "openToolingView")
+
+
+def test_category_dossier_renders_from_api_data_only() -> None:
+    """Every function on the category-dossier / dossier-tooling path reads the
+    session-cached /tooling payload (api() only, never fetch()); the dossier
+    carries verb labels, technique deep-links, the shared ledger citation, and
+    teaching empty states."""
+    src = _app_js()
+    for name in (
+        "ensureTooling",
+        "showToolingList",
+        "toolingBasisText",
+        "tlcStat",
+        "renderToolingCategory",
+        "openToolingCategoryView",
+        "openToolingCategory",
+        "dossierToolingJoin",
+        "renderDossierTooling",
+        "loadDossierTooling",
+    ):
+        assert "fetch(" not in _fn_body(src, name), f"{name}() fetches outside api()"
+    render = _fn_body(src, "renderToolingCategory")
+    assert '"DETECTS"' in render and '"PREVENTS"' in render and '"CAUGHT"' in render
+    assert "covered_techniques" in render
+    assert "selectTechnique(" in render  # deep link to #/technique/<ID>
+    assert "toolingBasisText(" in render  # same citation the list renders
+    assert "No observed technique yet" in render  # teaching empty state
+    assert "No stored case document names a product" in render
+    # Both-sides labeling is shared with the dossier section via one map.
+    assert '"DETECTS + PREVENTS"' in src
+
+
+def test_category_dossier_markup_and_purpose_lines() -> None:
+    html = _index_html()
+    for el_id in (
+        "tlp-list-view",
+        "tlc-view",
+        "tlc-back",
+        "tlc-title",
+        "tlc-rationale",
+        "tlc-stats",
+        "tlc-vendors",
+        "tlc-controls",
+        "tlc-techs",
+        "tlc-basis",
+    ):
+        assert f'id="{el_id}"' in html, f"#{el_id} missing from the tooling pane"
+    # Section heads with methodology tooltips (teaches-itself doctrine).
+    assert "NAMED IN CASE RECORDS" in html
+    assert "IMPLEMENTS — ITM CONTROL ENTRIES" in html
+    assert "COVERS THESE OBSERVED TECHNIQUES" in html
+    # Purpose sub-line on the dossier itself.
+    assert "One tool category against the observed case record" in html
+
+
+def test_dossier_relevant_tooling_section_wired() -> None:
+    """Every technique dossier renders RELEVANT TOOLING after its
+    detections/preventions content: category chips with side labels, NAMED ×N
+    vendor chips for corpus-mentioned vendors, muted e.g. for the rest."""
+    html = _index_html()
+    assert 'id="dossier-tooling"' in html and 'id="dossier-tooling-list"' in html
+    assert "tool categories whose mapped ITM controls" in html
+    # Section order: after the preventions list, before the case list.
+    assert (
+        html.index('id="dossier-prevention-list"')
+        < html.index('id="dossier-tooling"')
+        < html.index('id="dossier-article-list"')
+    )
+    src = _app_js()
+    assert "loadDossierTooling(" in _fn_body(src, "showDossier")
+    render = _fn_body(src, "renderDossierTooling")
+    assert "dossierToolingJoin(" in render
+    assert "openToolingCategory(" in render  # chip click-through to the dossier
+    assert "NAMED ×" in render  # verb chips for documented case mentions
+    assert "tlp-examples" in render  # unmentioned vendors keep the muted style
+    assert "ensureTooling()" in _fn_body(src, "loadDossierTooling")
+
+
+def test_tooling_list_row_opens_category_dossier() -> None:
+    """The ranked list click-through: category names (collapsed row) and the
+    FULL CATEGORY DOSSIER button (expanded detail) both route to the dossier."""
+    render = _fn_body(_app_js(), "renderToolingPage")
+    assert render.count("openToolingCategory(") >= 2
+    collapsed, _detail = render.split('const detail = evpEl("div", "tlp-detail")', 1)
+    assert "openToolingCategory(" in collapsed

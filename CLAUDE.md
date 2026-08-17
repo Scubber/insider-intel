@@ -202,6 +202,13 @@ checked-in `shared/data/vendor_aliases.json`; alias safety rules in the file
 Presence in the record, never effectiveness, computed once per index
 generation (weak-keyed on the index object; `/reload` invalidates), and
 never an input to the category ranking (byte-identity test-pinned).
+The matrix–tooling alignment (2026-08-17) rides the same payload: each
+category row carries its full covered-technique list (`covered_techniques`;
+`top_techniques` is its head), the UI adds a per-category dossier at
+`#/tooling/<category-id>`, and every technique dossier gets a RELEVANT
+TOOLING section — both are client-side joins of the session-cached
+`/tooling` read with the `/itm` catalog (`web/app.js::dossierToolingJoin`,
+node-executed unit tests + api()-only contracts in `tests/test_tooling.py`).
 
 ## Everyday commands
 

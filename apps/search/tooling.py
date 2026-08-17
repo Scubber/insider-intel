@@ -38,6 +38,12 @@ the map leaves the ranking output byte-identical. The mention-ranked vendor
 rows the payload also carries (documented case-mention counts) are attached
 AFTER ranking by apps/search/vendor_mentions.py under the same never-an-input
 contract.
+
+Each row carries ``covered_techniques`` — EVERY observed technique whose
+catalog controls intersect the category's mapping, ranked by case count —
+for the category dossier's "COVERS THESE OBSERVED TECHNIQUES" section, and
+``top_techniques`` — its head slice (TOP_TECHNIQUES_PER_CATEGORY) — for the
+TOOLING page's compact row detail. Same list, same order, one computation.
 """
 
 from __future__ import annotations
@@ -111,7 +117,19 @@ def rank_tool_categories(
         naming.sort(key=lambda kv: (-kv[1], kv[0]))
         corroborated_cases = max((n for _, n in naming), default=0)
 
-        top = sorted(det_techs | prev_techs, key=lambda t: (-observed[t], t))
+        covered = [
+            {
+                "id": t,
+                "title": catalog[t].get("title") or t,
+                "cases": observed[t],
+                "covers": (
+                    "both"
+                    if t in det_techs and t in prev_techs
+                    else ("detect" if t in det_techs else "prevent")
+                ),
+            }
+            for t in sorted(det_techs | prev_techs, key=lambda t: (-observed[t], t))
+        ]
         rows.append(
             {
                 "id": cat.get("id"),
@@ -129,19 +147,9 @@ def rank_tool_categories(
                 "prevention_coverage_pct": pct(prevent_volume),
                 "corroborated_cases": corroborated_cases,
                 "corroborated_via": [fam for fam, _ in naming],
-                "top_techniques": [
-                    {
-                        "id": t,
-                        "title": catalog[t].get("title") or t,
-                        "cases": observed[t],
-                        "covers": (
-                            "both"
-                            if t in det_techs and t in prev_techs
-                            else ("detect" if t in det_techs else "prevent")
-                        ),
-                    }
-                    for t in top[:TOP_TECHNIQUES_PER_CATEGORY]
-                ],
+                # Full ranked list (category dossier) + its head (page row).
+                "covered_techniques": covered,
+                "top_techniques": covered[:TOP_TECHNIQUES_PER_CATEGORY],
             }
         )
 

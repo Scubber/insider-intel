@@ -41,6 +41,9 @@ _MATRIX_PATH_FUNCTIONS = (
     "renderDossierArticles",
     "renderDossierHunts",
     "loadDossierEvidence",
+    "dossierToolingJoin",
+    "renderDossierTooling",
+    "loadDossierTooling",
     "selectDetection",
     "selectPrevention",
 )
@@ -80,6 +83,12 @@ def test_matrix_and_dossier_read_only_live_api_sources() -> None:
     dossier = _fn_body(src, "showDossier")
     assert 'api("/articles"' in dossier and "itm_id: tech.id" in dossier
     assert "/evidence/technique/" in _fn_body(src, "loadDossierEvidence")
+    # RELEVANT TOOLING joins the session-cached live /tooling payload — the
+    # same ensureTooling read the TOOLING page uses (pinned in
+    # tests/test_tooling.py), never a checked-in mapping snapshot.
+    assert "loadDossierTooling(" in dossier
+    assert "ensureTooling()" in _fn_body(src, "loadDossierTooling")
+    assert 'api("/tooling"' in _fn_body(src, "ensureTooling")
     assert 'api("/articles"' in _fn_body(src, "selectDetection")
     assert 'api("/articles"' in _fn_body(src, "selectPrevention")
 

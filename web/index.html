@@ -264,7 +264,7 @@
               <dt>EVIDENCE</dt>
               <dd>What proof real cases actually produce. Tap a technique row for its stage detail.</dd>
               <dt>TOOLING</dt>
-              <dd>Which controls pay off first — tool categories ranked by what caught real insiders. Expand a row for the ITM controls behind its score.</dd>
+              <dd>Which controls pay off first — tool categories ranked by what caught real insiders. Expand a row for the ITM controls behind its score; tap a category name for its coverage dossier. Technique dossiers list their relevant tooling too.</dd>
               <dt>WORKBENCH</dt>
               <dd>What your flagged insiders actually did. Flag cases on STREAM, then hit MODUS OPERANDI.</dd>
               <dt>SETTINGS</dt>
@@ -438,6 +438,16 @@
             <div class="kw-group">
               <h4>Related preventions</h4>
               <ul id="dossier-prevention-list" class="chip-list"></ul>
+            </div>
+            <div class="kw-group" id="dossier-tooling" hidden>
+              <h4>Relevant tooling <span class="meta" id="dossier-tooling-count"></span></h4>
+              <p class="kw-hint">
+                Which class of tooling helps here — tool categories whose mapped ITM controls
+                intersect this technique's detections and preventions, ordered by control
+                overlap (detections first). Tap a category for its coverage dossier; vendor
+                chips count documented case mentions, never effectiveness.
+              </p>
+              <div id="dossier-tooling-list"></div>
             </div>
             <div class="kw-group dossier-cases">
               <h4>Cases <span class="meta" id="dossier-case-count"></span></h4>
@@ -763,13 +773,15 @@
             <h2>TOOLING — CONTROL CLASSES RANKED BY OBSERVED-CASE COVERAGE</h2>
           </div>
           <div class="pane-body">
+            <div id="tlp-list-view">
             <p class="evp-sub">
               Security tool categories ranked by how much of the observed insider-case volume
               their mapped ITM controls can detect and prevent. Categories, never vendors, are
               what the ranking scores — vendors inside a row's detail are ordered only by
               documented case mentions (presence in court documents, not an effectiveness
               score), with unmentioned examples trailing as illustrations. Expand a row for
-              the exact DT/PV entries behind its score and the observed techniques it covers.
+              the exact DT/PV entries behind its score and the observed techniques it covers,
+              or tap a category name to open its full coverage dossier.
             </p>
             <div class="evp-legend">
               <span><i class="evp-lg-all"></i>DETECT / PREVENT — share of observed technique-case volume the category's controls cover</span>
@@ -795,6 +807,35 @@
                 authored and versioned in the repo; the ranking recomputes from the corpus
                 on every sweep. ITM™ owned by Forscie Limited — not affiliated.
               </p>
+            </div>
+            </div>
+            <div id="tlc-view" class="tlc-view" hidden>
+              <div class="tlc-head">
+                <button type="button" id="tlc-back" class="ghost dossier-back">← All categories</button>
+                <h3 id="tlc-title"></h3>
+                <p class="evp-sub">
+                  One tool category against the observed case record — how much real insider-case
+                  volume its mapped ITM controls cover, where court records credit the control
+                  class with the catch, which vendors the case documents actually name, and the
+                  observed techniques it reaches. All numbers recompute from the live corpus on
+                  every sweep.
+                </p>
+                <p class="evp-note" id="tlc-rationale"></p>
+              </div>
+              <div class="evp-stats tlc-stats" id="tlc-stats" aria-live="polite"></div>
+              <div class="tlc-block">
+                <p class="evp-section-head" data-tip="Distinct stored case documents whose text names the product — presence in the record, never an effectiveness score, and never an input to any ranking">NAMED IN CASE RECORDS</p>
+                <div id="tlc-vendors"></div>
+              </div>
+              <div class="tlc-block">
+                <p class="evp-section-head" data-tip="The authored category → control mapping behind every number on this page — versioned in the repo, validated against the ITM catalog in CI">IMPLEMENTS — ITM CONTROL ENTRIES</p>
+                <div id="tlc-controls"></div>
+              </div>
+              <div class="tlc-block">
+                <p class="evp-section-head" data-tip="Observed = at least one verdict-true case with extracted methods exhibits the technique. Ranked by case count; tap one for its MATRIX dossier">COVERS THESE OBSERVED TECHNIQUES</p>
+                <div id="tlc-techs" class="tlp-techs"></div>
+              </div>
+              <p class="tlp-basis" id="tlc-basis" hidden></p>
             </div>
           </div>
         </section>

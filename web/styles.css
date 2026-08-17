@@ -698,6 +698,74 @@ body {
   }
 }
 
+/* Category name doubles as the dossier click-through (same signal treatment
+   as technique names elsewhere); the summary chevron area still expands. */
+.tlp-name-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  color: var(--signal);
+  border-bottom: 1px dotted color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.tlc-open-btn {
+  margin-top: 0.5rem;
+}
+
+/* Tool-category dossier (#/tooling/<id>): same pane, second view. */
+.tlc-head h3 {
+  margin: 0.35rem 0 0.3rem;
+  font-size: 1.05rem;
+}
+.tlc-block {
+  border-top: 1px solid var(--line);
+  padding-top: 0.6rem;
+  margin-top: 0.8rem;
+}
+.tlc-block .evp-chips {
+  margin-top: 0.3rem;
+}
+
+/* Technique-dossier RELEVANT TOOLING rows: category chip + vendor receipts. */
+.dossier-tooling-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--line);
+}
+.dossier-tooling-row:first-child {
+  border-top: 0;
+}
+.tlc-cat-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+}
+.tlc-cat-name {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--signal);
+}
+.tlc-cat-side {
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.dossier-tooling-eg {
+  margin: 0;
+}
+
 /* Color law (holds in every theme): --accent = court-proven / corroborated,
    --signal = observed/alleged volume. The legend carries the words. */
 .evp-sub,
