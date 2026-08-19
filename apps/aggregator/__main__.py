@@ -177,6 +177,33 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(court_text_p)
 
+    follow_p = sub.add_parser(
+        "follow_dockets",
+        help=(
+            "Poll open dockets of verdict-true cases for outcomes; changed "
+            "dockets re-enrich on the next processing run."
+        ),
+    )
+    follow_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    follow_p.add_argument(
+        "--processed-path",
+        type=str,
+        default=None,
+        help="Processed store whose LLM fields reset for updated cases.",
+    )
+    follow_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max docket polls this run (DOCKET_FOLLOW_MAX_PER_RUN).",
+    )
+    follow_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List the dockets that would be polled; no requests, no writes.",
+    )
+    _add_verbose(follow_p)
+
     history_p = sub.add_parser(
         "sweep_courtlistener_history",
         help=(
@@ -591,6 +618,23 @@ def _cmd_backfill_courtlistener_text(args: argparse.Namespace) -> int:
     return 1 if result.failure_count and not result.success_count else 0
 
 
+def _cmd_follow_dockets(args: argparse.Namespace) -> int:
+    from apps.aggregator.docket_follow import run_docket_follow
+
+    result = run_docket_follow(
+        store_path=args.store_path,
+        processed_path=args.processed_path,
+        limit=args.limit,
+        dry_run=args.dry_run,
+    )
+    if args.dry_run:
+        return 0
+    _print_ingest(result)
+    if result.total_articles_saved:
+        _try_reload_api()
+    return 1 if result.failure_count and not result.success_count else 0
+
+
 def _cmd_sweep_courtlistener_history(args: argparse.Namespace) -> int:
     from apps.aggregator.courtlistener_pipeline import run_courtlistener_history_sweep
 
@@ -906,6 +950,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_courtlistener(args)
     if args.command == "backfill_courtlistener_text":
         return _cmd_backfill_courtlistener_text(args)
+    if args.command == "follow_dockets":
+        return _cmd_follow_dockets(args)
     if args.command == "purchase_pacer":
         return _cmd_purchase_pacer(args)
     if args.command == "sweep_courtlistener_history":
