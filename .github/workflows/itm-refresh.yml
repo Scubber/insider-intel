@@ -33,8 +33,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if git diff --quiet shared/data/itm_index.json; then
-            echo "ITM index unchanged — nothing to do."
+          # refreshed_at changes on every run; only real matrix changes count.
+          if git diff --quiet -I '"refreshed_at"' -- shared/data/itm_index.json; then
+            echo "ITM index unchanged (timestamp-only) — nothing to do."
             exit 0
           fi
           VERSION=$(python3 -c "import json; print(json.load(open('shared/data/itm_index.json')).get('itm_version'))")
@@ -49,4 +50,8 @@ jobs:
           gh pr create --base main --head "$BRANCH" \
             --title "itm: refresh slim index to v${VERSION}" \
             --body "Automated weekly ITM refresh: upstream matrix now v${VERSION} (${COUNT} techniques). CI runs the full suite including the evidence-crosswalk guard — a red check here means a technique/detection we depend on was renamed or removed and needs a manual fix before merge. Merging is operator approval." \
-            || echo "PR already open for this branch"
+            || {
+            # Tolerate only "PR already open"; any other failure must go red,
+            # not vanish behind a green run (this masked a real failure once).
+            test -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')"
+          }
