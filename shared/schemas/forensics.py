@@ -211,7 +211,12 @@ def enrichment_richness(rec: EnrichmentRecord | None) -> float:
         conf = float(rec.forensics.confidence or 0.0)
     except (TypeError, ValueError):
         conf = 0.0
-    return note + methods * 10.0 + conf
+    # An adjudicated outcome is analyst value the method count can't see: a
+    # docket-follow re-enrichment that learns the case ended must not lose
+    # selection to the complaint-stage record over one fewer method. +15
+    # outranks a one-method deficit; a gutted record still can't win.
+    outcome = 15.0 if (rec.forensics.outcome or "").strip() else 0.0
+    return note + methods * 10.0 + conf + outcome
 
 
 def _selection_key(rec: EnrichmentRecord) -> tuple[float, float]:

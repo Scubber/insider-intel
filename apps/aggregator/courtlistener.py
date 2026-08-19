@@ -29,6 +29,7 @@ COURTLISTENER_OPINION_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/op
 COURTLISTENER_RECAP_DOCS_URL = "https://www.courtlistener.com/api/rest/v4/recap-documents/"
 COURTLISTENER_CLUSTER_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/clusters/"
 COURTLISTENER_DOCKET_ENTRIES_URL = "https://www.courtlistener.com/api/rest/v4/docket-entries/"
+COURTLISTENER_DOCKET_DETAIL_URL = "https://www.courtlistener.com/api/rest/v4/dockets/"
 COURTLISTENER_FETCH_URL = "https://www.courtlistener.com/api/rest/v4/recap-fetch/"
 
 # RECAP Fetch request types (https://www.courtlistener.com/help/api/rest/v4/recap/)
@@ -449,6 +450,108 @@ def fetch_recap_document_text(
         if total >= max_chars:
             break
     return "\n\n".join(parts)
+
+
+def fetch_docket_status(
+    docket_id: int,
+    *,
+    token: str | None = None,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """Docket lifecycle metadata (free): filed/terminated/last-filing dates.
+
+    Returns {date_filed, date_terminated, date_last_filing} (ISO strings or
+    None). ``date_terminated`` set means the court closed the case — the
+    docket will not change again.
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(
+                f"{COURTLISTENER_DOCKET_DETAIL_URL}{docket_id}/",
+                headers=headers,
+                params={"fields": "date_filed,date_terminated,date_last_filing"},
+            )
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"docket {docket_id} status fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"docket {docket_id} status HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+    finally:
+        if own_client:
+            http.close()
+
+    return {
+        "date_filed": payload.get("date_filed"),
+        "date_terminated": payload.get("date_terminated"),
+        "date_last_filing": payload.get("date_last_filing"),
+    }
+
+
+def fetch_docket_entries_tail(
+    docket_id: int,
+    *,
+    token: str | None = None,
+    date_filed_after: str | None = None,
+    page_size: int = 20,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """Trailing docket entries with description text (free metadata read).
+
+    Newest-first server-side (``order_by=-date_filed`` — minute entries often
+    have no entry_number, so date is the only reliable order), returned
+    date-ascending. ``date_filed_after`` narrows to entries on/after that ISO
+    date. Returns [{entry_number, date_filed, description}].
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if token and token.strip():
+        headers["Authorization"] = f"Token {token.strip()}"
+
+    params: dict[str, Any] = {
+        "docket": docket_id,
+        "order_by": "-date_filed",
+        "page_size": max(1, min(page_size, 50)),
+        "fields": "entry_number,date_filed,description",
+    }
+    if date_filed_after:
+        params["date_filed__gte"] = date_filed_after
+
+    own_client = client is None
+    http = client or httpx.Client(timeout=45.0, follow_redirects=True)
+    try:
+        try:
+            resp = http.get(COURTLISTENER_DOCKET_ENTRIES_URL, headers=headers, params=params)
+        except httpx.HTTPError as exc:
+            raise CourtListenerError(f"docket {docket_id} tail fetch failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise CourtListenerError(
+                f"docket {docket_id} tail HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        payload = resp.json()
+    finally:
+        if own_client:
+            http.close()
+
+    entries: list[dict[str, Any]] = []
+    for entry in payload.get("results") or []:
+        if not isinstance(entry, dict):
+            continue
+        entries.append(
+            {
+                "entry_number": entry.get("entry_number"),
+                "date_filed": entry.get("date_filed"),
+                "description": (entry.get("description") or "").strip(),
+            }
+        )
+    entries.reverse()
+    return entries
 
 
 def fetch_docket_entries(

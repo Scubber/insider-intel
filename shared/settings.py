@@ -121,6 +121,24 @@ class Settings(BaseSettings):
         ge=0,
         le=200,
     )
+    docket_follow_max_per_run: int = Field(
+        default=0,
+        alias="DOCKET_FOLLOW_MAX_PER_RUN",
+        description=(
+            "Docket-status polls per run for verdict-true filings lacking an "
+            "outcome (0 disables; set only in .env.spark — the GCP rollback "
+            "job runs the same entrypoint and must not double-write)"
+        ),
+        ge=0,
+        le=500,
+    )
+    docket_follow_repoll_days: float = Field(
+        default=7.0,
+        alias="DOCKET_FOLLOW_REPOLL_DAYS",
+        description="Minimum days between status polls of the same docket",
+        ge=0.0,
+        le=90.0,
+    )
     # PACER purchasing via CourtListener's RECAP Fetch API (strictly gated:
     # both credentials AND a positive budget/cap required; no creds = no-op).
     # Default budget stays under PACER's $30/quarter fee waiver.

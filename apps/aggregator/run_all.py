@@ -119,7 +119,19 @@ def run_full_pipeline(
             store_path=raw_path,
             processed_path=processed_path,
         )
-        court_result = _merge_ingestion(court_result, text_result, purchase_result)
+        # Poll open dockets of verdict-true cases for outcomes (judgment,
+        # dismissal, settlement, termination); changed dockets get their new
+        # entries appended and re-enrich this same cycle. No-op unless
+        # DOCKET_FOLLOW_MAX_PER_RUN > 0 (sparky-only via .env.spark).
+        from apps.aggregator.docket_follow import run_docket_follow
+
+        follow_result = run_docket_follow(
+            store_path=raw_path,
+            processed_path=processed_path,
+        )
+        court_result = _merge_ingestion(
+            court_result, text_result, purchase_result, follow_result
+        )
     web_result: IngestionRunResult | None = None
     if not skip_web_keywords:
         web_result = run_web_keyword_ingestion(

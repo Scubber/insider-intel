@@ -105,7 +105,11 @@ def _richness(row: ProcessedArticle | None) -> float:
         conf = float(getattr(forensics, "confidence", 0.0) or 0.0) if forensics else 0.0
     except (TypeError, ValueError):
         conf = 0.0
-    return ai + methods * 10.0 + conf
+    # Mirrors enrichment_richness: an adjudicated outcome outranks a
+    # one-method deficit (docket-follow re-enrichments must not lose to the
+    # complaint-stage record for knowing less procedure but more result).
+    outcome = 15.0 if (getattr(forensics, "outcome", None) or "").strip() else 0.0
+    return ai + methods * 10.0 + conf + outcome
 
 
 def snapshot_and_clear_missed_filings(
