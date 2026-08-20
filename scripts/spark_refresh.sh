@@ -63,11 +63,18 @@ SPARKY_COMPOSE_DIR="${SPARKY_COMPOSE_DIR:-$HOME/sparky}"
 SPARKY_ENRICH_OVERRIDE="${SPARKY_ENRICH_OVERRIDE:-model-enrich.yml}"
 SPARKY_MODEL_URL="${SPARKY_MODEL_URL:-http://127.0.0.1:8001/v1/models}"
 SPARKY_MODEL_WAIT_SECONDS="${SPARKY_MODEL_WAIT_SECONDS:-2400}"
+# Restored together on the way out: open-webui reads OPENAI_API_KEY from
+# compose at container-create time, so recreating only vllm would leave the UI
+# holding a stale key after any rotation.
+SPARKY_CHAT_SERVICES="${SPARKY_CHAT_SERVICES:-vllm open-webui}"
 
-vllm_up() { # $1: optional override file layered over compose.yml
+vllm_up() { # $1: override file (empty for base) ; $2...: services
   local files=(-f compose.yml)
   [ -n "${1:-}" ] && files+=(-f "$1")
-  (cd "$SPARKY_COMPOSE_DIR" && docker compose "${files[@]}" up -d --no-deps vllm)
+  shift || true
+  local services=("$@")
+  [ "${#services[@]}" -eq 0 ] && services=(vllm)
+  (cd "$SPARKY_COMPOSE_DIR" && docker compose "${files[@]}" up -d --no-deps "${services[@]}")
 }
 
 vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
@@ -85,7 +92,9 @@ vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
 
 restore_chat_model() {
   echo "spark_refresh: restoring chat model"
-  vllm_up "" || echo "spark_refresh: [FAIL] chat model not restored" >&2
+  # shellcheck disable=SC2086 -- deliberate word-split: a service-name list
+  vllm_up "" $SPARKY_CHAT_SERVICES ||
+    echo "spark_refresh: [FAIL] chat stack not restored" >&2
 }
 
 SWAPPED_MODEL=0
