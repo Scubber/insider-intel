@@ -824,6 +824,13 @@ def test_enrich_prompt_carries_relevance_and_tactical_guidance() -> None:
     # The source-vs-inference discipline must survive the edits.
     assert "do NOT name a specific vendor, product, or log source" in p
     assert "PORTABLE pseudo-logic" in p
+    # Per-field fill demands: schema-literal models (Qwen) emit the specimen's
+    # null/[] defaults unless each case fact is explicitly demanded — corpus
+    # audit 2026-08-19: detection filled 3% by Qwen vs 49% by Haiku.
+    assert "fill EVERY one of these the text establishes" in p
+    assert "SOURCE IS SILENT" in p
+    assert "HOW the conduct came to light" in p
+    assert "every channel the text says data moved through" in p
 
 
 def test_backfill_prioritizes_filings_over_newer_news(monkeypatch, tmp_path: Path) -> None:
