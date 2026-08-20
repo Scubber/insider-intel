@@ -21,7 +21,10 @@ mapped to ITM; it is not an official or endorsed Forscie product. See `NOTICE`.
   [`docs/sourcing.md`](sourcing.md). News seat budget: prefer **$0**; hard cap
   **&lt;$100/year** total (no Law360).
 - **Later:** expand archive sources, Postgres + pgvector.
-- Product maturity (auth, read/unread, detection generation pipelines, etc.) stays out of MVP.
+- Product maturity (auth, read/unread, detection generation pipelines, weekly
+  audio case brief — templated script from corpus slots + local TTS on sparky,
+  voice engine TBD by listening audition (operator vetoed Chatterbox's voice;
+  candidates: Fish Audio S2, Kokoro, NeuTTS Air), etc.) stays out of MVP.
 - **Corporate boundary:** export OSINT *out* only; never read Graph/Teams/email/SIEM from this repo.
 
 ## Goals & Constraints
