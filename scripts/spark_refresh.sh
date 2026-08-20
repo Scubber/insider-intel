@@ -51,18 +51,74 @@ fi
 PULL_PREFIXES=(raw processed state config)
 PUSH_PREFIXES=(raw processed state)
 
+# The Spark is a chat host between cycles: compose.yml's vllm command serves
+# whatever model the operator talks to. The cycle BORROWS the box for the
+# enrichment model and hands it back on the way out. The swap is sequential by
+# design — two models of this size cannot co-reside on 128GB of unified memory
+# (two crashes on 2026-08-20 taught us the binding limit is the load-time peak).
+#
+# No override file present => this whole block is inert and the cycle enriches
+# with whatever is already loaded.
+SPARKY_COMPOSE_DIR="${SPARKY_COMPOSE_DIR:-$HOME/sparky}"
+SPARKY_ENRICH_OVERRIDE="${SPARKY_ENRICH_OVERRIDE:-model-enrich.yml}"
+SPARKY_MODEL_URL="${SPARKY_MODEL_URL:-http://127.0.0.1:8001/v1/models}"
+SPARKY_MODEL_WAIT_SECONDS="${SPARKY_MODEL_WAIT_SECONDS:-2400}"
+
+vllm_up() { # $1: optional override file layered over compose.yml
+  local files=(-f compose.yml)
+  [ -n "${1:-}" ] && files+=(-f "$1")
+  (cd "$SPARKY_COMPOSE_DIR" && docker compose "${files[@]}" up -d --no-deps vllm)
+}
+
+vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
+  local key deadline=$((SECONDS + SPARKY_MODEL_WAIT_SECONDS))
+  key=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY_COMPOSE_DIR/.env" | head -1)
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if curl -fsS -H "Authorization: Bearer ${key}" "$SPARKY_MODEL_URL" 2>/dev/null |
+      grep -o '"id":"[^"]*"' | head -1; then
+      return 0
+    fi
+    sleep 15
+  done
+  return 1
+}
+
+restore_chat_model() {
+  echo "spark_refresh: restoring chat model"
+  vllm_up "" || echo "spark_refresh: [FAIL] chat model not restored" >&2
+}
+
+SWAPPED_MODEL=0
+if [ -f "$SPARKY_COMPOSE_DIR/$SPARKY_ENRICH_OVERRIDE" ]; then
+  echo "spark_refresh: loading enrichment model ($SPARKY_ENRICH_OVERRIDE)"
+  # Arm the restore FIRST: a failed pull, a timed-out pipeline, or a kill must
+  # never leave the box parked on the enrichment model.
+  trap restore_chat_model EXIT
+  SWAPPED_MODEL=1
+  vllm_up "$SPARKY_ENRICH_OVERRIDE"
+else
+  echo "spark_refresh: no $SPARKY_ENRICH_OVERRIDE — enriching with the loaded model"
+fi
+
 echo "spark_refresh: pull $(date -u +%FT%TZ)"
 for p in "${PULL_PREFIXES[@]}"; do
   mkdir -p "data/${p}"
   gsutil -m rsync -r "${SPARK_CORPUS_BUCKET}/${p}" "data/${p}" || [ "${p}" = "config" ]
 done
 
+if [ "$SWAPPED_MODEL" = "1" ]; then
+  # Weights load while the corpus pulls; block only now, right before the run.
+  vllm_wait || echo "spark_refresh: [FAIL] enrichment model never served — \
+ingest and docket-follow still run, enrichment will no-op" >&2
+fi
+
 echo "spark_refresh: pipeline $(date -u +%FT%TZ) code $(git rev-parse --short HEAD)"
 # --build: `compose run` reuses an existing image and never rebuilds, so a git
 # pull is inert without it (layer cache makes the no-change case cheap).
-# timeout: bound a cycle at 5.5h — inside the 6h cadence — so a wedged vLLM
-# can't hold the flock across every subsequent tick.
-timeout --signal=INT 19800 docker compose -f docker-compose.spark.yml run --build --rm refresh
+# timeout: bound the pipeline at 8h — well inside the daily cadence — so a
+# wedged vLLM can't hold the flock across the next tick. (Was 5.5h when the
+# cadence was 6h; the cycle now also spends ~30min loading the model.)
+timeout --signal=INT 28800 docker compose -f docker-compose.spark.yml run --build --rm refresh
 
 echo "spark_refresh: push"
 for p in "${PUSH_PREFIXES[@]}"; do
