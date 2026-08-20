@@ -92,55 +92,154 @@ body {
   outline-offset: 1px;
 }
 
-.refine-panel {
-  margin-top: 0.65rem;
-}
-
-.refine-summary {
-  list-style: none;
-  cursor: pointer;
+/* ── Filter chip bar (replaces the Refine drawer, 2026-08-20). Each chip
+   wears its live value; a tuned chip tints accent; popovers anchor to the
+   bar. The bar lives inside header.top (its own stacking context, z-index
+   10) so the popovers only need to clear in-header siblings. ── */
+.chip-bar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.75rem;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: var(--top-muted, var(--muted));
-  user-select: none;
-}
-
-.refine-summary::-webkit-details-marker {
-  display: none;
-}
-
-.refine-summary::before {
-  content: "▸";
-  display: inline-block;
-  transition: transform 0.15s ease;
-  color: var(--top-muted, var(--muted));
-}
-
-.refine-panel[open] > .refine-summary::before {
-  transform: rotate(90deg);
-}
-
-.refine-label {
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
   color: var(--top-ink, var(--ink));
+  background: var(--top-field-bg, var(--input-bg));
+  border: 1px solid var(--top-line, var(--line));
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.refine-state {
+.fchip-k {
   color: var(--top-muted, var(--muted));
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  letter-spacing: 0.09em;
 }
 
-.refine-body {
-  margin-top: 0.45rem;
+.fchip-caret {
+  color: var(--top-muted, var(--muted));
+  font-size: 0.6rem;
 }
 
-/* The Refine disclosure works on every layout (mockup: clean masthead). */
-.refine-panel {
-  margin-top: 0.55rem;
+.fchip:hover {
+  border-color: var(--top-muted, var(--muted));
+}
+
+.fchip.open {
+  border-color: var(--top-pill-active-border, var(--accent));
+}
+
+.fchip.tuned {
+  background: var(--top-pill-active-bg, var(--accent-soft));
+  border-color: var(--top-pill-active-border, var(--accent));
+}
+
+.fchip.tuned .fchip-k {
+  color: var(--top-pill-active-fg, var(--accent));
+}
+
+.chip-reset {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--top-pill-active-fg, var(--accent));
+  background: none;
+  border: 0;
+  padding: 0.28rem 0.3rem;
+  cursor: pointer;
+}
+
+.chip-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08);
+  padding: 0.8rem 0.9rem;
+  min-width: 250px;
+  max-width: min(92vw, 26rem);
+}
+
+.chip-pop-wide {
+  min-width: min(92vw, 21rem);
+}
+
+.chip-pop-title {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chip-pop-title-2 {
+  margin-top: 0.85rem;
+}
+
+.chip-pop-note {
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 0.75;
+}
+
+.chip-pop .pill small {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.64rem;
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+  margin-top: 0.05rem;
+}
+
+.chip-pop .pill.active small {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.chip-pop-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.6rem 0 0;
+  max-width: 34ch;
+}
+
+.chip-pop .source-filter-row {
+  margin-top: 0.7rem;
+}
+
+.chip-pop .source-filter-row select {
+  min-width: 9rem;
+  max-width: 15rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--input-bg);
+  border-color: var(--line);
+}
+
+.chip-pop .hunt-usecases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .brand,
@@ -264,47 +363,6 @@ body {
   background: var(--top-ink, var(--ink));
 }
 
-.stream-filters.stream-filters-secondary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 0.45rem 0.85rem;
-  margin-top: 0.55rem;
-  max-width: 40rem;
-  opacity: 0.92;
-}
-
-.stream-filters-secondary .pill {
-  padding: 0.2rem 0.55rem;
-  font-size: 0.68rem;
-  border-color: var(--top-line, var(--line));
-  color: var(--top-muted, var(--muted));
-}
-
-.stream-filters-secondary .pill.active {
-  background: var(--top-pill-active-bg, var(--accent-soft));
-  border-color: var(--top-pill-active-border, var(--accent));
-  color: var(--top-pill-active-fg, var(--accent));
-}
-
-.stream-filters-secondary .source-filter-row select {
-  min-width: 9rem;
-  max-width: 16rem;
-  padding: 0.3rem 0.45rem;
-  font-size: 0.8rem;
-  color: var(--top-field-ink, var(--ink));
-  background: var(--top-field-bg, var(--input-bg));
-  border-color: var(--top-line, var(--line));
-}
-
-.stream-filters-secondary .source-filter-row select option {
-  color: var(--ink);
-  background: var(--panel);
-}
-
-.stream-filters-secondary .filter-label {
-  color: var(--top-muted, var(--muted));
-}
 
 .top .status {
   color: var(--top-muted, var(--muted));
@@ -3219,21 +3277,14 @@ a.itm-chip:hover {
     font-size: clamp(1.45rem, 5.5vw, 2rem);
   }
 
-  .refine-panel {
+  .chip-bar {
     margin-top: 0.4rem;
+    gap: 0.35rem;
   }
 
-  .refine-summary {
-    padding: 0.35rem 0;
-  }
-
-  .refine-body {
-    padding-bottom: 0.25rem;
-  }
-
-  .stream-filters.stream-filters-secondary {
-    gap: 0.4rem 0.65rem;
-    margin-top: 0.35rem;
+  .fchip {
+    font-size: 0.68rem;
+    padding: 0.24rem 0.6rem;
   }
 
   .theme-picker select {
@@ -4323,14 +4374,6 @@ button.chip.itm-chip {
   color: var(--accent);
 }
 
-/* Refine summary note + signal slider */
-.refine-note {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.1em;
-  color: var(--top-muted, var(--muted));
-}
 
 .filter-group-signal {
   max-width: 24rem;
@@ -4348,14 +4391,6 @@ button.chip.itm-chip {
   font-weight: 700;
 }
 
-.signal-ticks {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
-  color: var(--top-muted, var(--muted));
-}
 
 /* Settings pane */
 .pane-settings .settings-grid {
@@ -4539,22 +4574,19 @@ button.chip.itm-chip {
 }
 
 /* Takeover panes (Workbench / Settings) hide the stream-only header chrome. */
-body[data-pane="workbench"] .refine-panel,
+body[data-pane="workbench"] .chip-bar,
 body[data-pane="workbench"] .panels-row,
-body[data-pane="settings"] .refine-panel,
+body[data-pane="settings"] .chip-bar,
 body[data-pane="settings"] .panels-row,
-body[data-pane="evidence"] .refine-panel,
+body[data-pane="evidence"] .chip-bar,
 body[data-pane="evidence"] .panels-row,
-body[data-pane="tooling"] .refine-panel,
+body[data-pane="tooling"] .chip-bar,
 body[data-pane="tooling"] .panels-row,
-body[data-pane="about"] .refine-panel,
+body[data-pane="about"] .chip-bar,
 body[data-pane="about"] .panels-row {
   display: none;
 }
 
-.signal-ticks {
-  gap: 0.4rem;
-}
 
 /* ▲ TRENDING rows — [CHANNEL] tag, signal-colored delta, one-line topic. */
 .trending-list {

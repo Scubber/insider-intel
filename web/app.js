@@ -192,10 +192,7 @@
     ttpBehaviorList: document.getElementById("ttp-behavior-list"),
     copyTtpReport: document.getElementById("copy-ttp-report"),
     copyTtpLlm: document.getElementById("copy-ttp-llm"),
-    alignFilters: document.getElementById("align-filters"),
     channelFilters: document.getElementById("channel-filters"),
-    insiderTypeFilters: document.getElementById("insider-type-filters"),
-    signalSlider: document.getElementById("signal-slider"),
     signalValue: document.getElementById("signal-value"),
     introPanel: document.getElementById("intro-panel"),
     introToggle: document.getElementById("intro-toggle"),
@@ -211,8 +208,8 @@
     defaultSignalValue: document.getElementById("default-signal-value"),
     applyDefaults: document.getElementById("apply-defaults"),
     resetPrefs: document.getElementById("reset-prefs"),
-    refinePanel: document.getElementById("refine-panel"),
-    refineState: document.getElementById("refine-state"),
+    chipBar: document.getElementById("chip-bar"),
+    chipReset: document.getElementById("chip-reset"),
     matrixQ: document.getElementById("matrix-q"),
     matrixModeTabs: document.getElementById("matrix-mode-tabs"),
     matrixColumns: document.getElementById("matrix-columns"),
@@ -300,7 +297,7 @@
       els.appWorkbench.dataset.pane = next;
     }
     // Mirror on <body> so the header (outside the app shell) can hide its
-    // stream-only chrome (refine bar, status row) on takeover panes.
+    // stream-only chrome (chip bar, status row) on takeover panes.
     document.body.dataset.pane = next;
     if (els.mobileTabs) {
       els.mobileTabs.querySelectorAll(".mobile-tab").forEach((btn) => {
@@ -748,7 +745,7 @@
     updateStatusLine();
   }
 
-  // The topic pills render twice: in the REFINE bar and in the intro's TRY IT
+  // The topic pills render twice: in the FOCUS chip popover and the intro's TRY IT
   // strip. Same behavior, shared active-state sync.
   function huntUsecaseContainers() {
     return [els.huntUsecases, els.introUsecases].filter(Boolean);
@@ -784,8 +781,9 @@
           if (item.useCase) {
             // Toggle the classified use-case facet on the stream.
             state.useCase = state.useCase === item.useCase ? "" : item.useCase;
+            state.theme = ""; // one focus at a time
             syncHuntUsecases();
-            updateRefineSummary();
+            updateChipBar();
             reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
           } else {
             if (els.q) els.q.value = item.query;
@@ -1001,7 +999,7 @@
       return `No ITM map for “${els.q.value.trim()}”. Add an alias in shared/itm/aliases.py if this is a real insider-risk phrase.`;
     }
     if (state.signal > SIG_DEFAULT) {
-      return `No cases clear SIG ≥ ${state.signal} for this filter — lower the confidence floor or widen scope.`;
+      return "No cases match this filter — widen the FOCUS or SOURCE chips, or reset them.";
     }
     if (state.itmAlignment === "all") {
       if (state.sourceId || state.lastTotalIndexed > 0) {
@@ -1248,7 +1246,7 @@
         }
       }
       if (!picks.length) {
-        setStatus("No cases available for an example hunt — try Refine or wait for LIVE");
+        setStatus("No cases available for an example hunt — widen the filter chips or wait for LIVE");
         return;
       }
       picks.forEach((article) => {
@@ -3750,7 +3748,7 @@
       btn.classList.add("active");
     }
 
-    // 3. Meta row — SOURCE / FILED / SIG (truncates) + in-flow classification stamp.
+    // 3. Meta row — SOURCE / FILED (truncates) + in-flow classification stamp.
     const meta = document.createElement("p");
     meta.className = "row-meta";
     const metaText = document.createElement("span");
@@ -3764,7 +3762,6 @@
     const retrievedIso = isoFiledDate(article.ingested_at);
     if (retrievedIso && retrievedIso !== filedIso) metaParts.push(`RETRIEVED ${retrievedIso}`);
     const sig = sigScore(article);
-    if (sig != null) metaParts.push(`SIG ${sig}`);
     const proof = proofLabel(article);
     if (proof) metaParts.push(proof.label);
     metaText.textContent = metaParts.join(" · ");
@@ -4261,32 +4258,11 @@
     }
   });
 
-  function setActiveScopePill(alignment) {
-    document.querySelectorAll("#align-filters .pill").forEach((btn) => {
-      btn.classList.toggle("active", (btn.dataset.alignment || "") === alignment);
-    });
-  }
-
-  function syncSignalControls() {
-    if (els.signalValue) els.signalValue.textContent = `SIG ≥ ${state.signal}`;
-    if (els.signalSlider && Number(els.signalSlider.value) !== state.signal) {
-      els.signalSlider.value = String(state.signal);
-    }
-  }
-
   function setActiveChannelPill(channel) {
     document.querySelectorAll("#channel-filters .pill").forEach((btn) => {
       btn.classList.toggle("active", (btn.dataset.channel || "") === channel);
     });
   }
-
-  function setActiveInsiderTypePill(insiderType) {
-    document.querySelectorAll("#insider-type-filters .pill").forEach((btn) => {
-      btn.classList.toggle("active", (btn.dataset.insiderType || "") === insiderType);
-    });
-  }
-
-  const REFINE_OPEN_KEY = "insider-intel-refine-open";
 
   function buildCrumb(label, onRemove, title) {
     const li = document.createElement("li");
@@ -4318,8 +4294,7 @@
           "All indexed",
           () => {
             state.itmAlignment = "insider";
-            setActiveScopePill("insider");
-            updateRefineSummary();
+            updateChipBar();
             reapplyActiveFilters().catch(fail);
           },
           "Back to Insider Focus",
@@ -4327,26 +4302,10 @@
       );
     }
 
-    if (state.signal > 0) {
-      items.push(
-        buildCrumb(
-          `SIG ≥ ${state.signal}`,
-          () => {
-            state.signal = 0;
-            uiState.signal = 0;
-            saveUiState();
-            updateRefineSummary();
-            reapplyActiveFilters().catch(fail);
-          },
-          "Drop the confidence floor to 0 (show everything)",
-        ),
-      );
-    }
-
     if (state.channel && state.channel !== "all") {
       const labels = {
         news: "News",
-        filings: "Cases",
+        filings: "Court cases",
         tips: "Tips",
         social: "Social",
         publications: "Publications",
@@ -4355,7 +4314,7 @@
         buildCrumb(labels[state.channel] || state.channel, () => {
           state.channel = "all";
           setActiveChannelPill("all");
-          updateRefineSummary();
+          updateChipBar();
           reapplyActiveFilters().catch(fail);
         }),
       );
@@ -4366,7 +4325,17 @@
         buildCrumb(USE_CASE_LABELS[state.useCase] || state.useCase, () => {
           state.useCase = "";
           syncHuntUsecases();
-          updateRefineSummary();
+          updateChipBar();
+          reapplyActiveFilters().catch(fail);
+        }),
+      );
+    }
+
+    if (state.theme) {
+      items.push(
+        buildCrumb(STREAM_THEME_LABELS[state.theme] || state.theme, () => {
+          state.theme = "";
+          updateChipBar();
           reapplyActiveFilters().catch(fail);
         }),
       );
@@ -4376,8 +4345,7 @@
       items.push(
         buildCrumb(INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType, () => {
           state.insiderType = "all";
-          setActiveInsiderTypePill("all");
-          updateRefineSummary();
+          updateChipBar();
           reapplyActiveFilters().catch(fail);
         }),
       );
@@ -4391,7 +4359,7 @@
         buildCrumb(label, () => {
           state.sourceId = "";
           if (els.sourceSelect) els.sourceSelect.value = "";
-          updateRefineSummary();
+          updateChipBar();
           reapplyActiveFilters().catch(fail);
         }),
       );
@@ -4422,52 +4390,110 @@
     els.filterCrumbs.hidden = items.length === 0;
   }
 
-  function updateRefineSummary() {
-    if (!els.refineState) return;
-    const alignLabel = state.itmAlignment === "all" ? "ALL INDEXED" : "INSIDER FOCUS";
-    let channelLabel = "ALL CHANNELS";
-    if (state.channel === "news") channelLabel = "NEWS";
-    else if (state.channel === "filings") channelLabel = "CASES";
-    else if (state.channel === "tips") channelLabel = "TIPS";
-    else if (state.channel === "social") channelLabel = "SOCIAL";
-    else if (state.channel === "publications") channelLabel = "PUBLICATIONS";
-    const typeLabel =
-      state.insiderType && state.insiderType !== "all"
-        ? (INSIDER_TYPE_LABELS[state.insiderType] || state.insiderType).toUpperCase()
-        : "ANY TYPE";
-    let sourceLabel = "";
+  // The chip bar wears the live filter values (SOURCE / FOCUS). Tuned
+  // chips tint accent and surface RESET; crumbs stay for programmatic
+  // filters (matrix taps, deep links).
+  const STREAM_THEME_LABELS = {
+    motive: "Motive",
+    means: "Means",
+    preparation: "Preparation",
+    infringement: "Infringement",
+    "anti-forensics": "Anti-forensics",
+  };
+
+  function syncThemePills() {
+    document.querySelectorAll("#theme-filters .pill").forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.streamTheme || "") === (state.theme || ""));
+    });
+  }
+
+  function updateChipBar() {
+    const sourceValue = document.getElementById("chip-source-value");
+    const focusValue = document.getElementById("chip-focus-value");
+    if (!sourceValue || !focusValue) return;
+    let sourceLabel = "All";
+    if (state.channel === "filings") sourceLabel = "Court cases";
+    else if (state.channel === "news") sourceLabel = "News";
+    else if (state.channel && state.channel !== "all") sourceLabel = state.channel;
     if (state.sourceId && els.sourceSelect) {
       const opt = els.sourceSelect.selectedOptions[0];
       const raw = (opt && opt.textContent) || state.sourceId;
-      sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase();
+      sourceLabel = raw.replace(/\s*\(\d+\)\s*$/, "").trim();
     }
-    const parts = [alignLabel, channelLabel, typeLabel, `SIG ≥ ${state.signal}`];
-    if (state.useCase) {
-      parts.push((USE_CASE_LABELS[state.useCase] || state.useCase).toUpperCase());
-    }
-    if (sourceLabel) parts.push(sourceLabel);
-    els.refineState.textContent = parts.join(" · ");
-    syncSignalControls();
+    sourceValue.textContent = sourceLabel;
+    let focusLabel = "Any";
+    if (state.useCase) focusLabel = USE_CASE_LABELS[state.useCase] || state.useCase;
+    else if (state.theme) focusLabel = STREAM_THEME_LABELS[state.theme] || state.theme;
+    focusValue.textContent = focusLabel;
+    const sourceTuned = sourceLabel !== "All";
+    const focusTuned = focusLabel !== "Any";
+    const chipSource = document.getElementById("chip-source");
+    const chipFocus = document.getElementById("chip-focus");
+    if (chipSource) chipSource.classList.toggle("tuned", sourceTuned);
+    if (chipFocus) chipFocus.classList.toggle("tuned", focusTuned);
+    if (els.chipReset) els.chipReset.hidden = !(sourceTuned || focusTuned);
+    syncThemePills();
     renderFilterCrumbs();
   }
 
-  function initRefinePanel() {
-    if (!els.refinePanel) return;
-    // Collapsed by default on every layout (mockup: clean masthead — secondary
-    // filters live behind the Refine disclosure); remember the user's choice.
-    const applyOpen = () => {
-      const saved = sessionStorage.getItem(REFINE_OPEN_KEY);
-      els.refinePanel.open = saved === "1";
+  function initChipBar() {
+    if (!els.chipBar) return;
+    const bar = els.chipBar;
+    const closeAll = () => {
+      bar.querySelectorAll(".chip-pop").forEach((pop) => { pop.hidden = true; });
+      bar.querySelectorAll(".fchip").forEach((chip) => {
+        chip.classList.remove("open");
+        chip.setAttribute("aria-expanded", "false");
+      });
     };
-    applyOpen();
-    els.refinePanel.addEventListener("toggle", () => {
-      sessionStorage.setItem(
-        REFINE_OPEN_KEY,
-        els.refinePanel.open ? "1" : "0",
-      );
+    bar.querySelectorAll(".fchip").forEach((chip) => {
+      chip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const pop = document.getElementById(chip.dataset.pop || "");
+        if (!pop) return;
+        const wasOpen = !pop.hidden;
+        closeAll();
+        if (!wasOpen) {
+          pop.hidden = false;
+          chip.classList.add("open");
+          chip.setAttribute("aria-expanded", "true");
+        }
+      });
     });
-    MOBILE_MQ.addEventListener("change", applyOpen);
-    updateRefineSummary();
+    document.addEventListener("click", (event) => {
+      if (!bar.contains(event.target)) closeAll();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeAll();
+    });
+    const themeFilters = document.getElementById("theme-filters");
+    if (themeFilters) {
+      themeFilters.addEventListener("click", (event) => {
+        const btn = event.target.closest(".pill[data-stream-theme]");
+        if (!btn) return;
+        const theme = btn.dataset.streamTheme || "";
+        state.theme = state.theme === theme ? "" : theme;
+        state.useCase = ""; // one focus at a time
+        syncHuntUsecases();
+        updateChipBar();
+        reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+      });
+    }
+    if (els.chipReset) {
+      els.chipReset.addEventListener("click", () => {
+        state.channel = "all";
+        state.sourceId = "";
+        state.useCase = "";
+        state.theme = "";
+        if (els.sourceSelect) els.sourceSelect.value = "";
+        setActiveChannelPill("all");
+        syncHuntUsecases();
+        updateChipBar();
+        closeAll();
+        reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
+      });
+    }
+    updateChipBar();
   }
 
   function streamTitle() {
@@ -4513,7 +4539,7 @@
       });
       els.sourceSelect.value = state.sourceId || "";
     }
-    updateRefineSummary();
+    updateChipBar();
   }
 
   /* ▲ TRENDING — most-active topics across subscribed feeds (server counts
@@ -4572,7 +4598,7 @@
         if (item.kind === "use_case") {
           state.useCase = state.useCase === item.key ? "" : item.key;
           syncHuntUsecases();
-          updateRefineSummary();
+          updateChipBar();
           reapplyActiveFilters().catch(fail);
           if (isMobileLayout()) setActivePane("articles");
         } else if (item.kind === "technique") {
@@ -6305,50 +6331,13 @@
     await reloadStreamOrSearch();
   }
 
-  if (els.alignFilters) {
-    els.alignFilters.addEventListener("click", (event) => {
-      const btn = event.target.closest(".pill[data-alignment]");
-      if (!btn) return;
-      state.itmAlignment = btn.dataset.alignment || "insider";
-      setActiveScopePill(state.itmAlignment);
-      updateRefineSummary();
-      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
-    });
-  }
-
-  if (els.signalSlider) {
-    // Live label while dragging; the (cheap, local-index) refetch on release.
-    els.signalSlider.addEventListener("input", () => {
-      state.signal = Number(els.signalSlider.value) || 0;
-      if (els.signalValue) els.signalValue.textContent = `SIG ≥ ${state.signal}`;
-    });
-    els.signalSlider.addEventListener("change", () => {
-      state.signal = Number(els.signalSlider.value) || 0;
-      uiState.signal = state.signal;
-      saveUiState();
-      updateRefineSummary();
-      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
-    });
-  }
-
   if (els.channelFilters) {
     els.channelFilters.addEventListener("click", (event) => {
       const btn = event.target.closest(".pill[data-channel]");
       if (!btn) return;
       state.channel = btn.dataset.channel || "all";
       setActiveChannelPill(state.channel);
-      updateRefineSummary();
-      reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
-    });
-  }
-
-  if (els.insiderTypeFilters) {
-    els.insiderTypeFilters.addEventListener("click", (event) => {
-      const btn = event.target.closest(".pill[data-insider-type]");
-      if (!btn) return;
-      state.insiderType = btn.dataset.insiderType || "all";
-      setActiveInsiderTypePill(state.insiderType);
-      updateRefineSummary();
+      updateChipBar();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });
   }
@@ -6587,7 +6576,7 @@
   if (els.sourceSelect) {
     els.sourceSelect.addEventListener("change", () => {
       state.sourceId = els.sourceSelect.value || "";
-      updateRefineSummary();
+      updateChipBar();
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
     });
   }
@@ -6808,9 +6797,7 @@
       state.signal = uiState.defSignal;
       uiState.signal = uiState.defSignal;
       saveUiState();
-      setActiveScopePill(state.itmAlignment);
-      syncSignalControls();
-      updateRefineSummary();
+      updateChipBar();
       setActivePane("articles");
       reapplyActiveFilters().catch((err) => setStatus(`Load failed: ${err.message}`));
       setStatus("Defaults applied to the current session");
@@ -6829,7 +6816,6 @@
         }
       });
       try {
-        sessionStorage.removeItem(REFINE_OPEN_KEY);
       } catch {
         /* ignore */
       }
@@ -6847,11 +6833,9 @@
 
   async function boot() {
     try {
-      initRefinePanel();
+      initChipBar();
       syncPaneForViewport();
       applyPanelChrome();
-      setActiveScopePill(state.itmAlignment);
-      syncSignalControls();
       updateStatusLine();
       loadDismissed();
       loadExtractionBoard();
