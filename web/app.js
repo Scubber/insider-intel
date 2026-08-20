@@ -1645,15 +1645,37 @@
   // behavior leaves behind, and detect & hunt guidance (ITM DT*/PV* controls
   // plus case-grounded queries). Every deep field is guarded — floor/offline
   // reports simply render without them.
-  // Legal-posture badge (indictment / plea / conviction / …). "unknown"/"none"
-  // and empty values render nothing — allegations must read distinctly from
-  // findings, but an absent posture should not add noise.
-  function appendPostureBadge(target, posture) {
+  // Court-procedure terms → plain language (voice invariant: executives read
+  // "sued", not "complaint"). The badge shows the plain verb; the precise
+  // court term and what it does/doesn't prove live in the tooltip. CSS classes
+  // stay keyed on the raw enum so the allegation/finding color split holds.
+  const POSTURE_DISPLAY = {
+    complaint: ["sued", "Civil complaint filed — allegations only, no ruling yet (court term: complaint)"],
+    civil_suit: ["sued", "Civil case in progress — allegations unless a ruling says otherwise (court term: civil suit)"],
+    indictment: ["criminally charged", "Criminal indictment — charges are accusations, not findings"],
+    plea: ["pled guilty", "Guilty plea entered (court term: plea)"],
+    conviction: ["convicted", "Found guilty at trial or by plea"],
+    sentencing: ["sentenced", "Sentence handed down — the case is concluded"],
+    settlement: ["settled", "Parties settled — terms usually private, no admission of fault"],
+  };
+
+  function postureLabel(posture) {
     const value = String(posture || "").trim().toLowerCase();
-    if (!value || value === "unknown" || value === "none") return;
+    if (!value || value === "unknown" || value === "none") return null;
+    const [label, tip] = POSTURE_DISPLAY[value] || [value, ""];
+    return { value, label, tip };
+  }
+
+  // Legal-posture badge. "unknown"/"none" and empty values render nothing —
+  // allegations must read distinctly from findings, but an absent posture
+  // should not add noise.
+  function appendPostureBadge(target, posture) {
+    const display = postureLabel(posture);
+    if (!display) return;
     const badge = document.createElement("span");
-    badge.className = `ttp-posture-badge ttp-posture-${value}`;
-    badge.textContent = value;
+    badge.className = `ttp-posture-badge ttp-posture-${display.value}`;
+    badge.textContent = display.label;
+    if (display.tip) badge.title = display.tip;
     target.appendChild(document.createTextNode(" "));
     target.appendChild(badge);
   }
@@ -1891,7 +1913,7 @@
         ...(section.tradecraft_summary ? [`  Tradecraft: ${section.tradecraft_summary}`] : []),
         ...(section.cases || []).flatMap((c) => [
           `  ${c.title}`,
-          ...(c.legal_posture ? [`  Posture: ${c.legal_posture}`] : []),
+          ...((d => d ? [`  Status: ${d.label} (${d.value})`] : [])(postureLabel(c.legal_posture))),
           ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
           ...(c.bullets || []).map((b) => `  - ${b}`),
         ]),
@@ -1953,7 +1975,7 @@
         ...(s.tradecraft_summary ? [`Tradecraft: ${s.tradecraft_summary}`] : []),
         ...(s.cases || []).flatMap((c) => [
           `  Case: ${c.title}`,
-          ...(c.legal_posture ? [`  Posture: ${c.legal_posture}`] : []),
+          ...((d => d ? [`  Status: ${d.label} (${d.value})`] : [])(postureLabel(c.legal_posture))),
           ...(c.tradecraft ? [`  ${c.tradecraft}`] : []),
           ...(c.bullets || []).map((b) => `  - ${b}`),
         ]),
