@@ -92,7 +92,8 @@ vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
 
 restore_chat_model() {
   echo "spark_refresh: restoring chat model"
-  # shellcheck disable=SC2086 -- deliberate word-split: a service-name list
+  # Deliberate word-split: SPARKY_CHAT_SERVICES is a service-name list.
+  # shellcheck disable=SC2086
   vllm_up "" $SPARKY_CHAT_SERVICES ||
     echo "spark_refresh: [FAIL] chat stack not restored" >&2
 }
