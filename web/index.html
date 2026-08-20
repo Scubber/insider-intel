@@ -62,10 +62,6 @@
           <a class="masthead-nav-guide" id="about-open" href="#/about" data-tip="What this site is, where the data comes from, who runs it" data-tip-pos="bottom-end">ABOUT</a>
           <button type="button" class="masthead-nav-guide" id="guide-open" aria-expanded="false" aria-controls="guide-panel" data-tip="How to use this site — per-tab cheat sheet" data-tip-pos="bottom-end">GUIDE</button>
         </nav>
-        <!-- Source-health warning: rendered ONLY while a lane is broken —
-             healthy corpora carry zero extra chrome. Click opens SETTINGS,
-             where the full DATA SOURCES line lives. -->
-        <button type="button" class="lane-warn" id="lane-warn" hidden data-tip-pos="bottom-end"></button>
         <span class="live-status" id="live-status">LIVE</span>
       </div>
 
@@ -379,15 +375,6 @@
             <span class="kbd-hint" aria-hidden="true"
               >j/k · x flag · d dismiss · ⏎ open · / search</span
             >
-            <button
-              type="button"
-              id="refresh-stream"
-              class="ghost stream-refresh"
-              data-tip="Reload the index and re-run the current filters"
-              data-tip-pos="bottom-end"
-            >
-              Refresh ↻
-            </button>
             <span class="pane-head-actions">
               <button
                 type="button"
@@ -973,9 +960,9 @@
               </div>
             </section>
 
-            <!-- Source-health home (footer removal, 2026-08-17): the full
-                 DATA SOURCES line lives here; the masthead #lane-warn chip
-                 appears only while a lane is broken and points here. -->
+            <!-- Source-health home: the DATA SOURCES line lives here and
+                 only here — operator telemetry stays out of reader chrome
+                 (masthead chip retired 2026-08-20). -->
             <section class="settings-section" data-panel-key="lanes" aria-label="Data sources">
               <div class="settings-head">
                 <h3>DATA SOURCES</h3>
@@ -989,6 +976,17 @@
                 </p>
                 <p class="settings-lane-health" id="settings-lane-health">
                   No lane telemetry yet — the health line fills when the corpus data loads.
+                </p>
+                <p class="panel-actions">
+                  <button
+                    type="button"
+                    id="refresh-stream"
+                    class="copy-btn"
+                    data-tip="Reloads the corpus index from storage and redraws every page. The site does this automatically after each sweep — use it only if the data looks stale."
+                    data-tip-pos="bottom-start"
+                  >
+                    FORCE CORPUS REFRESH ↻
+                  </button>
                 </p>
               </div>
             </section>
