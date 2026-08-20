@@ -78,132 +78,57 @@
         <button type="submit" class="hunt-submit" data-tip="Map the query to ITM techniques and search the corpus" data-tip-pos="bottom-end">SEARCH</button>
       </form>
       </div>
-      <details class="refine-panel" id="refine-panel">
-        <summary class="refine-summary" id="refine-summary">
-          <span class="refine-label">Refine</span>
-          <span class="refine-state" id="refine-state">INSIDER FOCUS · ALL CHANNELS</span>
-        </summary>
-        <div class="refine-body">
-          <div class="stream-filters stream-filters-secondary" id="stream-filters">
-            <div class="filter-group">
-              <span
-                class="filter-label"
-                data-tip="The top insider risks — pick a topic and the stream focuses on it. Click again to clear."
-                tabindex="0"
-              >Top Insider Risks</span>
-              <div
-                class="hunt-usecases"
-                id="hunt-usecases"
-                role="group"
-                aria-label="Top insider risks"
-              ></div>
-            </div>
-            <div class="filter-group">
-              <span class="filter-label">Scope</span>
-              <div class="pill-group" id="align-filters" role="group" aria-label="Stream scope">
-                <button
-                  type="button"
-                  class="pill active"
-                  data-alignment="insider"
-                  data-tip="Only articles matched to Insider Threat Matrix™ techniques"
-                >
-                  Insider Focus
-                </button>
-                <button
-                  type="button"
-                  class="pill"
-                  data-alignment="all"
-                  data-tip="Everything indexed, including weak or unmatched articles"
-                >
-                  All indexed
-                </button>
-              </div>
-            </div>
-            <div class="filter-group filter-group-signal">
-              <span
-                class="filter-label"
-                data-tip="Relevance-score floor for the stream. Raise it to hide weaker matches; publications are never hidden."
-                tabindex="0"
-              >Min. Insider Confidence — <span class="signal-value" id="signal-value">SIG ≥ 30</span></span>
-              <input
-                type="range"
-                id="signal-slider"
-                min="0"
-                max="100"
-                step="5"
-                value="30"
-                aria-label="Minimum insider confidence (SIG floor)"
-              />
-              <div class="signal-ticks" aria-hidden="true">
-                <span>0 ALL</span><span>30 STD</span><span>45 HIGH</span><span>100</span>
-              </div>
-            </div>
-            <div class="filter-group">
-              <span class="filter-label">Channel</span>
-              <div class="pill-group" id="channel-filters" role="group" aria-label="Channel">
-                <button type="button" class="pill active" data-channel="all">All channels</button>
-                <button type="button" class="pill" data-channel="news">News</button>
-                <button type="button" class="pill" data-channel="filings">Cases</button>
-                <button type="button" class="pill" data-channel="tips">Tips</button>
-                <button type="button" class="pill" data-channel="social">Social</button>
-                <button type="button" class="pill" data-channel="publications">Publications</button>
-              </div>
-            </div>
-            <div class="filter-group">
-              <span
-                class="filter-label"
-                data-tip="How culpable the insider appears — malicious, negligent, or an honest mistake. Hover a pill for each definition."
-                tabindex="0"
-              >Insider type</span>
-              <div
-                class="pill-group"
-                id="insider-type-filters"
-                role="group"
-                aria-label="Insider type"
-              >
-                <button
-                  type="button"
-                  class="pill active"
-                  data-insider-type="all"
-                  data-tip="Any intent — include articles with no intent signal"
-                >
-                  Any type
-                </button>
-                <button
-                  type="button"
-                  class="pill"
-                  data-insider-type="malicious"
-                  data-tip="Deliberate harm — theft, sabotage, selling data"
-                >
-                  Malicious
-                </button>
-                <button
-                  type="button"
-                  class="pill"
-                  data-insider-type="negligent"
-                  data-tip="Knew the rules, hid it or skipped them anyway"
-                >
-                  Negligent
-                </button>
-                <button
-                  type="button"
-                  class="pill"
-                  data-insider-type="unintentional"
-                  data-tip="Honest mistake — accident, phish, unaware of policy"
-                >
-                  Unintentional
-                </button>
-              </div>
-            </div>
-            <div class="source-filter-row">
-              <label class="filter-label" for="source-select">Source</label>
-              <select id="source-select" aria-label="Filter by source">
-                <option value="">All feeds</option>
-              </select>
-            </div>
+      <!-- Filter chip bar (2026-08-20, replaces the Refine drawer): each
+           chip wears its live value — no hidden state. SOURCE = where the
+           reporting comes from; FOCUS = one topic or one Insider Threat
+           Matrix stage at a time. Scope + SIG retreated to SETTINGS as the
+           defaults they always were; insider-type pills retired (tags on
+           cards remain informational). Popovers reuse the existing pill
+           wiring by keeping ids hunt-usecases / channel-filters /
+           source-select. -->
+      <div class="chip-bar" id="chip-bar">
+        <button type="button" class="fchip" id="chip-source" data-pop="pop-source" aria-haspopup="true" aria-expanded="false">
+          <span class="fchip-k">Source</span><span class="fchip-v" id="chip-source-value">All</span><span class="fchip-caret">▾</span>
+        </button>
+        <button type="button" class="fchip" id="chip-focus" data-pop="pop-focus" aria-haspopup="true" aria-expanded="false">
+          <span class="fchip-k">Focus</span><span class="fchip-v" id="chip-focus-value">Any</span><span class="fchip-caret">▾</span>
+        </button>
+        <button type="button" class="chip-reset" id="chip-reset" hidden>Reset ✕</button>
+
+        <div class="chip-pop" id="pop-source" hidden>
+          <h4 class="chip-pop-title">Source</h4>
+          <div class="pill-group" id="channel-filters" role="group" aria-label="Source">
+            <button type="button" class="pill active" data-channel="all">All</button>
+            <button type="button" class="pill" data-channel="filings" data-tip="Filings and dockets from federal courts — the receipts">Court cases</button>
+            <button type="button" class="pill" data-channel="news" data-tip="Security-press reporting around the cases">News</button>
+          </div>
+          <div class="source-filter-row">
+            <label class="filter-label" for="source-select">Specific feed</label>
+            <select id="source-select" aria-label="Filter by source">
+              <option value="">All feeds</option>
+            </select>
           </div>
         </div>
-      </details>
+
+        <div class="chip-pop chip-pop-wide" id="pop-focus" hidden>
+          <h4 class="chip-pop-title">By topic</h4>
+          <div
+            class="hunt-usecases"
+            id="hunt-usecases"
+            role="group"
+            aria-label="Top insider risks"
+          ></div>
+          <h4 class="chip-pop-title chip-pop-title-2">By matrix stage <span class="chip-pop-note">Insider Threat Matrix™</span></h4>
+          <div class="pill-group" id="theme-filters" role="group" aria-label="Matrix stage">
+            <button type="button" class="pill" data-stream-theme="motive">Motive<small>why they did it</small></button>
+            <button type="button" class="pill" data-stream-theme="means">Means<small>access they abused</small></button>
+            <button type="button" class="pill" data-stream-theme="preparation">Preparation<small>getting ready</small></button>
+            <button type="button" class="pill" data-stream-theme="infringement">Infringement<small>the act itself</small></button>
+            <button type="button" class="pill" data-stream-theme="anti-forensics">Anti-forensics<small>covering tracks</small></button>
+          </div>
+          <p class="chip-pop-hint">One focus at a time — a topic, or a stage of the matrix. Deep technique browsing lives in MATRIX.</p>
+        </div>
+      </div>
       <div class="status-row">
         <span id="data-state" class="data-state" hidden></span>
         <p class="status" id="status" role="status">Connecting…</p>

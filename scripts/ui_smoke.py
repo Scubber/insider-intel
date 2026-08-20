@@ -211,13 +211,18 @@ def run(base_url: str, headed: bool) -> int:
         # Drop the SIG floor to 0 first so the full corpus is in view — the
         # default floor filters most cards and the long-note sample may score
         # below it. Chunking is floor-independent.
+        # The stream slider is gone (chip bar, 2026-08-20): drop the floor via
+        # SETTINGS defaults + APPLY, the one remaining SIG control.
+        page.click('.masthead-nav-item[data-pane="settings"]')
         page.evaluate(
             """() => {
-              const s = document.getElementById('signal-slider');
+              const s = document.getElementById('default-signal');
               s.value = '0';
+              s.dispatchEvent(new Event('input', { bubbles: true }));
               s.dispatchEvent(new Event('change', { bubbles: true }));
             }"""
         )
+        page.click('#apply-defaults')
         page.wait_for_timeout(600)
         chunked = page.evaluate(
             """() => {
@@ -398,35 +403,40 @@ def run(base_url: str, headed: bool) -> int:
             not page.is_visible(".left-rail .pane-trending"),
         )
 
-        # Signal slider filters the stream: SIG ≥ 100 should clear (or shrink)
-        # it and update the refine summary; sliding back restores it. Start
-        # from a clean latest stream (the earlier hunt left search mode on).
+        # Chip bar filters the stream (2026-08-20): SOURCE -> Court cases
+        # narrows to filings and the chip label follows; RESET restores. Then
+        # FOCUS -> a matrix stage filters by ITM theme (state.theme wiring).
         page.goto(demo)
         page.wait_for_selector(".article-item", timeout=20000)
         base_rows = page.locator("#article-list .article-row").count()
-        page.evaluate(
-            """() => {
-              const s = document.getElementById('signal-slider');
-              s.value = '100';
-              s.dispatchEvent(new Event('input', { bubbles: true }));
-              s.dispatchEvent(new Event('change', { bubbles: true }));
-            }"""
-        )
-        page.wait_for_timeout(600)
-        high_rows = page.locator("#article-list .article-row").count()
-        summary = page.text_content("#refine-state") or ""
+        page.click("#chip-source")
         checks.check(
-            "signal slider filters the stream",
-            high_rows < base_rows and "SIG ≥ 100" in summary,
-            f"base={base_rows} high={high_rows} summary={summary!r}",
+            "source popover opens",
+            page.is_visible("#pop-source"),
         )
-        page.evaluate(
-            """() => {
-              const s = document.getElementById('signal-slider');
-              s.value = '30';
-              s.dispatchEvent(new Event('change', { bubbles: true }));
-            }"""
+        page.click('#channel-filters .pill[data-channel="filings"]')
+        page.wait_for_timeout(600)
+        filings_rows = page.locator("#article-list .article-row").count()
+        source_label = page.text_content("#chip-source-value") or ""
+        checks.check(
+            "SOURCE chip filters to court cases and wears the value",
+            filings_rows <= base_rows and "Court cases" in source_label,
+            f"base={base_rows} filings={filings_rows} label={source_label!r}",
         )
+        checks.check(
+            "reset appears when tuned",
+            page.is_visible("#chip-reset"),
+        )
+        page.click("#chip-focus")
+        page.click('#theme-filters .pill[data-stream-theme="motive"]')
+        page.wait_for_timeout(600)
+        focus_label = page.text_content("#chip-focus-value") or ""
+        checks.check(
+            "FOCUS chip carries the matrix stage",
+            "Motive" in focus_label,
+            f"label={focus_label!r}",
+        )
+        page.click("#chip-reset")
         page.wait_for_timeout(600)
 
         # Workbench nav tab takes over full-width (stream + rail hidden) and
