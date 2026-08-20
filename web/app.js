@@ -714,18 +714,9 @@
     themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
   }
 
-  // Shell chrome: the ABOUT page's feed link, the masthead source-health
-  // chip, and the status band's UTC clock.
+  // Shell chrome: the ABOUT page's feed link and the status band's UTC clock.
   const aboutFeed = document.getElementById("about-feed-link");
   if (aboutFeed) aboutFeed.href = `${apiBase}/feed.xml`;
-  const laneWarnChip = document.getElementById("lane-warn");
-  if (laneWarnChip) {
-    laneWarnChip.addEventListener("click", () => {
-      // The full DATA SOURCES line lives in SETTINGS.
-      setActivePane("settings");
-      window.scrollTo({ top: 0 });
-    });
-  }
   const utcClock = document.getElementById("utc-clock");
   function tickClock() {
     if (!utcClock) return;
@@ -4607,9 +4598,9 @@
 
   /** Source-health presentation (pure, node-unit-tested): the SETTINGS line
    *  always tells the full story — "DATA SOURCES: X HEALTHY / Y BROKEN
-   *  (names)" — and the masthead chip exists ONLY while something is broken.
-   *  Zero broken means zero chip: the call-out that matters, with no
-   *  permanent chrome. Returns null when there is no telemetry at all. */
+   *  (names)". Operator telemetry lives in SETTINGS only (2026-08-20: the
+   *  masthead chip was retired — admin views stay out of reader chrome).
+   *  Returns null when there is no telemetry at all. */
   function laneHealthPresentation(summary) {
     if (!summary || !summary.total) return null;
     const broken = summary.broken || 0;
@@ -4619,42 +4610,19 @@
       const names = (summary.broken_lanes || []).join(", ");
       line += ` / ${broken} BROKEN${names ? ` (${names.toUpperCase()})` : ""}`;
     }
-    const chip =
-      broken > 0
-        ? {
-            text: `▲ ${broken} SOURCE${broken === 1 ? "" : "S"} BROKEN`,
-            tip: `${line} — a lane counts as BROKEN after 3 failed or empty refresh cycles. Details in SETTINGS.`,
-          }
-        : null;
-    return { line, broken, chip };
+    return { line, broken };
   }
 
-  /** Source-health homes (footer removal, 2026-08-17): the full line renders
-   *  into SETTINGS (#settings-lane-health); the masthead #lane-warn chip
-   *  appears only when broken > 0. summary is /lanes/health `summary` (live)
-   *  or meta.json `lane_health` (boot snapshot). Fail-soft: no data → the
-   *  SETTINGS line keeps its teaching text and the chip stays hidden. */
+  /** Source health renders into SETTINGS only (#settings-lane-health) —
+   *  operator telemetry, not reader chrome. summary is /lanes/health
+   *  `summary` (live) or meta.json `lane_health` (boot snapshot).
+   *  Fail-soft: no data → the SETTINGS line keeps its teaching text. */
   function renderLaneHealth(summary) {
     const line = document.getElementById("settings-lane-health");
-    const chip = document.getElementById("lane-warn");
     const view = laneHealthPresentation(summary);
-    if (!view) {
-      if (chip) chip.hidden = true;
-      return;
-    }
-    if (line) {
-      line.textContent = view.line;
-      line.classList.toggle("lane-health-broken", view.broken > 0);
-    }
-    if (chip) {
-      if (view.chip) {
-        chip.textContent = view.chip.text;
-        chip.dataset.tip = view.chip.tip;
-        chip.hidden = false;
-      } else {
-        chip.hidden = true;
-      }
-    }
+    if (!view || !line) return;
+    line.textContent = view.line;
+    line.classList.toggle("lane-health-broken", view.broken > 0);
   }
 
   async function loadLaneHealth() {

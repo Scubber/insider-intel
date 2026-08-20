@@ -193,23 +193,15 @@ def test_lane_health_homes_are_settings_line_plus_masthead_chip() -> None:
     assert "DATA SOURCES" in block
     assert 'id="settings-lane-health"' in block
     assert "three failed or empty cycles" in block
-    # Masthead: the warning chip, hidden by default.
-    chip = re.search(r'<button[^>]*id="lane-warn"[^>]*>', html)
-    assert chip, "masthead lane-warn chip missing"
-    assert "hidden" in chip.group(0), "the chip must not render while healthy"
-    # renderLaneHealth targets both homes via the pure presentation helper.
+    # Operator telemetry stays out of reader chrome (2026-08-20): the
+    # masthead lane-warn chip is retired — SETTINGS is the only home.
+    assert 'id="lane-warn"' not in html, "masthead chip must stay retired"
     render = _fn_body(app, "renderLaneHealth")
     assert 'getElementById("settings-lane-health")' in render
-    assert 'getElementById("lane-warn")' in render
     assert "laneHealthPresentation(" in render
-    # The chip routes to SETTINGS, where the full line lives.
-    assert re.search(
-        r'laneWarnChip\.addEventListener\("click"[\s\S]{0,120}setActivePane\("settings"\)',
-        app,
-    ), "lane-warn chip must open SETTINGS"
-    # Chip color law: signal, not accent (observed/alleged tone for warnings).
+    assert "lane-warn" not in app, "no chip wiring may remain"
     css = Path("web/styles.css").read_text(encoding="utf-8")
-    assert re.search(r"\.lane-warn\s*\{[^}]*var\(--signal\)", css)
+    assert ".lane-warn" not in css, "no dead chip styles"
 
 
 # ── 3. Chip presentation logic, executed under node ─────────────────────────
@@ -243,26 +235,16 @@ def test_chip_absent_without_telemetry() -> None:
     assert _present({"total": 0}) is None
 
 
-def test_chip_absent_when_zero_broken() -> None:
-    """The call-out that matters, without permanent chrome: healthy = no chip."""
+def test_line_when_zero_broken() -> None:
     out = _present({"total": 5, "healthy": 5, "broken": 0, "broken_lanes": []})
     assert out is not None
-    assert out["chip"] is None
     assert out["broken"] == 0
     assert out["line"] == "DATA SOURCES: 5 HEALTHY"
+    assert "chip" not in out  # masthead chip retired 2026-08-20
 
 
-def test_chip_present_when_broken_with_names_in_tip() -> None:
+def test_line_names_broken_lanes() -> None:
     out = _present({"total": 6, "healthy": 4, "broken": 2, "broken_lanes": ["dead-a", "dead-b"]})
     assert out is not None
     assert out["line"] == "DATA SOURCES: 4 HEALTHY / 2 BROKEN (DEAD-A, DEAD-B)"
-    assert out["chip"] is not None
-    assert out["chip"]["text"] == "▲ 2 SOURCES BROKEN"
-    assert "DEAD-A, DEAD-B" in out["chip"]["tip"]
-    assert "SETTINGS" in out["chip"]["tip"]
-
-
-def test_chip_singular_for_one_broken_lane() -> None:
-    out = _present({"total": 3, "healthy": 2, "broken": 1, "broken_lanes": ["flaky"]})
-    assert out is not None
-    assert out["chip"]["text"] == "▲ 1 SOURCE BROKEN"
+    assert out["broken"] == 2
