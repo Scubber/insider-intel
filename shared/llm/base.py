@@ -200,8 +200,21 @@ Rules:
   never states (no "Microsoft 365", "CrowdStrike", "event ID 4104",
   "index=o365"). Set basis: mechanically_implied only when the action itself
   guarantees the trace; otherwise analyst_inference.
-- motive_signals / exfil_channels: short phrases close to the article's own
-  wording; [] when none stated.
+- Case facts — fill EVERY one of these the text establishes; null/[] means
+  the SOURCE IS SILENT on it, never that you skipped it. Check each field
+  against the text before replying:
+  * actor_role / access_vector: the insider's job, and the access or system
+    they abused.
+  * timeframe: when the conduct ran, in the text's own dating.
+  * motive_signals: short phrases close to the article's own wording.
+  * exfil_channels: every channel the text says data moved through (personal
+    email, USB drive, cloud storage, printouts, photographs…); [] only when
+    none is stated.
+  * detection: HOW the conduct came to light, one line close to the text's
+    wording (internal audit, coworker report, DLP alert, forensic review on
+    departure…).
+  * outcome: where the case stands per THIS document — charges filed, plea,
+    sentence, damages, settlement, injunction, dismissal.
 - itm_refs: from CANDIDATE TECHNIQUES only, ids whose behavior the article
   actually evidences, each with confidence and a short evidence phrase; [] if
   none apply. Never use an id outside the candidate list.
