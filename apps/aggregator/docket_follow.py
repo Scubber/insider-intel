@@ -292,16 +292,22 @@ def run_docket_follow(
             saved = article_store.save(updated_articles)
         _clear_llm_fields(processed, {a.link for a in updated_articles})
 
-    result.sources.append(
-        SourceIngestionResult(
-            source_id="courtlistener-docket-follow",
-            source_name="CourtListener docket follow",
-            success=not (errors and saved == 0 and polled == len(errors)),
-            articles_fetched=polled,
-            articles_saved=saved,
-            error="; ".join(errors[:5]) if errors and saved == 0 else None,
+    # A caught-up lane is healthy-idle, not broken: when every tracked docket
+    # sits inside its repoll window there is nothing to attempt, and reporting
+    # fetched=0 here made lane health count "empty" cycles toward BROKEN
+    # (false alarm observed after 3 quiet cycles, 2026-08-21). Report only
+    # when the lane actually did something — polled, saved, or errored.
+    if polled or saved or errors:
+        result.sources.append(
+            SourceIngestionResult(
+                source_id="courtlistener-docket-follow",
+                source_name="CourtListener docket follow",
+                success=not (errors and saved == 0 and polled == len(errors)),
+                articles_fetched=polled,
+                articles_saved=saved,
+                error="; ".join(errors[:5]) if errors and saved == 0 else None,
+            )
         )
-    )
     result.total_articles_saved = saved
     result.finished_at = datetime.now(UTC)
     logger.info(
