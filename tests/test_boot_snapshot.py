@@ -239,3 +239,38 @@ def test_snapshot_mirrors_the_boot_query() -> None:
     assert BOOT_QUERY["group"] is True
     app_js = Path("web/app.js").read_text(encoding="utf-8")
     assert "limit: 75" in app_js  # loadArticles' boot limit — keep in lockstep
+
+
+def test_articles_twin_equals_slimmed_live_response(tmp_path, monkeypatch) -> None:
+    """THE drift guard: exporter output == the live boot response, slimmed.
+
+    Runs both paths against one corpus — build_snapshot() vs the same
+    list_articles(**BOOT_QUERY) call the API serves — and asserts the
+    articles twin is exactly the slim projection of the live payload.
+    Any divergence (query params, slimming whitelist, clustering,
+    serialization) fails here before it can ship as a boot flash.
+    """
+    _seed(tmp_path, monkeypatch)
+    from apps.search.service import get_index
+    from scripts.export_boot_snapshot import BOOT_QUERY, _slim_hit, build_snapshot
+    from shared.settings import get_settings
+
+    articles, _meta, _tooling, _sources, _ledger = build_snapshot()
+
+    index = get_index(get_settings().processed_articles_path, reload=True)
+    live = index.list_articles(**BOOT_QUERY)
+    expected_results = [_slim_hit(h) for h in live.results]
+    expected_clusters = []
+    for cluster in live.clusters or []:
+        c = cluster.model_dump(mode="json")
+        c["primary"] = _slim_hit(cluster.primary)
+        c["siblings"] = [_slim_hit(sib) for sib in cluster.siblings or []]
+        expected_clusters.append(c)
+
+    assert json.loads(json.dumps(articles["results"])) == json.loads(
+        json.dumps(expected_results)
+    )
+    assert json.loads(json.dumps(articles["clusters"])) == json.loads(
+        json.dumps(expected_clusters)
+    )
+    assert articles["total_indexed"] == index.size
