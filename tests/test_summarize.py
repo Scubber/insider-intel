@@ -297,7 +297,9 @@ def test_qualifying_article_gets_note_forensics_and_llm_hits(monkeypatch) -> Non
     assert forensics is not None and forensics.is_insider_case
     assert forensics.extraction_status == "llm"
     assert forensics.methods and forensics.methods[0].action == "USB copy of design files"
-    assert forensics.hunt_queries and forensics.hunt_queries[0].stack == "EDR"
+    # v3 freeze: hunt_queries left the enricher contract — even a reply
+    # carrying them (this fake does) writes an empty list.
+    assert forensics.hunt_queries == []
     assert forensics.link == processed.link and forensics.model == "fake-model"
     # candidate_technique_ids are stamped from the final merged ITM hits.
     assert "IF038" in forensics.candidate_technique_ids
@@ -819,18 +821,26 @@ def test_enrich_prompt_carries_relevance_and_tactical_guidance() -> None:
     assert "digital-forensics angle" in p
     assert "name every application, service, device, or protocol" in p
     assert "Telegram" in p and "rclone" in p
-    assert "Up to 4 hunt queries" in p
-    assert "DIFFERENT stack" in p
+    # v3 freeze pins (docs/schema-freeze-v3.md): the five prompt-contract
+    # changes must survive future edits.
+    assert "VERBATIM OR EMPTY" in p and "machine-checked" in p
+    assert "Calibrate to these bands" in p and "a complaint is never 0.95" in p
+    assert "every route data LEFT BY" in p
+    assert "A name is NEVER evidence of nationality" in p
+    assert "a fillable field is never a reason to call" in p
+    assert "Insider Threat Matrix 2.12" in p
+    assert "caught (it detected or stopped the conduct)" in p
+    assert "financial-services" in p
+    assert "hunt_queries" not in p  # dead weight, out of the contract
     # The source-vs-inference discipline must survive the edits.
     assert "do NOT name a specific vendor, product, or log source" in p
-    assert "PORTABLE pseudo-logic" in p
     # Per-field fill demands: schema-literal models (Qwen) emit the specimen's
     # null/[] defaults unless each case fact is explicitly demanded — corpus
     # audit 2026-08-19: detection filled 3% by Qwen vs 49% by Haiku.
     assert "fill EVERY one of these the text establishes" in p
     assert "SOURCE IS SILENT" in p
     assert "HOW the conduct came to light" in p
-    assert "every channel the text says data moved through" in p
+    # (v3 reworded the exfil demand; the LEFT BY pin above covers it)
 
 
 def test_backfill_prioritizes_filings_over_newer_news(monkeypatch, tmp_path: Path) -> None:

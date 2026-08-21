@@ -135,7 +135,9 @@ def _arm_stats(pairs: list[dict], arm: str) -> dict:
     methods_counts: list[float] = []
     confidences: list[float] = []
     insider_records = 0
-    hunt_terms_present = hunt_queries_present = 0
+    hunt_terms_present = 0
+    _FILL_FIELDS = ("detection", "outcome", "timeframe", "exfil", "motive")
+    fills = {f: 0 for f in _FILL_FIELDS}
     for record in records:
         methods = record.get("methods") or []
         methods_counts.append(float(len(methods)))
@@ -148,7 +150,14 @@ def _arm_stats(pairs: list[dict], arm: str) -> dict:
         if record.get("is_insider_case"):
             insider_records += 1
             hunt_terms_present += int(bool(record.get("hunt_terms")))
-            hunt_queries_present += int(bool(record.get("hunt_queries")))
+            for field in _FILL_FIELDS:
+                if field == "exfil":
+                    filled = bool(record.get("exfil_channels"))
+                elif field == "motive":
+                    filled = bool(record.get("motive_signals"))
+                else:
+                    filled = bool(str(record.get(field) or "").strip())
+                fills[field] += int(filled)
 
     walls = [float(p[arm].get("wall_seconds") or 0.0) for p in pairs if p.get(arm)]
     completion_tokens = [
@@ -174,8 +183,13 @@ def _arm_stats(pairs: list[dict], arm: str) -> dict:
         "hunt_terms_present_rate": (
             round(hunt_terms_present / insider_records, 4) if insider_records else None
         ),
-        "hunt_queries_present_rate": (
-            round(hunt_queries_present / insider_records, 4) if insider_records else None
+        # v3 freeze: per-field fill over insider-true records — the gap that
+        # let field-skipping ship (Qwen detection 3% vs Haiku 49%, caught
+        # only by corpus audit, 2026-08-19).
+        "field_fill": (
+            {f: round(n / insider_records, 4) for f, n in fills.items()}
+            if insider_records
+            else None
         ),
     }
 
@@ -291,6 +305,28 @@ def decide(metrics: dict) -> dict:
                 ),
             }
         )
+
+    # v3 freeze gates (docs/schema-freeze-v3.md).
+    VERBATIM_FLOOR = 0.85
+    rate_on_abs = arms[ARM_ON]["verbatim_rate"]
+    checks.append(
+        {
+            "name": "verbatim_floor",
+            "passed": bool(rate_on_abs is None or rate_on_abs >= VERBATIM_FLOOR),
+            "detail": f"thinking-on verbatim {rate_on_abs} (floor {VERBATIM_FLOOR}; "
+            "None = no quotes claimed, vacuously passes)",
+        }
+    )
+    DETECTION_FILL_FLOOR = 0.60
+    fill_on = (arms[ARM_ON].get("field_fill") or {}).get("detection")
+    checks.append(
+        {
+            "name": "detection_fill",
+            "passed": bool(fill_on is None or fill_on >= DETECTION_FILL_FLOOR),
+            "detail": f"thinking-on detection fill {fill_on} (floor {DETECTION_FILL_FLOOR}; "
+            "None = no insider-true records, vacuously passes)",
+        }
+    )
 
     rate_on = arms[ARM_ON]["verbatim_rate"]
     rate_off = arms[ARM_OFF]["verbatim_rate"]
@@ -499,7 +535,13 @@ def render_markdown(metrics: dict, decision: dict, judge: dict | None, meta: dic
             ),
         ),
         ("hunt_terms present (insider rows)", lambda a: _fmt(a["hunt_terms_present_rate"])),
-        ("hunt_queries present (insider rows)", lambda a: _fmt(a["hunt_queries_present_rate"])),
+        (
+            "field fill (insider rows)",
+            lambda a: ", ".join(
+                f"{k} {_fmt(v)}" for k, v in (a.get("field_fill") or {}).items()
+            )
+            or "—",
+        ),
     ]
     for label, getter in rows:
         lines.append(f"| {label} | {getter(arms[ARM_ON])} | {getter(arms[ARM_OFF])} |")

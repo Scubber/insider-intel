@@ -144,15 +144,13 @@ for anything the text does not establish):
   "exfil_channels": [],
   "detection": null,
   "outcome": null,
+  "actor_citizenship": null,
+  "industry": "unknown",
+  "tool_mentions": [
+    {"name": "product the SOURCE names", "role": "caught", "evidence": "short phrase"}
+  ],
   "itm_refs": [{"id": "IF002", "confidence": 0.0, "evidence": "short phrase"}],
-  "hunt_terms": ["literal strings an analyst could paste into a search"],
-  "hunt_queries": [
-    {
-      "stack": "Splunk/SIEM",
-      "logic": "portable pseudo-logic with <angle_bracket_placeholders>",
-      "rationale": "which behavior it catches"
-    }
-  ]
+  "hunt_terms": ["literal strings an analyst could paste into a search"]
 }
 
 Enum values (use exactly these strings):
@@ -166,6 +164,15 @@ Enum values (use exactly these strings):
 - source_type: court_filing | news | blog | social | press_release | unknown.
 - legal_posture: indictment | complaint | plea | conviction | sentencing |
   civil_suit | settlement | none | unknown — the document's stage, not a guess.
+- industry: financial-services | healthcare | technology | defense |
+  manufacturing | energy | retail | public-sector | professional-services |
+  other | unknown — the VICTIM organization's sector.
+- tool_mentions[].role: caught (it detected or stopped the conduct) |
+  bypassed (present but evaded) | misused (the insider's instrument) |
+  traced (used after the fact to reconstruct events). Only products the
+  SOURCE names — never infer a product from behavior.
+- itm_refs adjudicate against Insider Threat Matrix 2.12 — use only ids from
+  the CANDIDATE TECHNIQUES list, judged by the behavior the text evidences.
 
 Rules:
 - ai_summary: 3-5 plain sentences — who did what, how it was found, and what
@@ -185,10 +192,11 @@ Rules:
   when is_insider_case is true.
 - SOURCE vs INFERENCE. methods describe what the source SAYS the insider did;
   set claim_status from the source's own framing (an indictment = "alleged",
-  never "adjudicated"). evidence_quote MUST be an exact substring of the text
-  above, copied character for character — never reworded, condensed, or
-  reconstructed from memory. An empty "" is always correct when no exact
-  snippet fits; a paraphrased "quote" is always wrong. Keep tool names and
+  never "adjudicated"). evidence_quote is VERBATIM OR EMPTY — an exact
+  substring of the text above, copied character for character. Before writing
+  a quote, locate it in the text; if you cannot point to the exact characters,
+  write "" instead. A paraphrase presented as a quote is a corrupt record —
+  worse than no quote. Every quote is machine-checked against the source. Keep tool names and
   quantities verbatim where present; no invented facts. Be tactically
   specific: name every application, service, device, or protocol the source
   mentions (Zoom, Telegram, rclone, AnyDesk, USB drive, personal Gmail…) in
@@ -202,14 +210,21 @@ Rules:
   guarantees the trace; otherwise analyst_inference.
 - Case facts — fill EVERY one of these the text establishes; null/[] means
   the SOURCE IS SILENT on it, never that you skipped it. Check each field
-  against the text before replying:
+  against the text before replying. These fields describe a case ONLY when
+  is_insider_case is true — a fillable field is never a reason to call
+  something an insider case; the verdict is decided first, on its own rule:
   * actor_role / access_vector: the insider's job, and the access or system
     they abused.
   * timeframe: when the conduct ran, in the text's own dating.
   * motive_signals: short phrases close to the article's own wording.
-  * exfil_channels: every channel the text says data moved through (personal
-    email, USB drive, cloud storage, printouts, photographs…); [] only when
-    none is stated.
+  * exfil_channels: every route data LEFT BY — name the service, device, or
+    method the text states (personal Gmail, USB drive, Dropbox, printouts,
+    photographs, screen captures…); [] only when none is stated.
+  * actor_citizenship: ONLY from an explicit statement ("a citizen of India",
+    "a Chinese national"). A name is NEVER evidence of nationality. Civil
+    filings usually plead only state citizenship — record "US (state
+    pleaded)" for those. null when the source is silent.
+  * industry: the victim organization's sector, from the enum above.
   * detection: HOW the conduct came to light, one line close to the text's
     wording (internal audit, coworker report, DLP alert, forensic review on
     departure…).
@@ -218,17 +233,17 @@ Rules:
 - itm_refs: from CANDIDATE TECHNIQUES only, ids whose behavior the article
   actually evidences, each with confidence and a short evidence phrase; [] if
   none apply. Never use an id outside the candidate list.
-- hunt_terms / hunt_queries: only when is_insider_case is true, [] otherwise.
-  Up to 4 hunt queries, each covering a DIFFERENT stack for a different
-  observed behavior (e.g. Splunk/SIEM, email gateway, chat/collab audit,
-  EDR) — never 4 variants of one idea. logic must be PORTABLE pseudo-logic using
-  <angle_bracket_placeholders> for anything the source doesn't supply — e.g.
-  FROM <outbound_email_log> WHERE recipient_domain NOT IN <approved_domains>.
-  Never invent concrete index names, sourcetypes, event IDs, or field names.
+- hunt_terms: only when is_insider_case is true, [] otherwise — literal
+  strings (tool names, file names, service domains) an analyst could paste
+  into a search.
 - confidence: how strongly the source establishes a concrete insider case and
   that this reconstruction reflects the supplied text — NOT a probability the
-  person is guilty. An unproven allegation can be a high-confidence extraction
-  of what the source claims.
+  person is guilty. Calibrate to these bands, and use the WHOLE range:
+  0.9-1.0 court-adjudicated facts (conviction, plea, judgment);
+  0.7-0.9 charged or alleged with primary documents (indictment, complaint);
+  0.4-0.7 news-sourced with named parties and specifics;
+  below 0.4 thin, secondhand, or anonymized accounts.
+  Reserve 0.95+ for adjudicated findings; a complaint is never 0.95.
 """
 
 
