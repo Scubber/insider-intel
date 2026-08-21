@@ -158,12 +158,14 @@ DEFAULT_FEEDS: list[FeedSource] = [
         name="Australian Federal Police — Media",
         url="https://www.afp.gov.au/rss.xml",
         category="insider-legal",
+        enabled=False,  # parked 2026-08-21: HTTP 401 from cloud/CI IPs, 18 straight broken cycles
     ),
     FeedSource(
         id="oaic-news",
         name="OAIC (AU privacy regulator) — News",
         url="https://www.oaic.gov.au/rss",
         category="insider-legal",
+        enabled=False,  # parked 2026-08-21: empty 18 straight cycles (feed serves no items)
     ),
     # cps-news removed 2026-08-16: https://www.cps.gov.uk/rss.xml is a hard
     # 404 (Drupal error page); no replacement RSS path found on cps.gov.uk.
@@ -180,6 +182,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         name="Justice Canada — News Releases",
         url="https://api.io.canada.ca/io-server/gc/news/en/v2?dept=departmentofjustice&type=newsreleases&format=atom&atomtitle=Justice%20Canada",
         category="insider-legal",
+        enabled=False,  # parked 2026-08-21: empty 18 straight cycles (API feed serves no items)
     ),
     # CanLII per-court new-decision feeds (intl phase 2-lite; HANDOFF thread
     # 8). The CanLII API is metadata-only, so CA coverage is these RSS lanes:
@@ -323,6 +326,9 @@ DEFAULT_FEEDS: list[FeedSource] = [
         url="https://databreaches.net/category/insider/feed/",
         category="insider-osint",
         max_items=25,
+        # parked 2026-08-21: HTTP 403 (likely UA-blocked) 18 straight cycles;
+    # candidate for a browser-UA retry.
+    enabled=False,
     ),
     FeedSource(
         id="insurancebusiness-au-cyber",
@@ -526,12 +532,16 @@ DEFAULT_FEEDS: list[FeedSource] = [
         name="Cybernews",
         url="https://cybernews.com/feed/",
         category="insider-osint",
+        # parked 2026-08-21: Cloudflare 403 18 straight cycles; candidate for
+    # a browser-UA retry.
+    enabled=False,
     ),
     FeedSource(
         id="dtex-i3",
         name="DTEX i3 Blog",
         url="https://www.dtexsystems.com/feed/",
         category="threat-research",
+        enabled=False,  # parked 2026-08-21: empty 18 straight cycles
     ),
     FeedSource(
         id="google-threat-intel",
@@ -550,6 +560,7 @@ DEFAULT_FEEDS: list[FeedSource] = [
         name="Microsoft Security Blog",
         url="https://www.microsoft.com/en-us/security/blog/feed/",
         category="threat-research",
+        enabled=False,  # parked 2026-08-21: exact URL duplicate of the healthy msrc-blog lane
     ),
     # darkatlas removed 2026-08-16: darkatlas.io/blog/rss.xml is a hard 404
     # (Next.js error page); no working feed path found on the rebuilt site.

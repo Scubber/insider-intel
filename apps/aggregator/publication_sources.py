@@ -51,11 +51,17 @@ DEFAULT_PUBLICATION_SOURCES: list[PublicationSource] = [
             "https://www.cisa.gov/sites/default/files/publications/"
             "Insider%20Threat%20Mitigation%20Guide_Final_508.pdf"
         ),
+        # parked 2026-08-21: cisa.gov 403s cloud IPs even with the browser UA,
+        # 18 straight broken cycles.
+        enabled=False,
     ),
     PublicationSource(
         id="pub-nittf-insider-threat-guide-2017",
         name="NITTF Insider Threat Guide (2017)",
         url=("https://www.dni.gov/files/NCSC/documents/nittf/NITTF-Insider-Threat-Guide-2017.pdf"),
+        # parked 2026-08-21: dni.gov 403s cloud IPs even with the browser UA,
+        # 18 straight broken cycles.
+        enabled=False,
     ),
 ]
 

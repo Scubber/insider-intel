@@ -177,7 +177,7 @@ def test_expected_lanes_full_enumeration(monkeypatch) -> None:
     assert lanes.get("courtlistener-recap") == "court"
     assert lanes.get("datatheftnews") == "datatheftnews"
     assert lanes.get("web-keyword:alerts.example") == "web-keyword"
-    assert lanes.get("pub-cisa-insider-threat-mitigation-guide") == "publications"
+    assert lanes.get("pub-sei-common-sense-guide-7e") == "publications"
     assert lanes.get("social-reddit-netsec") == "social"
     # RSS registry flows through too.
     assert lanes.get("krebsonsecurity") == "rss"
