@@ -199,7 +199,6 @@
     introGotit: document.getElementById("intro-gotit"),
     introHelp: document.getElementById("intro-help"),
     introUsecases: document.getElementById("intro-usecases"),
-    trendingList: document.getElementById("trending-list"),
     statusLine: document.getElementById("status-line"),
     boardMenuBtn: document.getElementById("board-menu-btn"),
     boardMenu: document.getElementById("board-menu"),
@@ -214,8 +213,6 @@
     matrixModeTabs: document.getElementById("matrix-mode-tabs"),
     matrixColumns: document.getElementById("matrix-columns"),
     matrixControlList: document.getElementById("matrix-control-list"),
-    itmRail: document.getElementById("itm-rail"),
-    matrixBrowseAll: document.getElementById("matrix-browse-all"),
     matrixPanel: document.getElementById("matrix-panel"),
     matrixBack: document.getElementById("matrix-back"),
     articlePanel: document.getElementById("article-panel"),
@@ -2791,108 +2788,6 @@
     return themes;
   }
 
-  function syncItmRailCaseHighlight() {
-    if (!els.itmRail) return;
-    const ids = state.selectedArticleItmIds;
-    els.itmRail.querySelectorAll(".itm-rail-btn").forEach((btn) => {
-      btn.classList.toggle("case-hit", ids.has(btn.dataset.techId || ""));
-    });
-  }
-
-  function renderItmRail() {
-    if (!els.itmRail) return;
-    const themes = aggregateItmRail(state.streamArticles || []);
-    els.itmRail.innerHTML = "";
-
-    // Case filter: with an article selected, the rail collapses to that
-    // article's tagged techniques only (its matrix fingerprint). A case with
-    // zero hits leaves the rail unfiltered — nothing to fingerprint.
-    const caseIds = state.selectedArticleItmIds;
-    const caseFiltered = caseIds.size > 0;
-    if (caseFiltered) {
-      const filterHead = document.createElement("div");
-      filterHead.className = "itm-rail-filter";
-      const filterLabel = document.createElement("span");
-      filterLabel.textContent = "Case filter";
-      const showAll = document.createElement("button");
-      showAll.type = "button";
-      showAll.id = "itm-rail-show-all";
-      showAll.textContent = "Show all ↩";
-      showAll.title = "Show every technique observed in the stream";
-      showAll.addEventListener("click", () => {
-        state.selectedArticleItmIds = new Set();
-        renderItmRail();
-      });
-      filterHead.append(filterLabel, showAll);
-      els.itmRail.appendChild(filterHead);
-    }
-
-    let any = false;
-    MATRIX_THEMES.forEach((theme) => {
-      let bucket = themes.get(theme.id);
-      if (!bucket || !bucket.techs.size) return; // hide unobserved themes
-      if (caseFiltered) {
-        const kept = new Map(
-          [...bucket.techs.entries()].filter(([id]) => caseIds.has(id)),
-        );
-        if (!kept.size) return; // theme not tagged in the selected case
-        // Header count reads truthfully while filtered: this case's
-        // technique count for the theme, not the stream article count.
-        bucket = { articleCount: kept.size, techs: kept };
-      }
-      any = true;
-      const head = document.createElement("div");
-      head.className = "itm-rail-theme";
-      const label = document.createElement("span");
-      label.className = "itm-rail-theme-label";
-      label.textContent = theme.label;
-      const leader = document.createElement("span");
-      leader.className = "itm-rail-leader";
-      const count = document.createElement("span");
-      count.className = "itm-rail-count";
-      count.textContent = String(bucket.articleCount);
-      head.append(label, leader, count);
-      els.itmRail.appendChild(head);
-
-      const list = document.createElement("ul");
-      list.className = "itm-rail-list";
-      [...bucket.techs.values()]
-        .sort((a, b) => b.articleCount - a.articleCount || a.id.localeCompare(b.id))
-        .forEach((tech) => {
-          const li = document.createElement("li");
-          const btn = document.createElement("button");
-          btn.type = "button";
-          // ui_smoke contract: rail rows must stay .matrix-tech-btn
-          btn.className = "matrix-tech-btn itm-rail-btn";
-          btn.dataset.techId = tech.id;
-          if (tech.id === state.selectedTechniqueId) btn.classList.add("active");
-          btn.title = `${tech.id} · ${tech.articleCount} in stream`;
-          const idSpan = document.createElement("span");
-          idSpan.className = "matrix-tech-id";
-          idSpan.textContent = tech.id;
-          const titleSpan = document.createElement("span");
-          titleSpan.className = "matrix-tech-title";
-          titleSpan.textContent = tech.title;
-          btn.append(idSpan, titleSpan);
-          btn.addEventListener("click", () => {
-            selectTechnique(tech.id).catch((err) =>
-              setStatus(`Technique load failed: ${err.message}`),
-            );
-          });
-          li.appendChild(btn);
-          list.appendChild(li);
-        });
-      els.itmRail.appendChild(list);
-    });
-    if (!any) {
-      const empty = document.createElement("p");
-      empty.className = "itm-rail-empty";
-      empty.textContent = "No ITM techniques observed in the current stream.";
-      els.itmRail.appendChild(empty);
-    }
-    syncItmRailCaseHighlight();
-  }
-
   function buildHuntMapEntries(query, articles) {
     const catalog = matchQueryToTechniques(query);
     const fromArticles = aggregateItmFromArticles(articles);
@@ -2971,7 +2866,6 @@
   function clearWorkbench() {
     state.selectedLink = null;
     state.selectedArticleItmIds = new Set();
-    renderItmRail();
     els.panelEmpty.hidden = false;
     els.panelBody.hidden = true;
     syncBoardToggle();
@@ -3195,7 +3089,6 @@
   }
 
   function renderMatrixBrowse() {
-    renderItmRail();
     const mode = state.matrixMode || "techniques";
     const isTech = mode === "techniques";
     const isCandidates = mode === "candidates";
@@ -3561,7 +3454,6 @@
     state.selectedArticleItmIds = new Set(
       (article.itm_hits || []).map((hit) => railParentId(hit && hit.id)).filter(Boolean),
     );
-    renderItmRail();
 
     if (isMobileLayout() && !options.keepPane) setActivePane("workbench");
   }
@@ -4151,7 +4043,6 @@
     // Rail snapshot: renderDossierArticles also overwrites state.articles, so
     // the observed-only ITM rail reads this stream-only copy.
     state.streamArticles = state.articles;
-    renderItmRail();
     els.streamTitle.textContent = title;
     els.streamCount.textContent = state.searchMode
       ? `${clusters.length} CASES`
@@ -4545,83 +4436,6 @@
   /* ▲ TRENDING — most-active topics across subscribed feeds (server counts
      recent vs prior window over the indexed corpus; no LLM). Failures are
      non-fatal: the panel just shows its empty state. */
-  function trendingDeltaText(item) {
-    if (item.direction === "new") return "NEW";
-    const pct = Math.abs(Math.round(item.delta_pct || 0));
-    if (item.direction === "down") return `↓ ${pct}% WK`;
-    if (item.direction === "flat") return "±0% WK";
-    return `↑ ${pct}% WK`;
-  }
-
-  function renderTrending(data) {
-    if (!els.trendingList) return;
-    els.trendingList.innerHTML = "";
-    const items = (data && data.items) || [];
-    if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "trending-empty";
-      empty.textContent = "Not enough recent activity across subscribed feeds yet.";
-      els.trendingList.appendChild(empty);
-      return;
-    }
-    items.forEach((item) => {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "trend-row";
-      const kindTip =
-        item.kind === "use_case"
-          ? "Filter the stream to this topic"
-          : item.kind === "technique"
-            ? "Open this technique's dossier"
-            : "Search the corpus for this term";
-      row.dataset.tip = `${item.recent_count} recent · ${item.count} all-time · ${trendingDeltaText(item)} vs prior — ${kindTip}`;
-      const head = document.createElement("span");
-      head.className = "trend-head";
-      const src = document.createElement("span");
-      src.className = "trend-src";
-      src.textContent = `[${String(item.channel || "news").toUpperCase()}]`;
-      const count = document.createElement("span");
-      count.className = "trend-count";
-      // Recent-window volume — what "trending" means; all-time is in the tip.
-      const shown = item.recent_count != null ? item.recent_count : item.count;
-      count.textContent = `×${shown}`;
-      const delta = document.createElement("span");
-      delta.className = `trend-delta trend-${item.direction}`;
-      delta.textContent = trendingDeltaText(item);
-      head.append(src, count, delta);
-      const label = document.createElement("span");
-      label.className = "trend-label";
-      label.textContent = item.label;
-      row.append(head, label);
-      row.addEventListener("click", () => {
-        const fail = (err) => setStatus(`Load failed: ${err.message}`);
-        if (item.kind === "use_case") {
-          state.useCase = state.useCase === item.key ? "" : item.key;
-          syncHuntUsecases();
-          updateChipBar();
-          reapplyActiveFilters().catch(fail);
-          if (isMobileLayout()) setActivePane("articles");
-        } else if (item.kind === "technique") {
-          selectTechnique(item.key).catch(fail);
-        } else {
-          if (els.q) els.q.value = item.label;
-          runSearch(item.label).catch((err) => setStatus(`Search failed: ${err.message}`));
-        }
-      });
-      els.trendingList.appendChild(row);
-    });
-  }
-
-  async function loadTrending() {
-    if (!els.trendingList) return;
-    try {
-      renderTrending(await api("/trending", { limit: 8 }, { timeoutMs: 10000 }));
-    } catch (err) {
-      console.warn("Trending unavailable", err);
-      renderTrending(null);
-    }
-  }
-
   /** Source-health presentation (pure, node-unit-tested): the SETTINGS line
    *  always tells the full story — "DATA SOURCES: X HEALTHY / Y BROKEN
    *  (names)". Operator telemetry lives in SETTINGS only (2026-08-20: the
@@ -4660,97 +4474,18 @@
     }
   }
 
-  /* EVIDENCE LEDGER pane: what evidence made real cases, aggregated across
-     every extracted forensic record. Pure read of /evidence/ledger — the API
-     recomputes from its in-memory index, so this stays current per /reload. */
-  function renderEvidenceLedger(data) {
-    renderCorpusStats(data);
-    const body = document.getElementById("ledger-body");
-    if (!body) return;
-    body.innerHTML = "";
-    if (!data || !data.enriched_cases) {
-      const empty = document.createElement("p");
-      empty.className = "trending-empty";
-      empty.textContent = "No extracted forensic records yet — the ledger fills as cases enrich.";
-      body.appendChild(empty);
-      return;
-    }
-    const s = data.strength_totals || {};
-    const summary = document.createElement("p");
-    summary.className = "ledger-summary";
-    summary.textContent =
-      `${data.enriched_cases} cases with extracted methods · ` +
-      `${s.adjudicated_admitted || 0} confirmed in court · ${s.alleged || 0} alleged`;
-    body.appendChild(summary);
-
-    const head = document.createElement("p");
-    head.className = "ledger-section-head";
-    head.textContent = "EVIDENCE TRAIL — record classes case evidence lives in";
-    head.dataset.tip =
-      "Not necessarily how each case was DETECTED. Solid bar = the described act " +
-      "necessarily produced this record (mechanically implied); faded bar = where " +
-      "an analyst would look (inferred — a hunting lead, not a detection fact).";
-    body.appendChild(head);
-
-    const artifacts = (data.detected_by || []).slice(0, 8);
-    const maxCases = artifacts.length ? artifacts[0].cases : 1;
-    artifacts.forEach((a) => {
-      const mech = a.mechanical_observables || 0;
-      const inferred = a.inferred_observables || 0;
-      const totalObs = Math.max(1, mech + inferred);
-      const row = document.createElement("div");
-      row.className = "ledger-row";
-      const examples = (a.examples || []).length ? ` — e.g. ${a.examples.join("; ")}` : "";
-      row.dataset.tip =
-        `${a.cases} case(s) touch this record class · ${a.adjudicated_admitted_cases} confirmed in court` +
-        (a.adjudicated_share != null ? ` (${a.adjudicated_share}% of adjudicated cases)` : "") +
-        ` · ${mech} mechanically implied vs ${inferred} inferred observable(s)${examples}`;
-      const label = document.createElement("span");
-      label.className = "ledger-label";
-      label.textContent = a.artifact;
-      const bar = document.createElement("span");
-      bar.className = "ledger-bar";
-      const width = Math.max(4, Math.round((100 * a.cases) / maxCases));
-      const mechFill = document.createElement("span");
-      mechFill.className = "ledger-bar-fill";
-      mechFill.style.width = `${Math.round((width * mech) / totalObs)}%`;
-      const infFill = document.createElement("span");
-      infFill.className = "ledger-bar-fill ledger-bar-inferred";
-      infFill.style.width = `${Math.round((width * inferred) / totalObs)}%`;
-      bar.append(mechFill, infFill);
-      const count = document.createElement("span");
-      count.className = "ledger-count";
-      count.textContent = `×${a.cases}`;
-      row.append(label, bar, count);
-      body.appendChild(row);
-    });
-
-    const chHead = document.createElement("p");
-    chHead.className = "ledger-section-head";
-    chHead.textContent = "CHANNEL COVERAGE";
-    body.appendChild(chHead);
-    const channels = Object.entries(data.channels || {}).sort((a, b) => b[1] - a[1]);
-    const chWrap = document.createElement("div");
-    chWrap.className = "ledger-channels";
-    channels.forEach(([ch, n]) => {
-      const chip = document.createElement("span");
-      chip.className = "ledger-chip";
-      chip.textContent = `${ch} ${n}`;
-      chip.dataset.tip = `${n} distinct case(s) with evidence in the ${ch} channel`;
-      chWrap.appendChild(chip);
-    });
-    body.appendChild(chWrap);
-  }
-
+  /* The ledger fetch has no panel of its own since the stream rail was cut
+     (2026-08-21) — EVIDENCE owns that view. It still runs on every load
+     because it is the only writer of state.evidenceLedger (the MODUS
+     OPERANDI "CORPUS: seen in N real case(s)" footnote reads it) and the
+     only path to the masthead corpus counts on the stream. */
   async function loadEvidenceLedger() {
-    if (!document.getElementById("ledger-body")) return;
     try {
       const data = await api("/evidence/ledger", { top: 25 }, { timeoutMs: 10000 });
       state.evidenceLedger = data;
-      renderEvidenceLedger(data);
+      renderCorpusStats(data);
     } catch (err) {
       console.warn("Evidence ledger unavailable", err);
-      renderEvidenceLedger(null);
     }
   }
 
@@ -6206,7 +5941,6 @@
       state.candidates = null;
       await ensureItmCatalog(true);
       renderMatrixBrowse();
-      loadTrending();
       loadEvidenceLedger();
       evidencePageLoaded = false;
       if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
@@ -6413,10 +6147,6 @@
     });
   }
 
-  if (els.matrixBrowseAll) {
-    els.matrixBrowseAll.addEventListener("click", () => openMatrixView());
-  }
-
   // Masthead nav: STREAM restores the 3-pane stream view; WORKBENCH and
   // SETTINGS take over the grid full-width on every layout (design handoff);
   // MATRIX opens the center full-matrix browser.
@@ -6561,7 +6291,18 @@
         openToolingView();
         return;
       }
-      setActivePane(btn.dataset.pane || "articles");
+      // Insights: the rail used to BE this pane on phones. It now opens the
+      // same matrix view the masthead nav does, instead of an empty grid.
+      if (btn.dataset.pane === "matrix") {
+        openMatrixView();
+        return;
+      }
+      const pane = btn.dataset.pane || "articles";
+      // Matrix renders INSIDE pane-articles, so coming back to Articles has to
+      // drop the matrix view too — otherwise the tab shows the browser, not
+      // the stream. (Mirrors the masthead nav handler.)
+      if (pane === "articles" && state.view !== "stream") setView("stream");
+      setActivePane(pane);
     });
   }
 
@@ -6890,7 +6631,6 @@
       await ensureItmCatalog();
       renderMatrixBrowse();
       await loadSources();
-      loadTrending();
       loadEvidenceLedger();
       loadLaneHealth();
       const route = parseRoute();

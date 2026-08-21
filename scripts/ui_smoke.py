@@ -180,24 +180,6 @@ def run(base_url: str, headed: bool) -> int:
         page.click(".masthead-nav-item[data-pane='articles']")
         page.wait_for_selector(".article-item", state="visible", timeout=10000)
 
-        # TRENDING panel: real rows (or the honest empty state) — never the
-        # old TODO placeholder.
-        trend_rows = page.locator(".pane-trending .trend-row").count()
-        trend_empty = page.locator(".pane-trending .trending-empty").count()
-        pane_text = page.text_content(".pane-trending") or ""
-        checks.check(
-            "trending panel renders rows or empty state",
-            (trend_rows > 0 or trend_empty > 0) and "TODO" not in pane_text,
-            f"rows={trend_rows} empty={trend_empty}",
-        )
-        if trend_rows:
-            first = page.text_content(".pane-trending .trend-row .trend-delta") or ""
-            checks.check(
-                "trending rows carry a delta chip",
-                any(tok in first for tok in ("↑", "↓", "NEW", "±")),
-                f"delta={first!r}",
-            )
-
         # Snippet is clean prose (no literal HTML entities) — Fix 4 guard
         snips = page.locator("#article-list .snip").all_text_contents()
         joined = " ".join(snips)
@@ -234,36 +216,6 @@ def run(base_url: str, headed: bool) -> int:
             }"""
         )
         checks.check("long notes are sentence-chunked", chunked >= 2, f"snip-para count={chunked}")
-
-        # Observed-only ITM rail: grouped theme headers present, and the rail
-        # never renders zero-coverage taxonomy rows.
-        theme_headers = page.locator(".pane-matrix .itm-rail-theme").count()
-        checks.check(
-            "rail shows observed theme groups",
-            1 <= theme_headers <= 5,
-            f"{theme_headers} theme headers",
-        )
-        checks.check(
-            "rail has no zero-coverage rows",
-            page.locator(".pane-matrix .matrix-tech-zero").count() == 0,
-        )
-
-        # Case click collapses the rail to that article's tagged techniques.
-        full_rows = page.locator(".itm-rail-btn").count()
-        row_with_hit = page.locator(".article-row:has(.itm-id-chip)").first
-        row_with_hit.locator(".article-item").click()
-        case_rows = page.locator(".itm-rail-btn").count()
-        case_hits = page.locator(".itm-rail-btn.case-hit").count()
-        checks.check(
-            "selected case filters rail to its techniques",
-            1 <= case_rows < full_rows and case_hits == case_rows,
-            f"full={full_rows} case={case_rows} hits={case_hits}",
-        )
-        page.click("#itm-rail-show-all")
-        checks.check(
-            "SHOW ALL restores the full observed rail",
-            page.locator(".itm-rail-btn").count() == full_rows,
-        )
 
         # Masthead MATRIX opens the center full-matrix browser and comes back.
         page.click(".masthead-nav-item[data-pane='matrix']")
@@ -391,16 +343,13 @@ def run(base_url: str, headed: bool) -> int:
         page.click(".masthead-nav-item[data-pane='articles']")
         page.wait_for_selector(".article-item", state="visible", timeout=10000)
 
-        # Redesign (2026-08): the stream rail carries no window chrome — no
-        # collapse/hide buttons, no TRENDING pane on the stream layout.
-        rail_chrome = ".left-rail .panel-collapse:visible"
+        # The stream carries no side rail at all since 2026-08-21 — EVIDENCE
+        # and MATRIX are full nav pages, so the column (and the stacked
+        # explainer copy each panel needed) is gone.
         checks.check(
-            "stream rail has no panel chrome",
-            page.locator(rail_chrome).count() == 0,
-        )
-        checks.check(
-            "trending pane is off the stream layout",
-            not page.is_visible(".left-rail .pane-trending"),
+            "stream has no side rail",
+            page.locator(".left-rail").count() == 0,
+            "the rail was cut 2026-08-21 — EVIDENCE and MATRIX own that content",
         )
 
         # Chip bar filters the stream (2026-08-20): SOURCE -> Court cases
@@ -470,23 +419,14 @@ def run(base_url: str, headed: bool) -> int:
         mp = browser.new_page(viewport={"width": 390, "height": 844})
         mp.goto(demo)
         mp.wait_for_selector(".article-item", timeout=20000)
-        mp.click(".mobile-tab[data-pane='matrix']")
-        mp.wait_for_selector("#matrix-browse-all", state="visible", timeout=10000)
-        mp.click("#matrix-browse-all")
-        mp.wait_for_selector("#matrix-panel:not([hidden])", timeout=10000)
-        cta_ok = mp.evaluate(
-            "() => document.querySelector('.app-shell').dataset.pane === 'articles'"
-        )
-        checks.check("mobile: rail CTA opens full matrix on articles pane", cta_ok)
-        mp.click("#matrix-back")
-        mp.wait_for_selector("#article-panel:not([hidden])", timeout=10000)
-        expandable = mp.locator(".article-row:has(.article-expand-btn)").first
-        expandable.locator(".article-item").click()
+        # Mobile Insights tab opens the real matrix view (it used to render
+        # the side rail, which no longer exists).
+        page.click('.mobile-tab[data-pane="matrix"]')
+        page.wait_for_timeout(400)
         checks.check(
-            "mobile: tapping a case expands the analyst note",
-            "expanded" in (expandable.get_attribute("class") or ""),
+            "mobile Insights opens the matrix browser",
+            page.is_visible("#matrix-panel"),
         )
-        mp.close()
 
         # Landscape (short viewport) — Fix 2 guard: article visible, not a sliver
         for w, h, tag in ((844, 390, "iphone"), (932, 430, "promax")):

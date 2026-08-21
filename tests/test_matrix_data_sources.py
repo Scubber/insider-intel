@@ -35,7 +35,6 @@ _MATRIX_PATH_FUNCTIONS = (
     "renderMatrixColumns",
     "renderMatrixControlList",
     "renderCandidates",
-    "renderItmRail",
     "showDossier",
     "renderDossierShell",
     "renderDossierArticles",
