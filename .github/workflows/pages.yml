@@ -15,7 +15,8 @@ on:
       - "scripts/export_boot_snapshot.py"
       - ".github/workflows/pages.yml"
   schedule:
-    - cron: "40 4,10,16,22 * * *"
+    # One snapshot build, 40 min after the daily 08:00Z corpus cycle
+    - cron: "40 8 * * *"
   workflow_dispatch:
 
 permissions:

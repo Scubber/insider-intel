@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from apps.aggregator.lane_health import read_lane_health
-from apps.search.service import get_index, tooling_rankings
+from apps.search.service import get_index, list_sources, tooling_rankings
 from shared.settings import get_settings
 from shared.utils.evidence import build_evidence_ledger
 
@@ -73,39 +73,67 @@ _KEEP_FORENSICS_KEYS = (
 _KEEP_METHOD_KEYS = ("action", "claim_status")
 
 
-def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict]:
+def _slim_hit(hit) -> dict:
+    """Card-slim one article hit (forensics whitelisted, case_record dropped)."""
+    row = hit.model_dump(mode="json")
+    row.pop("case_record", None)
+    forensics = row.pop("forensics", None)
+    if isinstance(forensics, dict):
+        slim = {k: forensics.get(k) for k in _KEEP_FORENSICS_KEYS}
+        slim["methods"] = [
+            {k: m.get(k) for k in _KEEP_METHOD_KEYS}
+            for m in forensics.get("methods") or []
+            if isinstance(m, dict)
+        ]
+        row["forensics"] = slim
+    return row
+
+
+# The snapshot must mirror the UI's boot query EXACTLY or the live re-render
+# replaces different content — which is the flash static-first exists to kill
+# (web/app.js loadArticles: limit 75, SIG floor 0.30, insider alignment,
+# grouped clusters). Keep in lockstep with loadArticles.
+BOOT_QUERY = {
+    "limit": 75,
+    "min_score": 0.30,
+    "itm_alignment": "insider",
+    "topic_match": False,
+    "group": True,
+}
+
+
+def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict, list, dict]:
     settings = get_settings()
     index = get_index(settings.processed_articles_path, reload=True)
-    listed = index.list_articles(
-        limit=limit,
-        min_score=0.0,
-        itm_alignment="all",
-        topic_match=False,
-    )
-    results = []
-    for hit in listed.results:
-        row = hit.model_dump(mode="json")
-        row.pop("case_record", None)
-        forensics = row.pop("forensics", None)
-        if isinstance(forensics, dict):
-            slim = {k: forensics.get(k) for k in _KEEP_FORENSICS_KEYS}
-            slim["methods"] = [
-                {k: m.get(k) for k in _KEEP_METHOD_KEYS}
-                for m in forensics.get("methods") or []
-                if isinstance(m, dict)
-            ]
-            row["forensics"] = slim
-        results.append(row)
+    listed = index.list_articles(**BOOT_QUERY)
+    results = [_slim_hit(hit) for hit in listed.results]
+    clusters = []
+    for cluster in listed.clusters or []:
+        c = cluster.model_dump(mode="json")
+        c["primary"] = _slim_hit(cluster.primary)
+        c["siblings"] = [_slim_hit(sib) for sib in cluster.siblings or []]
+        clusters.append(c)
 
     articles = {
         "total_indexed": index.size,
         "count": len(results),
         "results": results,
-        "clusters": [],
+        "clusters": clusters,
     }
-    # D-staleness: the ledger's generation basis rides in meta.json so the
-    # cached first paint can render the EVIDENCE basis banner ("based on N
-    # adjudicated-or-alleged cases as of DATE") before the live API answers.
+
+    # SOURCE chip twin: the boot /sources query (same filters as the boot
+    # stream), so the dropdown + counts paint without the API.
+    sources = [
+        s.model_dump(mode="json")
+        for s in list_sources(
+            settings.processed_articles_path,
+            min_score=0.30,
+            itm_alignment="insider",
+        )
+    ]
+    # Ledger twin (masthead corpus counts + the MODUS OPERANDI footnote's
+    # state.evidenceLedger) — the SAME payload GET /evidence/ledger serves;
+    # meta.evidence_basis derives from it instead of a second aggregation.
     ledger = build_evidence_ledger(
         (
             {
@@ -116,7 +144,7 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict]:
             }
             for a in index.articles
         ),
-        top=1,
+        top=25,
     )
     meta = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -143,7 +171,7 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict]:
     # own generated_at + basis block, so the cached paint cites its true age
     # on every basis line without meta.json involvement.
     tooling = tooling_rankings(settings.processed_articles_path)
-    return articles, meta, tooling
+    return articles, meta, tooling, sources, ledger
 
 
 def main() -> None:
@@ -152,18 +180,20 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=SNAPSHOT_LIMIT)
     args = ap.parse_args()
 
-    articles, meta, tooling = build_snapshot(limit=args.limit)
+    articles, meta, tooling, sources, ledger = build_snapshot(limit=args.limit)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    articles_path = out / "articles.json"
-    meta_path = out / "meta.json"
-    tooling_path = out / "tooling.json"
-    articles_path.write_text(json.dumps(articles, indent=None), encoding="utf-8")
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    tooling_path.write_text(json.dumps(tooling, indent=None), encoding="utf-8")
-    print(f"Wrote {articles_path} ({articles_path.stat().st_size // 1024} KiB)")
-    print(f"Wrote {meta_path}")
-    print(f"Wrote {tooling_path} ({tooling_path.stat().st_size // 1024} KiB)")
+    payloads = {
+        "articles.json": (articles, None),
+        "meta.json": (meta, 2),
+        "tooling.json": (tooling, None),
+        "sources.json": (sources, None),
+        "ledger.json": (ledger, None),
+    }
+    for name, (payload, indent) in payloads.items():
+        path = out / name
+        path.write_text(json.dumps(payload, indent=indent), encoding="utf-8")
+        print(f"Wrote {path} ({path.stat().st_size // 1024} KiB)")
 
 
 if __name__ == "__main__":

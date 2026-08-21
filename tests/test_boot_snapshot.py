@@ -60,7 +60,7 @@ def test_snapshot_shape_and_slimming(tmp_path, monkeypatch) -> None:
     _seed(tmp_path, monkeypatch)
     from scripts.export_boot_snapshot import build_snapshot
 
-    articles, meta, _tooling = build_snapshot(limit=50)
+    articles, meta, _tooling, _sources, _ledger = build_snapshot(limit=50)
 
     # UI-compatible: validates as the API's stream response model.
     parsed = ArticleListResponse.model_validate(articles)
@@ -130,7 +130,7 @@ def test_snapshot_tooling_is_the_exact_live_payload(tmp_path, monkeypatch) -> No
     from apps.search.service import tooling_rankings
     from scripts.export_boot_snapshot import build_snapshot
 
-    _articles, _meta, tooling = build_snapshot(limit=50)
+    _articles, _meta, tooling, _sources, _ledger = build_snapshot(limit=50)
 
     # JSON-clean: the exporter writes this dict verbatim with json.dumps.
     tooling = json.loads(json.dumps(tooling))
@@ -208,3 +208,69 @@ def test_snapshot_covers_stream_card_forensics_reads() -> None:
     assert method_fields <= set(_KEEP_METHOD_KEYS), (
         f"method fields read but dropped: {sorted(method_fields - set(_KEEP_METHOD_KEYS))}"
     )
+
+
+def test_snapshot_writes_sources_and_ledger_twins(tmp_path, monkeypatch) -> None:
+    """v3 static-first: the first paint's remaining API calls have twins."""
+    import sys
+
+    _seed(tmp_path, monkeypatch)
+    from scripts import export_boot_snapshot
+
+    out = tmp_path / "webdata"
+    monkeypatch.setattr(sys, "argv", ["export_boot_snapshot", "--out", str(out)])
+    export_boot_snapshot.main()
+    sources = json.loads((out / "sources.json").read_text())
+    assert isinstance(sources, list)
+    ledger = json.loads((out / "ledger.json").read_text())
+    assert "enriched_cases" in ledger
+
+
+def test_snapshot_mirrors_the_boot_query() -> None:
+    """The articles twin must match web/app.js loadArticles or the live
+    re-render replaces different content — the flash static-first kills."""
+    from pathlib import Path
+
+    from scripts.export_boot_snapshot import BOOT_QUERY
+
+    assert BOOT_QUERY["limit"] == 75
+    assert BOOT_QUERY["min_score"] == 0.30
+    assert BOOT_QUERY["itm_alignment"] == "insider"
+    assert BOOT_QUERY["group"] is True
+    app_js = Path("web/app.js").read_text(encoding="utf-8")
+    assert "limit: 75" in app_js  # loadArticles' boot limit — keep in lockstep
+
+
+def test_articles_twin_equals_slimmed_live_response(tmp_path, monkeypatch) -> None:
+    """THE drift guard: exporter output == the live boot response, slimmed.
+
+    Runs both paths against one corpus — build_snapshot() vs the same
+    list_articles(**BOOT_QUERY) call the API serves — and asserts the
+    articles twin is exactly the slim projection of the live payload.
+    Any divergence (query params, slimming whitelist, clustering,
+    serialization) fails here before it can ship as a boot flash.
+    """
+    _seed(tmp_path, monkeypatch)
+    from apps.search.service import get_index
+    from scripts.export_boot_snapshot import BOOT_QUERY, _slim_hit, build_snapshot
+    from shared.settings import get_settings
+
+    articles, _meta, _tooling, _sources, _ledger = build_snapshot()
+
+    index = get_index(get_settings().processed_articles_path, reload=True)
+    live = index.list_articles(**BOOT_QUERY)
+    expected_results = [_slim_hit(h) for h in live.results]
+    expected_clusters = []
+    for cluster in live.clusters or []:
+        c = cluster.model_dump(mode="json")
+        c["primary"] = _slim_hit(cluster.primary)
+        c["siblings"] = [_slim_hit(sib) for sib in cluster.siblings or []]
+        expected_clusters.append(c)
+
+    assert json.loads(json.dumps(articles["results"])) == json.loads(
+        json.dumps(expected_results)
+    )
+    assert json.loads(json.dumps(articles["clusters"])) == json.loads(
+        json.dumps(expected_clusters)
+    )
+    assert articles["total_indexed"] == index.size
