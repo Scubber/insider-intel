@@ -82,7 +82,7 @@ PANE_PROOF_COMMON = {
 }
 PANE_PROOF_MATRIX = {
     "desktop": "#matrix-panel:not([hidden])",
-    "mobile": ".left-rail .pane-matrix",
+    "mobile": "#matrix-panel",
 }
 PANE_ORDER = ("matrix", "evidence", "tooling", "workbench", "settings", "articles")
 
