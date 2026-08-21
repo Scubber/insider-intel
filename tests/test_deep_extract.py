@@ -188,7 +188,7 @@ def test_parse_forensics_json_coerces_and_never_raises() -> None:
     assert f.methods[0].evidence_quote == ""  # non-str → default
     assert f.source_type == "unknown"  # invalid enum → default
     assert f.legal_posture == "unknown"  # invalid enum → default
-    assert f.hunt_queries[0].logic == "index=x"
+    assert f.hunt_queries == []  # v3: out of the enricher contract
     assert f.confidence == 0.0  # non-numeric coerced
     assert f.exfil_channels == ["USB"]
 

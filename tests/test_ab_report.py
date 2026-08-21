@@ -36,7 +36,7 @@ def _arm(
         forensics = {
             "is_insider_case": insider,
             "confidence": conf,
-            "detection": None,
+            "detection": "a DLP alert flagged the export" if insider else None,
             "outcome": None,
             "methods": [
                 {
@@ -152,6 +152,8 @@ def test_decide_activates_when_all_criteria_hold() -> None:
     assert {c["name"] for c in decision["checks"]} == {
         "parse_failure",
         "baseline_agreement",
+        "verbatim_floor",
+        "detection_fill",
         "verbatim_rate",
         "speedup",
     }
@@ -303,7 +305,14 @@ def test_render_markdown_smoke() -> None:
     decision = decide(metrics)
     markdown = render_markdown(metrics, decision, None, {"pairs": "p", "manifest": "m"})
     assert "**ACTIVATE**" in markdown
-    for name in ("parse_failure", "baseline_agreement", "verbatim_rate", "speedup"):
+    for name in (
+        "parse_failure",
+        "baseline_agreement",
+        "verbatim_floor",
+        "detection_fill",
+        "verbatim_rate",
+        "speedup",
+    ):
         assert name in markdown
     assert "## LLM judge" not in markdown  # judge section only renders when run
 
@@ -320,3 +329,22 @@ def test_render_markdown_smoke() -> None:
     markdown = render_markdown(metrics, decision, judge, {"pairs": "p", "manifest": "m"})
     assert "LLM judge (optional, informational only)" in markdown
     assert "model-grades-model" in markdown
+
+
+def test_v3_verbatim_floor_gate() -> None:
+    """v3 freeze: the thinking-on arm must clear an ABSOLUTE 85% verbatim rate."""
+    mixed = _arm(quotes=(("real quote", True), ("made up", False)))
+    pairs = [_pair(f"https://x.test/v{i}", mixed, _arm()) for i in range(4)]
+    decision = decide(compute_metrics(pairs, _manifest([p["link"] for p in pairs])))
+    by_name = {c["name"]: c for c in decision["checks"]}
+    assert by_name["verbatim_floor"]["passed"] is False  # 50% < 85%
+
+
+def test_v3_detection_fill_gate() -> None:
+    """v3 freeze: insider-true records that skip `detection` fail the round."""
+    pairs = [_pair(f"https://x.test/d{i}", _arm(), _arm()) for i in range(4)]
+    for pr in pairs:
+        pr[ARM_ON]["forensics"]["detection"] = None
+    decision = decide(compute_metrics(pairs, _manifest([p["link"] for p in pairs])))
+    by_name = {c["name"]: c for c in decision["checks"]}
+    assert by_name["detection_fill"]["passed"] is False

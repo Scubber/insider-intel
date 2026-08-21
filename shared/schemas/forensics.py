@@ -47,12 +47,38 @@ CLAIM_STATUSES = ("alleged", "admitted", "adjudicated", "reported", "unclear")
 # a re-enrich sweep can re-select rows enriched under a narrower schema. v1 =
 # the original tight clamps (detection/outcome 300, method action 400); v2 =
 # storage safety bounds only (detection/outcome 2000, method action 600), full
-# narrative persisted. Rows with schema_version < this are re-enrich candidates.
-ENRICH_SCHEMA_VERSION = 2
+# narrative persisted. v3 = the 2026-08-21 freeze (docs/schema-freeze-v3.md):
+# actor_citizenship + industry + tool_mentions in, hunt_queries out of the
+# write path, prompt contract v3. Rows with schema_version < this are
+# re-enrich candidates (the #14 sweep arms via SUMMARIZER_REENRICH_* env —
+# defaults keep the bump inert until then).
+ENRICH_SCHEMA_VERSION = 3
 
 # Document provenance / legal stage, validated against these sets; anything
 # else falls back to "unknown".
 SOURCE_TYPES = ("court_filing", "news", "blog", "social", "press_release", "unknown")
+
+# Victim organization's sector (v3). Financial services first per operator
+# priority; "unknown" when the source is silent.
+INDUSTRIES = (
+    "financial-services",
+    "healthcare",
+    "technology",
+    "defense",
+    "manufacturing",
+    "energy",
+    "retail",
+    "public-sector",
+    "professional-services",
+    "other",
+    "unknown",
+)
+
+# How a named product figured in the case (v3) — fills the TOOLING table's
+# end-state columns (operator-approved v8 spec): caught = it detected or
+# stopped the conduct; bypassed = present but evaded; misused = the insider's
+# instrument; traced = used after the fact to reconstruct events.
+TOOL_MENTION_ROLES = ("caught", "bypassed", "misused", "traced")
 CONTEXT_KINDS = ("detection", "prevention", "tradecraft", "policy", "news")
 
 LEGAL_POSTURES = (
@@ -110,6 +136,20 @@ class CaseMethod(BaseModel):
     observables: list[CaseObservable] = Field(default_factory=list)
 
 
+class ToolMention(BaseModel):
+    """One named product/service and its role in the case (v3).
+
+    Only products the SOURCE names — never inferred from behavior. Roles per
+    TOOL_MENTION_ROLES; names feed the tooling catalog's candidate mining.
+    """
+
+    name: str
+    role: Literal["caught", "bypassed", "misused", "traced"]
+    evidence: str = Field(
+        default="", description="Short phrase from the source supporting the role call"
+    )
+
+
 class HuntQuerySeed(BaseModel):
     """A case-grounded hunt query precomputed at ingest (article-scoped)."""
 
@@ -159,6 +199,12 @@ class PerCaseForensics(BaseModel):
     access_vector: str | None = None
     motive_signals: list[str] = Field(default_factory=list)
     exfil_channels: list[str] = Field(default_factory=list)
+    # v3 case facts. Citizenship only from an EXPLICIT statement in the source
+    # — a name is never evidence of nationality; civil filings usually plead
+    # only state citizenship (record "US (state pleaded)" for those).
+    actor_citizenship: str | None = None
+    industry: str = Field(default="unknown", description="Victim org sector (INDUSTRIES)")
+    tool_mentions: list[ToolMention] = Field(default_factory=list)
     timeframe: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     extracted_at: datetime | None = None
@@ -425,6 +471,22 @@ def _coerce_methods(value: object) -> list[CaseMethod]:
     return methods
 
 
+def parse_tool_mentions(raw: object) -> list[ToolMention]:
+    """Lenient v3 tool-mention coercion — bad entries drop, never raise."""
+    out: list[ToolMention] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw[:12]:
+        if not isinstance(item, dict):
+            continue
+        name = _s(item.get("name"), 120)
+        role = str(item.get("role") or "").strip().lower()
+        if not name or role not in TOOL_MENTION_ROLES:
+            continue
+        out.append(ToolMention(name=name, role=role, evidence=_s(item.get("evidence"), 300)))
+    return out
+
+
 def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensics:
     """Lenient coercion of unified-enricher JSON — bad fields drop, never raise.
 
@@ -453,7 +515,10 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         detection=_s(data.get("detection"), 2000) or None,
         outcome=_s(data.get("outcome"), 2000) or None,
         hunt_terms=_slist(data.get("hunt_terms"), 12, 120),
-        hunt_queries=parse_hunt_queries(data.get("hunt_queries")),
+        # v3: hunt_queries dropped from the enricher contract (dead weight —
+        # operator call). The field itself stays on the model so stored v1/v2
+        # records round-trip; nothing new is written into it.
+        hunt_queries=[],
         is_insider_case=bool(data.get("is_insider_case")),
         context_kind=(lambda v: v if v in CONTEXT_KINDS else "")(
             str(data.get("context_kind") or "").strip().lower()
@@ -462,6 +527,11 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         access_vector=_s(data.get("access_vector"), 200) or None,
         motive_signals=_slist(data.get("motive_signals"), 8, 200),
         exfil_channels=_slist(data.get("exfil_channels"), 8, 200),
+        actor_citizenship=_s(data.get("actor_citizenship"), 200) or None,
+        industry=(lambda v: v if v in INDUSTRIES else "unknown")(
+            str(data.get("industry") or "").strip().lower()
+        ),
+        tool_mentions=parse_tool_mentions(data.get("tool_mentions")),
         timeframe=_s(data.get("timeframe"), 200) or None,
         confidence=max(0.0, min(1.0, confidence)),
         extraction_status="llm",
