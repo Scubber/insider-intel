@@ -4404,6 +4404,11 @@
       theme: state.theme || undefined,
     });
 
+    state.sourcesLive = true;
+    renderSources(sources);
+  }
+
+  function renderSources(sources) {
     const ids = new Set(sources.map((s) => s.id));
     if (state.sourceId && !ids.has(state.sourceId)) {
       state.sourceId = "";
@@ -5890,6 +5895,14 @@
     }
   }
 
+  // Identity of a rendered stream: the story list, not the payload bytes —
+  // clustersFromResponse normalizes grouped and flat shapes identically.
+  function streamKeyOf(dataOrResults) {
+    return clustersFromResponse(dataOrResults)
+      .map((c) => c.primary.link + "|" + ((c.siblings || []).length))
+      .join("\n");
+  }
+
   async function loadArticles() {
     setStatus(`Loading stream from ${apiBase}…`);
     const data = await api("/articles", {
@@ -5903,6 +5916,23 @@
       theme: state.theme || undefined,
     });
     state.lastTotalIndexed = data.total_indexed || 0;
+    if (state.streamPaintKey && streamKeyOf(data) === state.streamPaintKey) {
+      // Same stories the snapshot painted: adopt the live payload's
+      // full-depth rows without touching the DOM (READ FILING and exports
+      // need the unslimmed records) — no flash, no scroll reset.
+      state.streamPaintKey = null;
+      state.lastStream = { dataOrResults: data, title: streamTitle(), options: {} };
+      const allClusters = clustersFromResponse(data);
+      const clusters = uiState.showContext
+        ? allClusters
+        : allClusters.filter((c) => !isContextCluster(c));
+      state.clusters = clusters;
+      state.articles = flattenClusterMembers(clusters);
+      state.streamArticles = state.articles;
+      setStatus(`API ok · ${data.total_indexed} indexed`);
+      return;
+    }
+    state.streamPaintKey = null;
     clearHuntMap();
     updateFilterContext("");
     renderArticles(data, streamTitle());
@@ -6384,6 +6414,29 @@
       state.lastTotalIndexed = data.total_indexed || data.results.length;
       renderLaneHealth(meta.lane_health || null);
       renderArticles(data, streamTitle());
+      // Render-identity key: when the live boot payload shows the same
+      // stories, loadArticles adopts it silently instead of repainting —
+      // the snapshot IS the page, the API becomes invisible.
+      state.streamPaintKey = streamKeyOf(data);
+      // Static twins for the rest of the first paint (fail-soft: absent
+      // files just leave those surfaces to the live calls).
+      fetch("data/sources.json", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((sources) => {
+          if (Array.isArray(sources) && sources.length && !state.sourcesLive) {
+            renderSources(sources);
+          }
+        })
+        .catch(() => {});
+      fetch("data/ledger.json", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((ledger) => {
+          if (ledger && ledger.enriched_cases && !state.evidenceLedger) {
+            state.evidenceLedger = ledger;
+            renderCorpusStats(ledger);
+          }
+        })
+        .catch(() => {});
       updateStatusLine();
       if (els.liveStatus) {
         const ts = state.snapshotGeneratedAt;

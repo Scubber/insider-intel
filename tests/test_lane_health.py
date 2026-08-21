@@ -262,7 +262,7 @@ def test_boot_snapshot_meta_embeds_lane_summary(tmp_path, monkeypatch) -> None:
 
     # No health file yet → meta omits the key (UI waits for live endpoint).
     monkeypatch.setenv("LANE_HEALTH_PATH", str(tmp_path / "missing.json"))
-    _articles, meta, _tooling = build_snapshot(limit=5)
+    _articles, meta, _tooling, _sources, _ledger = build_snapshot(limit=5)
     assert "lane_health" not in meta
 
     health_path = tmp_path / "lane_health.json"
@@ -276,7 +276,7 @@ def test_boot_snapshot_meta_embeds_lane_summary(tmp_path, monkeypatch) -> None:
             path=health_path,
         )
     monkeypatch.setenv("LANE_HEALTH_PATH", str(health_path))
-    _articles, meta, _tooling = build_snapshot(limit=5)
+    _articles, meta, _tooling, _sources, _ledger = build_snapshot(limit=5)
     summary = meta["lane_health"]
     assert summary["broken"] == 1
     assert summary["broken_lanes"] == ["dead-a"]

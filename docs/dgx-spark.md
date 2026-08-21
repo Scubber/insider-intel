@@ -175,7 +175,7 @@ the Spark.
 The steps above were executed 2026-08-16; the Spark is the production
 refresh tenant. What is running now:
 
-- **Cron** (sparky user crontab): `0 4,10,16,22 * * *` UTC with the
+- **Cron** (sparky user crontab): `0 8 * * *` UTC with the
   `PATH=$HOME/google-cloud-sdk/bin:$PATH` prefix, logging to
   `~/insider-intel/logs/spark_refresh.log`. First unattended cycle
   2026-08-17 00:00→00:31:51Z verified end-to-end (corpus 7,193 rows /
