@@ -99,6 +99,45 @@ def test_noop_when_disabled_by_default(tmp_path, monkeypatch) -> None:
     assert result.total_articles_saved == 0
 
 
+def test_quiet_lane_reports_nothing_to_lane_health(tmp_path, monkeypatch) -> None:
+    """Caught-up (all dockets inside the repoll window) is healthy-idle: no
+    SourceIngestionResult, so lane health cannot count it as an empty cycle."""
+    raw_path, processed_path, state = _seed(tmp_path, monkeypatch)
+    now = datetime.now(UTC)
+    state.set(_ATTEMPT_KEY.format(link=DOCKET_LINK), f"{_CHECKED_PREFIX}{now.isoformat()}")
+    hits: list[str] = []
+    with _client(_api({}, {}, hits)) as client:
+        result = run_docket_follow(
+            store_path=str(raw_path),
+            processed_path=str(processed_path),
+            state=state,
+            client=client,
+            limit=5,
+            request_delay=0,
+        )
+    assert hits == []
+    assert result.sources == []  # nothing attempted -> nothing to judge
+
+
+def test_active_lane_still_reports(tmp_path, monkeypatch) -> None:
+    raw_path, processed_path, state = _seed(tmp_path, monkeypatch)
+    hits: list[str] = []
+    statuses = {
+        111: {"date_filed": "2026-07-01", "date_terminated": None, "date_last_filing": None}
+    }
+    with _client(_api(statuses, {}, hits)) as client:
+        result = run_docket_follow(
+            store_path=str(raw_path),
+            processed_path=str(processed_path),
+            state=state,
+            client=client,
+            limit=5,
+            request_delay=0,
+        )
+    assert len(hits) == 1
+    assert len(result.sources) == 1 and result.sources[0].success
+
+
 def test_candidate_filter(tmp_path, monkeypatch) -> None:
     """Only verdict-true recap rows lacking an outcome, minus done/recent."""
     done_link = "https://www.courtlistener.com/docket/222/acme-v-jones/"
