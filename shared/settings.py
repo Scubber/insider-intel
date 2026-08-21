@@ -385,6 +385,15 @@ class Settings(BaseSettings):
     # long generation fall through the chain to a funded provider. Applies to
     # all openai-compat chain entries (openai/gemini/xai/custom) in the
     # summarizer, discoverer, and hunt-synthesis builders.
+    openai_compat_guided_json: bool = Field(
+        default=True,
+        alias="OPENAI_COMPAT_GUIDED_JSON",
+        description=(
+            "Grammar-enforce the enrichment reply via response_format "
+            "json_schema (vLLM structured output). Off = plain JSON mode "
+            "(pre-v3 behavior) for servers whose grammar backend misbehaves."
+        ),
+    )
     openai_compat_timeout_seconds: float = Field(
         default=90.0,
         ge=1.0,

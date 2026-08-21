@@ -172,6 +172,7 @@ def _build_summarizer(
         max_input_chars=max_chars,
         timeout=settings.openai_compat_timeout_seconds,
         enable_thinking=settings.openai_compat_enable_thinking,
+        guided_json=settings.openai_compat_guided_json,
     )
 
 

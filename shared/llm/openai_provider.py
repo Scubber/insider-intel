@@ -13,6 +13,7 @@ import httpx
 from shared.llm.base import (
     CLASSIFY_SYSTEM_PROMPT,
     DISCOVER_SYSTEM_PROMPT,
+    ENRICH_REPLY_SCHEMA,
     ENRICH_SYSTEM_PROMPT,
     SYNTH_SYSTEM_PROMPT,
     ClassificationResult,
@@ -152,13 +153,26 @@ def _chat_completion(
     user: str,
     max_tokens: int | None = None,
     enable_thinking: bool = True,
+    json_schema: dict | None = None,
 ) -> ChatResult | None:
-    """POST a JSON-mode chat completion; returns content + served model, or None."""
+    """POST a JSON-mode chat completion; returns content + served model, or None.
+
+    With ``json_schema``, decoding is grammar-enforced (vLLM structured
+    output): the model structurally cannot omit required keys or emit
+    malformed JSON. Fallback ladder on server rejection: json_schema ->
+    json_object -> no response_format.
+    """
     global _LAST_USAGE
     _LAST_USAGE = None
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    response_format: dict = {"type": "json_object"}
+    if json_schema is not None:
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {"name": "enrichment_reply", "schema": json_schema},
+        }
     payload = {
         "model": model,
         "messages": [
@@ -166,7 +180,7 @@ def _chat_completion(
             {"role": "user", "content": user},
         ],
         "temperature": 0,
-        "response_format": {"type": "json_object"},
+        "response_format": response_format,
     }
     if max_tokens is not None:
         payload["max_tokens"] = max_tokens
@@ -177,6 +191,17 @@ def _chat_completion(
     url = f"{base_url}/chat/completions"
     try:
         response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
+        if (
+            response.status_code == 400
+            and json_schema is not None
+            and ("json_schema" in response.text or "response_format" in response.text)
+        ):
+            # Schema tier rejected (older server / grammar backend off):
+            # downgrade to plain JSON mode and retry once. 400s naming other
+            # keys fall through to the generic strip-and-retry below.
+            logger.warning("Server rejected json_schema response_format; retrying as json_object")
+            payload["response_format"] = {"type": "json_object"}
+            response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
         if response.status_code == 400:
             # Some servers reject response_format or chat_template_kwargs by
             # name; strip whichever the error mentions and retry once.
@@ -250,6 +275,7 @@ class OpenAICompatSummarizer:
         max_input_chars: int = 6000,
         timeout: float = 90.0,
         enable_thinking: bool = True,
+        guided_json: bool = True,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -257,6 +283,7 @@ class OpenAICompatSummarizer:
         self._max_input_chars = max_input_chars
         self._timeout = timeout
         self._enable_thinking = enable_thinking
+        self._guided_json = guided_json
         self.model_name = model
 
     def extract_case(
@@ -279,6 +306,7 @@ class OpenAICompatSummarizer:
                     max_chars=self._max_input_chars,
                 ),
                 max_tokens=ENRICH_MAX_TOKENS,
+                json_schema=ENRICH_REPLY_SCHEMA if self._guided_json else None,
             ),
         )
         if content is None:
