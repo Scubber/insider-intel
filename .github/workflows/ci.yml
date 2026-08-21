@@ -9,8 +9,7 @@ on:
       - "shared/**"
       - "tests/**"
       - "web/**"
-      - "scripts/ui_smoke.py"
-      - "scripts/ui_smoke_ci.py"
+      - "scripts/**"
       - "pyproject.toml"
       - "Dockerfile"
       - "docker-compose.yml"
@@ -23,8 +22,7 @@ on:
       - "shared/**"
       - "tests/**"
       - "web/**"
-      - "scripts/ui_smoke.py"
-      - "scripts/ui_smoke_ci.py"
+      - "scripts/**"
       - "pyproject.toml"
       - "Dockerfile"
       - "docker-compose.yml"
@@ -43,6 +41,19 @@ jobs:
         run: make lint
       - name: Test (against Postgres sidecar)
         run: make test
+
+  # Shell gate: scripts/*.sh are unattended production plumbing (the nightly
+  # refresh cycle among them) and `bash -n` only catches syntax. shellcheck
+  # catches the semantics — word-splitting, quoting, trap and directive
+  # errors — which is how a malformed disable directive that silently broke a
+  # whole function was found on 2026-08-20.
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: shellcheck
+        run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable scripts/*.sh
 
   # Browser-floor gate (operator directive 2026-08-17, after a broken deploy
   # shipped): the real web/ served statically, driven headless in Chromium at
