@@ -135,12 +135,15 @@ Files:
   caps, one slow/dead vLLM converts the whole raised budget into paid calls.
   Set `model` to `auto` (the example default) so the job takes whatever vLLM
   is serving; do not pin a Qwen SKU in this repo.
-- `scripts/spark_refresh.sh` — one cycle: bucket pull → pipeline → bucket
-  push → `/reload` (skipped while `SPARK_RELOAD_URL` is empty, i.e. on
-  staging). Cron/systemd-timer it (e.g. every 6h) from the repo root. The
-  script exports the user-space Cloud SDK onto `PATH` itself (cron and
-  non-interactive SSH never read `~/.bashrc`), holds a `flock` so cycles
-  never overlap (skips are logged, not silent), bounds a cycle at 5.5h, and
+- `scripts/spark_refresh.sh` — one cycle: load the enrichment model
+  (layer `model-enrich.yml`, EXIT trap armed FIRST so any exit restores the
+  chat stack) → bucket pull → wait for the model to serve → pipeline →
+  bucket push → `/reload` (skipped while `SPARK_RELOAD_URL` is empty, i.e.
+  on staging) → chat stack restored by the trap. Cron it once daily from
+  the repo root (production: `0 8 * * *` UTC). The script exports the
+  user-space Cloud SDK onto `PATH` itself (cron and non-interactive SSH
+  never read `~/.bashrc`), holds a `flock` so cycles never overlap (skips
+  are logged, not silent), bounds the pipeline at 8h (`timeout 28800`), and
   passes `--build` so a `git pull` is actually picked up — plain
   `compose run` reuses a stale image forever. It pushes only
   `raw/ processed/ state/`: `config/` is pull-only because the prod API
@@ -170,29 +173,57 @@ and select-best over `enrichment_history` keeps the richer record either way.
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
 the Spark.
 
-### Operating state (cutover complete 2026-08-16)
+### Operating state (cutover 2026-08-16; current as of 2026-08-22)
 
-The steps above were executed 2026-08-16; the Spark is the production
-refresh tenant. What is running now:
+The Spark is the production refresh tenant. What is running now:
 
-- **Cron** (sparky user crontab): `0 8 * * *` UTC with the
+- **Cron** (sparky user crontab): one cycle daily, `0 8 * * *` UTC, with the
   `PATH=$HOME/google-cloud-sdk/bin:$PATH` prefix, logging to
-  `~/insider-intel/logs/spark_refresh.log`. First unattended cycle
-  2026-08-17 00:00→00:31:51Z verified end-to-end (corpus 7,193 rows /
-  1,839 enriched, API reloaded).
-- **Caps**: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`,
-  `SUMMARIZER_BACKFILL_RESERVE=30` — operator-approved raise from the cloud
-  trickle's 25/15, affordable because the chain is $0.
-- **Chain**: `SUMMARIZER_LLM_PROVIDER=sparky` alone (local
-  `Qwen/Qwen3.8-27B-FP8` via vLLM, `model: auto` probe,
-  `OPENAI_COMPAT_TIMEOUT_SECONDS=900`); `forensics.model` is stamped from
-  each completion. $0 LLM spend, 0 Anthropic calls.
+  `~/insider-intel/logs/spark_refresh.log`. The Pages boot snapshot rebuilds
+  at 08:40Z (`pages.yml`).
+- **Model borrow/restore**: the box is a chat host between cycles
+  (`~/sparky/compose.yml` serves whatever the operator talks to — chat only,
+  never enrichment). The cycle layers `~/sparky/model-enrich.yml` to load
+  the enrichment model — Nemotron 3 Super 120B-A12B-NVFP4 at gpu-util 0.70,
+  131k ctx, 1 seq — and an EXIT trap in `spark_refresh.sh` restores the chat
+  stack (vllm + open-webui together) on any exit.
+- **Memory law** (two crashes taught it): the binding limit is the
+  LOAD-TIME peak, not steady state. Hard ceiling ≈ 75GB of weights; never
+  boot two big models side by side; no fastsafetensors.
+- **Chain**: `SUMMARIZER_LLM_PROVIDER=sparky` alone (`model: auto` probe,
+  `OPENAI_COMPAT_TIMEOUT_SECONDS=900`), prompt contract v3
+  (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` for Nemotron
+  (the 2026-08-22 control run measured guided decoding at −10 points of
+  verdict accuracy). `forensics.model` is stamped from each completion.
+  $0 LLM spend.
+- **Pipeline bound**: `timeout 28800` (8h) around the run; the refresh
+  holds `/tmp/insider-intel-spark-refresh.lock` so overlapping cycles skip
+  loudly.
 - **PACER**: creds live in `.env.spark` on sparky (moved at cutover);
   purchases stay capped at 5/run.
 - **Rollback**: `crontab -r` on sparky, resume Cloud Scheduler
-  `corpus-refresh-schedule` (paused 2026-08-16 ~19:45Z, retained),
-  optionally `gcloud run jobs execute corpus-refresh` once.
-- **Known-accepted issues**: hunt synthesis fails under Qwen thinking mode
-  (fix = `OPENAI_COMPAT_ENABLE_THINKING` knob, merged; activation gated on a
-  gold-set A/B); occasional Qwen JSON parse failures (guided-JSON work
-  queued); vLLM API key rotation scheduled for the next restart window.
+  `corpus-refresh-schedule` (paused 2026-08-16, retained), optionally
+  `gcloud run jobs execute corpus-refresh` once. NEVER run the Cloud Run
+  job while the sparky cron is live — two writers on one bucket race, and
+  the loser's enrichments are silently replaced.
+
+### Access + IAM record (moved from the retired cutover handoff)
+
+- **SSH**: alias `sparky`, defined in the Windows profile's SSH config
+  (NVIDIA Sync). WSL has no SSH config for this host — use Windows interop
+  `ssh.exe sparky '<cmd>'` from WSL; plain WSL `ssh` is refused. Never
+  commit the hostname or IPs.
+- **GCS service account**:
+  `spark-corpus@insider-intel-502413.iam.gserviceaccount.com`, granted
+  `roles/storage.objectAdmin` on the corpus bucket (`--condition=None` was
+  required because of the existing `config/` condition). JSON key at
+  `~/.config/insider-intel-spark-sa.json` (0600) on WSL and sparky — never
+  commit, never cat. Bucket has no `allUsers` bindings; `api-runtime` holds
+  `objectViewer` + conditional `objectAdmin` on `config/` only.
+- **Key hygiene**: `docker inspect sparky-vllm` prints the vLLM API key in
+  `Cmd`, and the same key sits in the container's process argv (`ps aux`
+  leaks it identically). Treat any inspect/ps paste as a disclosure and
+  rotate: one shared value lives in `~/sparky/.env` (`VLLM_API_KEY`) and
+  `~/insider-intel/.env.spark` (`SPARKY_API_KEY`); recreate vllm AND
+  open-webui together after a rotation (open-webui bakes the key at
+  container create). Verify by hash, never by printing.

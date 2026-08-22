@@ -81,8 +81,11 @@ jobs:
         #    ENRICHER's model on the chain's first named provider (anthropic)
         #    ONLY — it must be a valid Anthropic id or it poisons the Anthropic
         #    link and drops the openai fallback to its mini default. Set to
-        #    claude-haiku-4-5-20251001: enrichment runs on Haiku 4.5 to fill the
-        #    remaining backlog at ~1/3 the Sonnet cost (~$1/$5 vs $3/$15 per MTok).
+        #    claude-haiku-4-5-20251001. NOTE: this whole job is the PAUSED
+        #    rollback lane — production enrichment runs on sparky (Nemotron,
+        #    docs/dgx-spark.md §4); backlog convergence is the sparky nightly
+        #    reenrich lane, not this job. Haiku pricing (~$1/$5 per MTok) only
+        #    matters if the rollback lane is ever resumed.
         #    The classifier also uses the cheap ANTHROPIC_MODEL (Haiku) default;
         #    SUMMARIZER_MODEL is scoped to the summarizer role. OPENAI_COMPAT_MODEL=gpt-4o
         #    pins the openai fallback link; sol comes from LLM_CUSTOM_PROVIDERS,
@@ -106,7 +109,9 @@ jobs:
         #    so historical windows drain in one pass (social-engineering / sim-
         #    swap / device-identifier cases included); BACKFILL_MAX_DOCKETS=10
         #    (trickle mode) bounds free-archive body pulls per run. Budget ≈ 34
-        #    forward + 26 history + 10 backfill ≈ 70 req/run × 4 runs (< 600/day).
+        #    forward + 26 history + 10 backfill ≈ 70 req/run (sized for the old
+        #    4-runs/day cadence; the lane is paused — production runs once daily
+        #    on sparky).
         #    REQUIRES the token mapped as a secret (one-time, persists):
         #      gcloud run jobs update corpus-refresh --region us-east1 \
         #        --set-secrets COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest

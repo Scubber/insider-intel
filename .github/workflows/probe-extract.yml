@@ -1,7 +1,7 @@
-# On-demand probe of the live extract endpoint: boards a few real filings and
-# prints the report mode/labels, so LLM wiring (EXTRACT_LLM_PROVIDER + key on
-# the API service) is verifiable from Actions without touching prod by hand.
-# Costs one rate-limited LLM call per run — dispatch it, don't schedule it.
+# On-demand probe of the live extract endpoint: fetches a few recent filings
+# and prints the report mode/labels. /extract/ttps assembles STORED forensics
+# in code — no LLM runs at read time (product invariant) — so a probe costs
+# nothing but rate-limited API requests. Dispatch it, don't schedule it.
 name: probe-extract
 
 on:
@@ -41,8 +41,9 @@ jobs:
                   for bullet in case.get("bullets", [])[:4]:
                       print(f"    - {bullet[:160]}")
               det = section.get("detection") or {}
-              for q in (det.get("hunt_queries") or [])[:2]:
-                  print(f"  [{q.get('stack','')}] {q.get('logic','')[:140]}")
+              # v3 removed hunt_queries; detections/preventions are the guidance payload.
+              for d in (det.get("detections") or [])[:2]:
+                  print(f"  [detect] {str(d)[:140]}")
           PY
       - name: Enrichment coverage (analyst notes on recent filings)
         run: |

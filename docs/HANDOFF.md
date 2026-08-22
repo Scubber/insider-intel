@@ -21,7 +21,7 @@ prod).
 
 | Area | State |
 |---|---|
-| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 4,10,16,22 * * *` UTC runs `scripts/spark_refresh.sh` (pull → pipeline → push → `/reload`), log `~/insider-intel/logs/spark_refresh.log`. Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → pull → pipeline → push → `/reload` → restore chat stack), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
 | **Corpus** | **7,193 rows**, **1,839 enriched** (forensics present; 2026-08-17 00:31Z cycle), **540 LLM-adjudicated insider cases** (2026-08 count). Writes land 4×/day (04/10/16/22 UTC generations on `processed/articles.jsonl`). |
 | **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM `Qwen/Qwen3.8-27B-FP8`, `model: auto`, timeout 900s) — **$0 LLM spend**. Caps raised operator-approved: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`, `RESERVE=30` (cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
@@ -97,9 +97,9 @@ prod).
    sparky is the production refresh tenant: cron `0 4,10,16,22 * * *` UTC,
    sparky-only Qwen chain ($0 LLM spend), caps 40/30, PACER creds on the
    box, first unattended cycle verified 2026-08-17 00:31Z. Cloud Scheduler
-   `corpus-refresh-schedule` paused as rollback. Full record + operating
-   state: [`docs/spark-cutover-handoff.md`](spark-cutover-handoff.md) and
-   `docs/dgx-spark.md` §4. Remaining follow-ups: thinking-mode knob
+   `corpus-refresh-schedule` paused as rollback. Operating state:
+   `docs/dgx-spark.md` §4 (the one-time cutover log was retired 2026-08-22;
+   its durable records moved there). Remaining follow-ups: thinking-mode knob
    activation (gold-set A/B), guided-JSON for Qwen parse failures, vLLM key
    rotation at next restart, sparky-repo doc de-pin, Reddit OAuth.
 6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
