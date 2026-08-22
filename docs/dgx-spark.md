@@ -134,7 +134,8 @@ Files:
   Chaining a funded fallback is a deliberate opt-in — combined with raised
   caps, one slow/dead vLLM converts the whole raised budget into paid calls.
   Set `model` to `auto` (the example default) so the job takes whatever vLLM
-  is serving; do not pin a Qwen SKU in this repo.
+  is serving; do not pin a model id in this repo (the enrichment model is
+  chosen on sparky — Nemotron 3 Super going forward).
 - `scripts/spark_refresh.sh` — one cycle: load the enrichment model
   (layer `model-enrich.yml`, EXIT trap armed FIRST so any exit restores the
   chat stack) → bucket pull → wait for the model to serve → pipeline →
@@ -166,8 +167,9 @@ run:**
    PATH and locking).
 
 The paused cloud job stays around as a manual fallback; enrichment provenance
-is per-record (`forensics.model` = the id the server put on the completion,
-e.g. whatever Qwen SKU is loaded), so a mixed local/Claude corpus is normal
+is per-record (`forensics.model` = the id the server put on the completion —
+whatever model the server reports; Nemotron 3 Super in production), so a
+mixed local/Claude corpus is normal
 and select-best over `enrichment_history` keeps the richer record either way.
 
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from

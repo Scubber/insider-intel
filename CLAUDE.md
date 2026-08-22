@@ -1,10 +1,13 @@
 # CLAUDE.md — agent operating manual
 
-Insider-risk OSINT aggregator. **This repo is in production**: UI on GitHub
-Pages, API on Cloud Run, corpus in GCS, self-refreshing every 6h, CD on merge
-to `main`. Read this before changing anything; deeper docs in
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (dev env) and
-[docs/hosting.md](docs/hosting.md) (production).
+Insider-threat guidance product built on litigated court cases: the four
+jobs are BUILD A PROGRAM / DETECT / PREVENT / HUNT, every claim backed by
+receipts from real filings. **This repo is in production**: UI on GitHub
+Pages, API on Cloud Run, corpus in GCS, refreshed once daily at 08:00Z from
+the DGX Spark, CD on merge to `main`. Read this before changing anything;
+deeper docs in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (dev env),
+[docs/hosting.md](docs/hosting.md) (production), and
+[docs/dgx-spark.md](docs/dgx-spark.md) (the refresh tenant).
 
 **Picking up a session?** [docs/HANDOFF.md](docs/HANDOFF.md) is the current live
 state — what's deployed now, what's parked (e.g. PACER purchasing), open threads,
@@ -72,9 +75,14 @@ weak ITM alignment so first-person confessions surface under Insider Focus.
 The **enrich** node (`shared/agents/summarize.py`, `SUMMARIZER_LLM_PROVIDER`)
 makes **one unified LLM call per qualifying article** that produces the analyst
 note (`ai_summary`), a full forensic record (`ProcessedArticle.forensics`:
-actions with tools/quantities, observables typed by channel, per-case hunt
-queries, ITM adjudication incl. `is_insider_case`), and derives the legacy
-`case_record` from it. **What "qualifying" means is the spend policy**
+actions with tools/quantities, observables typed by channel, hunt terms, ITM
+adjudication incl. `is_insider_case`), and derives the legacy `case_record`
+from it. The record contract is **schema v3**
+([docs/schema-freeze-v3.md](docs/schema-freeze-v3.md), `ENRICH_SCHEMA_VERSION=3`):
+`actor_citizenship` (explicit statements only, never name-inference),
+`industry` enum, `tool_mentions[]` with roles caught|bypassed|misused|traced,
+verbatim-or-empty evidence quotes, calibrated confidence bands;
+`hunt_queries` were REMOVED from the write path in v3 (`hunt_terms` remain). **What "qualifying" means is the spend policy**
 (`summarize.py::qualifies`) — a 2026-07 corpus audit found 66% of billed calls
 were LLM-adjudicated non-cases before these gates:
 
@@ -119,13 +127,17 @@ prompt — that's the point.
 **Enrichments are append-only, never rewritten** (operator mandate):
 every generation lands in `ProcessedArticle.enrichment_history`
 (`shared/schemas/forensics.py::EnrichmentRecord`, deduped by signature); the
-top-level `ai_summary`/`forensics` are a *projection* selected in two stages:
-the `is_insider_case` **verdict** is won by whichever side's best generation
+top-level `ai_summary`/`forensics` are a *projection* selected
+**schema-tier first** (PR #242, the Bruce v. Intuit lesson): only
+generations at the newest `schema_version` present compete at all — a
+contract bump is a deliberate re-adjudication, and cross-schema confidence
+or richness comparisons are meaningless. Within the tier, the
+`is_insider_case` **verdict** is won by whichever side's best generation
 carries the higher confidence, then richness picks within that verdict
 (`enrichment_richness`: analyst note + method count + confidence, ties →
 newest). Richness alone can never flip an adjudication — a chatty
 low-confidence generation lands in history but not the projection (critical
-once multi-model sweeps write second opinions). Every method also carries a
+now that multi-model sweeps write second opinions). Every method also carries a
 write-time `evidence_quote_verbatim` grounding stamp (deterministic
 normalized-substring check against the text the model saw; backfill via
 `scripts/backfill_quote_verbatim.py`). A thin re-enrich can therefore never
@@ -136,14 +148,20 @@ attempts all produce nothing, the job logs
 firing means a dead provider (missing key or $0 balance), not a quiet day.
 
 `SUMMARIZER_LLM_PROVIDER` is an ordered fallback chain (comma-separated; each
-tried until one succeeds, unfunded named entries skipped). Prod leads with
-`anthropic` and pins `SUMMARIZER_MODEL=claude-haiku-4-5-20251001` — enrichment
-runs on **Haiku 4.5** to fill the backlog at ~1/3 the Sonnet cost — then
-`openai`/`sol`/`gemini`/`xai` as fallbacks. The chain, `SUMMARIZER_MODEL`, and
-`LLM_CUSTOM_PROVIDERS` live in `deploy-api.yml` (edit + merge, not gcloud);
-`SUMMARIZER_MODEL` overrides only the **first** provider, so it must be a valid
-id for that vendor (an Anthropic id today). Same chain mechanics apply to
-`DISCOVERER_LLM_PROVIDER` (the filings-only second call).
+tried until one succeeds, unfunded named entries skipped). **Production
+enrichment runs on the DGX Spark**: the nightly cycle borrows the box for
+Nemotron 3 Super 120B (docs/dgx-spark.md §4), chain `sparky` alone, prompt
+contract v3, `OPENAI_COMPAT_GUIDED_JSON=0` (the 2026-08-22 control run
+measured guided decoding at −10 points of verdict accuracy), $0 spend —
+config lives in `.env.spark` on sparky, NOT in this repo. The Anthropic-led
+chain pinned in `deploy-api.yml` (`SUMMARIZER_MODEL=claude-haiku-4-5-…`)
+belongs to the PAUSED Cloud Run rollback job; editing it changes nothing
+about live enrichment. `SUMMARIZER_MODEL` overrides only the **first**
+provider, so it must be a valid id for that vendor. Same chain mechanics
+apply to `DISCOVERER_LLM_PROVIDER` (the filings-only second call). The
+**docket-follow lane** (`apps/aggregator/docket_follow.py`) polls open
+dockets for outcomes each cycle (cap 40/run, re-poll every 7 days) — a
+quiet lane is HEALTHY idle (nothing to poll), not broken.
 
 Provenance channels: `news | filings | tips | social | publications` — legacy
 `reddit-*` RSS feeds stay `tips`; API-based social sources use `social-*` ids;
@@ -167,9 +185,9 @@ CONTEXT / NEWS / COMMUNITY / REFERENCE) for pre-`context_kind` enrichments —
 and are hidden by default behind a toggle — un-enriched rows are unknown,
 never context.
 
-## EVIDENCE — the research product
+## EVIDENCE — the corpus-wide research surface
 
-Corpus-wide forensic aggregation, the flagship output of this project.
+Corpus-wide forensic aggregation, serving the DETECT and HUNT jobs.
 Core is `shared/utils/evidence.py` — **pure stdlib on purpose** so bare
 Actions runners can load it via `importlib.util.spec_from_file_location`
 without the pydantic import chain (see `scripts/evidence_ledger.py`). Served
@@ -212,19 +230,21 @@ category row carries its full covered-technique list (`covered_techniques`;
 TOOLING section — both are client-side joins of the session-cached
 `/tooling` read with the `/itm` catalog (`web/app.js::dossierToolingJoin`,
 node-executed unit tests + api()-only contracts in `tests/test_tooling.py`).
-The **NAMED TOOLS directory** (2026-08-17) is the pane's second list-level
-view: a `CATEGORIES | NAMED TOOLS` segmented switch flips `#/tooling` ↔
-`#/tools` (card grid, one card per vendor across categories, dual-homed
-vendors deduped; ×0 vendors dim under a NOT YET NAMED IN CASES divider), and
-`#/tools/<vendor-slug>` is the vendor sheet whose receipts are the actual
-naming cases — the payload's vendor rows carry `cases` (link/title/
-verdict_true/published, capped at the `VENDOR_CASE_REFS_CAP = 25` most
-recent by published date) + `more_cases`. All of it renders from the one
-session-cached `/tooling` read; NAMED ×N chips on category/technique
-dossiers route into the sheets. Every TOOLING surface cites one muted basis
-line (`BASED ON <N> VERDICT-TRUE CASES · AS OF <date>Z · METHODOLOGY ·
-ITM™ Forscie Ltd`); the caveat prose lives in the METHODOLOGY tooltip
-(operator call 2026-08-17). Contracts: `tests/test_tools_directory.py`.
+The pane itself (rebuilt 2026-08-21, operator spec) is **ONE grouped
+table** in the EVIDENCE table idiom: category group rows (plain labels) with
+tool rows beneath, an instant text filter, and an IN COURT FILINGS toggle;
+the old CATEGORIES|NAMED TOOLS switch and vendor card grid are gone (bare
+`#/tools` redirects to `#/tooling`). `#/tools/<vendor-slug>` survives as
+the vendor sheet whose receipts are the actual naming cases — the payload's
+vendor rows carry `cases` (link/title/verdict_true/published, capped at
+`VENDOR_CASE_REFS_CAP = 25` most recent) + `more_cases`; `#/tooling/<id>`
+is the category dossier. Post-sweep, the table's role columns
+(CAUGHT/BYPASSED/MISUSED/TRACED from v3 `tool_mentions`) swap in. All of it
+renders from the one session-cached `/tooling` read. Every TOOLING surface
+cites one muted basis line (`BASED ON <N> VERDICT-TRUE CASES · AS OF
+<date>Z · METHODOLOGY · ITM™ Forscie Ltd`); the caveat prose lives in the
+METHODOLOGY tooltip (operator call 2026-08-17). Contracts:
+`tests/test_tools_directory.py`, `tests/test_tooling.py`.
 
 ## Everyday commands
 
@@ -237,8 +257,12 @@ python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /
 python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
 python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECAP Fetch, budget-capped)
 python -m apps.aggregator sweep_courtlistener_history --windows 4  # pull historical case windows manually
-python -m apps.aggregator reenrich_missed --dry-run   # count filings whose forensics aren't on the current model
-gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
+python -m apps.aggregator reenrich_missed --dry-run   # count filings whose forensics aren't on the current model/schema
+# ROLLBACK LANE ONLY — never while the sparky cron is live (two writers on
+# one bucket race; the loser's enrichments are silently replaced). To force
+# a refresh today: spark_refresh.sh on sparky, or the SETTINGS "Force corpus
+# refresh" button on the site.
+gcloud run jobs execute corpus-refresh --region us-east1 --wait
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
   --format='value(textPayload)' | grep -E '\[OK\]|\[FAIL\]|reloaded'
 ```
@@ -246,7 +270,8 @@ gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \
 **No GCP access?** (Claude Code on the web sandboxes can't reach GCP or the
 prod API directly.) Read-only `workflow_dispatch` diagnostics cover it —
 dispatch from the Actions tab or the GitHub API: `refresh-corpus` /
-`watch-refresh` (force + watch a refresh; `refresh-corpus` takes a
+`watch-refresh` (**rollback lane only** — they drive the paused Cloud Run
+job; same two-writer race warning as above. `refresh-corpus` takes a
 `force_reprocess` input that replays the job with `--force` — full lexical
 retag of the corpus after an ITM/lexicon bump, no LLM re-billing), `corpus-status` (state + job env
 audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
@@ -317,6 +342,12 @@ legacy fallback.
 - **Corpus lives in the bucket, never in images.** The Dockerfile's final
   stage must stay the Cloud Run `runtime` stage (plain `docker build .`
   produces it; the deploy workflow and legacy script rely on that).
+- **Sparky memory law** (two crashes, 2026-08-19/20): the binding limit on
+  the 128GB unified box is the LOAD-TIME peak, not steady state. Hard
+  ceiling ≈ **75GB of weights**; never boot two big models side by side; no
+  fastsafetensors. The refresh cycle borrows the box sequentially
+  (model-enrich.yml overlay) and its EXIT trap must always restore the chat
+  stack — any ad-hoc borrow script carries the same trap.
 - **DB/config flows only through `shared/settings.py`** (pydantic-settings,
   env aliases). Never scatter connection strings or `os.environ` reads.
 - **The API's bucket access is read-only except the `config/` prefix**
@@ -337,8 +368,9 @@ legacy fallback.
   Since 2026-08 it is a **forensic case study** (MODUS OPERANDI): per-case
   methods, observables, legal posture, ITM catalog controls — no hunt-query
   or seed-term surfaces (hunting guidance lives in the dossier's synthesized
-  patterns; the report cross-links there). All LLM spend lives on the
-  **corpus-refresh job** (the enrich node), never the API service — keep
+  patterns; the report cross-links there). All LLM spend lives at
+  **ingest/enrichment time** (today: the sparky refresh pipeline; on the
+  rollback lane: the corpus-refresh job) — NEVER the API service. Keep
   extract-time keys off the service. The rate limiter
   (`apps/search/ratelimit.py`) stays as a CPU/abuse guard only; don't remove
   it. Rollout: enrichment backfills over refreshes, so reports get richer over
@@ -363,7 +395,11 @@ legacy fallback.
   the job (call). The read product stays anonymous. Don't add new write or
   compute-heavy endpoints without this dependency.
 - Secrets: Secret Manager / env only. `detect-secrets` hook + baseline are
-  enforced via pre-commit (`make precommit`).
+  enforced via pre-commit (`make precommit`). **Never print key values** —
+  compare by hash. The vLLM key is one shared value in `~/sparky/.env`
+  (`VLLM_API_KEY`) and `.env.spark` (`SPARKY_API_KEY`); `docker inspect` /
+  `ps` on sparky leak it (it rides the process argv), so treat any paste as
+  a disclosure and rotate — recreating vllm AND open-webui together.
 - Actions in workflows are **SHA-pinned**; keep it that way.
 
 ## Verification habits
@@ -387,9 +423,11 @@ legacy fallback.
   merge-audited path for DNS record changes regardless). For the full
   platform skills, run `/plugin marketplace add cloudflare/skills` +
   `/plugin install cloudflare@cloudflare` locally (per-user, not repo
-  config). Physical-click testing catches what curl can't (see gotchas). The
-  responsive rail collapses below **1024px** into the INSIGHTS tab, so test
-  tablet widths, not just desktop.
+  config). Physical-click testing catches what curl can't (see gotchas).
+  Always test tablet widths (768/1024), not just phone and desktop — the
+  pane grid and chip bar reflow there. (The old left rail and its INSIGHTS
+  collapse are deleted; filtering lives in the SOURCE + FOCUS chip bar,
+  with Scope/SIG as SETTINGS defaults.)
 - `deploy-api.yml` smoke-tests `/health`, `/articles`, `/social/catalog`,
   `/trending`, `/feed.xml`, `/evidence/ledger`, a subscription write
   round-trip, and `/extract/ttps` after every deploy. Extend it when adding
@@ -424,7 +462,11 @@ legacy fallback.
 - **Job task-timeout must exceed a full-throughput run**: at 45m a heavy
   run hit the timeout and Cloud Run's retry re-billed already-enriched
   articles (history select-best absorbed it, but it doubled spend). Now 60m
-  in `deploy-api.yml`, with the `watch-refresh` watcher at 75m.
+  in `deploy-api.yml` (rollback lane), with the `watch-refresh` watcher at
+  75m. The live path's equivalents: `spark_refresh.sh` bounds the pipeline
+  at **8h** (`timeout 28800`) and holds
+  `/tmp/insider-intel-spark-refresh.lock` — overlapping cycles skip loudly;
+  a long-running sweep should hold the same flock so the cron skips it.
 - **Cloud Run domain-mapping certs propagate slowly**: the console can say
   provisioned while edges still fail TLS for a while. Verify with your own
   repeated curls before cutting anything over.
