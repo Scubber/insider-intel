@@ -8,8 +8,7 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 **Last updated:** 2026-08-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
-(cron **daily** — reduced from the cutover's 4×/day, operator-confirmed
-2026-08-22; Cloud Scheduler paused as rollback).
+(once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
 **Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
 working design, blessed before the next UI redesign — restore `web/**` from
 here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
@@ -21,11 +20,11 @@ prod).
 
 | Area | State |
 |---|---|
-| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron **daily** at 08:00 UTC (operator-confirmed 2026-08-22; the Pages snapshot fires 08:40 UTC ≈ 40min after) runs `scripts/spark_refresh.sh` (**GCS** pull → pipeline → push → `/reload` — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Enrichment caps rescaled for daily cadence 2026-08-22: `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60` (40/30 was 4×/day sizing). Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
-| **Corpus** | 2026-08-17 snapshot (**stale**): 7,193 rows / 1,839 enriched / 540 insider cases. The 2026-08-22 gate replay measured **7,283 filings-channel rows** and **896 adjudicated-insider filings** — the corpus has grown well past the snapshot; take fresh counts from the next cycle before citing any. Writes land daily (one generation per refresh on `processed/articles.jsonl`). |
-| **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM, `model: auto` — serves whatever SKU is loaded; a Nemotron model as of 2026-08-22 per operator, docs previously said Qwen; timeout 900s) — **$0 LLM spend**. Caps: `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60` since the daily-cadence rescale 2026-08-22 (40/30 under 4×/day; cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
+| **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. |
+| **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242). Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
-| **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact daily (08:40 UTC, ~40min after the refresh); UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
+| **Cold-start UX** | **Static-first boot** (#240, 2026-08-22): `pages.yml` builds `web/data/` as a **true twin of the boot render** (articles/sources/ledger/meta/tooling.json, never committed) daily at 08:40Z; UI paints instantly under a CACHED badge and silently adopts the live API result when it matches (projection-equivalence test guards drift). deploy-pages poll timeout 20min. |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
 | **Service memory** | **2Gi asserted in `deploy-api.yml`** after the 2026-07-26 OOM burst-503 outage at legacy 1Gi. Must grow with the corpus. |
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
@@ -34,7 +33,7 @@ prod).
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
-| **UI redesign (2026-08-10)** | Claude Design redesign ported: no intro panel; masthead corpus-stats line + status band (lanes, UTC clock); provenance meta lines (SOURCE · FILED · RETRIEVED · SIG · proof); plain-language proof standard (CONFIRMED IN COURT / ALLEGED / REPORTED, from forensics claim_status); stream = content + one right rail (techniques tally + ledger), board on WORKBENCH takeover only; footer with methodology/about pane + neutral theme labels. Redesign source in `design/redesign/`. |
+| **UI (2026-08-20 → 22 wave)** | Filter **chip bar** (SOURCE + FOCUS, "Attack footprints" = matrix stages) replaced the Refine drawer; Scope/SIG became SETTINGS defaults; the stream's left rail is deleted (EVIDENCE is a page); Refresh button became SETTINGS "Force corpus refresh"; sources-broken panel moved to SETTINGS; TOOLING is one grouped table with an IN COURT FILINGS toggle; plain-language GUIDE panel (#241); posture badges in plain language; vacuous hunt-term chips filtered (#243); findings F2 restated (#244). Provenance meta lines + proof-standard badges (CONFIRMED IN COURT / ALLEGED / REPORTED) carry over from the 2026-08-10 redesign. |
 | **UI honesty** | Settings is reader-safe (no TODO / stub ADD / Notifications chrome). Empty board offers **TRY EXAMPLE HUNT**. Default theme **Wire Light** (cnn-lite; was Dossier Sage until 2026-08-11); desktop rail JS breakpoint matches CSS at **1024px**. |
 
 ---
@@ -94,14 +93,14 @@ prod).
    generator. Not built.
 5. **Spark as the corpus tenant — DONE 2026-08-16 (cutover complete).**
    Architecture shipped (#188, hardened by #190, `model: auto` via #189);
-   sparky is the production refresh tenant: cron daily (see Live state row),
-   sparky-only Qwen chain ($0 LLM spend), caps 40/30, PACER creds on the
-   box, first unattended cycle verified 2026-08-17 00:31Z. Cloud Scheduler
-   `corpus-refresh-schedule` paused as rollback. Full record + operating
-   state: [`docs/spark-cutover-handoff.md`](spark-cutover-handoff.md) and
-   `docs/dgx-spark.md` §4. Remaining follow-ups: thinking-mode knob
-   activation (gold-set A/B), guided-JSON for Qwen parse failures, vLLM key
-   rotation at next restart, sparky-repo doc de-pin, Reddit OAuth.
+   sparky is the production refresh tenant: cron `0 8 * * *` UTC (once
+   daily), sparky-only chain ($0 LLM spend) borrowing Nemotron nightly,
+   caps 160/60, PACER creds on the box. Cloud Scheduler
+   `corpus-refresh-schedule` paused as rollback. Operating state:
+   `docs/dgx-spark.md` §4 (the one-time cutover log was retired 2026-08-22;
+   its durable records moved there). Closed since: guided JSON shipped and
+   deliberately OFF for Nemotron (2026-08-22 control run); vLLM key rotated
+   2026-08-22. Still open: Reddit OAuth (#26).
 6. **UI feed auto-discovery** — `<link rel="alternate">` for `/feed.xml`
    still a one-line deferred change.
 7. **Cold-start UX** — **DONE 2026-08-06** (#140/#141): snapshot-first boot

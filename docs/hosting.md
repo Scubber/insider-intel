@@ -13,6 +13,12 @@ Brand hub and sibling apex aliases live in **https://github.com/Scubber/thederpw
 | `https://scubber.github.io/insider-intel/` | Same Pages site | GitHub Pages project URL |
 
 **DNS:** `intel` CNAME → `scubber.github.io`.
+
+Credential scopes (recorded from the retired one-shot `dns-zone-create`
+workflow): the day-to-day `CLOUDFLARE_API_TOKEN` deliberately lacks
+Zone:Edit — zone creation needs the broader `CLOUDFLARE_DNS_ADMIN` token.
+If a new zone is ever needed, recover the idempotent zone-create procedure
+from git history (PR #196) rather than widening the day-to-day token.
 **UI primary:** `web/CNAME` = `intel.thederpweb.com`.
 **API:** map `api.intel.thederpweb.com` to the Cloud Run service (below).
 

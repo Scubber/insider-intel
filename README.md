@@ -3,17 +3,17 @@
 **Evidence-based insider-threat research, built from what actually reaches
 court.**
 
-insider-intel is an open OSINT research instrument whose purpose is to
-**discover novel insider techniques** — tradecraft that shows up in real
-cases before it shows up in any framework. It ingests litigated insider cases
-(US federal dockets, opinions, international prosecutor and regulator feeds),
-insider-relevant news, first-person social confessions, and long-form
-publications; forensically enriches each case with an LLM at ingest time; and
-aggregates the corpus into corpus-level evidence: **how insider incidents
-actually happen, who commits them, what record classes actually detect and
-convict them — and which methods don't yet map to anything in the matrix.**
-Hunt terms and detection queries fall out of that as byproducts; the mission
-is the discovery.
+insider-intel is a guidance product for insider-threat programs, built from
+litigated court cases. It serves four jobs: **build a program, detect,
+prevent, hunt** — and backs every claim with receipts from real filings.
+
+The pipeline ingests litigated insider cases (US federal dockets and
+opinions, international prosecutor and regulator feeds), insider-relevant
+news, and long-form publications. Each case is forensically enriched by an
+LLM once, at ingest. The corpus then answers questions a single case report
+can't: how insider incidents happen, who commits them, which records detect
+and convict them — and which methods don't yet map to anything in the
+matrix (novel-technique discovery is a standing pass, not the mission).
 
 **Live:** [insider-intel.net](https://insider-intel.net) (also
 [intel.thederpweb.com](https://intel.thederpweb.com)) · API:
@@ -25,12 +25,12 @@ Preparation · Infringement · Anti-Forensics).
 
 ---
 
-## The EVIDENCE ledger — the research product
+## The EVIDENCE ledger
 
-The flagship output is the **EVIDENCE page**
-([insider-intel.net → EVIDENCE](https://insider-intel.net/#/evidence)):
-a continuously recomputed forensic aggregation across every method-bearing case
-in the corpus. It answers questions a single case report can't:
+The **EVIDENCE page**
+([insider-intel.net → EVIDENCE](https://insider-intel.net/#/evidence)) is
+a continuously recomputed forensic aggregation across every method-bearing
+case in the corpus:
 
 - **Who?** Actor profile on two axes — function (executive/officer, manager,
   technical, sales/finance…) × employment state (current, departing, former) —
@@ -50,7 +50,7 @@ on the EVIDENCE page with their claim, the ledger data behind it, the honest
 caveat, and program recommendations. Findings are operator-approved by merge —
 the GitOps trail *is* the editorial record.
 
-### Methodology, honestly
+### Methodology and limitations
 
 Court data is a biased sample: it over-represents what gets litigated. The
 ledger treats that bias as measurable signal (selection bias is stated first
@@ -64,11 +64,12 @@ stored forensic records — **no LLM runs at read time**.
 |---|---|
 | **Case stream** | Chronological insider-case reader with signal scoring, use-case + insider-type classification, and analyst notes. Cases the enricher itself adjudicates as *not* insider render as muted CONTEXT, hidden by default. |
 | **Filings lane** | CourtListener RECAP dockets + opinions flagged by a hand-authored insider query lexicon; full-document bodies backfilled; targeted PACER purchasing (budget-capped) for high-signal stubs; CanLII and international prosecutor/regulator feeds. |
-| **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, per-case hunt queries), and an ITM adjudication. Every generation is stored append-only; the visible record is a select-best projection. |
+| **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, actor citizenship, victim industry, named-product roles), and an ITM adjudication — schema v3, with machine-verified evidence quotes. Every generation is stored append-only; the visible record is a select-best projection. |
 | **Novel-technique discovery** | A second LLM pass over each filing's forensic record flags methods that don't map cleanly to existing ITM techniques — candidate tradecraft the frameworks haven't named yet. |
 | **ITM matrix** | Five-theme technique browser; per-technique dossiers with related cases, detections/preventions, and corpus evidence tie-ins. |
 | **Workbench** | Flag cases, extract a MODUS OPERANDI forensic case study assembled from stored forensics (no LLM spend) — per-case methods, observables, legal posture — with links into each technique dossier for hunting guidance. |
-| **Social + tips** | Subscribed Reddit/X sources and one-off URL flagging surface first-person confessions (overemployment, data theft) the news never covers. |
+| **Tooling** | Security-product categories ranked by how much observed case volume their controls cover, with a per-product court-filing record — which products caught insiders, which were bypassed. |
+| **Social + tips** | One-off URL flagging surfaces first-person confessions (overemployment, data theft). Scheduled social pulls are parked pending OAuth credentials. |
 | **Syndication** | Atom feed (`/feed.xml`), one-way corporate export (`GET /export/articles`, NDJSON + bearer token). |
 
 ## Architecture
@@ -77,14 +78,16 @@ stored forensic records — **no LLM runs at read time**.
 RSS / CourtListener / social / publications
    → ingest lanes → raw corpus (JSONL in GCS)
    → LangGraph processing: ITM alias match → score → classify → LLM enrich → embed
-   → FastAPI (Cloud Run) : /articles /search /itm /evidence/ledger /extract/ttps
-   → static UI (GitHub Pages) : Stream | Matrix | EVIDENCE | Workbench
+   → FastAPI (Cloud Run) : /articles /search /itm /evidence/ledger /tooling /extract/ttps
+   → static UI (GitHub Pages) : STREAM | MATRIX | EVIDENCE | TOOLING | WORKBENCH
 ```
 
-Production is fully automated: the corpus self-refreshes daily via a
-Cloud Run job, and every merge to `main` deploys (keyless OIDC — no stored
-credentials). LLM spend is gated by insider-signal checks and billed **once
-per article, ever**; enrichment history is append-only.
+Production is fully automated: the corpus refreshes once daily from a local
+DGX Spark that runs the enrichment model itself ($0 LLM spend), the site
+boots from a static snapshot and swaps to live data, and every merge to
+`main` deploys (keyless OIDC — no stored credentials). LLM spend is gated
+by insider-signal checks; enrichment history is append-only, and records
+re-enrich only when the analysis contract itself is upgraded.
 
 For contributors and agents: [`CLAUDE.md`](CLAUDE.md) is the operating manual
 (architecture, invariants, gotchas); [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
