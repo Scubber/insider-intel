@@ -17,9 +17,9 @@ intel.thederpweb.com (Pages, web/) ──► api.intel.thederpweb.com (Cloud Run
                                           │ GCS FUSE mount at /app/data
                        gs://insider-intel-502413-corpus  (processed/ raw/ state/ config/)
                                           ▲ read-write
-DGX Spark cron (0 4,10,16,22 UTC) ──► spark_refresh.sh (refresh tenant) ──► POST /reload
+DGX Spark cron (0 8 UTC, once daily) ──► spark_refresh.sh (refresh tenant) ──► POST /reload
   (Cloud Scheduler + Cloud Run Job corpus-refresh: PAUSED since the 2026-08-16
-   cutover, kept as rollback — docs/spark-cutover-handoff.md)
+   cutover, kept as rollback — docs/dgx-spark.md §4)
 ```
 
 GCP project `insider-intel-502413`, region `us-east1`, $10/mo budget alert.

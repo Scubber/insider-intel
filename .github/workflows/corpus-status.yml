@@ -111,17 +111,6 @@ jobs:
             | grep -iE 'pacer|recap.fetch|purchase|quarterly budget|skipping purchase' \
             | tail -30 || echo "(no PACER log lines found)"
 
-      - name: Sony/Udio enrichment state (grep logs for the docket)
-        run: |
-          echo "== Any recent log lines mentioning the Udio docket =="
-          gcloud logging read \
-            'resource.labels.job_name=corpus-refresh' \
-            --freshness="${{ github.event.inputs.log_freshness }}" \
-            --project "${PROJECT_ID}" \
-            --format='value(textPayload)' 2>/dev/null \
-            | grep -iE 'udio|uncharted|73641108|sony' \
-            | tail -20 || echo "(no Sony/Udio log lines found)"
-
       - name: Corpus object versioning (recovery path check)
         run: |
           echo "== Is object versioning enabled on the corpus bucket? =="
@@ -130,8 +119,6 @@ jobs:
             || echo "(could not describe bucket)"
           echo
           echo "== Versions of processed/articles.jsonl (newest first) =="
-          echo "If versioning is on, a generation from BEFORE the drain (~14:55Z"
-          echo "2026-07-21) holds Sony's pre-drain record — a clean recovery source."
           gcloud storage ls -a -l \
             gs://insider-intel-502413-corpus/processed/articles.jsonl \
             --project "${PROJECT_ID}" 2>/dev/null \
