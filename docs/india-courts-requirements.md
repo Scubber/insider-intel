@@ -213,11 +213,32 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
   `tests/test_about_page.py` (minimal-pane, attribution-lines, no-corpus-digits
   contracts). `ui-smoke` must pass at 390/1280; Playwright evidence in the PR body.
   `web/findings.json` needs no rewrite (static, publish-by-merge).
-- EVIDENCE ledger jurisdiction breakdown: deterministic, pure-stdlib, small-n floor
-  (`SMALL_N_FLOOR=10`) and case-strength separation preserved; jurisdiction = source
-  court system, never actor nationality; limitations language notes that different
-  jurisdictions contribute different document types and procedural stages, and that
-  coverage equals the lexicon (no semantic discovery at the scan stage).
+- **EVIDENCE separates by country (operator requirement 2026-08-22)** — a filter, not
+  just a payload breakdown:
+  - API: `country` query param on `GET /evidence/ledger` AND
+    `GET /evidence/technique/{id}` — the ledger recomputes over the country-sliced row
+    set (pure-stdlib `build_evidence_ledger` unchanged in spirit; country threaded into
+    the row projection at `apps/search/service.py:175-184` and the Actions-runner path).
+    No param = global ledger, exactly today's behavior. Countries are enumerated from
+    the data (via legal_metadata / the source-prefix resolver), never a hardcoded list.
+  - UI: a jurisdiction switch on the EVIDENCE pane (ALL | per-country chips rendered
+    only for countries present in the corpus), carried into the per-technique dossier
+    tie-ins. Per "every page teaches itself": a `data-tip` stating jurisdiction = the
+    court system of the source records, never actor nationality.
+  - The basis line names the active slice (e.g. `BASED ON <N> VERDICT-TRUE CASES ·
+    JURISDICTION: IN · AS OF <date>Z`). `SMALL_N_FLOOR=10` applies per-slice — sliced
+    views will suppress percentages more often, which is correct; the suppressed/empty
+    state says why and how it fills (more adjudicated cases in that jurisdiction).
+  - Limitations copy: different jurisdictions contribute different document types and
+    procedural stages, so rates are NOT comparable across country slices — the filter
+    presents per-jurisdiction views, never cross-country comparisons of people;
+    coverage equals the lexicon (no semantic discovery at the scan stage).
+  - `web/findings.json` stays global and untouched; the boot snapshot may carry only
+    the global slice (country slices can require the live API — CACHED view shows ALL).
+  - TOOLING may inherit the same param later; out of scope for this change unless
+    trivial. Contract tests in the style of `tests/test_matrix_data_sources.py` pin the
+    param, the per-slice floor behavior, and byte-identical global output when the
+    param is absent.
 
 ## Coverage scope (operator-decided 2026-08-22 — not open for re-scoping)
 
