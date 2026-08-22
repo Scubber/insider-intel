@@ -158,6 +158,39 @@ def test_ingest_match_marker_cannot_self_qualify() -> None:
     assert strip_match_markers("plain body text") == "plain body text"
 
 
+def test_marker_stripped_from_flattened_clean_text() -> None:
+    """The gate sees clean_text, which to_plain_text FLATTENS to one line —
+    line-based stripping alone is a no-op there (2026-08-22 review, verified
+    by execution). The segment pass must remove the marker mid-string."""
+    from shared.agents.summarize import qualifies
+    from shared.utils.text import to_plain_text
+
+    marker = "CourtListener query: former employee trade secret exfiltration"
+    # The review's exact repro: title+summary+marker+signal-free boilerplate,
+    # flattened the way _node_normalize builds clean_text.
+    flattened = to_plain_text(
+        "\n".join(["US v. Example", "Court: X\nDocket: 1", f"{marker}\n" + ("boilerplate " * 200)])
+    )
+    assert "\n" not in flattened  # precondition: truly flattened
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=flattened)
+    # A genuinely signalling body (terms well past the strip window) still bills.
+    real = to_plain_text(
+        "\n".join(
+            [
+                "US v. Example",
+                "Court: X\nDocket: 1",
+                f"{marker}\n"
+                # Well clear of the floor: the segment strip deducts ~260
+                # chars from the effective body length (by design —
+                # conservative), so the fixture must not sit at the boundary.
+                + ("x " * 1000)
+                + "the former employee copied files to a USB drive for data exfiltration",
+            ]
+        )
+    )
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=real)
+
+
 def test_filing_stub_with_itm_hit_does_not_qualify() -> None:
     """A metadata-stub filing must NOT enrich just because it carries an ITM hit.
 

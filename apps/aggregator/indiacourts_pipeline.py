@@ -68,6 +68,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_INDIACOURTS_STATE_DIR = "data/state/indiacourts"
 _HISTORY_CURSOR_KEY = "indiacourts_history:cursor"
 _PENDING_NAME = "pending.json"
+# Spaced retries before a pending PDF is dead-lettered (oversized/corrupt/gone
+# documents must not consume extract budget forever).
+_MAX_PENDING_ATTEMPTS = 5
 
 OcrBackend = Callable[[bytes], str]
 
@@ -198,9 +201,21 @@ class _Stats:
 
     def __init__(self) -> None:
         self.pdfs_attempted = 0
+        self.partitions_checked = 0
         self.matches = 0
         self.pending_added = 0
         self.errors: list[str] = []
+
+    @property
+    def work_done(self) -> int:
+        """Units examined this run, for lane health.
+
+        An idle forward cycle (every partition ETag unchanged — the designed
+        daily pattern, since the dataset updates 1x/day and refreshes run
+        4x/day) still CHECKED partitions; reporting 0 here would classify a
+        healthy lane as "empty" and trip [LANE-BROKEN] after 3 quiet cycles.
+        """
+        return self.pdfs_attempted or self.partitions_checked
 
 
 def _process_meta(
@@ -247,8 +262,9 @@ def _process_meta(
                 from apps.aggregator.indiacourts import truncate_head_tail
 
                 text = truncate_head_tail(raw_text.strip(), settings.indiacourts_text_max_chars)
-            except IndiaCourtsError as exc:
-                stats.errors.append(str(exc))
+            except Exception as exc:  # noqa: BLE001 — an OCR backend must never
+                # kill the refresh run; the PDF parks and retries.
+                stats.errors.append(f"ocr: {exc}")
         if len(text) < settings.indiacourts_min_text_chars:
             pending.add(meta.pdf_key, pending_entry(meta, "ocr"), now=now)
             stats.pending_added += 1
@@ -340,7 +356,7 @@ def _finish(
         source_id=result_id,
         source_name=result_name,
         success=not stats.errors,
-        articles_fetched=stats.pdfs_attempted,
+        articles_fetched=stats.work_done,
         articles_saved=saved,
         error="; ".join(stats.errors[:5]) if stats.errors else None,
     )
@@ -371,7 +387,13 @@ def _save(store: ArticleStore, batch: list[RawArticle]) -> int:
 
 def resolve_ocr_backend(settings) -> OcrBackend | None:
     command = (settings.indiacourts_ocr_command or "").strip()
-    return command_ocr_backend(command) if command else None
+    if not command:
+        return None
+    try:
+        return command_ocr_backend(command)
+    except Exception as exc:  # noqa: BLE001 — a bad command is config, not fatal
+        logger.warning("INDIACOURTS_OCR_COMMAND unusable (%s) — OCR disabled this run", exc)
+        return None
 
 
 def run_indiacourts_ingestion(
@@ -418,6 +440,7 @@ def run_indiacourts_ingestion(
             for partition in _sort_partitions(partitions, order, scope):
                 if budget.exhausted:
                     break
+                stats.partitions_checked += 1
                 _process_partition(
                     partition,
                     client=http,
@@ -516,6 +539,7 @@ def run_indiacourts_history_sweep(
                 if budget.exhausted:
                     year_complete = False
                     break
+                stats.partitions_checked += 1
                 done = _process_partition(
                     partition,
                     client=http,
@@ -568,8 +592,33 @@ def run_indiacourts_extract_pending(
     own_client = client is None
     http = client or httpx.Client(timeout=60.0)
     batch: list[RawArticle] = []
+    due = pending.due(now=now, retry_days=settings.indiacourts_retry_days)
+    if not due:
+        # Nothing to retry: emit NO result row. A success/0 row would classify
+        # as "empty" and trip the broken-lane chip for a healthy idle queue.
+        if own_client:
+            http.close()
+        return IngestionRunResult(started_at=now, sources=[], total_articles_saved=0)
     try:
-        for pdf_key, entry in pending.due(now=now, retry_days=settings.indiacourts_retry_days):
+        for pdf_key, entry in due:
+            attempts = int(entry.get("attempts") or 0)
+            if attempts >= _MAX_PENDING_ATTEMPTS:
+                # Dead-letter: a PDF that failed this many spaced retries
+                # (oversized, corrupt, gone) will not heal; stop burning
+                # budget and bandwidth on it. Marking the basename done keeps
+                # partition passes from re-discovering it.
+                meta = meta_from_pending(pdf_key, entry)
+                pending.remove(pdf_key)
+                state = PartitionState(sdir, meta.partition)
+                state.done.add(meta.pdf_basename)
+                state.save()
+                logger.warning(
+                    "[indiacourts] giving up on %s after %d attempts (%s)",
+                    pdf_key,
+                    attempts,
+                    entry.get("reason") or "?",
+                )
+                continue
             if not budget.take():
                 break
             meta = meta_from_pending(pdf_key, entry)

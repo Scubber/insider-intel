@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import logging
+import weakref
 from pathlib import Path
 
 from apps.aggregator.config import DEFAULT_FEEDS
@@ -174,34 +176,50 @@ def search(
     )
 
 
+# Ledger payloads cached per live index object (the vendor_mentions pattern):
+# /reload swaps in a new index, the weak key dies, every jurisdiction slice
+# recomputes. Without this, the EVIDENCE page's nation tabs (up to 4
+# concurrent per-country reads) would re-project and re-aggregate the whole
+# corpus per request on the 2Gi instance whose failure mode is OOM.
+_ledger_cache: weakref.WeakKeyDictionary[object, dict] = weakref.WeakKeyDictionary()
+
+
 def _raw_evidence_ledger(
     path: str | Path | None = None, *, top: int = 25, country: str = "all"
 ) -> dict:
     from shared.utils.evidence import build_evidence_ledger, filter_rows_by_country
 
-    rows = [
-        {
-            "link": a.link,
-            "title": a.title,
-            "published": a.published.isoformat() if a.published else "",
-            "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
-            # Jurisdiction inputs: the builder's country breakdown and the
-            # ?country= slicing both resolve from these (explicit metadata
-            # winning over the source-id prefix fallback).
-            "source_id": a.source_id,
-            "legal_metadata": (
-                a.legal_metadata.model_dump(mode="json")
-                if getattr(a, "legal_metadata", None)
-                else None
-            ),
-        }
-        for a in get_index(path).articles
-    ]
+    index = get_index(path)
     mode = (country or "all").strip().upper()
-    if mode not in {"", "ALL", "*"}:
-        # One engine, many views: slice the rows, rebuild the same ledger.
-        rows = filter_rows_by_country(rows, mode)
-    return build_evidence_ledger(rows, top=top)
+    if mode in {"", "*"}:
+        mode = "ALL"
+    per_index = _ledger_cache.setdefault(index, {})
+    key = (mode, top)
+    if key not in per_index:
+        rows = [
+            {
+                "link": a.link,
+                "title": a.title,
+                "published": a.published.isoformat() if a.published else "",
+                "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
+                # Jurisdiction inputs: the builder's country breakdown and the
+                # ?country= slicing both resolve from these (explicit metadata
+                # winning over the source-id prefix fallback).
+                "source_id": a.source_id,
+                "legal_metadata": (
+                    a.legal_metadata.model_dump(mode="json")
+                    if getattr(a, "legal_metadata", None)
+                    else None
+                ),
+            }
+            for a in index.articles
+        ]
+        if mode != "ALL":
+            # One engine, many views: slice the rows, rebuild the same ledger.
+            rows = filter_rows_by_country(rows, mode)
+        per_index[key] = build_evidence_ledger(rows, top=top)
+    # Callers mutate the payload (evidence_ledger pops/joins) — hand out copies.
+    return copy.deepcopy(per_index[key])
 
 
 def _catalog_detections() -> dict[str, list[dict]]:

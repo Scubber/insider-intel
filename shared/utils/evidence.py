@@ -106,6 +106,18 @@ def resolve_country(source_id, legal_metadata=None) -> str | None:
     return None
 
 
+def resolve_article_country(article) -> str | None:
+    """`resolve_country` for an article-shaped object (duck-typed, no imports).
+
+    Single home for the jurisdiction rule so the search index and the NDJSON
+    export can never silently disagree on a row's country.
+    """
+    legal = getattr(article, "legal_metadata", None)
+    if legal is not None and not isinstance(legal, dict):
+        legal = legal.model_dump() if hasattr(legal, "model_dump") else None
+    return resolve_country(getattr(article, "source_id", None), legal)
+
+
 def filter_rows_by_country(rows, country: str):
     """Rows whose resolved jurisdiction matches ``country`` (case-insensitive).
 

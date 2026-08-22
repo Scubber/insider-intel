@@ -10,6 +10,7 @@ forensic record so the existing analyst-note UI keeps working unchanged.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -127,17 +128,33 @@ def qualifies(
     return False
 
 
-# Ingest-time match-marker lines each court lane writes at the head of
-# RawArticle.content ("scored but hidden"). They embed the very insider terms
-# the gate scans for, so they are stripped before any body-signal decision.
+# Ingest-time match markers court lanes write into RawArticle.content
+# ("scored but hidden"). They embed the very insider terms the gate scans
+# for, so they are stripped before any body-signal decision. Two passes,
+# because the corpus stores TWO shapes: raw content keeps line structure
+# (line pass), but clean_text is whitespace-FLATTENED by to_plain_text, so a
+# marker sits mid-string there and only a bounded segment wipe can remove it.
 _MATCH_MARKER_PREFIXES: tuple[str, ...] = (
     "courtlistener query:",
     "indiacourts match:",
 )
+# Longest shipped CourtListener query is ~204 chars; wiping the prefix plus
+# this window removes the whole query from flattened text at the cost of at
+# most a couple hundred chars of real body — a conservative bias under the
+# 1,500-char filings floor.
+_MARKER_SEGMENT_RE = re.compile(
+    r"(?:courtlistener query:|indiacourts match:).{0,240}",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def strip_match_markers(text: str) -> str:
-    """Remove ingest match-marker lines so they can't self-qualify a body."""
+    """Remove ingest match markers so they can't self-qualify a body.
+
+    Handles both stored shapes: marker LINES in raw content, and marker
+    SEGMENTS inside whitespace-flattened clean_text (where splitlines() is a
+    no-op — the 2026-08-22 review caught exactly that).
+    """
     if not text:
         return text
     lowered = text.lower()
@@ -148,7 +165,7 @@ def strip_match_markers(text: str) -> str:
         for line in text.splitlines()
         if not line.strip().lower().startswith(_MATCH_MARKER_PREFIXES)
     ]
-    return "\n".join(kept)
+    return _MARKER_SEGMENT_RE.sub(" ", "\n".join(kept))
 
 
 def _body_has_insider_signal(body: str) -> bool:

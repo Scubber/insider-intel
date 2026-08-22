@@ -4906,6 +4906,12 @@
       box.hidden = true;
       return;
     }
+    if (evidenceCountry !== "all") {
+      // The user switched to a per-country tab while the slices loaded — a
+      // stale completion must not re-show the global cross-tab there.
+      box.hidden = true;
+      return;
+    }
     const floor = globalData.small_n_floor || 10;
     const byTech = new Map(); // id -> {title, counts: {code: n}, total}
     codes.forEach((code, i) => {

@@ -538,10 +538,11 @@ def article_text(link: str = Query(..., min_length=8)) -> ArticleTextResponse:
         text = ""
     if not text:
         text = article.clean_text or ""
-    # Drop the ingest query-marker line so readers see the document, not our tag.
-    text = "\n".join(
-        line for line in text.splitlines() if not line.strip().startswith("CourtListener query:")
-    ).strip()
+    # Drop ingest match markers (all lanes) so readers see the document, not
+    # our tag — same stripper the spend gate uses.
+    from shared.agents.summarize import strip_match_markers
+
+    text = strip_match_markers(text).strip()
     return ArticleTextResponse(
         title=article.title,
         link=article.link,

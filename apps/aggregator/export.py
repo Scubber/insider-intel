@@ -79,10 +79,9 @@ def article_to_export_row(article: ProcessedArticle) -> dict[str, Any]:
 
 
 def _article_country(article: ProcessedArticle) -> str | None:
-    from shared.utils.evidence import resolve_country
+    from shared.utils.evidence import resolve_article_country
 
-    legal = getattr(article, "legal_metadata", None)
-    return resolve_country(article.source_id, legal.model_dump() if legal else None)
+    return resolve_article_country(article)
 
 
 def filter_articles(

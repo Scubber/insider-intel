@@ -311,9 +311,14 @@ def test_judgment_to_raw_article_contract() -> None:
         decision_date=datetime(2026, 1, 5, tzinfo=UTC),
     )
     article = judgment_to_raw_article(meta, ["former employee + confidential"], INSIDER_TEXT)
-    # Match marker + text live in hidden content, never in the visible summary.
-    assert article.content is not None and article.content.startswith(MATCH_MARKER_PREFIX)
+    # The judgment text is the hidden content; the match labels live ONLY in
+    # raw — a content marker would hand the spend gate its own query terms
+    # once clean_text flattens it (2026-08-22 review).
+    assert article.content is not None
+    assert MATCH_MARKER_PREFIX not in article.content
     assert INSIDER_TEXT[:50] in article.content
+    assert article.raw is not None
+    assert article.raw["matched_patterns"] == ["former employee + confidential"]
     assert article.summary is not None
     assert MATCH_MARKER_PREFIX not in article.summary
     # Story clustering parses the literal Court:/Docket: lines (CNR = docket).
@@ -376,9 +381,37 @@ def test_forward_second_run_skips_unchanged_partitions(
     bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
     _run_forward(bucket, tmp_path)
     first_fetches = bucket.pdf_fetches()
-    _run_forward(bucket, tmp_path)
-    # ETag unchanged → the second run fetched no parquet and no PDFs.
+    second = _run_forward(bucket, tmp_path)
+    # ETag unchanged → the second run fetched no parquet and no PDFs…
     assert bucket.pdf_fetches() == first_fetches
+    # …but still reports the partitions it CHECKED, so the designed daily
+    # idle pattern (dataset updates 1x/day, refresh runs 4x/day) classifies
+    # "ok", never "empty" → never a spurious [LANE-BROKEN] chip.
+    assert second.sources[0].success and second.sources[0].articles_fetched >= 1
+
+
+def test_pending_dead_letter_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A permanently failing PDF stops consuming budget after 5 spaced tries."""
+    _enable(monkeypatch)
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="GONE", text=None)  # 404s forever
+    _run_forward(bucket, tmp_path)
+    pending = PendingQueue(tmp_path / "state")
+    assert len(pending) == 1
+    key = next(iter(pending._items))
+    pending._items[key]["attempts"] = 5
+    pending.save()
+    with bucket.client() as client:
+        result = run_indiacourts_extract_pending(
+            store_path=str(tmp_path / "raw.jsonl"),
+            state_dir=str(tmp_path / "state"),
+            client=client,
+            now=datetime(2026, 9, 9, tzinfo=UTC),
+        )
+    assert len(PendingQueue(tmp_path / "state")) == 0  # dead-lettered
+    assert result.sources[0].articles_fetched == 0 or result.sources == []
 
 
 def test_forward_diff_processes_only_new_judgments(
@@ -461,7 +494,9 @@ def test_fetch_failure_parks_and_retries_after_cooldown(
             client=client,
             now=datetime(2026, 8, 22, 1, tzinfo=UTC),
         )
-    assert early.sources[0].articles_fetched == 0
+    # Nothing was due → no result row at all (a success/0 row would read as an
+    # "empty" failure and trip the broken-lane chip for a healthy idle queue).
+    assert early.sources == []
 
     # …and succeeds after it, retiring the entry and storing the match.
     with bucket.client() as client:

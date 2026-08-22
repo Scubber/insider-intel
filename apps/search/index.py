@@ -21,7 +21,7 @@ from shared.schemas import (
 )
 from shared.schemas.articles import resolve_channel
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
-from shared.utils.evidence import resolve_country
+from shared.utils.evidence import resolve_article_country
 from shared.utils.model_display import enricher_display_name
 from shared.utils.story_key import compute_story_key
 
@@ -61,11 +61,7 @@ def _article_matches_channel(
 
 def _article_country(article: ProcessedArticle) -> str | None:
     """Jurisdiction of the row's court system; None for non-court rows."""
-    legal = getattr(article, "legal_metadata", None)
-    return resolve_country(
-        article.source_id,
-        legal.model_dump() if legal is not None else None,
-    )
+    return resolve_article_country(article)
 
 
 def _article_matches_country(

@@ -46,9 +46,11 @@ SOURCE_NAME = "Indian High Court Judgments (eCourts open dataset)"
 
 DEFAULT_BASE_URL = "https://indian-high-court-judgments.s3.amazonaws.com"
 
-# Written at the head of RawArticle.content ("scored but hidden"); the spend
-# gate strips lines with this prefix before any body-signal decision — keep in
-# sync with shared/agents/summarize.py::_MATCH_MARKER_PREFIXES.
+# Defense-in-depth prefix: nothing writes it into content any more (matched
+# patterns live in RawArticle.raw only — a content marker would hand the
+# spend gate its own query terms in flattened clean_text), but the gate keeps
+# stripping it (shared/agents/summarize.py::_MATCH_MARKER_PREFIXES) in case a
+# row ever carries one.
 MATCH_MARKER_PREFIX = "IndiaCourts match: "
 
 _S3_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
@@ -176,16 +178,27 @@ def fetch_bytes(
     max_bytes: int,
 ) -> bytes:
     url = _object_url(base_url, key)
+    chunks: list[bytes] = []
+    total = 0
     try:
-        resp = client.get(url)
-        resp.raise_for_status()
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            declared = resp.headers.get("content-length")
+            if declared and declared.isdigit() and int(declared) > max_bytes:
+                raise IndiaCourtsError(f"{key} exceeds {max_bytes} bytes (declared)")
+            for chunk in resp.iter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    # Abort mid-stream: the cap bounds transfer AND memory.
+                    raise IndiaCourtsError(f"{key} exceeds {max_bytes} bytes")
+                chunks.append(chunk)
+    except IndiaCourtsError:
+        raise
     except httpx.HTTPStatusError as exc:
         raise IndiaCourtsError(f"HTTP {exc.response.status_code} for {key}") from exc
     except httpx.RequestError as exc:
         raise IndiaCourtsError(f"request failed for {key}: {exc}") from exc
-    if len(resp.content) > max_bytes:
-        raise IndiaCourtsError(f"{key} exceeds {max_bytes} bytes")
-    return resp.content
+    return b"".join(chunks)
 
 
 def list_partitions(
@@ -242,31 +255,27 @@ def read_partition_metadata(data: bytes, partition: PartitionRef) -> list[Judgme
     """
     import pyarrow.parquet as pq
 
+    wanted_cols = (
+        "title",
+        "cnr",
+        "pdf_link",
+        "court",
+        "judge",
+        "description",
+        "disposal_nature",
+        "decision_date",
+        "pdf_exists",
+    )
     try:
-        table = pq.read_table(
-            io.BytesIO(data),
-            columns=None,
-        )
+        # Column-pruned read: raw_html (bulky scrape residue) is never
+        # decoded, not merely dropped after materialization.
+        names = set(pq.read_schema(io.BytesIO(data)).names)
+        wanted = [c for c in wanted_cols if c in names]
+        table = pq.read_table(io.BytesIO(data), columns=wanted or None)
     except Exception as exc:  # noqa: BLE001 — a corrupt partition must not kill the run
         raise IndiaCourtsError(f"unreadable parquet for {partition.state_name}: {exc}") from exc
 
-    names = set(table.schema.names)
-    wanted = [
-        c
-        for c in (
-            "title",
-            "cnr",
-            "pdf_link",
-            "court",
-            "judge",
-            "description",
-            "disposal_nature",
-            "decision_date",
-            "pdf_exists",
-        )
-        if c in names
-    ]
-    rows = table.select(wanted).to_pylist() if wanted else []
+    rows = table.to_pylist() if wanted else []
     metas: list[JudgmentMeta] = []
     for row in rows:
         pdf_link = str(row.get("pdf_link") or "").strip()
@@ -369,13 +378,16 @@ def judgment_to_raw_article(
         parts.append(f"Judge: {meta.judge}")
     if meta.disposal_nature:
         parts.append(f"Disposal: {meta.disposal_nature}")
-    marker = MATCH_MARKER_PREFIX + "; ".join(matched)
+    # Matched-pattern labels live ONLY in ``raw`` (below): a marker line in
+    # content would flow into flattened clean_text alongside the judgment and
+    # hand the spend gate its own query terms (2026-08-22 review). The
+    # judgment body is its own match signal — nothing else needs scoring.
     return RawArticle(
         title=meta.title or meta.cnr or meta.pdf_basename,
         link=_object_url(base_url, meta.pdf_key),
         published=meta.decision_date,
         summary="\n".join(parts) if parts else None,
-        content=f"{marker}\n{text}",
+        content=text,
         source_id=SOURCE_ID,
         source_name=SOURCE_NAME,
         channel="filings",
@@ -412,7 +424,10 @@ def command_ocr_backend(command: str) -> Callable[[bytes], str]:
     wrapper, ocrmypdf+pdftotext, …) without a code change. Never raises out
     of the returned callable with the PDF contents in the message.
     """
-    argv = shlex.split(command)
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:  # unbalanced quotes etc. — never crash the run
+        raise IndiaCourtsError(f"unparseable ocr command: {exc}") from exc
 
     def run(data: bytes) -> str:
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -433,6 +448,10 @@ def command_ocr_backend(command: str) -> Callable[[bytes], str]:
             return proc.stdout
         except subprocess.TimeoutExpired as exc:
             raise IndiaCourtsError("ocr command timed out") from exc
+        except OSError as exc:
+            # Missing binary / permissions: a config error, never a reason to
+            # kill the whole refresh cycle.
+            raise IndiaCourtsError(f"ocr command failed to start: {exc}") from exc
         finally:
             Path(path).unlink(missing_ok=True)
 
