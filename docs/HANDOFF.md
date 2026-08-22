@@ -59,6 +59,7 @@ prod).
 | #189 | Stamp `forensics.model` from served OpenAI-compat id; `model: auto` (merged; live in the Spark tenant) |
 | #190 | `spark_refresh.sh` wrapper hardening (post-incident: flock, cycle bound, `--build`, reload skip when `SPARK_RELOAD_URL` empty) |
 | #196–#197 | **octoDNS: thederpweb.com zone live on Cloudflare** (zone reconciled; null MX + SPF `-all` + DMARC reject added; `insider-intel.net` apex/www stay Worker-owned behind a `NameRejectlistFilter`) — see thread #13 |
+| #247 | **IndiaCourts lane + jurisdiction plumbing + spend-gate tune** (landed by fast-forward, PR closed-not-merged by GitHub semantics): $0 eCourts lexicon-scan lane (dark), `legal_metadata`/`country` facet, EVIDENCE nation tabs + TACTICS BY REGION, Indian legal postures, export schema v6, `FILINGS_SOURCE_PREFIXES` channel fix, two-part body signal + `STRONG_INSIDER_OFFENSES` ≥3-mention rule — threads #8 and #10 |
 
 ---
 
@@ -107,16 +108,21 @@ prod).
    shipped (variant (a) of the old plan). Variant (b) (cpu-boost + prebuilt
    index) remains optional if wake time itself ever matters.
 8. **International court-filings lanes** — phase 0 (prosecutor/regulator
-   feeds) + phase-2-lite (CanLII RSS) SHIPPED; **IndiaCourts lane BUILT
-   2026-08-22 on branch `claude/indian-court-judgment-eval-3aa51n`
-   (UNMERGED — operator review pending)**: $0 lexicon-scan lane over the CC
-   BY 4.0 eCourts open dataset (all 25 HCs, floor 2000, hub-first walk,
-   dark behind `INDIACOURTS_ENABLED`), with legal provenance
-   (`legal_metadata` + `resolve_country`), Indian legal postures weighted
-   below the adjudicated floor, a `country` facet end to end, EVIDENCE
-   nation tabs + TACTICS BY REGION, and export schema v6. Requirements:
+   feeds) + phase-2-lite (CanLII RSS) SHIPPED; **IndiaCourts lane MERGED
+   2026-08-22** (PR #247 — landed by fast-forward to 377f82c, so GitHub
+   shows it closed, not merged; nothing was lost): $0 lexicon-scan lane
+   over the CC BY 4.0 eCourts open dataset (all 25 HCs, floor 2000,
+   hub-first walk), with legal provenance (`legal_metadata` +
+   `resolve_country`), Indian legal postures weighted below the adjudicated
+   floor, a `country` facet end to end, EVIDENCE nation tabs + TACTICS BY
+   REGION, and export schema v6. Requirements:
    docs/india-courts-requirements.md; lane doc: docs/india-courts-ingest.md.
-   Activation = enable on sparky + optional OCR command (bench first).
+   **Lane is still DARK**: `INDIACOURTS_ENABLED` unset on sparky, reserve
+   still 60 (bump to 120 optional when the history walk starts). Activation
+   = `INDIACOURTS_ENABLED=true` in `.env.spark`, smoke
+   `ingest_indiacourts -v`, verify `/lanes/health` + `?country=IN`;
+   optional OCR command (bench first). Flip only when Indian PDFs should
+   start walking.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
@@ -141,9 +147,9 @@ prod).
    data: executive/officer 230/320 role-known (47%), 26 adjudicated;
    external record classes (Form 4 ×36, public-vs-internal ×83, brokerage)
    make the cases — detecting upward needs no permission to surveil upward.
-10. **Filings spend-gate leak — FIX BUILT 2026-08-22 on branch
-    `claude/indian-court-judgment-eval-3aa51n` (UNMERGED — dry-run review
-    pending).** 2026-08-04 audit: of 553 post-gate enrichments, **58% still
+10. **Filings spend-gate leak — FIXED, MERGED 2026-08-22 (PR #247; live
+    from the next sparky cycle).** 2026-08-04 audit: of 553 post-gate
+    enrichments, **58% still
     adjudicated non-insider** — the in-body ITM alias check passed
     company-v-company IP/trade-secret litigation. The branch implements the
     proposed fix: two-part body signal (ITM alias AND
@@ -170,14 +176,19 @@ prod).
     recovery). "Public statement", "aiding and abetting", bare
     "misappropriation" stay blocked (the 58%-leak vocabulary); strong
     phrases stay OUT of the framing list — there one phrase would satisfy
-    both halves. Expected recapture ~20–23 of 51 (FN → ~3%). The replay
-    script now prints a **strong-offense-only** section (these rows never
-    show as old→new transitions — the old alias-only gate billed them
-    too); judge the tune there and by SAVINGS vs the 206 baseline.
-    **Remaining review gate:** re-run the replay on the branch and confirm
-    the securities cluster is recovered before merging #247. Blocked rows
-    were CourtListener-only; existing enrichments are untouched (future
-    spend only).
+    both halves. **Review gate PASSED (2026-08-22 replay on the tuned
+    head, 7,298 filings rows): old 2,310 → new 2,050 bills; SAVINGS 196
+    (−10 vs the 206 pre-tune baseline = the strong path's cost: 9 insider-
+    trading + 1 embezzlement non-insider bills); FN 51 → 42 (real
+    recapture 9; the ≥3-mention floor holds back part of the securities
+    cluster). The leftover 42 are the "public statement" / "aiding and
+    abetting" / no-alias pile — blocked on purpose.** Caveat on the replay
+    report: the strong-offense-only counts originally included rows that
+    would have billed anyway via use_cases/alignment (the operator read
+    around it; the script now excludes them, so the bucket is exactly
+    "billed only because of the strong path"). Blocked rows were
+    CourtListener-only; existing enrichments are untouched (future spend
+    only).
 11. **Admin page** — direction discussed, not decided: Cloudflare Access in
     front of an `/admin` route (free, auth at edge) vs Google IAP (needs LB,
     ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? —

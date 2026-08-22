@@ -61,10 +61,14 @@ def _new_gate(text: str, use_cases: list[str], alignment: str | None) -> bool:
     return bool(use_cases) or alignment == "insider" or _body_has_insider_signal(body)
 
 
-def _strong_only_hits(text: str) -> tuple[str, ...]:
-    """Offenses that bill this row via the strong path where alias∧framing
-    alone would block it — the tune's marginal reopening, invisible in the
-    old→new transitions."""
+def _strong_only_hits(text: str, use_cases: list[str], alignment: str | None) -> tuple[str, ...]:
+    """Offenses that are the SOLE reason this row bills — every other route
+    (use_cases, alignment, alias∧framing) would block it. The tune's marginal
+    reopening, invisible in the old→new transitions. (The first replay run
+    counted rows that also cleared via use_cases/alignment, inflating the
+    bucket — 2026-08-22 operator catch.)"""
+    if use_cases or alignment == "insider":
+        return ()
     body = strip_match_markers(text or "").strip()
     if len(body) < FILING_MIN_CHARS:
         return ()
@@ -119,7 +123,7 @@ def main() -> int:
             elif new and not old:
                 transitions[f"added:{v}"] += 1
             if new:
-                for offense in _strong_only_hits(text):
+                for offense in _strong_only_hits(text, use_cases, alignment):
                     strong_only[f"{offense}:{v}"] += 1
 
     print(f"corpus: {path}")
@@ -141,7 +145,7 @@ def main() -> int:
             print(f"  {family}: {n}")
     if strong_only:
         print()
-        print("strong-offense-only bills (alias∧framing alone would block), by phrase:")
+        print("strong-offense-only bills (no other route would bill them), by phrase:")
         for key in sorted(strong_only):
             print(f"  {key}: {strong_only[key]}")
         print("  ↑ ':insider' rows are the recaptured FNs; ':non-insider' rows are")
