@@ -3,7 +3,7 @@ name: pages
 # Deploys web/ as the Pages artifact. A slim boot snapshot (web/data/) is
 # generated into the artifact — never committed to git — so the UI can paint
 # instantly from cache (CACHED badge) while the Cloud Run API cold-starts,
-# then swap to LIVE. The schedule keeps the snapshot ≤6h stale (fires ~40min
+# then swap to LIVE. The schedule keeps the snapshot ≤24h stale (fires ~40min
 # after each corpus refresh). Snapshot generation is best-effort: if the
 # corpus copy fails the site still deploys, just without a fresh cache.
 on:

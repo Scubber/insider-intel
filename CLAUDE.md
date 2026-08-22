@@ -17,7 +17,7 @@ intel.thederpweb.com (Pages, web/) ──► api.intel.thederpweb.com (Cloud Run
                                           │ GCS FUSE mount at /app/data
                        gs://insider-intel-502413-corpus  (processed/ raw/ state/ config/)
                                           ▲ read-write
-DGX Spark cron (0 4,10,16,22 UTC) ──► spark_refresh.sh (refresh tenant) ──► POST /reload
+DGX Spark cron (daily) ──► spark_refresh.sh (refresh tenant) ──► POST /reload
   (Cloud Scheduler + Cloud Run Job corpus-refresh: PAUSED since the 2026-08-16
    cutover, kept as rollback — docs/spark-cutover-handoff.md)
 ```
@@ -486,3 +486,11 @@ green before merge (it runs the same Makefile targets you ran locally).
 ops knobs, or live state updates CLAUDE.md and/or docs/HANDOFF.md in that
 same PR — never "later". HANDOFF's Last-updated date is the freshness
 tripwire; the PR template carries the checklist.
+**Ops changes have no PR — document them anyway, in the same sitting**
+(operator directive 2026-08-22, after the refresh cadence changed on sparky
+while every doc kept saying 4×/day): any change to live operational state —
+cron cadence, `.env.spark` knobs, schedulers paused or resumed, secret
+mappings, caps — updates docs/HANDOFF.md (and CLAUDE.md when the
+architecture map is affected) immediately, code change or not. A session
+that finds the docs disagreeing with observed reality fixes the docs as
+part of that session — a docs/reality mismatch is a bug, not a footnote.

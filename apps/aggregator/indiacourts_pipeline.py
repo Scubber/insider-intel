@@ -210,10 +210,11 @@ class _Stats:
     def work_done(self) -> int:
         """Units examined this run, for lane health.
 
-        An idle forward cycle (every partition ETag unchanged — the designed
-        daily pattern, since the dataset updates 1x/day and refreshes run
-        4x/day) still CHECKED partitions; reporting 0 here would classify a
-        healthy lane as "empty" and trip [LANE-BROKEN] after 3 quiet cycles.
+        An idle forward cycle (every partition ETag unchanged — normal
+        whenever the daily dataset hasn't regenerated since the last pass,
+        at any refresh cadence) still CHECKED partitions; reporting 0 here
+        would classify a healthy lane as "empty" and trip [LANE-BROKEN]
+        after 3 quiet cycles.
         """
         return self.pdfs_attempted or self.partitions_checked
 

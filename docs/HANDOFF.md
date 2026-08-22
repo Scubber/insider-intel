@@ -8,8 +8,8 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 **Last updated:** 2026-08-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
-(cron 4×/day since the 2026-08-16 cutover; Cloud Scheduler paused as
-rollback).
+(cron **daily** — reduced from the cutover's 4×/day, operator-confirmed
+2026-08-22; Cloud Scheduler paused as rollback).
 **Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
 working design, blessed before the next UI redesign — restore `web/**` from
 here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
@@ -21,11 +21,11 @@ prod).
 
 | Area | State |
 |---|---|
-| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 4,10,16,22 * * *` UTC runs `scripts/spark_refresh.sh` (pull → pipeline → push → `/reload`), log `~/insider-intel/logs/spark_refresh.log`. Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
-| **Corpus** | **7,193 rows**, **1,839 enriched** (forensics present; 2026-08-17 00:31Z cycle), **540 LLM-adjudicated insider cases** (2026-08 count). Writes land 4×/day (04/10/16/22 UTC generations on `processed/articles.jsonl`). |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron **daily** (operator-confirmed 2026-08-22; exact schedule = `crontab -l` on the box — the Pages snapshot fires 08:40 UTC ≈ 40min after the refresh) runs `scripts/spark_refresh.sh` (pull → pipeline → push → `/reload`), log `~/insider-intel/logs/spark_refresh.log`. Enrichment caps were sized for 4×/day (40/30) — at daily cadence they should scale ~4× (operator decision pending). Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
+| **Corpus** | **7,193 rows**, **1,839 enriched** (forensics present; 2026-08-17 00:31Z cycle), **540 LLM-adjudicated insider cases** (2026-08 count). Writes land daily (one generation per refresh on `processed/articles.jsonl`). |
 | **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM `Qwen/Qwen3.8-27B-FP8`, `model: auto`, timeout 900s) — **$0 LLM spend**. Caps raised operator-approved: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`, `RESERVE=30` (cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
-| **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact on a 6h schedule; UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
+| **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact daily (08:40 UTC, ~40min after the refresh); UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
 | **Service memory** | **2Gi asserted in `deploy-api.yml`** after the 2026-07-26 OOM burst-503 outage at legacy 1Gi. Must grow with the corpus. |
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
@@ -94,7 +94,7 @@ prod).
    generator. Not built.
 5. **Spark as the corpus tenant — DONE 2026-08-16 (cutover complete).**
    Architecture shipped (#188, hardened by #190, `model: auto` via #189);
-   sparky is the production refresh tenant: cron `0 4,10,16,22 * * *` UTC,
+   sparky is the production refresh tenant: cron daily (see Live state row),
    sparky-only Qwen chain ($0 LLM spend), caps 40/30, PACER creds on the
    box, first unattended cycle verified 2026-08-17 00:31Z. Cloud Scheduler
    `corpus-refresh-schedule` paused as rollback. Full record + operating

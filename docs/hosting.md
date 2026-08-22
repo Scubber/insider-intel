@@ -206,7 +206,9 @@ note the corpus now comes from the bucket mount, not the image — the baked
 
 ## Refresh the public corpus
 
-Automatic: every 6 hours via Cloud Scheduler (`corpus-refresh-schedule`).
+Automatic: daily via sparky's cron (the Cloud Scheduler
+`corpus-refresh-schedule` is PAUSED as rollback; it fires every 6 hours if
+resumed).
 Manual: `gcloud run jobs execute corpus-refresh --region us-east1 --wait`.
 The job logs each source and finishes by POSTing `/reload`; Reddit RSS sources
 429 from cloud IPs (known), everything else pulls normally.

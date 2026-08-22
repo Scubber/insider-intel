@@ -81,7 +81,7 @@ RSS / CourtListener / social / publications
    → static UI (GitHub Pages) : Stream | Matrix | EVIDENCE | Workbench
 ```
 
-Production is fully automated: the corpus self-refreshes every 6 hours via a
+Production is fully automated: the corpus self-refreshes daily via a
 Cloud Run job, and every merge to `main` deploys (keyless OIDC — no stored
 credentials). LLM spend is gated by insider-signal checks and billed **once
 per article, ever**; enrichment history is append-only.

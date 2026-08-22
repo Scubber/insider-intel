@@ -5433,7 +5433,7 @@
             "evp-note",
             "No observed technique yet — one appears here the first time a verdict-true case " +
               "with extracted methods exhibits a technique whose catalog controls intersect " +
-              "this category's mapping. The corpus refresh sweeps every 6 hours; coverage " +
+              "this category's mapping. The corpus refresh sweeps daily; coverage " +
               "fills in as cases enrich.",
           ),
         );
@@ -5669,7 +5669,7 @@
           "evp-note",
           "No case document names this product yet — it appears here when one does. " +
             "Mentions are matched word-boundary against the authored alias map in stored " +
-            "court text; the corpus refresh sweeps every 6 hours.",
+            "court text; the corpus refresh sweeps daily.",
         );
         td.colSpan = 3;
         tr.appendChild(td);

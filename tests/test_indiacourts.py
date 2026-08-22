@@ -384,8 +384,8 @@ def test_forward_second_run_skips_unchanged_partitions(
     second = _run_forward(bucket, tmp_path)
     # ETag unchanged → the second run fetched no parquet and no PDFs…
     assert bucket.pdf_fetches() == first_fetches
-    # …but still reports the partitions it CHECKED, so the designed daily
-    # idle pattern (dataset updates 1x/day, refresh runs 4x/day) classifies
+    # …but still reports the partitions it CHECKED, so an idle cycle (the
+    # daily dataset hasn't regenerated since the last pass) classifies
     # "ok", never "empty" → never a spurious [LANE-BROKEN] chip.
     assert second.sources[0].success and second.sources[0].articles_fetched >= 1
 
