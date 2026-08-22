@@ -141,9 +141,13 @@ _MATCH_MARKER_PREFIXES: tuple[str, ...] = (
 # Longest shipped CourtListener query is ~204 chars; wiping the prefix plus
 # this window removes the whole query from flattened text at the cost of at
 # most a couple hundred chars of real body — a conservative bias under the
-# 1,500-char filings floor.
+# 1,500-char filings floor. The window is TEMPERED (never consumes a
+# following marker's prefix) and the wipe loops to a fixed point, so
+# adjacent or straddling markers can't shield each other's residue
+# (tests/test_summarize.py pins every shipped query inside the window).
 _MARKER_SEGMENT_RE = re.compile(
-    r"(?:courtlistener query:|indiacourts match:).{0,240}",
+    r"(?:courtlistener query:|indiacourts match:)"
+    r"(?:(?!courtlistener query:|indiacourts match:).){0,240}",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -160,25 +164,70 @@ def strip_match_markers(text: str) -> str:
     lowered = text.lower()
     if not any(prefix in lowered for prefix in _MATCH_MARKER_PREFIXES):
         return text
-    kept = [
+    kept = "\n".join(
         line
         for line in text.splitlines()
         if not line.strip().lower().startswith(_MATCH_MARKER_PREFIXES)
-    ]
-    return _MARKER_SEGMENT_RE.sub(" ", "\n".join(kept))
+    )
+    for _ in range(8):  # fixed point; bounded against pathological inputs
+        wiped = _MARKER_SEGMENT_RE.sub(" ", kept)
+        if wiped == kept:
+            return wiped
+        kept = wiped
+    return kept
+
+
+# A filing must NAME its offense repeatedly to bill on the strong path.
+# Prosecutions for insider trading or embezzlement say so throughout the
+# document; a statute-title citation, a policy mention, or a precedent quote
+# is a singleton. Guards the two bare-phrase DEFAULT_QUERIES lanes, whose
+# every row contains its admitting phrase by construction (2026-08-22
+# adversarial review).
+_STRONG_OFFENSE_MIN_MENTIONS = 3
+
+
+def strong_offense_hits(body: str) -> tuple[str, ...]:
+    """STRONG_INSIDER_OFFENSES phrases the body names as its subject.
+
+    Counts mentions after excising STRONG_OFFENSE_BOILERPLATE (statute
+    titles, policy names); an offense qualifies at
+    ``_STRONG_OFFENSE_MIN_MENTIONS``. Exposed for the replay script's
+    strong-only bucket — keep it in lockstep with _body_has_insider_signal.
+    """
+    from shared.itm.aliases import STRONG_INSIDER_OFFENSES, STRONG_OFFENSE_BOILERPLATE
+
+    lowered = body.lower()
+    if not any(offense in lowered for offense in STRONG_INSIDER_OFFENSES):
+        return ()
+    for boilerplate in STRONG_OFFENSE_BOILERPLATE:
+        lowered = lowered.replace(boilerplate, " ")
+    return tuple(
+        offense
+        for offense in STRONG_INSIDER_OFFENSES
+        if lowered.count(offense) >= _STRONG_OFFENSE_MIN_MENTIONS
+    )
 
 
 def _body_has_insider_signal(body: str) -> bool:
-    """Does the body carry BOTH an ITM alias hit and insider framing language?
+    """Does the body carry an insider signal strong enough to bill on?
 
-    A lone alias proved too weak a bar (2026-08-04 audit: 58% of post-gate
-    filings enrichments adjudicated non-insider — company-v-company IP
-    litigation clears one alias trivially). Framing keywords ("former
-    employee", "unauthorized access", …) anchor the document to an insider
-    scenario; both checks are pure string scans and cost nothing.
+    Two ways to pass, both pure string scans:
+
+    1. A repeatedly-named STRONG_INSIDER_OFFENSES phrase — offense names that
+       ARE ITM infringements ("insider trading" = IF016.004, "embezzlement" =
+       IF016), counted by strong_offense_hits. The 2026-08-22 replay showed
+       securities prosecutions carry no employment-framing vocabulary at all,
+       so the two-part rule below was blocking the most canonical insider
+       cases in the corpus.
+    2. An ITM alias hit AND an insider-framing keyword. A lone ordinary alias
+       proved too weak a bar (2026-08-04 audit: 58% of post-gate filings
+       enrichments adjudicated non-insider — company-v-company IP litigation
+       clears one alias trivially); framing anchors it to an insider scenario.
     """
     from shared.utils.entities import find_framing_keywords, match_itm_techniques
 
+    if strong_offense_hits(body):
+        return True
     return bool(match_itm_techniques(body)) and bool(find_framing_keywords(body))
 
 

@@ -1,10 +1,17 @@
 """Replay the filings spend gate (old vs new) over a stored processed corpus.
 
 Measures the blast radius of the 2026-08 gate tightening (HANDOFF item 10)
-BEFORE it decides real spend: the two-part body signal (ITM alias AND
-insider-framing keyword, match markers stripped) versus the old one-alias bar,
+BEFORE it decides real spend: the current body signal (a repeatedly-named
+STRONG_INSIDER_OFFENSES phrase alone, OR an ITM alias AND an insider-framing
+keyword — match markers stripped either way) versus the old one-alias bar,
 and the resolve_channel fix that moves canlii-*/indiacourts-* rows from the
 news gate to the filings gate.
+
+Rows the strong-offense path re-admits were ALSO billed by the old one-alias
+gate, so they never show as an old→new transition — the strong-only section
+below breaks them out explicitly (tuned-bills vs what alias∧framing alone
+would do), by phrase and adjudication. Compare SAVINGS against the prior
+run's number to see the tune's cost.
 
 Run where the corpus lives (sparky mounts it; a web sandbox cannot reach GCS):
 
@@ -30,9 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from shared.agents.summarize import (  # noqa: E402
     _body_has_insider_signal,
     strip_match_markers,
+    strong_offense_hits,
 )
 from shared.schemas.articles import resolve_channel  # noqa: E402
-from shared.utils.entities import match_itm_techniques  # noqa: E402
+from shared.utils.entities import find_framing_keywords, match_itm_techniques  # noqa: E402
 
 FILING_MIN_CHARS = 1_500
 
@@ -46,11 +54,23 @@ def _old_gate(text: str, use_cases: list[str], alignment: str | None) -> bool:
 
 
 def _new_gate(text: str, use_cases: list[str], alignment: str | None) -> bool:
-    """The tightened gate: markers stripped, alias AND framing required."""
+    """The current gate: markers stripped, strong offense OR alias∧framing."""
     body = strip_match_markers(text or "").strip()
     if len(body) < FILING_MIN_CHARS:
         return False
     return bool(use_cases) or alignment == "insider" or _body_has_insider_signal(body)
+
+
+def _strong_only_hits(text: str) -> tuple[str, ...]:
+    """Offenses that bill this row via the strong path where alias∧framing
+    alone would block it — the tune's marginal reopening, invisible in the
+    old→new transitions."""
+    body = strip_match_markers(text or "").strip()
+    if len(body) < FILING_MIN_CHARS:
+        return ()
+    if bool(match_itm_techniques(body)) and bool(find_framing_keywords(body)):
+        return ()
+    return strong_offense_hits(body)
 
 
 def main() -> int:
@@ -66,6 +86,7 @@ def main() -> int:
     totals: Counter[str] = Counter()
     transitions: Counter[str] = Counter()
     blocked_by_source: Counter[str] = Counter()
+    strong_only: Counter[str] = Counter()
     with path.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -97,6 +118,9 @@ def main() -> int:
                 blocked_by_source[source_id.split("-")[0]] += 1
             elif new and not old:
                 transitions[f"added:{v}"] += 1
+            if new:
+                for offense in _strong_only_hits(text):
+                    strong_only[f"{offense}:{v}"] += 1
 
     print(f"corpus: {path}")
     print(f"filings rows (new resolve_channel): {totals['filings_rows']}")
@@ -115,6 +139,13 @@ def main() -> int:
         print("blocked rows by source family:")
         for family, n in blocked_by_source.most_common():
             print(f"  {family}: {n}")
+    if strong_only:
+        print()
+        print("strong-offense-only bills (alias∧framing alone would block), by phrase:")
+        for key in sorted(strong_only):
+            print(f"  {key}: {strong_only[key]}")
+        print("  ↑ ':insider' rows are the recaptured FNs; ':non-insider' rows are")
+        print("    the tune's cost — compare SAVINGS against the prior run's number.")
     if totals.get("unparseable"):
         print(f"\nskipped unparseable lines: {totals['unparseable']}")
     return 0

@@ -21,9 +21,9 @@ prod).
 
 | Area | State |
 |---|---|
-| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron **daily** (operator-confirmed 2026-08-22; exact schedule = `crontab -l` on the box — the Pages snapshot fires 08:40 UTC ≈ 40min after the refresh) runs `scripts/spark_refresh.sh` (pull → pipeline → push → `/reload`), log `~/insider-intel/logs/spark_refresh.log`. Enrichment caps were sized for 4×/day (40/30) — at daily cadence they should scale ~4× (operator decision pending). Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
-| **Corpus** | **7,193 rows**, **1,839 enriched** (forensics present; 2026-08-17 00:31Z cycle), **540 LLM-adjudicated insider cases** (2026-08 count). Writes land daily (one generation per refresh on `processed/articles.jsonl`). |
-| **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM `Qwen/Qwen3.8-27B-FP8`, `model: auto`, timeout 900s) — **$0 LLM spend**. Caps raised operator-approved: `SUMMARIZER_MAX_ARTICLES_PER_RUN=40`, `RESERVE=30` (cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron **daily** at 08:00 UTC (operator-confirmed 2026-08-22; the Pages snapshot fires 08:40 UTC ≈ 40min after) runs `scripts/spark_refresh.sh` (**GCS** pull → pipeline → push → `/reload` — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Enrichment caps rescaled for daily cadence 2026-08-22: `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60` (40/30 was 4×/day sizing). Real run 1 (19:44Z–21:36Z, watched) passed all gates; first unattended cycle 2026-08-17 00:00→00:31:51Z verified end-to-end. Cloud Scheduler `corpus-refresh-schedule` **paused** ~19:45Z, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Full ops log: [`spark-cutover-handoff.md`](spark-cutover-handoff.md). |
+| **Corpus** | 2026-08-17 snapshot (**stale**): 7,193 rows / 1,839 enriched / 540 insider cases. The 2026-08-22 gate replay measured **7,283 filings-channel rows** and **896 adjudicated-insider filings** — the corpus has grown well past the snapshot; take fresh counts from the next cycle before citing any. Writes land daily (one generation per refresh on `processed/articles.jsonl`). |
+| **Enrichment** | **ON, Spark-local since 2026-08-16**: chain `SUMMARIZER_LLM_PROVIDER=sparky` only (vLLM, `model: auto` — serves whatever SKU is loaded; a Nemotron model as of 2026-08-22 per operator, docs previously said Qwen; timeout 900s) — **$0 LLM spend**. Caps: `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60` since the daily-cadence rescale 2026-08-22 (40/30 under 4×/day; cloud trickle was 25/15, Haiku, ≈$1–2/day). Known-accepted: hunt synthesis fails under Qwen thinking mode (`OPENAI_COMPAT_ENABLE_THINKING` knob merged, activation gated on a gold-set A/B); occasional Qwen JSON parse failures (guided-JSON queued). Spend gates live (see CLAUDE.md) — thread #10's filings-gate leak still matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Snapshot-first boot LIVE** (2026-08-06): `pages.yml` builds `web/data/` (slim 200-row snapshot, never committed) into the Pages artifact daily (08:40 UTC, ~40min after the refresh); UI paints ~3s under a CACHED badge, `probeLiveApi` backs off ~75s, flips LIVE on `/health`. deploy-pages poll timeout 20min (backend observed slow). |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
@@ -150,10 +150,35 @@ prod).
     proposed fix: two-part body signal (ITM alias AND
     `INSIDER_FRAMING_KEYWORDS` hit), match-marker stripping, and the
     `FILINGS_SOURCE_PREFIXES` channel fix (canlii-/indiacourts- were
-    news-gated). **Review gate before merge:** run
-    `python scripts/replay_filings_gate.py` on sparky against the live
-    corpus (937 stored non-insider vs 540 insider rows) and read the
-    false-negative cost it reports.
+    news-gated). **Replay run on the live corpus 2026-08-22**: 7,283 filings
+    rows; old gate bills 2,295 → new 2,011; savings 206 adjudicated
+    non-insider; false negatives 51/896 adjudicated-insider filings (5.7%),
+    every one with zero framing keywords after marker strip. FN alias
+    histogram: "public statement" ×23 (IF012), "insider trading" ×20
+    (IF016.004), "aiding and abetting" ×6 (ME018), embezzlement/
+    misappropriation ×3 (IF016), no alias ×6. Tuned per operator directive
+    (follow ITM): `STRONG_INSIDER_OFFENSES` = insider trading (IF016.004) +
+    embezzlement (IF016) — ITM **infringements** only — pass the body
+    signal alone when named **≥3×** after statute-title/policy boilerplate
+    excision (`STRONG_OFFENSE_BOILERPLATE`). The mention floor exists
+    because two `DEFAULT_QUERIES` are the bare phrases themselves — every
+    row those lanes admit contains its phrase by construction, so
+    phrase-alone degenerated them to a body-length gate (2026-08-22
+    adversarial review, executed counterexamples: 10b-5 statute-title
+    citations, ERISA/Dudenhoeffer quotes, D&O disputes). "Economic
+    espionage" was tried and REMOVED (ITM has espionage only as motive
+    MT017/MT005.x; §1831 external-APT indictments false-billed; zero FN
+    recovery). "Public statement", "aiding and abetting", bare
+    "misappropriation" stay blocked (the 58%-leak vocabulary); strong
+    phrases stay OUT of the framing list — there one phrase would satisfy
+    both halves. Expected recapture ~20–23 of 51 (FN → ~3%). The replay
+    script now prints a **strong-offense-only** section (these rows never
+    show as old→new transitions — the old alias-only gate billed them
+    too); judge the tune there and by SAVINGS vs the 206 baseline.
+    **Remaining review gate:** re-run the replay on the branch and confirm
+    the securities cluster is recovered before merging #247. Blocked rows
+    were CourtListener-only; existing enrichments are untouched (future
+    spend only).
 11. **Admin page** — direction discussed, not decided: Cloudflare Access in
     front of an `/admin` route (free, auth at edge) vs Google IAP (needs LB,
     ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? —
@@ -188,6 +213,17 @@ prod).
     auto-completes by **2026-08-21**. Route 53 hosted zone retained as
     rollback. Remaining: transfer auto-completion, then the .net aging
     clock before the prod cutover.
+    **BUG FIX QUEUED (operator, 2026-08-22): move the API onto
+    insider-intel.net** — today the API lives at `api.intel.thederpweb.com`
+    (Cloud Run domain mapping; `web/config.js` points every public host at
+    it) while insider-intel.net serves only the park-redirect Worker with
+    its apex/www guarded by the octoDNS `NameRejectlistFilter`. Scheduled
+    **after the India-lane deploy** (operator ordering). Scope: add
+    `api.insider-intel.net` DNS via the `dns/**` merge-audited flow (lift or
+    scope the rejectlist for the `api` name), create the Cloud Run domain
+    mapping, wait out cert propagation (see gotchas — verify with repeated
+    curls), update `web/config.js` + API `CORS_ORIGINS`, keep the old
+    hostname serving as an alias until cutover confidence.
 
 ---
 

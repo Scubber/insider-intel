@@ -269,6 +269,54 @@ CURATED_ALIASES: dict[str, tuple[str, ...]] = {
     "AF032": ("system time modification", "clock skew", "timestomp clock"),
 }
 
+# Offense names that are DEFINITIONALLY insider conduct — anchored to ITM
+# INFRINGEMENTS, per operator directive (follow the Insider Threat Matrix):
+# "insider trading" IS technique IF016.004, "embezzlement" is the core of
+# IF016 (Misappropriation of Funds). The act itself establishes an insider,
+# so the filings spend gate accepts a repeated in-body mention ALONE — the
+# 2026-08-22 replay found 51/896 adjudicated-insider filings blocked by the
+# alias∧framing rule (histogram: "public statement" ×23, "insider trading"
+# ×20, "aiding and abetting" ×6, embezzlement/misappropriation ×3, no alias
+# ×6); securities prosecutions never carry employment-framing vocabulary.
+# Membership rules, hard-won:
+# - ITM infringements only. "Economic espionage" was tried and REMOVED: in
+#   ITM espionage is a MOTIVE (MT017, MT005.x), not an infringement — §1831
+#   prosecutions of external nation-state hackers contain the phrase with no
+#   insider anywhere (verified false-bill), and the FN histogram showed zero
+#   recovery from it.
+# - "public statement", "aiding and abetting", bare "misappropriation" stay
+#   BLOCKED — the weak-alias vocabulary the 58% company-v-company leak was
+#   made of (trade-secret "misappropriation" is vendor litigation).
+# - Deliberately NOT merged into INSIDER_FRAMING_KEYWORDS: there, one phrase
+#   would satisfy both halves of the two-part signal and reopen the leak.
+# - A bare mention is NOT enough (see STRONG_OFFENSE_BOILERPLATE and the
+#   min-mentions rule in summarize.py): two DEFAULT_QUERIES are the verbatim
+#   phrases "insider trading"/"economic espionage", so every row those lanes
+#   admit contains its admitting phrase by construction — phrase-alone would
+#   degenerate those lanes to a body-length-only gate (2026-08-22 adversarial
+#   review, with executed counterexamples: 10b-5 class actions citing the
+#   Insider Trading and Securities Fraud Enforcement Act, ERISA stock-drop
+#   suits quoting Dudenhoeffer, D&O coverage disputes).
+# - "embezzlement" precision is coupled to COURTLISTENER_COMPANY_WATCHLIST:
+#   each bare-company catch-all widens the population whose bodies recite
+#   "embezzlement" incidentally (statutory 523(a)(4) boilerplate). Fine at
+#   today's watchlist size; re-check the replay when the list grows.
+STRONG_INSIDER_OFFENSES: tuple[str, ...] = (
+    "insider trading",
+    "embezzlement",
+)
+
+# Collocations that contain a strong offense phrase but never indicate the
+# filing is ABOUT that offense: statute titles and corporate-policy names
+# recited in passing. Excised before strong-offense mentions are counted.
+STRONG_OFFENSE_BOILERPLATE: tuple[str, ...] = (
+    "insider trading and securities fraud enforcement act",
+    "insider trading sanctions act",
+    "insider trading policies",
+    "insider trading policy",
+    "insider trading procedures",
+)
+
 # Framing terms that boost insider-relevance even without a technique hit.
 INSIDER_FRAMING_KEYWORDS: tuple[str, ...] = (
     "insider threat",

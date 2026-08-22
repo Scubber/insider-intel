@@ -96,7 +96,14 @@ were LLM-adjudicated non-cases before these gates:
   **and** an insider signal *in the body itself* — since 2026-08 a TWO-part
   signal: an ITM alias match **and** an `INSIDER_FRAMING_KEYWORDS` hit (a lone
   alias passed company-v-company IP litigation — 58% of post-gate enrichments
-  adjudicated non-insider), or a use-case / insider-alignment verdict. Ingest
+  adjudicated non-insider), or a use-case / insider-alignment verdict. One
+  exception (2026-08-22 replay: alias∧framing blocked 51/896 adjudicated-
+  insider filings, mostly securities prosecutions): a `STRONG_INSIDER_OFFENSES`
+  phrase — ITM *infringements* only ("insider trading" IF016.004,
+  "embezzlement" IF016) — passes alone, but only named ≥3× with statute-title/
+  policy boilerplate excised, because two `DEFAULT_QUERIES` are those bare
+  phrases and every row those lanes admit contains its phrase by construction.
+  Ingest
   match-marker lines ("CourtListener query: …" / "IndiaCourts match: …") are
   stripped before every body check so a marker can't qualify its own document.
   The per-article `itm_hits` fire off docket metadata — which embeds the CL

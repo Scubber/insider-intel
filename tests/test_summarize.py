@@ -158,6 +158,116 @@ def test_ingest_match_marker_cannot_self_qualify() -> None:
     assert strip_match_markers("plain body text") == "plain body text"
 
 
+def test_strong_offense_named_repeatedly_suffices_without_framing() -> None:
+    """Securities prosecutions carry no employment-framing vocabulary at all —
+    the 2026-08-22 replay found the alias∧framing rule blocking 51/896
+    adjudicated-insider filings, dominated by insider-trading cases. Offense
+    names that ARE ITM infringements (IF016.004 insider trading, IF016
+    embezzlement) pass alone — but only NAMED REPEATEDLY: two DEFAULT_QUERIES
+    are the bare phrases themselves, so every row those lanes admit contains
+    its admitting phrase by construction, and a singleton mention (statute
+    title, policy, precedent quote) must not bill."""
+    from shared.agents.summarize import qualifies
+
+    securities = ("x " * 800) + (
+        "the indictment charges insider trading; the defendant's insider "
+        "trading netted $2m, and the insider trading counts survive"
+    )
+    embezzle = ("x " * 800) + (
+        "convicted of embezzlement; the embezzlement of escrow funds spanned "
+        "three years, and restitution reflects the embezzlement total"
+    )
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=securities)
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=embezzle)
+    # A singleton mention is a citation, not a subject.
+    single = ("x " * 800) + "count two references insider trading in passing"
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=single)
+    # Statute titles and policy names are excised before counting — a 10b-5
+    # suit citing the Insider Trading and Securities Fraud Enforcement Act or
+    # reviewing an insider trading policy is not an insider-trading case.
+    boiler = ("x " * 800) + (
+        "under the Insider Trading and Securities Fraud Enforcement Act, "
+        "the Insider Trading and Securities Fraud Enforcement Act provides, "
+        "per the Insider Trading and Securities Fraud Enforcement Act and "
+        "the company's insider trading policy"
+    )
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=boiler)
+    # "economic espionage" is deliberately NOT strong: in ITM espionage is a
+    # motive (MT017/MT005.x), not an infringement, and §1831 prosecutions of
+    # external nation-state hackers contain the phrase with no insider at all.
+    espionage = ("x " * 800) + (
+        "economic espionage under section 1831; the economic espionage counts "
+        "allege economic espionage by foreign hackers"
+    )
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=espionage)
+    # Weak aliases from the FN histogram stay blocked on purpose — "public
+    # statement" (IF012) and "aiding and abetting" (ME018) are the vocabulary
+    # of the 58% company-v-company leak, and bare "misappropriation" is
+    # trade-secret vendor litigation. None may bill without framing.
+    for weak in ("public statement", "aiding and abetting", "misappropriation"):
+        body = ("x " * 800) + f"the complaint describes a {weak} by the respondent"
+        assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=body), weak
+    # The strong list must never leak through the lane's own match marker:
+    # "insider trading" is literally a CourtListener query, so the marker is
+    # stripped before the strong-offense scan runs — in the line shape AND in
+    # flattened clean_text, and it never contributes to the mention count.
+    from shared.utils.text import to_plain_text
+
+    marker = "CourtListener query: insider trading"
+    assert not qualifies(
+        itm_hits=[], use_cases=[], channel="filings", text=f"{marker}\n" + ("y " * 900)
+    )
+    # Title prefix keeps the flattened line from starting with the marker, so
+    # the SEGMENT wipe (not the line filter) must do the work.
+    flat = to_plain_text(f"Case Title\n{marker}\n" + ("y " * 900))
+    assert "\n" not in flat and flat.lower().startswith("case title")
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=flat)
+    two_plus_marker = to_plain_text(
+        f"Case Title\n{marker}\n"
+        + ("y " * 900)  # stays above the 1,500-char floor after the wipe
+        + "insider trading is alleged; the insider trading claim is count one"
+    )
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=two_plus_marker)
+    # And a strong offense must not weaken the news gate (filings-only rule).
+    assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=securities)
+
+
+def test_marker_wipe_survives_straddling_markers() -> None:
+    """Two markers where the second's prefix starts inside the first's wipe
+    window must both be removed — the tempered window + fixed-point loop
+    guarantee no marker residue reaches the strong-offense scan."""
+    from shared.agents.summarize import qualifies, strip_match_markers
+    from shared.utils.text import to_plain_text
+
+    first = "CourtListener query: " + ("pad " * 50)  # ~200 chars of query
+    second = "CourtListener query: insider trading insider trading insider trading"
+    flat = to_plain_text(f"Case Title\n{first}{second} " + ("y " * 900))
+    stripped = strip_match_markers(flat)
+    assert "query:" not in stripped.lower()
+    assert "insider trading" not in stripped.lower()
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=flat)
+
+
+def test_shipped_queries_fit_marker_wipe_window() -> None:
+    """The 240-char wipe window is the sole defense in flattened clean_text,
+    so every query a lane can actually emit must vanish inside it — including
+    watchlist expansions with generously long company names (the scope terms
+    embed 'embezzlement' ~141 chars past the prefix)."""
+    from apps.aggregator.courtlistener import DEFAULT_QUERIES, company_watchlist_queries
+    from shared.agents.summarize import strip_match_markers
+    from shared.utils.text import to_plain_text
+
+    long_name = "Amalgamated Consolidated International Holdings of America Incorporated"
+    queries = list(DEFAULT_QUERIES) + company_watchlist_queries(f"Voya, Voya India, {long_name}")
+    for query in queries:
+        flat = to_plain_text(f"Case Title\nCourtListener query: {query}\n" + ("body " * 400))
+        stripped = strip_match_markers(flat).lower()
+        assert "query:" not in stripped, query
+        # No fragment of the query text may survive the wipe.
+        tail = query.lower()[-40:].strip()
+        assert tail not in stripped, query
+
+
 def test_marker_stripped_from_flattened_clean_text() -> None:
     """The gate sees clean_text, which to_plain_text FLATTENS to one line —
     line-based stripping alone is a no-op there (2026-08-22 review, verified
