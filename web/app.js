@@ -3680,15 +3680,15 @@
     if (proof) metaText.classList.add(`proof-${proof.key}`);
     meta.appendChild(metaText);
     if (article.country) {
-      // Jurisdiction chip: which court system the record came from — never
-      // the person's nationality (the tooltip says so on every card).
+      // Jurisdiction chip: which country's court system the record came from.
+      // The tooltip spells out the code (and the court, when stored).
       const juris = document.createElement("span");
       juris.className = "case-juris";
       juris.textContent = article.country;
       const legal = article.legal_metadata || {};
       juris.dataset.tip =
         (legal.court_name ? `${legal.court_name} — ` : "") +
-        "jurisdiction of the court record, never the person's nationality";
+        `${countryName(article.country)} court record`;
       meta.appendChild(juris);
     }
     if (isContextArticle(article)) {
@@ -4825,6 +4825,12 @@
   let evidenceGlobalCountries = null; // {CC: caseCount} from the global read
   const evidenceLedgerCache = {}; // country -> ledger payload (session)
 
+  // Country codes used as jurisdiction labels, spelled out for tooltips.
+  const COUNTRY_NAMES = { US: "United States", IN: "India", CA: "Canada" };
+  function countryName(code) {
+    return COUNTRY_NAMES[String(code || "").toUpperCase()] || code;
+  }
+
   async function fetchLedger(country) {
     const key = (country || "all").toUpperCase();
     if (evidenceLedgerCache[key]) return evidenceLedgerCache[key];
@@ -4874,7 +4880,7 @@
       btn.dataset.tip =
         code === "all"
           ? "Every jurisdiction combined — the corpus-wide view"
-          : `${count} verdict-true case(s) from ${label} courts — a self-contained report for that court system`;
+          : `${countryName(code)} — ${count} verdict-true case(s) from its courts, a self-contained report for that court system`;
       btn.addEventListener("click", () => {
         if (evidenceCountry === code) return;
         evidenceCountry = code;
