@@ -1049,15 +1049,35 @@
     setStatus(ok ? okMessage : "Clipboard blocked — long-press and copy from the report");
   }
 
+  // Generic legal phrases with zero search specificity — pasting one into a
+  // log search yields noise, not leads. Pre-v3 enrichments emitted these as
+  // hunt terms; filtered at the one term choke point until the sweep retires
+  // them at the source (operator directive 2026-08-22).
+  const VACUOUS_TERMS = new Set([
+    "confidential information",
+    "confidential data",
+    "proprietary information",
+    "proprietary data",
+    "trade secret",
+    "trade secrets",
+    "intellectual property",
+    "sensitive information",
+    "sensitive data",
+    "company data",
+    "customer data",
+    "misappropriation",
+  ]);
+  const isVacuousTerm = (value) => VACUOUS_TERMS.has(String(value || "").trim().toLowerCase());
+
   function composeOperatorTerms(article) {
-    const fromApi = article.operator_terms || [];
+    const fromApi = (article.operator_terms || []).filter((t) => !isVacuousTerm(t));
     if (fromApi.length) return fromApi;
 
     const seen = new Set();
     const terms = [];
     const add = (value) => {
       const cleaned = String(value || "").trim();
-      if (cleaned.length < 3 || ITM_ID_RE.test(cleaned)) return;
+      if (cleaned.length < 3 || ITM_ID_RE.test(cleaned) || isVacuousTerm(cleaned)) return;
       const key = cleaned.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
