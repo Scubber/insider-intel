@@ -65,6 +65,7 @@ def expected_lane_specs(
     include_datatheftnews: bool = True,
     include_social: bool = True,
     include_publications: bool = True,
+    include_indiacourts: bool = True,
 ) -> list[ExpectedLane]:
     """Enumerate every lane the current configuration says should run.
 
@@ -135,6 +136,14 @@ def expected_lane_specs(
         for source in get_publication_sources():
             lanes.append(ExpectedLane(id=source.id, name=source.name, kind="publications"))
 
+    # Disabled = cleanly absent (the social_ingest_enabled pattern), never a
+    # perpetually-"skipped" row.
+    if include_indiacourts and settings.indiacourts_enabled:
+        from apps.aggregator.indiacourts import SOURCE_ID as INDIA_ID
+        from apps.aggregator.indiacourts import SOURCE_NAME as INDIA_NAME
+
+        lanes.append(ExpectedLane(id=INDIA_ID, name=INDIA_NAME, kind="court"))
+
     # De-dupe on id, first spec wins (e.g. an RSS feed and a pipeline lane
     # sharing an id must not produce two rows).
     seen: set[str] = set()
@@ -160,7 +169,7 @@ def _classify_outcome(success: bool, articles_fetched: int, error: str | None) -
 
 def _infer_kind(source_id: str) -> str:
     """Best-effort kind for dynamic result rows outside the expected set."""
-    if source_id.startswith("courtlistener") or source_id.startswith("pacer"):
+    if source_id.startswith(("courtlistener", "pacer", "indiacourts")):
         return "court"
     if source_id.startswith("feedly:"):
         return "feedly"

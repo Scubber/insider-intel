@@ -38,6 +38,7 @@ class FullRunResult:
     processing: ProcessingRunResult
     raw_path: str
     processed_path: str
+    indiacourts: IngestionRunResult | None = None
 
 
 def _merge_ingestion(*parts: IngestionRunResult | None) -> IngestionRunResult:
@@ -72,6 +73,7 @@ def run_full_pipeline(
     skip_datatheftnews: bool = False,
     skip_social: bool = False,
     skip_publications: bool = False,
+    skip_indiacourts: bool = False,
 ) -> FullRunResult:
     """Ingest feeds and optional sources, then process new raw articles."""
     settings = get_settings()
@@ -167,6 +169,25 @@ def run_full_pipeline(
             processed_path=processed_path,
             include_raw=include_raw,
         )
+    indiacourts_result: IngestionRunResult | None = None
+    # The Indian High Court dataset lane is parked behind INDIACOURTS_ENABLED
+    # (operator decision 2026-08-22): the per-PDF fetch + extract + scan work
+    # belongs on the Spark tenant, and the lane is $0 there.
+    if not skip_indiacourts and settings.indiacourts_enabled:
+        from apps.aggregator.indiacourts_pipeline import (
+            run_indiacourts_extract_pending,
+            run_indiacourts_history_sweep,
+            run_indiacourts_ingestion,
+        )
+
+        indiacourts_result = _merge_ingestion(
+            run_indiacourts_ingestion(store_path=raw_path),
+            # One bounded history slice per refresh — walks back to the
+            # configured floor year (2000), hub courts first.
+            run_indiacourts_history_sweep(store_path=raw_path),
+            # Cool-down retries for PDFs that failed extraction / await OCR.
+            run_indiacourts_extract_pending(store_path=raw_path),
+        )
     processing = run_processing(
         raw_path=raw_path,
         processed_path=processed_path,
@@ -181,6 +202,7 @@ def run_full_pipeline(
         dtn_result,
         social_result,
         publications_result,
+        indiacourts_result,
     )
     # Lane-health telemetry: one smoke-test row per configured source lane,
     # enumerated from the live config so new/removed sources track
@@ -202,6 +224,7 @@ def run_full_pipeline(
                 include_datatheftnews=not skip_datatheftnews,
                 include_social=not skip_social,
                 include_publications=not skip_publications,
+                include_indiacourts=not skip_indiacourts,
             ),
         )
         log_lane_health(health)
@@ -223,4 +246,5 @@ def run_full_pipeline(
         processing=processing,
         raw_path=raw_path,
         processed_path=processed_path,
+        indiacourts=indiacourts_result,
     )

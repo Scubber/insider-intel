@@ -220,6 +220,44 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(history_p)
 
+    india_p = sub.add_parser(
+        "ingest_indiacourts",
+        help=(
+            "Scan newly published Indian High Court judgments (CC BY 4.0 "
+            "eCourts open dataset) against the insider lexicon; matches are "
+            "stored with full text. Requires INDIACOURTS_ENABLED=true."
+        ),
+    )
+    india_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    _add_verbose(india_p)
+
+    india_hist_p = sub.add_parser(
+        "sweep_indiacourts_history",
+        help=(
+            "Walk Indian High Court judgment years backward to "
+            "INDIACOURTS_HISTORY_FLOOR (hub courts first; one bounded slice "
+            "per call by default)."
+        ),
+    )
+    india_hist_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    india_hist_p.add_argument(
+        "--slices",
+        type=int,
+        default=1,
+        help="Number of consecutive bounded slices to run in this invocation.",
+    )
+    _add_verbose(india_hist_p)
+
+    india_ext_p = sub.add_parser(
+        "extract_indiacourts_pending",
+        help=(
+            "Retry Indian judgment PDFs that failed extraction or await OCR "
+            "(INDIACOURTS_OCR_COMMAND), after the retry cool-down."
+        ),
+    )
+    india_ext_p.add_argument("--store-path", type=str, default=DEFAULT_STORE_PATH)
+    _add_verbose(india_ext_p)
+
     pacer_p = sub.add_parser(
         "purchase_pacer",
         help=(
@@ -419,6 +457,7 @@ def _build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--skip-datatheftnews", action="store_true")
     all_p.add_argument("--skip-social", action="store_true")
     all_p.add_argument("--skip-publications", action="store_true")
+    all_p.add_argument("--skip-indiacourts", action="store_true")
     _add_verbose(all_p)
 
     reenrich_p = sub.add_parser(
@@ -649,6 +688,44 @@ def _cmd_sweep_courtlistener_history(args: argparse.Namespace) -> int:
             exit_code = 1
             break
     return exit_code
+
+
+def _cmd_ingest_indiacourts(args: argparse.Namespace) -> int:
+    from apps.aggregator.indiacourts_pipeline import run_indiacourts_ingestion
+
+    result = run_indiacourts_ingestion(store_path=args.store_path)
+    if not result.sources:
+        print("IndiaCourts lane disabled (INDIACOURTS_ENABLED=false).")
+        return 0
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
+
+
+def _cmd_sweep_indiacourts_history(args: argparse.Namespace) -> int:
+    from apps.aggregator.indiacourts_pipeline import run_indiacourts_history_sweep
+
+    exit_code = 0
+    for _ in range(max(1, args.slices)):
+        result = run_indiacourts_history_sweep(store_path=args.store_path)
+        if not result.sources:
+            print("IndiaCourts history sweep disabled or already at the floor.")
+            break
+        _print_ingest(result)
+        if result.failure_count and not result.success_count:
+            exit_code = 1
+            break
+    return exit_code
+
+
+def _cmd_extract_indiacourts_pending(args: argparse.Namespace) -> int:
+    from apps.aggregator.indiacourts_pipeline import run_indiacourts_extract_pending
+
+    result = run_indiacourts_extract_pending(store_path=args.store_path)
+    if not result.sources:
+        print("IndiaCourts lane disabled (INDIACOURTS_ENABLED=false).")
+        return 0
+    _print_ingest(result)
+    return 1 if result.failure_count and not result.success_count else 0
 
 
 def _cmd_purchase_pacer(args: argparse.Namespace) -> int:
@@ -895,6 +972,7 @@ def _cmd_all(args: argparse.Namespace) -> int:
         skip_datatheftnews=args.skip_datatheftnews,
         skip_social=args.skip_social,
         skip_publications=args.skip_publications,
+        skip_indiacourts=args.skip_indiacourts,
     )
     _print_ingest(result.ingestion)
     _print_process(result.processing)
@@ -956,6 +1034,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_purchase_pacer(args)
     if args.command == "sweep_courtlistener_history":
         return _cmd_sweep_courtlistener_history(args)
+    if args.command == "ingest_indiacourts":
+        return _cmd_ingest_indiacourts(args)
+    if args.command == "sweep_indiacourts_history":
+        return _cmd_sweep_indiacourts_history(args)
+    if args.command == "extract_indiacourts_pending":
+        return _cmd_extract_indiacourts_pending(args)
     if args.command == "ingest_datatheftnews":
         return _cmd_ingest_datatheftnews(args)
     if args.command == "ingest_social":

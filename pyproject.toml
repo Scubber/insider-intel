@@ -19,6 +19,10 @@ dependencies = [
     # Core, not an extra: POST /publications/ingest_url parses PDFs on the API
     # service, which installs only [project.dependencies].
     "pypdf>=5.0",
+    # Core, not an extra: the refresh job image installs only
+    # [project.dependencies], and the IndiaCourts lane reads the eCourts open
+    # dataset's parquet partition metadata during ingestion.
+    "pyarrow>=17.0",
 ]
 
 [project.optional-dependencies]

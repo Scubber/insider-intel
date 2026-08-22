@@ -200,6 +200,120 @@ class Settings(BaseSettings):
         le=30,
     )
 
+    # Indian High Court judgments — the CC BY 4.0 eCourts open dataset on the
+    # AWS Open Data Registry (vanga/indian-high-court-judgments; updated
+    # daily, AWS-sponsored egress). $0 lane: parquet metadata → per-PDF fetch
+    # → local text extraction → local insider-lexicon scan; only matches enter
+    # the corpus, with their full text attached. Disabled by default — the
+    # heavy work belongs on the Spark tenant, not the GCP rollback job.
+    indiacourts_enabled: bool = Field(
+        default=False,
+        alias="INDIACOURTS_ENABLED",
+        description="Run the Indian High Court dataset lane during refreshes",
+    )
+    indiacourts_base_url: str = Field(
+        default="https://indian-high-court-judgments.s3.amazonaws.com",
+        alias="INDIACOURTS_BASE_URL",
+        description="Dataset bucket base URL (tests point this at a fake)",
+    )
+    indiacourts_courts: str = Field(
+        default="",
+        alias="INDIACOURTS_COURTS",
+        description=(
+            "Comma-separated court path codes (e.g. '7_26,27_1') restricting "
+            "the lane's scope; empty = all 25 High Courts (operator decision "
+            "2026-08-22: no exclusions)"
+        ),
+    )
+    indiacourts_court_order: str = Field(
+        default="7_26,27_1,29_3,33_10,36_29,3_22,24_17,19_16,9_13",
+        alias="INDIACOURTS_COURT_ORDER",
+        description=(
+            "Courts processed first (hub-first walk order): Delhi, Bombay, "
+            "Karnataka, Madras, Telangana, Punjab & Haryana, Gujarat, "
+            "Calcutta, Allahabad; remaining courts follow alphabetically. "
+            "Path form of the dataset's court codes ('7_26' for '7~26')."
+        ),
+    )
+    indiacourts_history_floor: str = Field(
+        default="2000-01-01",
+        alias="INDIACOURTS_HISTORY_FLOOR",
+        description=(
+            "Sweep backward until this decision year (empty disables the "
+            "sweep). 2000 = the IT Act era; dataset volume starts ~2004, so "
+            "this is effectively full coverage."
+        ),
+    )
+    indiacourts_max_pdfs_per_run: int = Field(
+        default=200,
+        alias="INDIACOURTS_MAX_PDFS_PER_RUN",
+        description="Forward-ingest PDF fetch+scan attempts per run (0 disables)",
+        ge=0,
+        le=5000,
+    )
+    indiacourts_history_max_pdfs_per_run: int = Field(
+        default=300,
+        alias="INDIACOURTS_HISTORY_MAX_PDFS_PER_RUN",
+        description="History-sweep PDF fetch+scan attempts per run (0 disables)",
+        ge=0,
+        le=5000,
+    )
+    indiacourts_extract_max_per_run: int = Field(
+        default=50,
+        alias="INDIACOURTS_EXTRACT_MAX_PER_RUN",
+        description="Pending-queue (failed/OCR) retry attempts per run (0 disables)",
+        ge=0,
+        le=1000,
+    )
+    indiacourts_pdf_max_bytes: int = Field(
+        default=15_000_000,
+        alias="INDIACOURTS_PDF_MAX_BYTES",
+        description="Skip judgment PDFs larger than this (routed to pending)",
+        ge=100_000,
+        le=100_000_000,
+    )
+    indiacourts_text_max_chars: int = Field(
+        default=40_000,
+        alias="INDIACOURTS_TEXT_MAX_CHARS",
+        description=(
+            "Stored judgment text cap — long judgments keep head AND tail "
+            "(facts open, disposition closes) with an omission marker"
+        ),
+        ge=500,
+        le=200_000,
+    )
+    indiacourts_min_text_chars: int = Field(
+        default=200,
+        alias="INDIACOURTS_MIN_TEXT_CHARS",
+        description="Text-layer yield below this = scanned PDF → OCR/pending route",
+        ge=0,
+        le=5_000,
+    )
+    indiacourts_retry_days: float = Field(
+        default=7.0,
+        alias="INDIACOURTS_RETRY_DAYS",
+        description="Minimum days between retry attempts of a pending PDF",
+        ge=0.0,
+        le=90.0,
+    )
+    indiacourts_request_delay_seconds: float = Field(
+        default=0.0,
+        alias="INDIACOURTS_REQUEST_DELAY_SECONDS",
+        description="Pacing between dataset requests (S3 needs none; knob kept for courtesy)",
+        ge=0.0,
+        le=10.0,
+    )
+    indiacourts_ocr_command: str | None = Field(
+        default=None,
+        alias="INDIACOURTS_OCR_COMMAND",
+        description=(
+            "Command template for scanned PDFs, run as '<command> <pdf-path>' "
+            "with extracted text expected on stdout (e.g. an olmOCR/ocrmypdf "
+            "wrapper on the Spark tenant). Unset = scanned PDFs wait in the "
+            "pending queue."
+        ),
+    )
+
     # Drop weak articles on process; UI should match this default
     process_min_score: float = Field(
         default=0.15,
