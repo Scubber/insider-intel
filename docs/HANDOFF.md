@@ -9,10 +9,14 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
-**Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
-working design, blessed before the next UI redesign — restore `web/**` from
-here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
-prod).
+**Rollback checkpoints:** `checkpoint/v1.2-pre-india-2026-08-22` (main as
+deployed immediately before the IndiaCourts lane + jurisdiction plumbing +
+spend-gate tune landed — restore from here to unwind all of #247; note the
+corpus itself rolls forward regardless: enrichment history is append-only
+and the lane was still dark, so code rollback is the whole rollback) ·
+`checkpoint/v1.1-design-2026-08-10` (the working design before the next UI
+redesign — restore `web/**` from here if the redesign goes sideways) ·
+`checkpoint/v1.0-parked` (pre-August prod).
 
 ---
 
