@@ -229,10 +229,18 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
     JURISDICTION: IN · AS OF <date>Z`). `SMALL_N_FLOOR=10` applies per-slice — sliced
     views will suppress percentages more often, which is correct; the suppressed/empty
     state says why and how it fills (more adjudicated cases in that jurisdiction).
-  - Limitations copy: different jurisdictions contribute different document types and
-    procedural stages, so rates are NOT comparable across country slices — the filter
-    presents per-jurisdiction views, never cross-country comparisons of people;
-    coverage equals the lexicon (no semantic discovery at the scan stage).
+  - Provenance labeling is required, not restricted: every Indian case says plainly
+    that it comes from Indian courts (chip, basis line, dossier), exactly as US cases
+    say US. Per-country numbers may sit side by side. Only two narrow inferences stay
+    out, per existing operator boundaries: (a) the court system never implies the
+    actor's nationality (a Delhi HC case no more makes the actor Indian than a New
+    Jersey docket makes one American — populate `actor_citizenship` only when the
+    record itself states it); (b) authored copy must not read cross-slice rate
+    differences as behavioral differences without the selection caveat — the two
+    lanes are differently sourced (query-driven US federal dockets vs lexicon-scanned
+    HC judgments), so the methodology tooltip carries that caveat the same way the
+    small-n floor and the F1 selection-bias framing already do. Coverage equals the
+    lexicon (no semantic discovery at the scan stage).
   - `web/findings.json` stays global and untouched; the boot snapshot may carry only
     the global slice (country slices can require the live API — CACHED view shows ALL).
   - TOOLING may inherit the same param later; out of scope for this change unless
