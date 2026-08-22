@@ -1,11 +1,12 @@
 # Thinking on/off A/B — the OPENAI_COMPAT_ENABLE_THINKING gate
 
-`OPENAI_COMPAT_ENABLE_THINKING=false` is merged but inactive. On the Spark's
-Qwen chain, thinking-on costs roughly 2x decode time per article (~5-9 min at
-~16 tok/s) and its reasoning tokens starve the 3k-cap hunt synthesizer;
-thinking-off halves cycle time but may change adjudication quality. This gate
-decides — mechanically, with no operator reviews — whether the knob may be
-activated. The output is an accept/reject recommendation, not a data review
+`OPENAI_COMPAT_ENABLE_THINKING=false` is merged but inactive. The 2x-decode
+numbers below were measured on the retired Qwen3.8 chain; the production
+enrichment model is Nemotron 3 Super 120B (no reasoning parser — the knob
+measured neutral there), so this gate matters mainly when evaluating a new
+model that thinks. The gate decides — mechanically, with no operator
+reviews — whether the knob may be activated. The output is an accept/reject
+recommendation, not a data review
 session.
 
 The harness is three scripts under `scripts/`, all offline-testable
