@@ -99,16 +99,25 @@ def test_filing_needs_body_and_insider_signal() -> None:
     """Bodied filings only bill when the body itself carries an insider signal.
 
     The per-article itm_hits fire off docket metadata (query tags), so the
-    gate scans the fetched text for ITM aliases instead — the corpus audit
-    showed 2/3 of body-length-only enrichments adjudicated as non-cases.
+    gate scans the fetched text instead — and since 2026-08 the body signal is
+    two-part: an ITM alias hit AND an insider-framing keyword. A lone alias
+    passed company-v-company IP litigation (2026-08-04 audit: 58% of
+    post-gate enrichments adjudicated non-insider).
     """
     from shared.agents.summarize import qualifies
 
-    signal_body = ("x " * 800) + "the employee copied files to a USB drive for data exfiltration"
+    signal_body = (
+        "x " * 800
+    ) + "the former employee copied files to a USB drive for data exfiltration"
+    alias_only_body = (
+        "x " * 800
+    ) + "the defendant copied plaintiff's files to a USB drive, data exfiltration alleged"
     noise_body = "y" * 2_000
-    # Body + in-body ITM signal → qualifies.
+    # Body + alias + framing ("former employee") → qualifies.
     assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=signal_body)
-    # Body with no insider signal (Valnet v. Google class) → does NOT bill.
+    # Alias with NO framing (company-v-company class) → does NOT bill.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=alias_only_body)
+    # Body with no insider signal at all (Valnet v. Google class) → does NOT bill.
     assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=noise_body)
     # Signal-less body still qualifies when classification already vouches.
     assert qualifies(
@@ -123,6 +132,30 @@ def test_filing_needs_body_and_insider_signal() -> None:
     assert not qualifies(itm_hits=[], use_cases=[], channel="news", text=noise_body)
     # A lexical hit still qualifies for non-filings callers without a verdict.
     assert qualifies(itm_hits=["IF002"], use_cases=[], channel="news", text="")
+
+
+def test_ingest_match_marker_cannot_self_qualify() -> None:
+    """The lane's own match-marker line is stripped before every body check.
+
+    The marker embeds the insider query terms that found the case, so without
+    stripping, every backfilled document would inherit alias + framing from
+    its own marker and the body gate would be vacuous.
+    """
+    from shared.agents.summarize import qualifies, strip_match_markers
+
+    marker = "CourtListener query: former employee USB drive data exfiltration"
+    # Marker + signal-free body → the marker's own terms must not qualify it.
+    assert not qualifies(
+        itm_hits=[], use_cases=[], channel="filings", text=f"{marker}\n" + ("y " * 800)
+    )
+    # Marker + genuinely signalling body → still qualifies.
+    real = ("x " * 800) + "the former employee copied source code to a USB drive"
+    assert qualifies(itm_hits=[], use_cases=[], channel="filings", text=f"{marker}\n{real}")
+    # A stub that is ONLY the marker stays under the length floor once stripped.
+    assert not qualifies(itm_hits=[], use_cases=[], channel="filings", text=marker)
+    # IndiaCourts markers strip the same way; unmarked text passes through.
+    assert strip_match_markers("IndiaCourts match: pen drive confidential\nbody") == "body"
+    assert strip_match_markers("plain body text") == "plain body text"
 
 
 def test_filing_stub_with_itm_hit_does_not_qualify() -> None:
@@ -235,7 +268,8 @@ def test_article_qualifies_reads_channel_and_text() -> None:
     entities = SimpleNamespace(itm_hits=[])
     full = SimpleNamespace(
         source_id="courtlistener-recap",
-        clean_text=("y " * 800) + "copied files to a USB drive for data exfiltration",
+        clean_text=("y " * 800)
+        + "former employee copied files to a USB drive for data exfiltration",
         use_cases=[],
         entities=entities,
     )
@@ -249,11 +283,19 @@ def test_article_qualifies_reads_channel_and_text() -> None:
     assert not article_qualifies(stub, filing_min_chars=0)
     signal_stub = SimpleNamespace(
         source_id="courtlistener-recap",
-        clean_text="INDICTMENT: data exfiltration via USB drive",
+        clean_text="INDICTMENT: former employee data exfiltration via USB drive",
         use_cases=[],
         entities=entities,
     )
     assert article_qualifies(signal_stub, filing_min_chars=0)
+    # The 2026-08 two-part bar: alias without framing no longer bills.
+    alias_only = SimpleNamespace(
+        source_id="canlii-onsc",
+        clean_text=("y " * 800) + "defendant company copied the database, data exfiltration",
+        use_cases=[],
+        entities=entities,
+    )
+    assert not article_qualifies(alias_only)
 
 
 def test_provider_unset_is_a_noop() -> None:

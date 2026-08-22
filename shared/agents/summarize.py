@@ -98,34 +98,71 @@ def qualifies(
     that found the case), so they say nothing about the document itself — and
     the corpus audit showed 2/3 of body-length-only enrichments came back
     is_insider_case=False (Valnet v. Google-class dockets that merely matched
-    query language). Scanning the fetched text for ITM aliases costs nothing
-    and a skipped filing re-qualifies automatically once a later pass
-    classifies it (use_cases / alignment).
+    query language). Since 2026-08 the body signal is TWO-part: an ITM alias
+    hit AND an insider-framing keyword, both in the body — the 2026-08-04
+    audit found a lone alias passes company-v-company IP litigation (58% of
+    post-gate enrichments adjudicated non-insider). The lane's own ingest
+    match marker ("CourtListener query: …" / "IndiaCourts match: …" lines) is
+    stripped before both the length floor and the signal scan, so a marker
+    phrased in insider terms can never qualify its own document. A skipped
+    filing re-qualifies automatically once a later pass classifies it
+    (use_cases / alignment).
 
     News (``channel=="news"``) must carry a lexical technique hit — the
     use-cases-only path stays open for social/tips confessions, where
     first-person framing is the signal, but vendor commentary that merely
     frames a use case bills as methods=0 non-cases.
     """
-    body = (text or "").strip()
+    body = strip_match_markers(text or "").strip()
     if channel == "filings" and filing_requires_body:
         if len(body) < max(1, filing_min_chars):
             return False
-        return bool(use_cases) or itm_alignment == "insider" or _body_has_itm_signal(body)
+        return bool(use_cases) or itm_alignment == "insider" or _body_has_insider_signal(body)
     if use_cases and channel != "news":
         return True
     if itm_hits and (itm_alignment is None or itm_alignment == "insider"):
         return True
     if channel == "filings" and len(body) >= max(1, filing_min_chars):
-        return bool(use_cases) or itm_alignment == "insider" or _body_has_itm_signal(body)
+        return bool(use_cases) or itm_alignment == "insider" or _body_has_insider_signal(body)
     return False
 
 
-def _body_has_itm_signal(body: str) -> bool:
-    """Does the document body itself alias-match at least one ITM technique?"""
-    from shared.utils.entities import match_itm_techniques
+# Ingest-time match-marker lines each court lane writes at the head of
+# RawArticle.content ("scored but hidden"). They embed the very insider terms
+# the gate scans for, so they are stripped before any body-signal decision.
+_MATCH_MARKER_PREFIXES: tuple[str, ...] = (
+    "courtlistener query:",
+    "indiacourts match:",
+)
 
-    return bool(match_itm_techniques(body))
+
+def strip_match_markers(text: str) -> str:
+    """Remove ingest match-marker lines so they can't self-qualify a body."""
+    if not text:
+        return text
+    lowered = text.lower()
+    if not any(prefix in lowered for prefix in _MATCH_MARKER_PREFIXES):
+        return text
+    kept = [
+        line
+        for line in text.splitlines()
+        if not line.strip().lower().startswith(_MATCH_MARKER_PREFIXES)
+    ]
+    return "\n".join(kept)
+
+
+def _body_has_insider_signal(body: str) -> bool:
+    """Does the body carry BOTH an ITM alias hit and insider framing language?
+
+    A lone alias proved too weak a bar (2026-08-04 audit: 58% of post-gate
+    filings enrichments adjudicated non-insider — company-v-company IP
+    litigation clears one alias trivially). Framing keywords ("former
+    employee", "unauthorized access", …) anchor the document to an insider
+    scenario; both checks are pure string scans and cost nothing.
+    """
+    from shared.utils.entities import find_framing_keywords, match_itm_techniques
+
+    return bool(match_itm_techniques(body)) and bool(find_framing_keywords(body))
 
 
 def article_qualifies(

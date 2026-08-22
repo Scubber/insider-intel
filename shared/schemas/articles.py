@@ -22,6 +22,16 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+# Source-id prefixes whose rows are COURT DOCUMENTS for the enrichment gates.
+# The spend policy re-derives channel from source_id alone (see
+# shared/agents/summarize.py), so every court-document lane must be listed
+# here or its rows fall through to the news gate — CanLII sat in that gap
+# until 2026-08-22. Prosecutor/regulator press-release feeds stay off this
+# list on purpose: their short releases behave like news for gating even
+# though the stream displays them as filings.
+FILINGS_SOURCE_PREFIXES: tuple[str, ...] = ("canlii-", "indiacourts-")
+
+
 def resolve_channel(
     source_id: str,
     channel: str | None = None,
@@ -38,7 +48,11 @@ def resolve_channel(
         return "publications"
     if sid.startswith(("reddit-", "tip-")) or "tips-" in cat or cat == "tips":
         return "tips"
-    if "courtlistener" in sid or cat in {"filings", "court", "recap"}:
+    if (
+        "courtlistener" in sid
+        or sid.startswith(FILINGS_SOURCE_PREFIXES)
+        or cat in {"filings", "court", "recap"}
+    ):
         return "filings"
     if channel in ("news", "filings", "tips"):
         return channel  # type: ignore[return-value]

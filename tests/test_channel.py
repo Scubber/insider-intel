@@ -32,6 +32,18 @@ def test_resolve_channel_heuristics() -> None:
     assert resolve_channel("unit42", "tips") == "tips"
 
 
+def test_court_document_lanes_resolve_filings() -> None:
+    """Every court-document lane must gate as filings (spend policy re-derives
+    channel from source_id alone — CanLII sat in the news gate until this fix)."""
+    assert resolve_channel("canlii-onsc", None) == "filings"
+    assert resolve_channel("canlii-fc", "news") == "filings"
+    assert resolve_channel("indiacourts-judgments", None) == "filings"
+    # Prosecutor/regulator press-release feeds stay news-gated on purpose:
+    # short releases carry framing language and behave like news for spend.
+    assert resolve_channel("afp-news", None) == "news"
+    assert resolve_channel("justice-canada-news", None) == "news"
+
+
 def test_resolve_channel_social() -> None:
     assert resolve_channel("social-reddit-overemployed", "news") == "social"
     assert resolve_channel("social-x-somehandle", None) == "social"

@@ -171,7 +171,7 @@ def _enrich(chain, monkeypatch, budget=None):
     return enrich_fields(
         title="US v. Example insider",
         source="courtlistener-recap",
-        text=("x " * 800) + "copied files to a USB drive for data exfiltration",
+        text=("x " * 800) + "former employee copied files to a USB drive for data exfiltration",
         lexical_hits=[
             ItmHit(
                 id="IF002", title="t", theme="Exfiltration", article_id="AF001", source="lexical"
