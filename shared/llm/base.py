@@ -293,7 +293,17 @@ Enum values (use exactly these strings):
   account with no court posture) | unclear. Pick from what the SOURCE states.
 - source_type: court_filing | news | blog | social | press_release | unknown.
 - legal_posture: indictment | complaint | plea | conviction | sentencing |
-  civil_suit | settlement | none | unknown — the document's stage, not a guess.
+  civil_suit | settlement | fir_allegation | charge_sheet |
+  disciplinary_proceeding | interim_injunction | bail | quashing |
+  writ_review | arbitral_proceeding | civil_decree | trial_judgment |
+  acquittal | none | unknown — the document's stage, not a guess. For court
+  judgments, the stage is what the COURT was deciding: a bail order is
+  "bail" (never a conviction), quashing an FIR is "quashing", an interim
+  injunction is "interim_injunction", review of an employer's enquiry is
+  "writ_review" or "disciplinary_proceeding". A judgment that RECITES
+  allegations does not adjudicate them — only a final merits decision is
+  "trial_judgment"/"conviction"/"civil_decree". An employment disciplinary
+  finding is not a criminal conviction.
 - industry: financial-services | healthcare | technology | defense |
   manufacturing | energy | retail | public-sector | professional-services |
   other | unknown — the VICTIM organization's sector.
@@ -322,7 +332,10 @@ Rules:
   when is_insider_case is true.
 - SOURCE vs INFERENCE. methods describe what the source SAYS the insider did;
   set claim_status from the source's own framing (an indictment = "alleged",
-  never "adjudicated"). evidence_quote is VERBATIM OR EMPTY — an exact
+  never "adjudicated"). A court document that merely RECITES a party's or the
+  prosecution's allegations leaves that conduct "alleged"; "adjudicated"
+  requires an actual finding on that specific conduct, and "admitted"
+  requires an admission or plea on the record. evidence_quote is VERBATIM OR EMPTY — an exact
   substring of the text above, copied character for character. Before writing
   a quote, locate it in the text; if you cannot point to the exact characters,
   write "" instead. A paraphrase presented as a quote is a corrupt record —

@@ -819,6 +819,66 @@ a.tlv-case-title:focus-visible {
   color: var(--muted);
   max-width: 68ch;
 }
+/* Jurisdiction tabs: one self-contained report per court system. */
+.evp-juris {
+  margin: 0.6rem 0 0.2rem;
+}
+.evp-juris-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.evp-juris-tab {
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 0.22rem 0.6rem;
+  border: 1px solid var(--line, currentColor);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.evp-juris-tab:hover {
+  opacity: 1;
+}
+.evp-juris-tab.active {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+#evp-basis-line {
+  margin: 0.35rem 0 0;
+  letter-spacing: 0.04em;
+}
+.evp-region {
+  margin-top: 1.1rem;
+}
+.evp-skew {
+  display: inline-block;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  padding: 0.08rem 0.4rem;
+  border: 1px solid var(--signal);
+  color: var(--signal);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+/* Jurisdiction chip on stream cards (court system, never nationality). */
+.case-juris {
+  display: inline-block;
+  margin-left: 0.45rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  padding: 0 0.32rem;
+  border: 1px solid var(--line, currentColor);
+  border-radius: 2px;
+  opacity: 0.8;
+  vertical-align: 1px;
+}
+
 .evp-stats {
   display: flex;
   flex-wrap: wrap;

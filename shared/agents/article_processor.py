@@ -330,6 +330,7 @@ def _node_assemble(state: ArticleProcessState) -> ArticleProcessState:
         source_name=raw.source_name,
         channel=channel,
         summary=to_plain_text(raw.summary) or None,
+        legal_metadata=raw.legal_metadata,
         clean_text=state.get("clean_text") or "",
         entities=entities,
         relevance_score=float(state.get("relevance_score") or 0.0),

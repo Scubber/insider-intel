@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-17 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (cron 4×/day since the 2026-08-16 cutover; Cloud Scheduler paused as
@@ -108,8 +108,18 @@ prod).
    shipped (variant (a) of the old plan). Variant (b) (cpu-boost + prebuilt
    index) remains optional if wake time itself ever matters.
 8. **International court-filings lanes** — phase 0 (prosecutor/regulator
-   feeds) + phase-2-lite (CanLII RSS) SHIPPED; **phase 1 UK Find Case Law**
-   pipeline module still the real build. CanLII API stays a no-go
+   feeds) + phase-2-lite (CanLII RSS) SHIPPED; **IndiaCourts lane BUILT
+   2026-08-22 on branch `claude/indian-court-judgment-eval-3aa51n`
+   (UNMERGED — operator review pending)**: $0 lexicon-scan lane over the CC
+   BY 4.0 eCourts open dataset (all 25 HCs, floor 2000, hub-first walk,
+   dark behind `INDIACOURTS_ENABLED`), with legal provenance
+   (`legal_metadata` + `resolve_country`), Indian legal postures weighted
+   below the adjudicated floor, a `country` facet end to end, EVIDENCE
+   nation tabs + TACTICS BY REGION, and export schema v6. Requirements:
+   docs/india-courts-requirements.md; lane doc: docs/india-courts-ingest.md.
+   Activation = enable on sparky + optional OCR command (bench first).
+   **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
+   jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
 9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE,
    `web/findings.json` publish-by-merge). Findings F2–F4 added 2026-08-09
@@ -132,14 +142,18 @@ prod).
    data: executive/officer 230/320 role-known (47%), 26 adjudicated;
    external record classes (Form 4 ×36, public-vs-internal ×83, brokerage)
    make the cases — detecting upward needs no permission to surveil upward.
-10. **Filings spend-gate leak (ACTIVE — next real work item).** 2026-08-04
-    audit: of 553 post-gate enrichments, **58% still adjudicated
-    non-insider** — the in-body ITM alias check passes company-v-company
-    IP/trade-secret litigation and CanLII judgments with zero methods
-    (news gate worked: only +18 in 9 days). Proposed fix: filings body must
-    also contain an `INSIDER_FRAMING_KEYWORDS` hit ("former employee" etc.),
-    with a dry-run replaying the gate over the 937 stored non-insider vs
-    540 insider rows to measure the false-negative cost first.
+10. **Filings spend-gate leak — FIX BUILT 2026-08-22 on branch
+    `claude/indian-court-judgment-eval-3aa51n` (UNMERGED — dry-run review
+    pending).** 2026-08-04 audit: of 553 post-gate enrichments, **58% still
+    adjudicated non-insider** — the in-body ITM alias check passed
+    company-v-company IP/trade-secret litigation. The branch implements the
+    proposed fix: two-part body signal (ITM alias AND
+    `INSIDER_FRAMING_KEYWORDS` hit), match-marker stripping, and the
+    `FILINGS_SOURCE_PREFIXES` channel fix (canlii-/indiacourts- were
+    news-gated). **Review gate before merge:** run
+    `python scripts/replay_filings_gate.py` on sparky against the live
+    corpus (937 stored non-insider vs 540 insider rows) and read the
+    false-negative cost it reports.
 11. **Admin page** — direction discussed, not decided: Cloudflare Access in
     front of an `/admin` route (free, auth at edge) vs Google IAP (needs LB,
     ~$18/mo). Gating question: is thederpweb.com DNS on Cloudflare? —

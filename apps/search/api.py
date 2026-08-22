@@ -142,6 +142,13 @@ def list_sources(
         default="all",
         description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
+    country: str = Query(
+        default="all",
+        description=(
+            "Jurisdiction filter: court system of the source records "
+            "(e.g. US, CA, IN) | all (default). Never the actor's nationality."
+        ),
+    ),
     use_case: str | None = Query(
         default=None,
         description="Use-case filter (e.g. overemployment); see GET /usecases",
@@ -158,6 +165,7 @@ def list_sources(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
     )
@@ -219,6 +227,13 @@ def list_articles(
         default="all",
         description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
+    country: str = Query(
+        default="all",
+        description=(
+            "Jurisdiction filter: court system of the source records "
+            "(e.g. US, CA, IN) | all (default). Never the actor's nationality."
+        ),
+    ),
     use_case: str | None = Query(
         default=None,
         description="Use-case filter (e.g. overemployment); see GET /usecases",
@@ -250,6 +265,7 @@ def list_articles(
         prevention_id=prevention_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
         topic_match=topic_match,
@@ -273,6 +289,7 @@ def feed_atom(
     min_score: float = Query(default=0.0, ge=0.0, le=1.0),
     itm_alignment: str = Query(default="insider"),
     channel: str = Query(default="all"),
+    country: str = Query(default="all"),
     use_case: str | None = Query(default=None),
     insider_type: str = Query(default="all"),
 ) -> Response:
@@ -289,6 +306,7 @@ def feed_atom(
         min_score=min_score,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
         group=True,
@@ -368,6 +386,13 @@ def search_get(
         default="all",
         description="Provenance filter: news|filings|tips|social|publications|all (default all)",
     ),
+    country: str = Query(
+        default="all",
+        description=(
+            "Jurisdiction filter: court system of the source records "
+            "(e.g. US, CA, IN) | all (default). Never the actor's nationality."
+        ),
+    ),
     use_case: str | None = Query(
         default=None,
         description="Use-case filter (e.g. overemployment); see GET /usecases",
@@ -387,6 +412,7 @@ def search_get(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
     )
@@ -402,6 +428,10 @@ def export_articles(
     itm_alignment: str = Query(
         default="insider",
         description="ITM alignment filter: insider (default) | weak | all",
+    ),
+    country: str = Query(
+        default="all",
+        description="Jurisdiction filter: source court system (e.g. US, CA, IN) | all",
     ),
     format: str = Query(default="json", pattern="^(json|ndjson)$"),
     _auth: None = Depends(_require_export_token),
@@ -422,6 +452,7 @@ def export_articles(
         min_score=min_score,
         since=since_dt,
         itm_alignment=itm_alignment,
+        country=country,
     )
     rows = [article_to_export_row(a) for a in articles]
     if format == "ndjson":
@@ -601,7 +632,17 @@ def trending(
 
 
 @app.get("/evidence/ledger")
-def evidence_ledger(top: int = Query(10, ge=1, le=50)) -> dict:
+def evidence_ledger(
+    top: int = Query(10, ge=1, le=50),
+    country: str = Query(
+        default="all",
+        description=(
+            "Jurisdiction slice: the ledger recomputes over only that court "
+            "system's cases (e.g. US, CA, IN). Absent/all = the global view. "
+            "Jurisdiction is the source court system, never actor nationality."
+        ),
+    ),
+) -> dict:
     """Corpus-wide Insider Evidence Ledger (EVIDENCE page + sidebar payload).
 
     Theme-grouped technique frequency (adjudicated vs alleged, never
@@ -610,7 +651,7 @@ def evidence_ledger(top: int = Query(10, ge=1, le=50)) -> dict:
     pure aggregation over the in-memory index joined with the packaged ITM
     catalog (no LLM, no extra I/O), refreshed with every /reload.
     """
-    return service.evidence_ledger(top=top)
+    return service.evidence_ledger(top=top, country=country)
 
 
 @app.get("/tooling")
@@ -627,13 +668,16 @@ def tooling() -> dict:
 
 
 @app.get("/evidence/technique/{tech_id}")
-def evidence_technique(tech_id: str) -> dict:
+def evidence_technique(
+    tech_id: str,
+    country: str = Query(default="all", description="Jurisdiction slice (see /evidence/ledger)"),
+) -> dict:
     """Per-technique observed-evidence detail for the Matrix dossier.
 
     Case-scoped: evidence seen in cases EXHIBITING the technique. 404 when the
     technique has no observed cases in the corpus.
     """
-    detail = service.evidence_technique(tech_id)
+    detail = service.evidence_technique(tech_id, country=country)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"no observed cases for {tech_id!r}")
     return detail

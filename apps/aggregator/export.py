@@ -14,9 +14,13 @@ from shared.schemas import ProcessedArticle
 
 logger = logging.getLogger(__name__)
 
+# v6: adds per-article `country` (jurisdiction of the source court system;
+# never actor nationality) + `legal_metadata` (typed court provenance —
+# court, CNR, document kind, stage; null for non-court rows), and the
+# `country` export filter.
 # v5: adds per-article `discovery` (novel-technique assessments) + a
 # corpus-level `candidates.ndjson` (clustered NovelCandidate view).
-EXPORT_SCHEMA_VERSION = "insider-intel.export.v5"
+EXPORT_SCHEMA_VERSION = "insider-intel.export.v6"
 DEFAULT_EXPORT_DIR = "dist/export"
 
 
@@ -65,7 +69,20 @@ def article_to_export_row(article: ProcessedArticle) -> dict[str, Any]:
             if getattr(article, "discovery", None)
             else None
         ),
+        "country": _article_country(article),
+        "legal_metadata": (
+            article.legal_metadata.model_dump(mode="json")
+            if getattr(article, "legal_metadata", None)
+            else None
+        ),
     }
+
+
+def _article_country(article: ProcessedArticle) -> str | None:
+    from shared.utils.evidence import resolve_country
+
+    legal = getattr(article, "legal_metadata", None)
+    return resolve_country(article.source_id, legal.model_dump() if legal else None)
 
 
 def filter_articles(
@@ -74,14 +91,18 @@ def filter_articles(
     min_score: float = 0.0,
     since: datetime | None = None,
     itm_alignment: str = "insider",
+    country: str = "all",
 ) -> list[ProcessedArticle]:
     mode = (itm_alignment or "insider").strip().lower()
+    country_mode = (country or "all").strip().upper()
     out: list[ProcessedArticle] = []
     for article in articles:
         if article.relevance_score < min_score:
             continue
         alignment = getattr(article, "itm_alignment", None) or "weak"
         if mode not in {"", "all", "*"} and alignment != mode:
+            continue
+        if country_mode not in {"", "ALL", "*"} and _article_country(article) != country_mode:
             continue
         if since is not None:
             stamp = article.published or article.processed_at

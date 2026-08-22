@@ -72,6 +72,7 @@ def list_sources(
     itm_id: str | None = None,
     itm_alignment: str = "all",
     channel: str = "all",
+    country: str = "all",
     use_case: str | None = None,
     insider_type: str = "all",
 ) -> list[SourceInfo]:
@@ -89,6 +90,7 @@ def list_sources(
             itm_id=itm_id,
             itm_alignment=itm_alignment,
             channel=channel,
+            country=country,
             use_case=use_case,
             insider_type=insider_type,
         )
@@ -98,6 +100,7 @@ def list_sources(
         (itm_alignment or "all").strip().lower() not in {"", "all", "*"}
         or bool(theme or itm_id or min_score > 0)
         or (channel or "all").strip().lower() not in {"", "all", "*"}
+        or (country or "all").strip().upper() not in {"", "ALL", "*"}
         or (use_case or "all").strip().lower() not in {"", "all", "*"}
         or (insider_type or "all").strip().lower() not in {"", "all", "*"}
     )
@@ -147,6 +150,7 @@ def search(
     itm_id: str | None = None,
     itm_alignment: str = "insider",
     channel: str = "all",
+    country: str = "all",
     use_case: str | None = None,
     insider_type: str = "all",
     path: str | Path | None = None,
@@ -164,23 +168,39 @@ def search(
         itm_id=itm_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
     )
 
 
-def _raw_evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
-    from shared.utils.evidence import build_evidence_ledger
+def _raw_evidence_ledger(
+    path: str | Path | None = None, *, top: int = 25, country: str = "all"
+) -> dict:
+    from shared.utils.evidence import build_evidence_ledger, filter_rows_by_country
 
-    rows = (
+    rows = [
         {
             "link": a.link,
             "title": a.title,
             "published": a.published.isoformat() if a.published else "",
             "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
+            # Jurisdiction inputs: the builder's country breakdown and the
+            # ?country= slicing both resolve from these (explicit metadata
+            # winning over the source-id prefix fallback).
+            "source_id": a.source_id,
+            "legal_metadata": (
+                a.legal_metadata.model_dump(mode="json")
+                if getattr(a, "legal_metadata", None)
+                else None
+            ),
         }
         for a in get_index(path).articles
-    )
+    ]
+    mode = (country or "all").strip().upper()
+    if mode not in {"", "ALL", "*"}:
+        # One engine, many views: slice the rows, rebuild the same ledger.
+        rows = filter_rows_by_country(rows, mode)
     return build_evidence_ledger(rows, top=top)
 
 
@@ -192,7 +212,9 @@ def _catalog_detections() -> dict[str, list[dict]]:
     }
 
 
-def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
+def evidence_ledger(
+    path: str | Path | None = None, *, top: int = 25, country: str = "all"
+) -> dict:
     """Corpus-wide evidence ledger from the loaded index (no LLM, no I/O).
 
     Same aggregation core as the evidence-ledger workflow, then joined against
@@ -203,7 +225,7 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     """
     from shared.utils.evidence import corroborate_detections
 
-    ledger = _raw_evidence_ledger(path, top=top)
+    ledger = _raw_evidence_ledger(path, top=top, country=country)
     families = ledger.pop("technique_families", {})
     ledger.pop("technique_counts", {})
     ledger.pop("technique_hunts", {})  # served per-technique, not corpus-wide
@@ -233,7 +255,9 @@ def evidence_ledger(path: str | Path | None = None, *, top: int = 25) -> dict:
     return ledger
 
 
-def evidence_technique(tech_id: str, path: str | Path | None = None) -> dict | None:
+def evidence_technique(
+    tech_id: str, path: str | Path | None = None, *, country: str = "all"
+) -> dict | None:
     """Per-technique evidence detail for the dossier's OBSERVED EVIDENCE section.
 
     Case-scoped join (evidence seen in cases EXHIBITING the technique — stated
@@ -242,7 +266,7 @@ def evidence_technique(tech_id: str, path: str | Path | None = None) -> dict | N
     from shared.utils.evidence import corroborate_detections, technique_theme
 
     tech_id = (tech_id or "").upper().strip()
-    ledger = _raw_evidence_ledger(path, top=1)
+    ledger = _raw_evidence_ledger(path, top=1, country=country)
     families = ledger.get("technique_families", {}).get(tech_id)
     counts = ledger.get("technique_counts", {}).get(tech_id)
     if not counts:
@@ -351,6 +375,7 @@ def list_articles(
     prevention_id: str | None = None,
     itm_alignment: str = "insider",
     channel: str = "all",
+    country: str = "all",
     use_case: str | None = None,
     insider_type: str = "all",
     topic_match: bool = False,
@@ -368,6 +393,7 @@ def list_articles(
         prevention_id=prevention_id,
         itm_alignment=itm_alignment,
         channel=channel,
+        country=country,
         use_case=use_case,
         insider_type=insider_type,
         topic_match=topic_match,

@@ -59,6 +59,20 @@ each name into a scoped insider query **and** a bare catch-all, appended to
 both lanes. CourtListener indexes US courts only, so a non-US entity is matched
 by US filings that name it, not by foreign court records.
 
+**IndiaCourts** (`indiacourts.py` + `indiacourts_pipeline.py`,
+docs/india-courts-ingest.md) is the $0 Indian filings lane: a local
+insider-lexicon scan over the CC BY 4.0 eCourts open dataset (AWS Open Data,
+25 High Courts, daily-updated) — parquet partition diffs → per-PDF fetch →
+pypdf text extraction (OCR command hook for scans) → only matches enter the
+corpus, WITH full text attached (no stub rows, so the CL backfill/clear
+contract doesn't apply). Disabled by default (`INDIACOURTS_ENABLED`; heavy
+work belongs on sparky); hub-courts-first history walk to the 2000 floor.
+Court rows carry typed `legal_metadata` (country, court, CNR, stage);
+`resolve_country` (`shared/utils/evidence.py`) maps source prefixes →
+US/CA/IN as the fallback, and a `country` facet threads through
+`/articles`, `/search`, `/sources`, `/feed.xml`, `/export/articles`, and the
+EVIDENCE ledger (`?country=IN` recomputes the same engine over the slice).
+
 Processing (`shared/agents/article_processor.py`, LangGraph):
 normalize → extract_entities (ITM alias match) → score → **classify** →
 **enrich** → embed → assemble. The classify node stamps `use_cases`
@@ -79,10 +93,20 @@ queries, ITM adjudication incl. `is_insider_case`), and derives the legacy
 were LLM-adjudicated non-cases before these gates:
 
 - **Filings**: full body present (`clean_text ≥ SUMMARIZER_FILING_MIN_TEXT_CHARS`)
-  **and** an insider signal *in the body itself* (ITM alias match on the
-  fetched text, or use-case / insider-alignment verdict). The per-article
-  `itm_hits` fire off docket metadata — which embeds the CL query tag — so
-  they must never unlock a filings bill on their own.
+  **and** an insider signal *in the body itself* — since 2026-08 a TWO-part
+  signal: an ITM alias match **and** an `INSIDER_FRAMING_KEYWORDS` hit (a lone
+  alias passed company-v-company IP litigation — 58% of post-gate enrichments
+  adjudicated non-insider), or a use-case / insider-alignment verdict. Ingest
+  match-marker lines ("CourtListener query: …" / "IndiaCourts match: …") are
+  stripped before every body check so a marker can't qualify its own document.
+  The per-article `itm_hits` fire off docket metadata — which embeds the CL
+  query tag — so they must never unlock a filings bill on their own. The gate
+  resolves filings from `FILINGS_SOURCE_PREFIXES` (`canlii-`, `indiacourts-`)
+  plus CourtListener ids — court lanes must be listed there or they fall to
+  the news gate (CanLII sat in that gap until 2026-08-22).
+  `scripts/replay_filings_gate.py` replays old vs new gate over a stored
+  corpus (operator runs it on sparky; the false-negative report is the review
+  gate for this change).
 - **News**: lexical ITM technique hit with `itm_alignment=="insider"`;
   use-case framing alone never bills (vendor-commentary class).
 - **Social/tips**: a classified use case suffices (first-person confessions).
@@ -156,8 +180,9 @@ end to end: `use_case` / `insider_type` / `channel` params on `/articles`,
 `/social/catalog` + `/social/subscriptions`; one-off flagging via
 `POST /social/ingest_url` (accepts Reddit `/s/` share links). The filings
 lane also carries international coverage: CanLII per-court RSS
-(`canlii-*` feeds, `channel="filings"`) plus prosecutor/regulator feeds
-(AFP, OAIC, CPS, NCA, ICO, Justice Canada) in `config.py`.
+(`canlii-*` feeds, `channel="filings"`), the IndiaCourts dataset lane
+(`indiacourts-*`), plus prosecutor/regulator feeds (AFP, OAIC, CPS, NCA,
+ICO, Justice Canada) in `config.py`.
 
 The stream acts on the enricher's own verdict: rows whose stored forensics
 say `is_insider_case=false` render muted with a **purpose stamp** — the
@@ -181,8 +206,15 @@ IS operator approval**; the page renders findings even during API cold-start.
 
 Its invariants: **roles, never individuals** (no persona/entity resolution —
 permanently scrapped as PII-shaped); **adjudicated/admitted vs alleged vs
-reported are never conflated** (`case_strength`); percentages suppressed
-below `SMALL_N_FLOOR`; the evidence→ITM detection crosswalk
+reported are never conflated** (`case_strength` — Indian pre-adjudication
+stages [FIR, charge sheet, bail, quashing, interim relief, writ/disciplinary
+review] are weighted below the adjudicated floor in `POSTURE_WEIGHT`;
+`tests/test_legal_postures.py` is the three-site drift tripwire);
+**jurisdiction = the source court system, never actor nationality** — the
+EVIDENCE page renders per-nation tabs (GLOBAL | US | IN | …, one ledger
+engine recomputing per `?country=` slice, basis line naming the slice,
+small-n floor per slice) plus a TACTICS BY REGION cross-tab on the global
+view; percentages suppressed below `SMALL_N_FLOOR`; the evidence→ITM detection crosswalk
 (`EVIDENCE_DT_CROSSWALK`) stays conservative — external/legal record classes
 map only to DT152 (Financial Auditing; DT067 before ITM 2.9). Color law: `--accent` = court-proven, `--signal` =
 observed/alleged, always with an explicit legend.
@@ -237,6 +269,10 @@ python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /
 python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
 python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECAP Fetch, budget-capped)
 python -m apps.aggregator sweep_courtlistener_history --windows 4  # pull historical case windows manually
+python -m apps.aggregator ingest_indiacourts          # scan new Indian HC judgments (INDIACOURTS_ENABLED)
+python -m apps.aggregator sweep_indiacourts_history   # walk Indian judgment years back to the 2000 floor
+python -m apps.aggregator extract_indiacourts_pending # retry failed/OCR-pending judgment PDFs
+python scripts/replay_filings_gate.py                 # old-vs-new spend gate over the stored corpus (run on sparky)
 python -m apps.aggregator reenrich_missed --dry-run   # count filings whose forensics aren't on the current model
 gcloud run jobs execute corpus-refresh --region us-east1 --wait   # force a corpus refresh
 gcloud logging read 'resource.labels.job_name=corpus-refresh' --freshness=6h \

@@ -101,7 +101,7 @@ def test_export_writes_candidates_ndjson(tmp_path, monkeypatch) -> None:
         processed_path=tmp_path / "empty-processed.jsonl",
         itm_alignment="all",
     )
-    assert manifest["schema_version"] == "insider-intel.export.v5"
+    assert manifest["schema_version"] == "insider-intel.export.v6"
     assert manifest["candidate_count"] == 1
     assert manifest["files"]["candidates"] == "candidates.ndjson"
     lines = (out_dir / "candidates.ndjson").read_text().strip().splitlines()

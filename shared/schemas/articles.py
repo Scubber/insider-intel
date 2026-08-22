@@ -76,6 +76,29 @@ class FeedSource(BaseModel):
     )
 
 
+class LegalMetadata(BaseModel):
+    """Durable typed provenance for court-document rows.
+
+    Jurisdiction of the COURT SYSTEM the record came from — never the actor's
+    nationality. Optional everywhere (legacy rows parse untouched); unknown
+    fields stay None — never fabricate a CNR or case number. Explicit values
+    win over the source-id prefix fallback
+    (``shared.utils.evidence.resolve_country``).
+    """
+
+    country_code: str = Field(..., description="ISO country of the court system (e.g. IN, US)")
+    jurisdiction: str | None = None
+    court_name: str | None = None
+    court_level: str | None = Field(default=None, description="e.g. high_court, federal")
+    document_kind: str | None = Field(default=None, description="e.g. judgment, order, docket")
+    case_number: str | None = None
+    cnr: str | None = Field(default=None, description="eCourts Case Number Reference (India)")
+    source_document_id: str | None = None
+    decision_date: datetime | None = None
+    language: str | None = None
+    source_terms: str | None = Field(default=None, description="License of the source dataset")
+
+
 class RawArticle(BaseModel):
     """Normalized article extracted from a feed entry.
 
@@ -98,6 +121,10 @@ class RawArticle(BaseModel):
         description="Provenance lane: news | filings | tips",
     )
     ingested_at: datetime = Field(default_factory=_utc_now)
+    legal_metadata: LegalMetadata | None = Field(
+        default=None,
+        description="Typed court provenance (jurisdiction, CNR, …); None for non-court rows",
+    )
     # Optional raw payload for debugging / future re-processing
     raw: dict[str, Any] | None = None
 
@@ -327,6 +354,10 @@ class ProcessedArticle(BaseModel):
         description="LLM classifier self-reported confidence (heuristic leaves None)",
     )
     processed_at: datetime = Field(default_factory=_utc_now)
+    legal_metadata: LegalMetadata | None = Field(
+        default=None,
+        description="Typed court provenance carried through from the raw row",
+    )
     # Filled by the optional ingest summarizer LLM (SUMMARIZER_LLM_PROVIDER)
     ai_summary: str | None = None
     case_record: CaseRecord | None = Field(

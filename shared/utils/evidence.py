@@ -52,9 +52,75 @@ POSTURE_WEIGHT: dict[str, int] = {
     "indictment": 2,
     "civil_suit": 1,
     "complaint": 1,
+    # Indian procedural stages (2026-08). Indian judgments are often
+    # forensically rich at PRE-adjudication stages — a bail order can recite
+    # exact email accounts and dates — so every pre-adjudicative stage sits
+    # below POSTURE_ADJUDICATED_MIN_WEIGHT and its "adjudicated" claims are
+    # capped to alleged-tier. Bail/quashing/interim relief are procedural, not
+    # findings on the conduct; a disciplinary or writ record is an employment
+    # process, never a criminal adjudication. Deliberate calls: acquittal is
+    # adjudicated AGAINST proof of the conduct, so it caps like a charge-stage
+    # document rather than letting "adjudicated" methods count as proven;
+    # trial_judgment/civil_decree ARE merits findings and rank adjudicated.
+    "trial_judgment": 5,
+    "civil_decree": 4,
+    "arbitral_proceeding": 3,
+    "charge_sheet": 2,
+    "disciplinary_proceeding": 2,
+    "interim_injunction": 2,
+    "writ_review": 2,
+    "acquittal": 2,
+    "fir_allegation": 1,
+    "bail": 1,
+    "quashing": 1,
 }
 POSTURE_ADJUDICATED_MIN_WEIGHT = 4
 CHANNELS = ("email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human")
+
+# Authored source→jurisdiction taxonomy (the country of the COURT SYSTEM the
+# record came from — never the actor's nationality). Explicit legal metadata
+# always wins over this prefix fallback. Kept here (pure stdlib) so both the
+# API's ledger path and the bare-Actions-runner path resolve identically.
+SOURCE_COUNTRY_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("courtlistener", "US"),
+    ("pacer", "US"),
+    ("canlii-", "CA"),
+    ("indiacourts-", "IN"),
+)
+
+
+def resolve_country(source_id, legal_metadata=None) -> str | None:
+    """Jurisdiction code for a corpus row: explicit metadata, then prefixes.
+
+    Returns None for rows with no court provenance (news, social, …) — those
+    are not "US by default"; only court-document lanes carry a jurisdiction.
+    """
+    if isinstance(legal_metadata, dict):
+        code = str(legal_metadata.get("country_code") or "").strip().upper()
+        if code:
+            return code
+    sid = str(source_id or "").strip().lower()
+    for prefix, country in SOURCE_COUNTRY_PREFIXES:
+        if sid.startswith(prefix):
+            return country
+    return None
+
+
+def filter_rows_by_country(rows, country: str):
+    """Rows whose resolved jurisdiction matches ``country`` (case-insensitive).
+
+    Used by the API's ``?country=`` ledger slicing and by the Actions runner;
+    the ledger builder itself stays slice-agnostic (one engine, many views).
+    """
+    want = (country or "").strip().upper()
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        got = resolve_country(row.get("source_id"), row.get("legal_metadata"))
+        if got == want:
+            out.append(row)
+    return out
 
 # Freeform artifact strings from the enricher vary ("EDR removable-media
 # events" vs "endpoint EDR removable media logs"). Normalize into coarse
@@ -404,6 +470,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
     behavior_seen: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
     strength_totals: Counter = Counter()
+    country_mix: Counter = Counter()  # jurisdiction of contributing cases
 
     for row in rows:
         if not isinstance(row, dict):
@@ -430,6 +497,9 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
             continue
         enriched_cases += 1
         model_mix[str(f.get("model") or "").strip() or "unknown"] += 1
+        row_country = resolve_country(row.get("source_id"), row.get("legal_metadata"))
+        if row_country:
+            country_mix[row_country] += 1
         link = str(row.get("link") or f"row-{total_rows}")
         title = str(row.get("title") or link)[:90]
         posture = str(f.get("legal_posture") or "unknown").strip().lower() or "unknown"
@@ -620,6 +690,11 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
             "excluded_no_verdict": excluded_no_verdict,
             "model_mix": dict(sorted(model_mix.items(), key=lambda kv: (-kv[1], kv[0]))),
         },
+        # Jurisdictions with contributing cases (court system of the source
+        # records, never actor nationality). Drives the EVIDENCE nation tabs;
+        # slicing happens via filter_rows_by_country BEFORE this builder, so
+        # one engine renders the global and every per-country view.
+        "countries": dict(sorted(country_mix.items(), key=lambda kv: (-kv[1], kv[0]))),
         # D-posture: document-stage mix of contributing cases plus how many
         # had their method-claimed strength demoted by the posture ceiling.
         "posture": {

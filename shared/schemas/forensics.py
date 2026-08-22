@@ -89,6 +89,22 @@ LEGAL_POSTURES = (
     "sentencing",
     "civil_suit",
     "settlement",
+    # Indian procedural stages (2026-08, the IndiaCourts lane). Every value
+    # here must ALSO appear in shared/utils/evidence.py::POSTURE_WEIGHT and in
+    # the prompt enum in shared/llm/base.py — an unmapped posture silently
+    # UNCAPS claim_status in case_strength (tests/test_legal_postures.py is
+    # the drift tripwire).
+    "fir_allegation",
+    "charge_sheet",
+    "disciplinary_proceeding",
+    "interim_injunction",
+    "bail",
+    "quashing",
+    "writ_review",
+    "arbitral_proceeding",
+    "civil_decree",
+    "trial_judgment",
+    "acquittal",
     "none",
     "unknown",
 )

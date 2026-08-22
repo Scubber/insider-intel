@@ -21,6 +21,7 @@ from shared.schemas import (
 )
 from shared.schemas.articles import resolve_channel
 from shared.utils.embeddings import cosine_similarity, get_default_embedder
+from shared.utils.evidence import resolve_country
 from shared.utils.model_display import enricher_display_name
 from shared.utils.story_key import compute_story_key
 
@@ -56,6 +57,26 @@ def _article_matches_channel(
     if mode in {"", "all", "*"}:
         return True
     return _article_channel(article) == mode
+
+
+def _article_country(article: ProcessedArticle) -> str | None:
+    """Jurisdiction of the row's court system; None for non-court rows."""
+    legal = getattr(article, "legal_metadata", None)
+    return resolve_country(
+        article.source_id,
+        legal.model_dump() if legal is not None else None,
+    )
+
+
+def _article_matches_country(
+    article: ProcessedArticle,
+    *,
+    country: str = "all",
+) -> bool:
+    mode = (country or "all").strip().upper()
+    if mode in {"", "ALL", "*"}:
+        return True
+    return _article_country(article) == mode
 
 
 def _passes_min_score(article: ProcessedArticle, min_score: float) -> bool:
@@ -307,6 +328,7 @@ class ArticleSearchIndex:
         itm_id: str | None = None,
         itm_alignment: str = "all",
         channel: str = "all",
+        country: str = "all",
         use_case: str | None = None,
         insider_type: str = "all",
     ) -> list[tuple[str, str, int]]:
@@ -320,6 +342,8 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_country(article, country=country):
                 continue
             if not _article_matches_use_case(article, use_case=use_case):
                 continue
@@ -338,6 +362,7 @@ class ArticleSearchIndex:
         min_score: float = 0.0,
         source_id: str | None = None,
         channel: str = "all",
+        country: str = "all",
         use_case: str | None = None,
         insider_type: str = "all",
     ) -> dict[str, int]:
@@ -359,6 +384,8 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_country(article, country=country):
                 continue
             if not _article_matches_use_case(article, use_case=use_case):
                 continue
@@ -531,6 +558,7 @@ class ArticleSearchIndex:
         prevention_id: str | None = None,
         itm_alignment: str = "insider",
         channel: str = "all",
+        country: str = "all",
         use_case: str | None = None,
         insider_type: str = "all",
         topic_match: bool = False,
@@ -556,6 +584,7 @@ class ArticleSearchIndex:
             )
             and _article_matches_alignment(a, itm_alignment=itm_alignment)
             and _article_matches_channel(a, channel=channel)
+            and _article_matches_country(a, country=country)
             and _article_matches_use_case(a, use_case=use_case)
             and _article_matches_insider_type(a, insider_type=insider_type)
         ]
@@ -595,6 +624,7 @@ class ArticleSearchIndex:
         itm_id: str | None = None,
         itm_alignment: str = "insider",
         channel: str = "all",
+        country: str = "all",
         use_case: str | None = None,
         insider_type: str = "all",
     ) -> SearchResponse:
@@ -620,6 +650,8 @@ class ArticleSearchIndex:
             if not _article_matches_alignment(article, itm_alignment=itm_alignment):
                 continue
             if not _article_matches_channel(article, channel=channel):
+                continue
+            if not _article_matches_country(article, country=country):
                 continue
             if not _article_matches_use_case(article, use_case=use_case):
                 continue
@@ -723,4 +755,6 @@ class ArticleSearchIndex:
             enriched_by=enricher_display_name(
                 getattr(forensics, "model", None) if forensics is not None else None
             ),
+            country=_article_country(article),
+            legal_metadata=getattr(article, "legal_metadata", None),
         )

@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from shared.schemas.articles import CaseRecord, ControlRef, ItmHit
+from shared.schemas.articles import CaseRecord, ControlRef, ItmHit, LegalMetadata
 from shared.schemas.forensics import PerCaseForensics
 
 
@@ -72,6 +72,18 @@ class SearchHit(BaseModel):
             "(shared.utils.model_display), e.g. 'Claude Haiku 4.5'; "
             "None when the row was never enriched"
         ),
+    )
+    country: str | None = Field(
+        default=None,
+        description=(
+            "Jurisdiction of the source court system (explicit legal metadata "
+            "winning over source-id inference); None for non-court rows — "
+            "never the actor's nationality"
+        ),
+    )
+    legal_metadata: LegalMetadata | None = Field(
+        default=None,
+        description="Typed court provenance (jurisdiction, CNR, …) when stored",
     )
 
 

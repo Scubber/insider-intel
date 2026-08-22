@@ -37,7 +37,7 @@ from urllib.parse import quote
 
 import httpx
 
-from shared.schemas.articles import RawArticle
+from shared.schemas.articles import LegalMetadata, RawArticle
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +379,18 @@ def judgment_to_raw_article(
         source_id=SOURCE_ID,
         source_name=SOURCE_NAME,
         channel="filings",
+        legal_metadata=LegalMetadata(
+            country_code="IN",
+            jurisdiction="India",
+            court_name=meta.court_name or None,
+            court_level="high_court",
+            document_kind="judgment",
+            cnr=meta.cnr or None,
+            case_number=meta.title.split(" of ")[0].strip() if " of " in meta.title else None,
+            source_document_id=meta.pdf_basename,
+            decision_date=meta.decision_date,
+            source_terms="CC BY 4.0 (eCourts open dataset)",
+        ),
         raw={
             "cnr": meta.cnr,
             "order_number": meta.order_number,

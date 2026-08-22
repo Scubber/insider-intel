@@ -3679,6 +3679,18 @@
     metaText.textContent = metaParts.join(" · ");
     if (proof) metaText.classList.add(`proof-${proof.key}`);
     meta.appendChild(metaText);
+    if (article.country) {
+      // Jurisdiction chip: which court system the record came from — never
+      // the person's nationality (the tooltip says so on every card).
+      const juris = document.createElement("span");
+      juris.className = "case-juris";
+      juris.textContent = article.country;
+      const legal = article.legal_metadata || {};
+      juris.dataset.tip =
+        (legal.court_name ? `${legal.court_name} — ` : "") +
+        "jurisdiction of the court record, never the person's nationality";
+      meta.appendChild(juris);
+    }
     if (isContextArticle(article)) {
       // The enricher's own verdict outranks the heuristic insider_type stamp.
       // Say what the row is FOR, not just what it isn't: the enricher's
@@ -4804,15 +4816,160 @@
     }
   }
 
-  let evidencePageLoaded = false;
+  /* ── Jurisdiction views (operator directive 2026-08-22): each nation tab is
+     a complete self-contained report rendered by the SAME ledger engine (the
+     API recomputes over the sliced rows); GLOBAL adds the TACTICS BY REGION
+     cross-tab that separate reports could never draw. Jurisdiction = the
+     court system of the records, never the actor's nationality. ─────────── */
+  let evidenceCountry = "all";
+  let evidenceGlobalCountries = null; // {CC: caseCount} from the global read
+  const evidenceLedgerCache = {}; // country -> ledger payload (session)
+
+  async function fetchLedger(country) {
+    const key = (country || "all").toUpperCase();
+    if (evidenceLedgerCache[key]) return evidenceLedgerCache[key];
+    const params = { top: 25 };
+    if (key !== "ALL") params.country = key;
+    const data = await api("/evidence/ledger", params, { timeoutMs: 15000 });
+    evidenceLedgerCache[key] = data;
+    return data;
+  }
+
+  function renderEvidenceBasisLine(data) {
+    const line = document.getElementById("evp-basis-line");
+    if (!line) return;
+    if (!data || !data.enriched_cases) {
+      line.textContent = "";
+      return;
+    }
+    const day = String(data.generated_at || "").slice(0, 10);
+    const juris = evidenceCountry === "all" ? "GLOBAL" : evidenceCountry.toUpperCase();
+    line.textContent =
+      `BASED ON ${data.enriched_cases.toLocaleString()} VERDICT-TRUE CASES · ` +
+      `JURISDICTION: ${juris}` +
+      (day ? ` · AS OF ${day}Z` : "");
+  }
+
+  function renderJurisdictionTabs() {
+    const wrap = document.getElementById("evp-juris");
+    const tabs = document.getElementById("evp-juris-tabs");
+    if (!wrap || !tabs) return;
+    const countries = evidenceGlobalCountries || {};
+    const codes = Object.keys(countries);
+    if (!codes.length) {
+      // No jurisdiction-tagged cases yet: no tabs, no empty broken element.
+      wrap.hidden = true;
+      return;
+    }
+    tabs.innerHTML = "";
+    const mk = (code, label, count) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "evp-juris-tab";
+      btn.setAttribute("role", "tab");
+      const active = evidenceCountry === code;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      if (active) btn.classList.add("active");
+      btn.textContent = count != null ? `${label} ×${count}` : label;
+      btn.dataset.tip =
+        code === "all"
+          ? "Every jurisdiction combined — the corpus-wide view"
+          : `${count} verdict-true case(s) from ${label} courts — a self-contained report for that court system`;
+      btn.addEventListener("click", () => {
+        if (evidenceCountry === code) return;
+        evidenceCountry = code;
+        loadEvidencePage();
+      });
+      return btn;
+    };
+    tabs.appendChild(mk("all", "GLOBAL", null));
+    codes.forEach((code) => tabs.appendChild(mk(code, code, countries[code])));
+    wrap.hidden = false;
+  }
+
+  async function renderRegionCompare(globalData) {
+    const box = document.getElementById("evp-region");
+    const table = document.getElementById("evp-region-table");
+    if (!box || !table) return;
+    const countries = Object.keys((globalData && globalData.countries) || {});
+    // The cross-tab needs at least two jurisdictions AND the global tab.
+    if (evidenceCountry !== "all" || countries.length < 2) {
+      box.hidden = true;
+      return;
+    }
+    const codes = countries.slice(0, 4); // columns stay readable
+    let ledgers;
+    try {
+      ledgers = await Promise.all(codes.map((c) => fetchLedger(c)));
+    } catch (err) {
+      console.warn("Region compare unavailable", err);
+      box.hidden = true;
+      return;
+    }
+    const floor = globalData.small_n_floor || 10;
+    const byTech = new Map(); // id -> {title, counts: {code: n}, total}
+    codes.forEach((code, i) => {
+      (ledgers[i].techniques || []).forEach((t) => {
+        const entry = byTech.get(t.id) || { title: t.title || t.id, counts: {}, total: 0 };
+        entry.counts[code] = t.cases || 0;
+        entry.total += t.cases || 0;
+        byTech.set(t.id, entry);
+      });
+    });
+    const rows = [...byTech.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 12);
+    table.innerHTML = "";
+    const thead = document.createElement("tr");
+    thead.appendChild(evpEl("th", "", "TECHNIQUE"));
+    codes.forEach((c) => thead.appendChild(evpEl("th", "num", c)));
+    thead.appendChild(evpEl("th", "", ""));
+    table.appendChild(thead);
+    rows.forEach(([id, entry]) => {
+      const tr = document.createElement("tr");
+      const name = evpEl("td", "", `${entry.title} `);
+      name.appendChild(evpEl("span", "evp-note", id));
+      tr.appendChild(name);
+      codes.forEach((c) => tr.appendChild(evpEl("td", "num", String(entry.counts[c] || 0))));
+      const skewTd = evpEl("td", "");
+      const top = codes.reduce((a, b) => ((entry.counts[a] || 0) >= (entry.counts[b] || 0) ? a : b));
+      // SKEWS only above the small-sample floor and a clear 2/3 concentration.
+      if (entry.total >= floor && (entry.counts[top] || 0) * 3 >= entry.total * 2) {
+        const chip = evpEl("span", "evp-skew", `SKEWS ${top}`);
+        chip.dataset.tip =
+          `${entry.counts[top]} of ${entry.total} cases citing this technique come from ` +
+          `${top} courts. The jurisdictions are differently sourced — read as document mix, ` +
+          `not a population comparison.`;
+        skewTd.appendChild(chip);
+      }
+      tr.appendChild(skewTd);
+      table.appendChild(tr);
+    });
+    if (!rows.length) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+  }
 
   async function loadEvidencePage(force) {
     if (!document.getElementById("evp-stats")) return;
     loadFindings();
-    if (evidencePageLoaded && !force) return;
+    if (force) {
+      // Post-sweep /reload: drop the session cache so every jurisdiction view
+      // recomputes from the fresh corpus. (Tab switches don't force — they
+      // re-render from the per-country cache.)
+      Object.keys(evidenceLedgerCache).forEach((k) => delete evidenceLedgerCache[k]);
+      evidenceGlobalCountries = null;
+    }
     try {
-      renderEvidencePage(await api("/evidence/ledger", { top: 25 }, { timeoutMs: 15000 }));
-      evidencePageLoaded = true;
+      // Tabs come from the GLOBAL payload; fetch it first (cache-first) so a
+      // per-country view still knows which tabs exist.
+      const globalData = await fetchLedger("all");
+      if (globalData && globalData.countries) evidenceGlobalCountries = globalData.countries;
+      const data = evidenceCountry === "all" ? globalData : await fetchLedger(evidenceCountry);
+      renderEvidencePage(data);
+      renderEvidenceBasisLine(data);
+      renderJurisdictionTabs();
+      renderRegionCompare(globalData);
     } catch (err) {
       console.warn("Evidence page unavailable", err);
       renderEvidencePage(null);
@@ -5992,8 +6149,14 @@
       await ensureItmCatalog(true);
       renderMatrixBrowse();
       loadEvidenceLedger();
-      evidencePageLoaded = false;
-      if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") loadEvidencePage(true);
+      // Force-drop the per-jurisdiction ledger cache; re-render immediately
+      // only when the EVIDENCE pane is the one on screen.
+      if (els.appWorkbench && els.appWorkbench.dataset.pane === "evidence") {
+        loadEvidencePage(true);
+      } else {
+        Object.keys(evidenceLedgerCache).forEach((k) => delete evidenceLedgerCache[k]);
+        evidenceGlobalCountries = null;
+      }
       // TOOLING is session-cached like the evidence page: drop the cached
       // /tooling payload (it also feeds category dossiers, vendor sheets,
       // and the technique dossiers' RELEVANT TOOLING join) and re-count
