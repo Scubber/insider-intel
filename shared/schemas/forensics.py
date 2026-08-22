@@ -279,20 +279,36 @@ def _confidence(rec: EnrichmentRecord) -> float:
 
 
 def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord | None:
-    """Pick the projected generation: richest WITHIN the winning verdict.
+    """Pick the projected generation: richest WITHIN the winning verdict,
+    considering only the newest SCHEMA TIER present.
 
-    Richness alone must never flip ``is_insider_case`` (2026-08-16 audit:
-    method count dominates confidence 10x in ``enrichment_richness``, so a
-    verbose low-confidence generation could silently re-adjudicate a case —
-    fatal once multi-model sweeps write second opinions into history).
-    Selection is two-stage: the VERDICT is won by whichever class's best
-    generation carries the higher confidence (ties: richer, then newer); the
-    projection is then the richest generation within that class. A thin
-    re-enrich still can't gut a rich record, and a chatty one can't flip a
-    confident adjudication.
+    Schema tier first (2026-08-22, the Bruce v. Intuit lesson): a schema bump
+    is a deliberate contract upgrade (docs/schema-freeze-v3.md) — its
+    generations carry calibrated confidence bands and demanded fields, so
+    comparing them against an older tier is meaningless in both directions: a
+    v2 complaint stamped 0.95 must not outvote a calibrated v3 at 0.75, and
+    v2 verbosity must not out-richness v3 tightness. Without this, a sweep
+    archives better records that never project. Only generations at the
+    highest ``schema_version`` in the history compete; histories with a
+    single tier (all-legacy rows) behave exactly as before.
+
+    Within the tier, richness alone must never flip ``is_insider_case``
+    (2026-08-16 audit: method count dominates confidence 10x in
+    ``enrichment_richness``, so a verbose low-confidence generation could
+    silently re-adjudicate a case — fatal once multi-model sweeps write
+    second opinions into history). Selection is two-stage: the VERDICT is won
+    by whichever class's best generation carries the higher confidence (ties:
+    richer, then newer); the projection is then the richest generation within
+    that class. A thin re-enrich still can't gut a rich record, and a chatty
+    one can't flip a confident adjudication.
     """
+    if not history:
+        return None
+    top_tier = max(rec.schema_version for rec in history)
     best_by_verdict: dict[bool, EnrichmentRecord] = {}
     for rec in history:
+        if rec.schema_version != top_tier:
+            continue
         verdict = bool(rec.forensics.is_insider_case)
         incumbent = best_by_verdict.get(verdict)
         if incumbent is None or _selection_key(rec) > _selection_key(incumbent):
