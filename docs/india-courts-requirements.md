@@ -213,18 +213,32 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
   `tests/test_about_page.py` (minimal-pane, attribution-lines, no-corpus-digits
   contracts). `ui-smoke` must pass at 390/1280; Playwright evidence in the PR body.
   `web/findings.json` needs no rewrite (static, publish-by-merge).
-- **EVIDENCE separates by country (operator requirement 2026-08-22)** — a filter, not
-  just a payload breakdown:
+- **Nation analysis is a primary product goal of this lane (operator directive
+  2026-08-22): threat tactics differ by region, and EVIDENCE must present per-nation
+  reports plus the cross-nation divergence — one ledger engine, many views. Never fork
+  into separate report pipelines: divergence is only demonstrable on a shared taxonomy
+  and shared machinery (same posture weights, same floors, same enrichment).**
   - API: `country` query param on `GET /evidence/ledger` AND
     `GET /evidence/technique/{id}` — the ledger recomputes over the country-sliced row
     set (pure-stdlib `build_evidence_ledger` unchanged in spirit; country threaded into
     the row projection at `apps/search/service.py:175-184` and the Actions-runner path).
-    No param = global ledger, exactly today's behavior. Countries are enumerated from
+    No param = global ledger, byte-identical to today. Countries are enumerated from
     the data (via legal_metadata / the source-prefix resolver), never a hardcoded list.
-  - UI: a jurisdiction switch on the EVIDENCE pane (ALL | per-country chips rendered
-    only for countries present in the corpus), carried into the per-technique dossier
-    tie-ins. Per "every page teaches itself": a `data-tip` stating jurisdiction = the
-    court system of the source records, never actor nationality.
+  - UI: **jurisdiction tabs as first-class EVIDENCE navigation** (e.g. `US | IN |
+    GLOBAL`, tabs rendered only for countries present in the corpus) — each nation tab
+    is a complete self-contained report: own basis line, own technique breakdown, own
+    small-n suppressions. Carried into the per-technique dossier tie-ins. A blended
+    global aggregate must never be the only lens (a global average of two different
+    tactic distributions describes neither region).
+  - **TACTICS BY REGION compare view**: a deterministic technique×country cross-tab
+    from the same ledger payloads, highlighting techniques that skew regional (e.g.
+    notice-period exfil / WhatsApp channels vs SIM-swap / help-desk social
+    engineering — the US and India query packs themselves encode this divergence).
+    Small-n floor applies per cell; the selection caveat lives in the methodology
+    tooltip per display doctrine. This view is the lane's flagship output — separate
+    per-nation reports could never render it.
+  - Per "every page teaches itself": a `data-tip` stating jurisdiction = the court
+    system of the source records, never actor nationality.
   - The basis line names the active slice (e.g. `BASED ON <N> VERDICT-TRUE CASES ·
     JURISDICTION: IN · AS OF <date>Z`). `SMALL_N_FLOOR=10` applies per-slice — sliced
     views will suppress percentages more often, which is correct; the suppressed/empty
