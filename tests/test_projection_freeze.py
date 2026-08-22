@@ -25,18 +25,19 @@ def _gen(
     methods: int,
     note: str | None = "note",
     when: int = 1,
+    schema: int | None = None,
 ) -> EnrichmentRecord:
-    return EnrichmentRecord(
-        ai_summary=note,
-        forensics=PerCaseForensics(
-            link="https://example.com/a",
-            title="t",
-            is_insider_case=insider,
-            confidence=confidence,
-            methods=[CaseMethod(action=f"a{i}") for i in range(methods)],
-            extracted_at=datetime(2026, 1, when, tzinfo=UTC),
-        ),
+    forensics = PerCaseForensics(
+        link="https://example.com/a",
+        title="t",
+        is_insider_case=insider,
+        confidence=confidence,
+        methods=[CaseMethod(action=f"a{i}") for i in range(methods)],
+        extracted_at=datetime(2026, 1, when, tzinfo=UTC),
     )
+    if schema is not None:
+        forensics = forensics.model_copy(update={"schema_version": schema})
+    return EnrichmentRecord(ai_summary=note, forensics=forensics)
 
 
 def test_richness_cannot_flip_a_confident_verdict() -> None:
@@ -68,6 +69,32 @@ def test_haiku_test_retest_flip_resolves_to_confident_generation() -> None:
     zero = _gen(insider=False, confidence=0.0, methods=2, when=2)
     assert select_best_enrichment([hi, zero]) is hi
     assert select_best_enrichment([zero, hi]) is hi
+
+
+def test_newer_schema_tier_beats_older_verbosity_and_confidence() -> None:
+    """The Bruce v. Intuit lesson (2026-08-22): a sweep's calibrated v3 record
+    must project over a verbose, overconfident v2 incumbent — else the sweep
+    archives improvements that never reach the site."""
+    v2_verbose = _gen(insider=True, confidence=0.95, methods=5, when=1, schema=2)
+    v3_terse = _gen(insider=True, confidence=0.75, methods=1, when=2, schema=3)
+    assert select_best_enrichment([v2_verbose, v3_terse]) is v3_terse
+    assert select_best_enrichment([v3_terse, v2_verbose]) is v3_terse
+
+
+def test_newer_schema_tier_owns_the_verdict() -> None:
+    """Cross-schema confidences are incomparable: v2's inflated 0.95 must not
+    outvote a calibrated v3 re-adjudication that flips the verdict."""
+    v2_insider = _gen(insider=True, confidence=0.95, methods=3, when=1, schema=2)
+    v3_noncase = _gen(insider=False, confidence=0.6, methods=0, when=2, schema=3)
+    picked = select_best_enrichment([v2_insider, v3_noncase])
+    assert picked is v3_noncase
+
+
+def test_single_schema_tier_keeps_legacy_behavior() -> None:
+    """All-v2 histories (untouched legacy rows) select exactly as before."""
+    thin = _gen(insider=True, confidence=0.9, methods=1, when=2, schema=2)
+    rich = _gen(insider=True, confidence=0.7, methods=4, when=1, schema=2)
+    assert select_best_enrichment([thin, rich]) is rich
 
 
 def test_single_generation_unchanged() -> None:
