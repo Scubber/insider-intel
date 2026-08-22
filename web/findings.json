@@ -19,17 +19,16 @@
     },
     {
       "id": "F2",
-      "title": "Most of what you'll read about insider threats is unproven",
-      "stat": "13%",
-      "stat_label": "of insider cases with a described method are court-proven — admitted or judged. That's 112 of 853; the other 662 are one side's allegations, and 79 are unclear",
-      "takeaway": "Nearly nine in ten insider stories — in the news, in vendor decks, in this corpus — are a claim someone made in a lawsuit, not an established fact. Before a scary statistic moves your budget, ask which pile it came from. Everything on this page keeps the two piles separate; hold your vendors to the same standard.",
+      "title": "Most cases here are still allegations, not verdicts",
+      "stat": "15%",
+      "stat_label": "of the 710 insider cases with a described action are court-proven — a guilty plea, an admission, or a judgment. That's 109 cases; 599 are so far one side's story, and 2 can't be called either way (corpus of 2026-08-22)",
+      "takeaway": "Court cases take years, and most of the paper trail is written at the accusation stage: a complaint or an indictment says what one side intends to prove, not what a court found. So at any moment most of this corpus — like most insider-threat stories anywhere — sits in the claimed pile, not the proven one. This page never mixes the two: proven and alleged are labeled and counted separately, everywhere.",
       "recommendations": [
-        "When a briefing or sales pitch cites insider-threat numbers, ask: how many of those cases were actually proven?",
-        "Weight decisions toward the proven subset — it's smaller, but it's real.",
-        "Use allegations for what they're good for: they show where companies believe they were hurt, and what evidence they reach for.",
-        "Bring the same discipline to internal reporting — label suspected vs. confirmed in your own incident metrics."
+        "When a briefing or sales pitch cites insider-threat numbers, ask how many come from proven cases.",
+        "Allegations still teach — they show where companies believe they were hurt and what evidence they bring to court. Just don't quote them as fact.",
+        "Label suspected vs. confirmed in your own incident metrics, the same way this page does."
       ],
-      "method": "A case counts as court-proven only if at least one described method carries an admitted or adjudicated status (guilty plea, admission, or judgment). Everything else stays 'alleged' or 'unclear'. The split is recomputed from the live corpus on every refresh."
+      "method": "A case counts as court-proven only when at least one described action carries an admitted or adjudicated status — a guilty plea, admission, or judgment. Everything else stays alleged or unclear. The split is recomputed from the live corpus on every refresh."
     },
     {
       "id": "F3",
