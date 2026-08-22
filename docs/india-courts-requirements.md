@@ -90,8 +90,9 @@ parquet sync of new decision dates (~1-day lag); history = backward partition wa
 4. This lane's heavy work (download, extract, OCR, scan) runs **on the Spark tenant**,
    bounded so it never starves the 4×-daily refresh cron: per-run caps on partitions
    downloaded, PDFs extracted, and OCR pages; resumable state under `data/state/`.
-   Check sparky's free disk before sizing partition scope — the operator picks target
-   courts and a year floor (pre-flight below).
+   **Disk is a rolling buffer, never cumulative**: download a tar partition → extract
+   text → scan → keep only matching judgments → delete the tar before the next
+   partition. Working space is a few GB at a time regardless of total corpus size.
 
 ## Deliver in three phases, in order, as separate PR-sized chunks
 
@@ -218,11 +219,31 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
   jurisdictions contribute different document types and procedural stages, and that
   coverage equals the lexicon (no semantic discovery at the scan stage).
 
+## Coverage scope (operator-decided 2026-08-22 — not open for re-scoping)
+
+- **Courts: all 25 High Courts.** No exclusions. Rationale: the rolling-buffer design
+  makes a court's cost pure background compute, and insider cases arise outside obvious
+  tech hubs — the dataset's largest court by volume is Punjab & Haryana (1.84M
+  judgments, the Gurgaon tech-belt court behind the Abhinav Gupta email-exfiltration
+  case). Scoping by court loses cases and saves nothing that matters.
+- **History floor: 2000-01-01** (`INDIACOURTS_HISTORY_FLOOR` default). Rationale: the
+  IT Act 2000 opens India's cybercrime-statute era and the IT/BPO employment boom is a
+  2000s phenomenon; per the dataset's STATS.md, meaningful volume starts ~2004 anyway
+  (~50k PDFs in 2004 → ~405k in 2010 → 1.79M peak in 2023; pre-2000 is negligible), so
+  the 2000 floor is effectively "everything" at no extra cost. Note: unlike the US
+  lane's 2015 CourtListener floor, there is no API throttle here — depth is free.
+- **Walk order: newest-first, hub-courts-first** (Delhi, Bombay, Karnataka, Madras,
+  Telangana, Punjab & Haryana lead; remaining courts follow). Ordering controls how
+  fast insider signal reaches EVIDENCE, not coverage — every court/year in scope gets
+  processed eventually. Expect the pre-2010 tail to skew scanned (higher OCR share,
+  slower); volumes there are small, so it is acceptable background work.
+- Deep history is a product feature: tactic evolution over time (floppy → pen drive →
+  personal email → WhatsApp) charts on the EVIDENCE year axis.
+
 ## Operator pre-flight (don't block coding; record gaps in the final report)
 
-1. Target scope: which High Courts and what year floor for the history walk (suggest
-   starting with the IT-hub courts — Delhi, Bombay, Karnataka, Madras, Telangana — and
-   ~10 years); confirm free disk on sparky for those partitions.
+1. Confirm free disk on sparky covers the rolling working buffer plus the retained
+   matched-judgment text (small; the tars are deleted after extraction).
 2. Confirm the OCR model choice after a bench run on sparky (olmOCR-2-7B default;
    DeepSeek-OCR 2 for speed; Surya for Indic scripts) and that vLLM serves it alongside
    or time-shared with the enrichment model within 128GB.
