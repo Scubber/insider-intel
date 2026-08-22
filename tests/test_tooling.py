@@ -554,8 +554,8 @@ def test_tooling_tab_pane_and_guide_line_present() -> None:
     # Cheat-sheet line (test_site_guide enforces existence; pin the promise).
     cheat = re.search(r'id="guide-cheat".*?</dl>', html, re.DOTALL)
     assert cheat and "<dt>TOOLING</dt>" in cheat.group(0)
-    assert "Which enterprise tools show up in real cases" in cheat.group(0)
-    assert "Click a tool for the filings that name it" in cheat.group(0)
+    assert "Security products named in real court filings" in cheat.group(0)
+    assert "Click a product for its cases" in cheat.group(0)
     # Takeover CSS wired like EVIDENCE.
     css = Path("web/styles.css").read_text(encoding="utf-8")
     assert '.app-shell[data-pane="tooling"] .pane-tooling-page' in css
