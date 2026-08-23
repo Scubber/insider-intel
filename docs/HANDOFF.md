@@ -138,8 +138,20 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    walk (300 PDFs/run cap) covers more courts and years. IN tab and
    `?country=IN` populate automatically when the first matches land. To
    speed the backlog: raise the `INDIACOURTS_*` per-run caps in
-   `.env.spark`. Optional OCR command still unbenched (parked PDFs wait
-   on it).
+   `.env.spark`. **OCR solved 2026-08-23**: Tesseract ships in the Docker
+   `spark` stage with `apps/aggregator/ocr_pdf.py` as the default
+   `INDIACOURTS_OCR_COMMAND` backend (keyword-grade text suffices for the
+   lexicon; olmOCR stays the benched upgrade path) — activate via
+   sparky-ops `enable-ocr`, drain parked PDFs with `extract-india`
+   (`retry_days=0` to skip the cool-down). **Language measured**: 0/62
+   sampled PDFs Devanagari across 14 benches incl. the Hindi-permitted
+   courts — no desi-lexicon needed; every stored row now stamps
+   `legal_metadata.language` and cycles log `non_english=` counts, so a
+   real Hindi share would surface in data. Dataset's `pdf_exists` flag is
+   unreliable (False on partitions whose PDFs exist) — the lane never
+   trusted it. Full-history bulk sweep (~18.5M judgments measured from
+   partition metadata; ~1-2 weeks via tar streaming/parallel fetch)
+   designed but NOT started — operator call pending.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.

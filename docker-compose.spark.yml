@@ -14,9 +14,10 @@ services:
   refresh:
     build:
       context: .
-      # `docker build .` already yields the runtime stage (repo invariant);
-      # explicit here so this file can't silently drift onto the dev image.
-      target: runtime
+      # runtime + OCR binaries (pdftoppm/tesseract) for the IndiaCourts
+      # scanned-PDF path. A plain `docker build .` still yields the lean
+      # runtime stage for Cloud Run (repo invariant — final alias stage).
+      target: spark
     image: insider-intel-spark
     command: python -m apps.aggregator all
     env_file:

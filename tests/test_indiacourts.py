@@ -330,6 +330,54 @@ def test_judgment_to_raw_article_contract() -> None:
     assert resolve_channel(article.source_id) == "filings"
     assert article.link.endswith("HCBM020000062026_1_2026-01-05.pdf")
     assert article.raw is not None and article.raw["cnr"] == "HCBM020000062026"
+    # Language stamped from the scanned text itself (dataset has no column).
+    assert article.legal_metadata is not None and article.legal_metadata.language == "en"
+
+
+def test_detect_language_scripts() -> None:
+    from apps.aggregator.indiacourts import detect_language
+
+    english = "the former employee copied confidential files onto a pen drive " * 10
+    hindi = "अभियुक्त कर्मचारी ने गोपनीय दस्तावेज़ों की प्रतिलिपि बनाई और गबन किया " * 10
+    mixed_header = ("IN THE HIGH COURT OF JUDICATURE " * 3) + hindi
+    assert detect_language(english) == "en"
+    assert detect_language(hindi) == "hi"
+    # Hindi body under an English boilerplate header still stamps hi.
+    assert detect_language(mixed_header) == "hi"
+    assert detect_language("short") is None
+
+
+def test_ocr_pdf_helper_runs_pdftoppm_then_tesseract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The Tesseract helper: rasterize pages, OCR each, join stdout — verified
+    with a faked subprocess so CI needs no OCR binaries."""
+    import subprocess as sp
+
+    from apps.aggregator import ocr_pdf as mod
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        if argv[0] == "pdftoppm":
+            prefix = Path(argv[-1])
+            for i in (1, 2):
+                (prefix.parent / f"{prefix.name}-{i}.png").write_bytes(b"png")
+            return sp.CompletedProcess(argv, 0, stdout=b"", stderr=b"")
+        if argv[0] == "tesseract":
+            page = Path(argv[1]).name
+            return sp.CompletedProcess(argv, 0, stdout=f"text-of-{page}\n", stderr="")
+        raise AssertionError(f"unexpected command {argv}")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    out = mod.ocr_pdf(str(pdf), max_pages=5)
+    assert "text-of-page-1.png" in out and "text-of-page-2.png" in out
+    assert calls[0][0] == "pdftoppm" and "-l" in calls[0]
+    assert calls[0][calls[0].index("-l") + 1] == "5"  # page cap threaded through
+    assert sum(1 for c in calls if c[0] == "tesseract") == 2
 
 
 def test_match_marker_is_stripped_by_the_spend_gate() -> None:
