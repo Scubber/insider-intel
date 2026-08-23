@@ -175,11 +175,16 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    gcloud services enable compute.googleapis.com cloudresourcemanager.googleapis.com --project $PROJECT
    PN=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
    gcloud storage buckets add-iam-policy-binding gs://$PROJECT-corpus \
-     --member=serviceAccount:${PN}-compute@developer.gserviceaccount.com --role=roles/storage.objectAdmin
+     --member=serviceAccount:${PN}-compute@developer.gserviceaccount.com \
+     --role=roles/storage.objectAdmin --condition=None
    gcloud projects add-iam-policy-binding $PROJECT \
-     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com --role=roles/compute.instanceAdmin.v1
+     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com \
+     --role=roles/compute.instanceAdmin.v1 --condition=None
    gcloud iam service-accounts add-iam-policy-binding ${PN}-compute@developer.gserviceaccount.com \
-     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com --role=roles/iam.serviceAccountUser --project $PROJECT
+     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com \
+     --role=roles/iam.serviceAccountUser --condition=None --project $PROJECT
+   # --condition=None is REQUIRED: the bucket policy carries the api-runtime
+   # conditional binding, so gcloud demands an explicit condition choice.
    ```
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
