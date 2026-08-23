@@ -25,7 +25,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | Area | State |
 |---|---|
 | **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
-| **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. **Incident 2026-08-23 RESOLVED (thread #14):** ~51 rows' enrichment projections were gutted overnight and restored at 11:52Z from the retained post-sweep generation (no articles were ever lost — the "row loss" was duplicate counting in a mid-append snapshot); 7,490 unique rows as of the restore. |
+| **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. **Incident 2026-08-23 RESOLVED (thread #14):** ~51 rows' enrichment projections were gutted overnight and restored at 11:52Z from the retained post-sweep generation (no articles were ever lost — the "row loss" was duplicate counting in a mid-append snapshot). Post-restore cycle (13:14Z): **7,494 rows / 2,146 enriched / 693 verdict-true**, pushed + reloaded. |
 | **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242). Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Static-first boot** (#240, 2026-08-22): `pages.yml` builds `web/data/` as a **true twin of the boot render** (articles/sources/ledger/meta/tooling.json, never committed) daily at 08:40Z; UI paints instantly under a CACHED badge and silently adopts the live API result when it matches (projection-equivalence test guards drift). deploy-pages poll timeout 20min. |
@@ -128,12 +128,18 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    floor, a `country` facet end to end, EVIDENCE nation tabs + TACTICS BY
    REGION, and export schema v6. Requirements:
    docs/india-courts-requirements.md; lane doc: docs/india-courts-ingest.md.
-   **Lane is still DARK**: `INDIACOURTS_ENABLED` unset on sparky, reserve
-   still 60 (bump to 120 optional when the history walk starts). Activation
-   = `INDIACOURTS_ENABLED=true` in `.env.spark`, smoke
-   `ingest_indiacourts -v`, verify `/lanes/health` + `?country=IN`;
-   optional OCR command (bench first). Flip only when Indian PDFs should
-   start walking.
+   **Lane LIVE since 2026-08-23** (activated via `sparky-ops`
+   `enable-india`/`smoke-india`/`run-refresh`): `INDIACOURTS_ENABLED=true`
+   in `.env.spark`, reserve 120. First cycles scanned ~1,400 real PDFs
+   (forward diff + history slice, both `[OK]`, lane health 64/64 ok);
+   truncated/scanned PDFs park in the pending queue as designed. **Zero
+   lexicon matches so far** — recent Delhi HC daily orders are mostly
+   routine matter; expect matches to trickle in as the nightly history
+   walk (300 PDFs/run cap) covers more courts and years. IN tab and
+   `?country=IN` populate automatically when the first matches land. To
+   speed the backlog: raise the `INDIACOURTS_*` per-run caps in
+   `.env.spark`. Optional OCR command still unbenched (parked PDFs wait
+   on it).
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
