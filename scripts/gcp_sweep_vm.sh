@@ -20,7 +20,7 @@ MACHINE="${MACHINE:-c2d-standard-16}"
 BUCKET="gs://${PROJECT}-corpus"
 SPOOL_PREFIX="${BUCKET}/raw/sweeps/indiacourts"
 STATE_PREFIX="${BUCKET}/raw/sweeps/indiacourts-state"
-REPO="${REPO:-https://github.com/Scubber/insider-intel.git}"
+SRC_TARBALL="${BUCKET}/raw/sweeps/indiacourts-src.tar.gz"
 
 case "${1:-create}" in
   status)
@@ -37,11 +37,31 @@ case "${1:-create}" in
     ;;
 esac
 
+# One-time project prep, idempotent: the Compute API and the default compute
+# SA's bucket access (needed for the VM's spool/state rsync). Best-effort —
+# an account without IAM rights sees the command to hand to one that has it.
+gcloud services enable compute.googleapis.com --project "$PROJECT" || true
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
+gcloud storage buckets add-iam-policy-binding "$BUCKET" \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role=roles/storage.objectAdmin >/dev/null 2>&1 \
+  || echo "WARN: could not grant objectAdmin on ${BUCKET} to the compute SA — grant it manually or the spool rsync will fail"
+
+# The repo is private, so the VM gets its source as a tarball through the
+# bucket (this script runs from a checkout — usually sparky's).
+git -C "$(dirname "$0")/.." archive --format=tar.gz -o /tmp/indiacourts-src.tar.gz HEAD
+gcloud storage cp /tmp/indiacourts-src.tar.gz "$SRC_TARBALL"
+
 STARTUP=$(cat <<EOS
 #!/bin/bash
 set -euo pipefail
-apt-get update && apt-get install -y --no-install-recommends docker.io git
-git clone --depth 1 ${REPO} /opt/insider-intel
+apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates
+# Docker CE via the convenience script: the repo Dockerfile uses heredocs,
+# which bare docker.io lacks BuildKit for (known gotcha).
+curl -fsSL https://get.docker.com | sh
+mkdir -p /opt/insider-intel
+gcloud storage cp ${SRC_TARBALL} /opt/src.tar.gz
+tar xzf /opt/src.tar.gz -C /opt/insider-intel
 cd /opt/insider-intel
 docker build --target spark -t insider-intel-spark .
 mkdir -p /opt/data/raw/sweep_spool /opt/data/state/indiacourts
@@ -78,8 +98,7 @@ gcloud compute instances create "$NAME" \
   --metadata=startup-script="$STARTUP"
 
 echo
-echo "VM '$NAME' creating. The default compute SA needs objectAdmin on ${BUCKET}"
-echo "(one-time): gcloud storage buckets add-iam-policy-binding ${BUCKET} \\"
-echo "  --member=serviceAccount:\$(gcloud projects describe ${PROJECT} --format='value(projectNumber)')-compute@developer.gserviceaccount.com \\"
-echo "  --role=roles/storage.objectAdmin"
+echo "VM '$NAME' creating (spot ${MACHINE}, ${ZONE}). Boot takes a few minutes:"
+echo "docker installs, the source tarball builds, then the sweep streams tars"
+echo "and rsyncs chunks/state to ${SPOOL_PREFIX} every 5 minutes."
 echo "Watch: bash scripts/gcp_sweep_vm.sh status   Tear down: bash scripts/gcp_sweep_vm.sh delete"
