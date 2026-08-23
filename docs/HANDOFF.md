@@ -268,6 +268,23 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
     executions in the window (log markers empty; scheduler paused). The
     `sparky-ops` workflow's `diagnose` op (added 2026-08-23) runs this
     whole checklist on the box in one dispatch.
+    **Forensics run 2026-08-23 ~11:40Z (diagnose + hunt-writer ops):**
+    crontab is CLEAN (one daily entry) and today's 08:00Z cron SKIPPED on a
+    held flock — yet 00:04Z and 08:03Z pushes happened, and the 08:03Z one
+    byte-matches the operational checkout's local file (mtime 08:02:13Z).
+    So the writer was a long-running MANUAL process in the one checkout
+    (no second checkout, no other crontabs, no tim user dir, GHA
+    refresh-corpus/watch-refresh idle since Aug 10 — Cloud Run job ruled
+    out), started without the log redirect, flock-compliant, ending
+    ~09:38Z today (chat stack restore per docker uptimes) — i.e. part of
+    the operator's 08-22 evening v3-sweep/eval/manual-cycle work; shell
+    history also shows a manual `sweep_indiacourts_history` invocation.
+    The 00:04Z stale push remains not fully attributed (candidate: a
+    manual cycle pushing from partially-compacted or pre-sweep local
+    state). **Writer is INACTIVE: flock free, no pipeline processes, no
+    refresh containers. Restore is UNBLOCKED** — tonight's cron pulls GCS
+    first, so a restore done before 08:00Z survives and gets built upon.
+    Recurrence watch armed for ~00:45Z 08-24.
 
 ---
 
