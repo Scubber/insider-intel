@@ -40,6 +40,9 @@ on:
           - sweep-start
           - sweep-status
           - sweep-stop
+          - gcp-sweep-launch
+          - gcp-sweep-status
+          - gcp-sweep-delete
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -83,7 +86,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -281,3 +284,31 @@ jobs:
           set -euo pipefail
           docker compose -f docker-compose.spark.yml --profile sweep stop sweep
           echo "sweep stopped (resume later with sweep-start — partition markers persist)"
+
+      - name: gcp-sweep-launch
+        if: ${{ github.event.inputs.op == 'gcp-sweep-launch' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          command -v gcloud >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          command -v gcloud >/dev/null 2>&1 || { echo "gcloud not on PATH for the runner user"; exit 1; }
+          bash scripts/gcp_sweep_vm.sh
+
+      - name: gcp-sweep-status
+        if: ${{ github.event.inputs.op == 'gcp-sweep-status' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -uo pipefail
+          command -v gcloud >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          bash scripts/gcp_sweep_vm.sh status
+
+      - name: gcp-sweep-delete
+        if: ${{ github.event.inputs.op == 'gcp-sweep-delete' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          command -v gcloud >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          bash scripts/gcp_sweep_vm.sh delete
