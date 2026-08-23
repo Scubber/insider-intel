@@ -302,6 +302,9 @@ jobs:
           set -uo pipefail
           command -v gcloud >/dev/null 2>&1 || \
             export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          echo "== gcloud identities on this box (names only) =="
+          gcloud auth list 2>&1 || true
+          echo
           bash scripts/gcp_sweep_vm.sh status
 
       - name: gcp-sweep-delete
