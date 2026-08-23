@@ -32,7 +32,9 @@ on:
           - git-status
           - pull-main
           - enable-india
+          - enable-ocr
           - smoke-india
+          - extract-india
           - run-replay
           - run-refresh
       confirm:
@@ -45,6 +47,10 @@ on:
         default: "150"
       reserve:
         description: "enable-india: also set SUMMARIZER_BACKFILL_RESERVE to this (empty = leave as-is)"
+        required: false
+        default: ""
+      retry_days:
+        description: "extract-india: override INDIACOURTS_RETRY_DAYS for this run (0 = retry parked PDFs now; empty = configured cool-down)"
         required: false
         default: ""
 
@@ -65,6 +71,7 @@ jobs:
       CONFIRM: ${{ github.event.inputs.confirm }}
       LINES: ${{ github.event.inputs.lines }}
       RESERVE: ${{ github.event.inputs.reserve }}
+      RETRY_DAYS: ${{ github.event.inputs.retry_days }}
     steps:
       - name: Resolve operational checkout
         run: |
@@ -73,7 +80,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|smoke-india|run-refresh)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -193,6 +200,21 @@ jobs:
           echo "now set (names/flags only):"
           grep -E '^(INDIACOURTS_ENABLED|SUMMARIZER_BACKFILL_RESERVE)=' "$ENV_FILE"
 
+      - name: enable-ocr
+        if: ${{ github.event.inputs.op == 'enable-ocr' }}
+        run: |
+          set -euo pipefail
+          ENV_FILE="$WORKDIR/.env.spark"
+          [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE"; exit 1; }
+          CMD="python -m apps.aggregator.ocr_pdf"
+          if grep -q '^INDIACOURTS_OCR_COMMAND=' "$ENV_FILE"; then
+            sed -i "s|^INDIACOURTS_OCR_COMMAND=.*|INDIACOURTS_OCR_COMMAND=${CMD}|" "$ENV_FILE"
+          else
+            printf 'INDIACOURTS_OCR_COMMAND=%s\n' "${CMD}" >> "$ENV_FILE"
+          fi
+          echo "now set:"
+          grep -E '^INDIACOURTS_OCR_COMMAND=' "$ENV_FILE"
+
       - name: smoke-india
         if: ${{ github.event.inputs.op == 'smoke-india' }}
         working-directory: ${{ env.WORKDIR }}
@@ -200,6 +222,16 @@ jobs:
           set -euo pipefail
           docker compose -f docker-compose.spark.yml run --rm --build refresh \
             python -m apps.aggregator ingest_indiacourts -v
+
+      - name: extract-india
+        if: ${{ github.event.inputs.op == 'extract-india' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          EXTRA=()
+          if [ -n "${RETRY_DAYS}" ]; then EXTRA+=(-e "INDIACOURTS_RETRY_DAYS=${RETRY_DAYS}"); fi
+          docker compose -f docker-compose.spark.yml run --rm --build "${EXTRA[@]}" refresh \
+            python -m apps.aggregator extract_indiacourts_pending -v
 
       - name: run-replay
         if: ${{ github.event.inputs.op == 'run-replay' }}

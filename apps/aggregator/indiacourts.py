@@ -342,6 +342,30 @@ def pdf_bytes_to_text(data: bytes, *, max_chars: int) -> str:
     return truncate_head_tail(cleaned, max_chars)
 
 
+def detect_language(text: str) -> str | None:
+    """Script-based language stamp for ``legal_metadata.language``.
+
+    High Court judgments are constitutionally English (Art. 348) — a 62-PDF
+    survey across 14 benches incl. the Hindi-permitted courts measured 0%
+    Devanagari (2026-08-23) — but a handful of courts MAY also issue in
+    Hindi, so every stored judgment records what it actually was and the
+    lane counts non-English docs per cycle. ``None`` = not enough text to
+    call (e.g. a stub); the English insider lexicon cannot match Devanagari
+    text, so an "hi" stamp marks a document the scan could not truly cover.
+    """
+    dev = latin = 0
+    for ch in text[:20000]:
+        code = ord(ch)
+        if 0x0900 <= code <= 0x097F:
+            dev += 1
+        elif code < 0x300 and ch.isalpha():
+            latin += 1
+    total = dev + latin
+    if total < 200:
+        return None
+    return "hi" if dev / total >= 0.3 else "en"
+
+
 def scan_insider_patterns(text: str) -> list[str]:
     """Labels of INSIDER_PATTERNS whose terms ALL appear in the text."""
     lowered = (text or "").lower()
@@ -401,6 +425,7 @@ def judgment_to_raw_article(
             case_number=meta.title.split(" of ")[0].strip() if " of " in meta.title else None,
             source_document_id=meta.pdf_basename,
             decision_date=meta.decision_date,
+            language=detect_language(text),
             source_terms="CC BY 4.0 (eCourts open dataset)",
         ),
         raw={

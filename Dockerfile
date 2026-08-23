@@ -98,3 +98,22 @@ EXPOSE 8080
 
 # Cloud Run sets PORT; default 8080 for local docker run
 CMD ["sh", "-c", "uvicorn apps.search.api:app --host 0.0.0.0 --port ${PORT:-8080}"]
+
+
+# ---------------------------------------------------------------------------
+# Spark tenant stage: runtime + OCR binaries for the IndiaCourts scanned-PDF
+# path (apps/aggregator/ocr_pdf.py shells out to pdftoppm + tesseract).
+# docker-compose.spark.yml targets this; Cloud Run never carries the ~90MB.
+FROM runtime AS spark
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        poppler-utils tesseract-ocr tesseract-ocr-hin \
+    && rm -rf /var/lib/apt/lists/*
+USER app
+
+
+# FINAL stage — a pure alias of runtime so a plain `docker build .` still
+# produces the Cloud Run image (repo invariant; the spark stage above must
+# never become the default build product).
+FROM runtime

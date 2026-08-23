@@ -213,6 +213,11 @@ class _Stats:
         # would trip a false [LANE-BROKEN].
         self.errors: list[str] = []
         self.doc_issues: list[str] = []
+        # Documents whose text is non-English (Devanagari-dominant): the
+        # English lexicon cannot match them, so this counter is the measured
+        # coverage gap that decides whether a Hindi lexicon is ever worth
+        # building (survey 2026-08-23: 0/62 sampled PDFs were Hindi).
+        self.non_english = 0
 
     @property
     def work_done(self) -> int:
@@ -279,6 +284,10 @@ def _process_meta(
             stats.pending_added += 1
             return None, False
 
+    from apps.aggregator.indiacourts import detect_language
+
+    if detect_language(text) == "hi":
+        stats.non_english += 1
     matched = scan_insider_patterns(text)
     if not matched:
         return None, True
@@ -370,7 +379,8 @@ def _finish(
         error="; ".join(stats.errors[:5]) if stats.errors else None,
     )
     logger.info(
-        "[indiacourts] %s: pdfs=%d matches=%d saved=%d pending+=%d errors=%d parked_issues=%d",
+        "[indiacourts] %s: pdfs=%d matches=%d saved=%d pending+=%d errors=%d "
+        "parked_issues=%d non_english=%d",
         result_id,
         stats.pdfs_attempted,
         stats.matches,
@@ -378,6 +388,7 @@ def _finish(
         stats.pending_added,
         len(stats.errors),
         len(stats.doc_issues),
+        stats.non_english,
     )
     if stats.doc_issues:
         logger.info(
