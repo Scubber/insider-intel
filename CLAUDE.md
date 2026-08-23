@@ -323,6 +323,11 @@ analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
+**Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
+self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
+/ `env-audit` (key names only, never values) / `git-status` are read-only;
+`pull-main` / `enable-india` / `smoke-india` / `run-refresh` mutate the box
+and require `confirm=RUN`; `run-replay` runs the spend-gate replay there.
 A dispatch workflow must exist on `main` to be invokable; it then runs the
 file from whatever ref you pass, so branch diagnostics work without merging.
 

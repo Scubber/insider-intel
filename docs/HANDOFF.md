@@ -82,6 +82,13 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
   `traffic-report`, `refresh-corpus`/`watch-refresh`, `reenrich-drain`,
   `corpus-recover`. A dispatch workflow must exist on `main`; it then runs
   the file from any ref (branch diagnostics without merging).
+- **Sparky ops from anywhere** (2026-08-23): a **self-hosted Actions runner
+  on the DGX Spark** serves the `sparky-ops` dispatch workflow — box
+  forensics (`diagnose`), refresh-log tails, `.env.spark` audits (key names
+  only), git state, plus confirm-gated mutations (`pull-main`,
+  `enable-india`, `smoke-india`, `run-refresh`) and the spend-gate
+  `run-replay`. Ends the operator-terminal relay for routine sparky work;
+  the runner user's permissions bound everything it can do.
 
 ---
 
@@ -258,7 +265,9 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
     entries from the 4×/day era?), `~/insider-intel/logs/spark_refresh.log`
     around 00:04Z, any second checkout/compose project whose `./data` is
     08-19-vintage, and whether the flock was held. Cloud Run job showed no
-    executions in the window (log markers empty; scheduler paused).
+    executions in the window (log markers empty; scheduler paused). The
+    `sparky-ops` workflow's `diagnose` op (added 2026-08-23) runs this
+    whole checklist on the box in one dispatch.
 
 ---
 
