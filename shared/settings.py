@@ -235,16 +235,33 @@ class Settings(BaseSettings):
             "Path form of the dataset's court codes ('7_26' for '7~26')."
         ),
     )
+    indiacourts_sweep_extract_procs: int = Field(
+        default=0,
+        alias="INDIACOURTS_SWEEP_EXTRACT_PROCS",
+        description=(
+            "Bulk sweep only: size of the pdf-text extraction process pool. "
+            "0 = extract inline on the streaming threads. pypdf extraction "
+            "is GIL-bound pure Python, so threads alone cap out near one "
+            "core regardless of INDIACOURTS_SWEEP_WORKERS (measured live "
+            "2026-08-23: zero partitions finished in 8h on 8 threads / 16 "
+            "vCPUs). Set to roughly vCPUs-4, with at least as many workers "
+            "so the pool stays fed."
+        ),
+        ge=0,
+        le=64,
+    )
     indiacourts_sweep_workers: int = Field(
         default=2,
         alias="INDIACOURTS_SWEEP_WORKERS",
         description=(
             "Concurrent tar streams for the bulk history sweep — the "
             "bandwidth throttle (each stream pulls a bench-year tar at line "
-            "rate). Raise on a datacenter VM; keep low on a residential link."
+            "rate). Raise on a datacenter VM; keep low on a residential "
+            "link. With an extraction pool, each thread keeps at most one "
+            "extraction in flight — size this >= the pool."
         ),
         ge=1,
-        le=16,
+        le=64,
     )
     indiacourts_sweep_ocr: bool = Field(
         default=True,

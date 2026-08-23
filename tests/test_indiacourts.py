@@ -43,9 +43,7 @@ from apps.aggregator.storage import JsonlArticleStore
 
 def _make_pdf(text: str) -> bytes:
     """Minimal one-page PDF whose text layer pypdf can extract."""
-    safe = (
-        text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)").replace("\n", " ")
-    )
+    safe = text.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)").replace("\n", " ")
     stream = f"BT /F1 11 Tf 50 750 Td ({safe}) Tj ET".encode("latin-1", "replace")
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -67,9 +65,9 @@ def _make_pdf(text: str) -> bytes:
     out += b"0000000000 65535 f \n"
     for off in offsets:
         out += b"%010d 00000 n \n" % off
-    out += (
-        b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
-        % (len(objects) + 1, xref_pos)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (
+        len(objects) + 1,
+        xref_pos,
     )
     return bytes(out)
 
@@ -232,7 +230,7 @@ class FakeBucket:
             assert isinstance(blob, bytes)
             return httpx.Response(200, content=blob)
         if path.startswith("data/tar/"):
-            for (y, c, b) in self.partitions:
+            for y, c, b in self.partitions:
                 if path == f"data/tar/year={y}/court={c}/bench={b}/data.tar":
                     # A genuine byte stream: content= would be pre-buffered by
                     # MockTransport and iter_raw() then raises StreamConsumed.
@@ -593,9 +591,7 @@ def test_forward_cap_bounds_work_and_resumes(
     assert {r.raw["cnr"] for r in rows if r.raw} == {"M1", "M2"}
 
 
-def test_disabled_lane_makes_no_requests(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_disabled_lane_makes_no_requests(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("INDIACOURTS_ENABLED", "false")
     bucket = FakeBucket()
     bucket.add_judgment(cnr="M1", text=INSIDER_TEXT)
@@ -604,9 +600,7 @@ def test_disabled_lane_makes_no_requests(
     assert bucket.requests == []
 
 
-def test_court_scope_and_priority_order(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_court_scope_and_priority_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _enable(monkeypatch, INDIACOURTS_COURTS="7_26")
     bucket = FakeBucket()
     bucket.add_judgment(cnr="INSCOPE", text=INSIDER_TEXT, court="7_26", bench="delhi1")
@@ -738,9 +732,7 @@ def test_history_cursor_holds_until_year_completes(
     assert state["indiacourts_history:cursor"] == "2023"
 
 
-def test_history_disabled_without_floor(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_history_disabled_without_floor(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _enable(monkeypatch, INDIACOURTS_HISTORY_FLOOR="")
     bucket = FakeBucket()
     result = _run_history(bucket, tmp_path, now=datetime(2026, 8, 22, tzinfo=UTC))
@@ -818,6 +810,58 @@ def test_bulk_sweep_streams_tars_and_spools_matches(
     ref = PartitionRef(year=2026, court="27_1", bench="benchx")
     state = PartitionState(tmp_path / "state", ref)
     assert state.complete and state.etag == "etag-1"
+
+
+def test_bulk_sweep_extracts_on_a_process_pool(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """INDIACOURTS_SWEEP_EXTRACT_PROCS routes pypdf through a spawn-context
+    process pool (the GIL fix): real end-to-end proof that extraction still
+    finds the match and the counters stay exact across the pool boundary."""
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="2",
+        INDIACOURTS_SWEEP_EXTRACT_PROCS="2",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    bucket.add_judgment(cnr="BENIGN1", text=BENIGN_TEXT)
+    summary = _run_bulk(bucket, tmp_path)
+    assert summary["pdfs"] == 2
+    assert summary["matches"] == 1
+    assert summary["extract_timeouts"] == 0
+    chunks = list((tmp_path / "spool").glob("*.jsonl"))
+    assert len(chunks) == 1 and "MATCH1" in chunks[0].read_text()
+
+
+def test_bulk_sweep_progress_flush_never_double_counts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With the flush/progress cadence forced to every pdf, mid-partition
+    stats folds plus the end-of-partition flush must still sum exactly, and
+    the progress pulse (rate line + status.json) must fire mid-partition."""
+    from apps.aggregator import indiacourts_bulk as bulk
+
+    monkeypatch.setattr(bulk, "FLUSH_EVERY", 1)
+    monkeypatch.setattr(bulk, "PROGRESS_LOG_EVERY", 1)
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    bucket.add_judgment(cnr="BENIGN1", text=BENIGN_TEXT)
+    bucket.add_judgment(cnr="CORRUPT1", text=b'{"msg": "upstream error"}')
+    summary = _run_bulk(bucket, tmp_path)
+    assert summary["pdfs"] == 3
+    assert summary["matches"] == 1
+    assert summary["corrupt"] == 1
+    status = json.loads((tmp_path / "spool" / "status.json").read_text())
+    assert status["pdfs"] == 3 and "pdfs_per_hour" in status
 
 
 def test_bulk_sweep_resumes_without_refetching(

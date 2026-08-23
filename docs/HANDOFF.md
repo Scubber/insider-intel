@@ -159,8 +159,8 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    (a) sparky capped container — `sparky-ops` `sweep-start`/`sweep-status`
    /`sweep-stop` (compose `sweep` service, 6 CPUs / 6GB, $0 but ~2.5-3TB
    through the home ISP, ~1-4 weeks); (b) **GCP spot VM (recommended)** —
-   `scripts/gcp_sweep_vm.sh` (c2d-standard-16 spot ≈ $20-40 total, ~2-5
-   days, S3→GCP ingress free, chunks+state rsync to
+   `scripts/gcp_sweep_vm.sh` (c2d-standard-32 spot ≈ $25-50 total, days,
+   S3→GCP ingress free, chunks+state rsync to
    `raw/sweeps/indiacourts` in the corpus bucket; `spark_refresh.sh` pulls
    that prefix and retires merged chunks). **Venue chosen 2026-08-23: GCP
    spot VM, launched from sparky via sparky-ops `gcp-sweep-launch`. First
@@ -186,6 +186,24 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    # --condition=None is REQUIRED: the bucket policy carries the api-runtime
    # conditional binding, so gcloud demands an explicit condition choice.
    ```
+   **Sweep LIVE on GCP since 2026-08-23** (VM `indiacourts-sweep`,
+   us-east1-b, launched 14:29Z, cycled 15:36Z for observability): a 4h
+   bug/quality Routine watches it via sparky-ops `gcp-sweep-status` +
+   `sweep-audit`. **First watch (23:30Z) caught the throughput bug**: pypdf
+   extraction ran inline on the streaming THREADS — pypdf is GIL-bound pure
+   Python, so 8 threads / 16 vCPUs delivered ~one core and ZERO partitions
+   completed in 8h (months-scale projection). Fix (same date):
+   `INDIACOURTS_SWEEP_EXTRACT_PROCS` routes extraction through a
+   spawn-context process pool (300s/PDF timeout, broken-pool self-heal),
+   worker threads now flush stats incrementally and log a rate line +
+   rewrite `status.json` every ~2000 global PDFs (mid-partition pulse — the
+   bucket heartbeat carries it), VM resized to c2d-standard-32
+   (workers=32, procs=28). Sizing law: the throughput knob is the process
+   pool, never thread count. VM cycled onto the fixed build; watch the
+   measured `pdfs_per_hour` in `status.json` — if the projection still
+   exceeds ~5 days, next levers are a bigger spot machine and/or
+   `INDIACOURTS_SWEEP_OCR=false` (count-and-skip scans, targeted OCR pass
+   later).
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.

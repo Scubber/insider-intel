@@ -48,6 +48,9 @@ services:
         required: true
     environment:
       SPARK_REFRESH_LOCK_PATH: /host-tmp/insider-intel-spark-refresh.lock
+      # pypdf is GIL-bound: without a process pool the capped 6 cpus idle.
+      INDIACOURTS_SWEEP_EXTRACT_PROCS: 4
+      INDIACOURTS_SWEEP_WORKERS: 6
     volumes:
       - ./data:/app/data
       - /tmp:/host-tmp:ro
