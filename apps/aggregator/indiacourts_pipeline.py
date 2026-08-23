@@ -262,6 +262,14 @@ def _process_meta(
         stats.doc_issues.append(str(exc))
         return None, False
 
+    if b"%PDF" not in data[:1024]:
+        # Corrupt AT SOURCE: the upstream scraper stored an error body (e.g.
+        # a '{"msg...' JSON) under the .pdf key — seen live 2026-08-23. No
+        # retry or OCR can fix these; retiring immediately beats burning 5
+        # spaced retries per object (matters at 18.5M-judgment sweep scale).
+        stats.doc_issues.append(f"not a PDF at source (skipped for good): {meta.pdf_key}")
+        return None, True
+
     text = ""
     try:
         text = pdf_bytes_to_text(data, max_chars=settings.indiacourts_text_max_chars)
