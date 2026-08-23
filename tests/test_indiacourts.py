@@ -112,6 +112,18 @@ def _partition_parquet(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+class _TarStream(httpx.SyncByteStream):
+    """Chunked byte stream so client.stream()+iter_raw() behaves like S3."""
+
+    def __init__(self, data: bytes, chunk: int = 8192) -> None:
+        self._data = data
+        self._chunk = chunk
+
+    def __iter__(self):
+        for i in range(0, len(self._data), self._chunk):
+            yield self._data[i : i + self._chunk]
+
+
 class FakeBucket:
     """In-memory dataset bucket served through httpx.MockTransport."""
 
@@ -156,6 +168,24 @@ class FakeBucket:
             self.pdfs[basename] = _make_pdf(text)
         return basename
 
+    def _tar_bytes(self, year: int, court: str, bench: str) -> bytes:
+        import io
+        import tarfile as _tarfile
+
+        buf = io.BytesIO()
+        _, rows = self.partitions[(year, court, bench)]
+        with _tarfile.open(fileobj=buf, mode="w") as tar:
+            for row in rows:
+                basename = row["pdf_link"].rsplit("/", 1)[-1]
+                blob = self.pdfs.get(basename)
+                if blob is None or blob == "missing":
+                    continue
+                assert isinstance(blob, bytes)
+                info = _tarfile.TarInfo(name=f"orders/{basename}")
+                info.size = len(blob)
+                tar.addfile(info, io.BytesIO(blob))
+        return buf.getvalue()
+
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path.lstrip("/")
         self.requests.append(path or f"LIST:{request.url.params.get('prefix', '')}")
@@ -165,6 +195,9 @@ class FakeBucket:
             keys = sorted(
                 f"metadata/parquet/year={y}/court={c}/bench={b}/metadata.parquet"
                 for (y, c, b) in self.partitions
+            )
+            keys += sorted(
+                f"data/tar/year={y}/court={c}/bench={b}/data.tar" for (y, c, b) in self.partitions
             )
             keys = [k for k in keys if k.startswith(prefix)]
             start = int(token) if token else 0
@@ -198,6 +231,13 @@ class FakeBucket:
                 return httpx.Response(404)
             assert isinstance(blob, bytes)
             return httpx.Response(200, content=blob)
+        if path.startswith("data/tar/"):
+            for (y, c, b) in self.partitions:
+                if path == f"data/tar/year={y}/court={c}/bench={b}/data.tar":
+                    # A genuine byte stream: content= would be pre-buffered by
+                    # MockTransport and iter_raw() then raises StreamConsumed.
+                    return httpx.Response(200, stream=_TarStream(self._tar_bytes(y, c, b)))
+            return httpx.Response(404)
         return httpx.Response(404)
 
     def _etag_for(self, key: str) -> str:
@@ -726,3 +766,121 @@ def test_lane_health_expected_only_when_enabled(monkeypatch: pytest.MonkeyPatch)
     # Dynamic result rows (history/extract) classify as court lanes too.
     assert _infer_kind("indiacourts-history") == "court"
     assert _infer_kind("indiacourts-extract") == "court"
+
+
+# ---------------------------------------------------------------------------
+# Bulk history sweep (tar streaming)
+
+
+def _run_bulk(bucket: FakeBucket, tmp_path: Path):
+    from apps.aggregator.indiacourts_bulk import run_indiacourts_bulk_sweep
+
+    with bucket.client() as client:
+        return run_indiacourts_bulk_sweep(
+            spool_dir=str(tmp_path / "spool"),
+            state_dir=str(tmp_path / "state"),
+            client=client,
+            now=datetime(2026, 8, 23, tzinfo=UTC),
+        )
+
+
+def test_bulk_sweep_streams_tars_and_spools_matches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One bench-year tar: the match lands in a spool chunk (never the main
+    store), the partition is marked complete with the PARQUET etag so the
+    nightly walkers skip swept ground, and status.json reports progress."""
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    bucket.add_judgment(cnr="BENIGN1", text=BENIGN_TEXT)
+    bucket.add_judgment(cnr="CORRUPT1", text=b'{"msg": "upstream error"}')
+    summary = _run_bulk(bucket, tmp_path)
+    assert summary["partitions_done"] == 1
+    assert summary["matches"] == 1
+    assert summary["corrupt"] == 1
+    chunks = list((tmp_path / "spool").glob("*.jsonl"))
+    assert len(chunks) == 1
+    from shared.schemas.articles import RawArticle
+
+    row = RawArticle.model_validate_json(chunks[0].read_text().strip())
+    assert row.raw is not None and row.raw["cnr"] == "MATCH1"
+    assert (tmp_path / "spool" / "status.json").exists()
+    # Partition marked complete with the parquet etag -> nightly walkers skip.
+    from apps.aggregator.indiacourts import PartitionRef
+    from apps.aggregator.indiacourts_pipeline import PartitionState
+
+    ref = PartitionRef(year=2026, court="27_1", bench="benchx")
+    state = PartitionState(tmp_path / "state", ref)
+    assert state.complete and state.etag == "etag-1"
+
+
+def test_bulk_sweep_resumes_without_refetching(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    _run_bulk(bucket, tmp_path)
+    tar_gets_before = sum(1 for p in bucket.requests if p.endswith("data.tar"))
+    _run_bulk(bucket, tmp_path)
+    tar_gets_after = sum(1 for p in bucket.requests if p.endswith("data.tar"))
+    assert tar_gets_before == 1 and tar_gets_after == 1  # second run: marker skip
+
+
+def test_sweep_spool_merges_into_store_idempotently(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The nightly forward ingest is the single writer: it folds spool chunks
+    into the raw store (link-deduped), retires them to ingested/, and a
+    re-merge of the same chunk adds nothing."""
+    spool = tmp_path / "spool"
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+        INDIACOURTS_SWEEP_SPOOL_DIR=str(spool),
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    _run_bulk(bucket, tmp_path)
+    chunk_name = next((spool).glob("*.jsonl")).name
+
+    result = _run_forward(bucket, tmp_path)
+    rows = JsonlArticleStore(str(tmp_path / "raw.jsonl")).load_all()
+    assert any(r.raw and r.raw.get("cnr") == "MATCH1" for r in rows)
+    assert result.total_articles_saved >= 1
+    assert (spool / "ingested" / chunk_name).exists()
+    assert not list(spool.glob("*.jsonl"))
+    # Re-merge the same chunk: harmless, nothing new enters.
+    import shutil
+
+    shutil.copy(spool / "ingested" / chunk_name, spool / chunk_name)
+    _run_forward(bucket, tmp_path)
+    rows_after = JsonlArticleStore(str(tmp_path / "raw.jsonl")).load_all()
+    assert len(rows_after) == len(rows)
+
+
+def test_refresh_lock_probe(tmp_path: Path) -> None:
+    import fcntl
+
+    from apps.aggregator.indiacourts_bulk import refresh_lock_held
+
+    lock = tmp_path / "refresh.lock"
+    assert refresh_lock_held(str(lock)) is False  # missing file
+    lock.touch()
+    assert refresh_lock_held(str(lock)) is False  # exists but unheld
+    with lock.open() as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert refresh_lock_held(str(lock)) is True  # held elsewhere

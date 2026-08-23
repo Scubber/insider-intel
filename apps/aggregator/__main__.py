@@ -248,6 +248,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(india_hist_p)
 
+    india_bulk_p = sub.add_parser(
+        "sweep_indiacourts_bulk",
+        help=(
+            "FULL-HISTORY bulk sweep: stream every bench-year tar bundle "
+            "back to the floor, spool matches for the nightly merge. "
+            "Long-running (days); resumable; pauses while a refresh runs."
+        ),
+    )
+    _add_verbose(india_bulk_p)
+
     india_ext_p = sub.add_parser(
         "extract_indiacourts_pending",
         help=(
@@ -717,6 +727,18 @@ def _cmd_sweep_indiacourts_history(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def _cmd_sweep_indiacourts_bulk(args: argparse.Namespace) -> int:
+    from apps.aggregator.indiacourts_bulk import run_indiacourts_bulk_sweep
+    from shared.settings import get_settings
+
+    if not get_settings().indiacourts_enabled:
+        print("IndiaCourts lane disabled (INDIACOURTS_ENABLED=false).")
+        return 0
+    summary = run_indiacourts_bulk_sweep()
+    print(f"Bulk sweep done: {summary}")
+    return 1 if summary.get("errors") and not summary.get("partitions_done") else 0
+
+
 def _cmd_extract_indiacourts_pending(args: argparse.Namespace) -> int:
     from apps.aggregator.indiacourts_pipeline import run_indiacourts_extract_pending
 
@@ -1038,6 +1060,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_ingest_indiacourts(args)
     if args.command == "sweep_indiacourts_history":
         return _cmd_sweep_indiacourts_history(args)
+    if args.command == "sweep_indiacourts_bulk":
+        return _cmd_sweep_indiacourts_bulk(args)
     if args.command == "extract_indiacourts_pending":
         return _cmd_extract_indiacourts_pending(args)
     if args.command == "ingest_datatheftnews":

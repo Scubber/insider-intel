@@ -149,9 +149,21 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    `legal_metadata.language` and cycles log `non_english=` counts, so a
    real Hindi share would surface in data. Dataset's `pdf_exists` flag is
    unreliable (False on partitions whose PDFs exist) — the lane never
-   trusted it. Full-history bulk sweep (~18.5M judgments measured from
-   partition metadata; ~1-2 weeks via tar streaming/parallel fetch)
-   designed but NOT started — operator call pending.
+   trusted it. **Full-history bulk sweep BUILT 2026-08-23**
+   (`sweep_indiacourts_bulk`, ~18.5M judgments measured from partition
+   metadata): streams the dataset's bench-year tar bundles member-by-member
+   (no tar touches disk), spools matches as chunk files the nightly
+   forward ingest merges (link-deduped single writer), marks swept
+   partitions complete so the nightly walkers skip them, pauses while the
+   refresh flock is held, zero GPU/LLM. Two venues, code identical:
+   (a) sparky capped container — `sparky-ops` `sweep-start`/`sweep-status`
+   /`sweep-stop` (compose `sweep` service, 6 CPUs / 6GB, $0 but ~2.5-3TB
+   through the home ISP, ~1-4 weeks); (b) **GCP spot VM (recommended)** —
+   `scripts/gcp_sweep_vm.sh` (c2d-standard-16 spot ≈ $20-40 total, ~2-5
+   days, S3→GCP ingress free, chunks+state rsync to
+   `raw/sweeps/indiacourts` in the corpus bucket; `spark_refresh.sh` pulls
+   that prefix and retires merged chunks). **NOT STARTED — venue + spend
+   are the operator's call.**
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
