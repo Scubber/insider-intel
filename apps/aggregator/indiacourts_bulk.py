@@ -139,6 +139,7 @@ class _StreamReader:
 class _SweepStats:
     def __init__(self) -> None:
         self.lock = threading.Lock()
+        self.started_monotonic = time.monotonic()
         self.partitions_done = 0
         self.pdfs = 0
         self.matches = 0
@@ -270,6 +271,9 @@ def _sweep_partition(
         stats.scanned_skipped += scanned
         stats.ocr_used += ocr_used
         stats.non_english += non_english
+    # Per-PARTITION status write: per-year alone left hours-long blind windows
+    # on big years (first live check, 2026-08-23) — monitoring needs a pulse.
+    _write_status(spool, stats, stats.started_monotonic, ref.year)
     logger.info(
         "[india-sweep] %s/%s/%s: pdfs=%d matches=%d corrupt=%d scanned_skipped=%d "
         "ocr=%d non_english=%d in %.0fs",
@@ -377,11 +381,14 @@ def run_indiacourts_bulk_sweep(
 
 
 def _write_status(spool: Path, stats: _SweepStats, started: float, year: int) -> None:
-    """Progress file for the sweep-status op (and post-mortems)."""
+    """Progress file for the sweep-status op (and post-mortems).
+
+    Called per partition from worker threads — the tmp name is per-thread so
+    concurrent writers never trample each other's rename."""
     payload = stats.snapshot()
     payload["current_year"] = year
     payload["elapsed_seconds"] = int(time.monotonic() - started)
     payload["updated_at"] = datetime.now(UTC).isoformat()
-    tmp = spool / ".status.tmp"
+    tmp = spool / f".status.{threading.get_ident()}.tmp"
     tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(tmp, spool / "status.json")

@@ -25,10 +25,16 @@ SRC_TARBALL="${BUCKET}/raw/sweeps/indiacourts-src.tar.gz"
 case "${1:-create}" in
   status)
     gcloud compute instances get-serial-port-output "$NAME" \
-      --zone "$ZONE" --project "$PROJECT" | tail -60
-    echo "---"
+      --zone "$ZONE" --project "$PROJECT" | tail -40
+    echo "--- status.json (per-partition progress) ---"
     gcloud storage cat "${SPOOL_PREFIX}/status.json" 2>/dev/null \
       || echo "(no status.json in the bucket spool yet)"
+    echo "--- heartbeat.log (container pulse, refreshed every 5min) ---"
+    gcloud storage cat "${SPOOL_PREFIX}/heartbeat.log" 2>/dev/null \
+      || echo "(no heartbeat yet)"
+    echo "--- spooled chunks ---"
+    gcloud storage ls -l "${SPOOL_PREFIX}/*.jsonl" 2>/dev/null | tail -15 \
+      || echo "(no match chunks yet)"
     exit 0
     ;;
   delete)
@@ -80,11 +86,17 @@ docker run -d --name sweep --restart on-failure \
   -v /opt/data:/app/data \
   insider-intel-spark python -m apps.aggregator sweep_indiacourts_bulk -v
 # Sync loop: chunks + status up, state up (resume), until the sweep exits.
+# heartbeat.log ships the container's latest lines to the bucket each cycle
+# so remote monitoring sees a live pulse instead of hour-long blind windows.
 while docker ps -q -f name=sweep | grep -q .; do
+  { date -u +%FT%TZ; docker logs --tail 8 sweep 2>&1; } \
+    > /opt/data/raw/sweep_spool/heartbeat.log || true
   gcloud storage rsync /opt/data/raw/sweep_spool ${SPOOL_PREFIX} || true
   gcloud storage rsync -r /opt/data/state/indiacourts ${STATE_PREFIX} || true
   sleep 300
 done
+{ date -u +%FT%TZ; echo "SWEEP CONTAINER EXITED:"; docker logs --tail 15 sweep 2>&1; } \
+  > /opt/data/raw/sweep_spool/heartbeat.log || true
 gcloud storage rsync /opt/data/raw/sweep_spool ${SPOOL_PREFIX} || true
 gcloud storage rsync -r /opt/data/state/indiacourts ${STATE_PREFIX} || true
 echo "SWEEP-COMPLETE \$(date -u)" > /opt/done
