@@ -69,7 +69,10 @@ insider-lexicon scan over the CC BY 4.0 eCourts open dataset (AWS Open Data,
 pypdf text extraction (OCR command hook for scans) → only matches enter the
 corpus, WITH full text attached (no stub rows, so the CL backfill/clear
 contract doesn't apply). Disabled by default (`INDIACOURTS_ENABLED`; heavy
-work belongs on sparky); hub-courts-first history walk to the 2000 floor.
+work belongs on sparky — **live in prod on sparky since 2026-08-23**);
+hub-courts-first history walk to the 2000 floor. Truncated/scanned PDFs
+park in the pending queue (the designed retry path — per-document issues
+never fail the lane; only systemic listing/parquet failures do).
 Court rows carry typed `legal_metadata` (country, court, CNR, stage);
 `resolve_country` (`shared/utils/evidence.py`) maps source prefixes →
 US/CA/IN as the fallback, and a `country` facet threads through
