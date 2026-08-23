@@ -26,6 +26,7 @@ on:
         type: choice
         options:
           - diagnose
+          - hunt-writer
           - tail-refresh-log
           - env-audit
           - git-status
@@ -103,6 +104,42 @@ jobs:
           tail -n 120 "$WORKDIR/logs/spark_refresh.log" 2>/dev/null || echo "(no log at $WORKDIR/logs/spark_refresh.log)"
           echo; echo "== log lines around the 00:04Z window (08-22/08-23) =="
           grep -n "2026-08-2[23]" "$WORKDIR/logs/spark_refresh.log" 2>/dev/null | tail -40 || true
+
+      - name: hunt-writer
+        if: ${{ github.event.inputs.op == 'hunt-writer' }}
+        run: |
+          set -uo pipefail
+          echo "== is the refresh flock actually HELD right now? =="
+          if flock -n /tmp/insider-intel-spark-refresh.lock true 2>/dev/null; then
+            echo "lock is FREE (file exists but nothing holds it)"
+          else
+            echo "lock is HELD; holder:"
+            fuser -v /tmp/insider-intel-spark-refresh.lock 2>&1 || true
+          fi
+          echo; echo "== live pipeline-ish processes (start time, cmd) =="
+          ps -eo pid,lstart,etime,user,args --sort=start_time \
+            | grep -Ei "spark_refresh|aggregator|run_all|model-enrich|replay|gsutil|gcloud storage" \
+            | grep -v grep || echo "(none running)"
+          echo; echo "== ALL containers incl. exited (created/exited times are the writer timeline) =="
+          docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Command}}' | head -25
+          echo; echo "== docker events yesterday 18:00Z -> now (container starts/stops) =="
+          docker events --since '2026-08-22T18:00:00Z' --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --filter type=container --format '{{.Time}} {{.Action}} {{.Actor.Attributes.name}}' 2>/dev/null \
+            | grep -E ' (start|die) ' | head -60 || echo "(docker events unavailable)"
+          echo; echo "== other home dirs (second-checkout suspects) =="
+          ls -la /home/ 2>/dev/null
+          for h in /home/*/; do
+            [ "$h" = "$HOME/" ] && continue
+            find "$h" -maxdepth 2 -name docker-compose.spark.yml 2>/dev/null || true
+            [ -f "$h/insider-intel/data/processed/articles.jsonl" ] && \
+              stat -c '%y  %s bytes  %n' "$h/insider-intel/data/processed/articles.jsonl" 2>/dev/null || true
+          done
+          echo; echo "== other crontabs (needs passwordless sudo; skipped otherwise) =="
+          for u in $(cut -d: -f1 /etc/passwd); do
+            sudo -n crontab -l -u "$u" 2>/dev/null | grep -v '^#' | grep . | sed "s/^/[$u] /" || true
+          done
+          echo; echo "== recent shell history mentioning refresh/sweep/enrich (own user only) =="
+          grep -hE "spark_refresh|reenrich|sweep|model-enrich|run_all" "$HOME/.bash_history" 2>/dev/null | tail -25 || true
 
       - name: tail-refresh-log
         if: ${{ github.event.inputs.op == 'tail-refresh-log' }}
