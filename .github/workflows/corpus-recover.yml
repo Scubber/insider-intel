@@ -10,8 +10,10 @@ name: corpus-recover
 #                   can be identified. Writes nothing.
 #   mode=restore  : download the chosen donor generation + the current live
 #                   file, keep-best merge (scripts/recover_gutted_rows.py —
-#                   restores only rows that regressed, keeps every current row),
-#                   back up the current file, upload the merge, reload the API.
+#                   restores rows that regressed, RE-ADDS rows only the donor
+#                   still has, unions enrichment_history on the rest, keeps
+#                   every current row), back up the current file, upload the
+#                   merge, reload the API.
 #                   Requires confirm=RESTORE and a donor_generation.
 #
 # Do NOT run mode=restore while a corpus-refresh execution is running — its

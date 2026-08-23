@@ -5,14 +5,18 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-23 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
-**Rollback checkpoints:** `checkpoint/v1.1-design-2026-08-10` (the current
-working design, blessed before the next UI redesign — restore `web/**` from
-here if the redesign goes sideways) · `checkpoint/v1.0-parked` (pre-August
-prod).
+**Rollback checkpoints:** `checkpoint/v1.2-pre-india-2026-08-22` (main as
+deployed immediately before the IndiaCourts lane + jurisdiction plumbing +
+spend-gate tune landed — restore from here to unwind all of #247; note the
+corpus itself rolls forward regardless: enrichment history is append-only
+and the lane was still dark, so code rollback is the whole rollback) ·
+`checkpoint/v1.1-design-2026-08-10` (the working design before the next UI
+redesign — restore `web/**` from here if the redesign goes sideways) ·
+`checkpoint/v1.0-parked` (pre-August prod).
 
 ---
 
@@ -21,7 +25,7 @@ prod).
 | Area | State |
 |---|---|
 | **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
-| **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. |
+| **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. **INCIDENT 2026-08-23 (thread #14): a stale overwrite at 00:04Z regressed the live corpus** (7,490 rows / 2,114 enriched / 642 verdict-true measured 09:51Z, ~550 filings rows missing); the post-sweep generation is retained and recoverable — treat these counts as post-incident until the restore runs. |
 | **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242). Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Static-first boot** (#240, 2026-08-22): `pages.yml` builds `web/data/` as a **true twin of the boot render** (articles/sources/ledger/meta/tooling.json, never committed) daily at 08:40Z; UI paints instantly under a CACHED badge and silently adopts the live API result when it matches (projection-equivalence test guards drift). deploy-pages poll timeout 20min. |
@@ -234,6 +238,27 @@ prod).
     mapping, wait out cert propagation (see gotchas — verify with repeated
     curls), update `web/config.js` + API `CORS_ORIGINS`, keep the old
     hostname serving as an alias until cutover confidence.
+14. **Corpus stale-overwrite incident (OPEN, found 2026-08-23 09:30Z
+    bug-test).** An unknown writer pushed a ~2026-08-19-vintage corpus over
+    the live object at **2026-08-23T00:04:05Z** (123,422,568 bytes — sized
+    between the 08-19 04:36Z and 08-19 12:10Z generations), replacing the
+    post-v3-sweep generation of **2026-08-22T20:38:06Z (162,448,969 bytes,
+    `#1787431086619121` — still retained as a live noncurrent version)**.
+    The 08:03Z daily cycle then built on the stale base. Damage measured by
+    the diagnostics: filings rows 7,298 → 6,751 (~550 rows gone), enriched
+    ~2,130 → 2,114, verdict-true ~714 → 642 — regressions that append-only
+    history makes impossible without an overwrite. Not caused by the spend
+    gate or India merge (lane dark; gate touches future billing only).
+    **Recovery:** dispatch `corpus-recover` `mode=restore`,
+    `donor_generation=gs://insider-intel-502413-corpus/processed/articles.jsonl#1787431086619121`,
+    `confirm=RESTORE` — the merge script now re-adds donor-only rows and
+    unions enrichment_history (fixed in this thread's PR; dispatch it with
+    the branch ref if not yet merged). **First identify the 00:04Z writer on
+    sparky** or it can clobber again tonight: `crontab -l` (stale extra
+    entries from the 4×/day era?), `~/insider-intel/logs/spark_refresh.log`
+    around 00:04Z, any second checkout/compose project whose `./data` is
+    08-19-vintage, and whether the flock was held. Cloud Run job showed no
+    executions in the window (log markers empty; scheduler paused).
 
 ---
 
