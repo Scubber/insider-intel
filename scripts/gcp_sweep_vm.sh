@@ -37,15 +37,18 @@ case "${1:-create}" in
     ;;
 esac
 
-# One-time project prep, idempotent: the Compute API and the default compute
-# SA's bucket access (needed for the VM's spool/state rsync). Best-effort —
-# an account without IAM rights sees the command to hand to one that has it.
-gcloud services enable compute.googleapis.com --project "$PROJECT" || true
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
-gcloud storage buckets add-iam-policy-binding "$BUCKET" \
-  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-  --role=roles/storage.objectAdmin >/dev/null 2>&1 \
-  || echo "WARN: could not grant objectAdmin on ${BUCKET} to the compute SA — grant it manually or the spool rsync will fail"
+# One-time project prep, idempotent and best-effort: on an owner account this
+# self-serves; the spark-corpus SA (sparky's identity) lacks IAM rights, so
+# there these steps no-op and the owner's one-time grant block (HANDOFF
+# thread #8) must already have been run.
+gcloud services enable compute.googleapis.com --project "$PROJECT" 2>/dev/null || true
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)' 2>/dev/null || true)
+if [ -n "$PROJECT_NUMBER" ]; then
+  gcloud storage buckets add-iam-policy-binding "$BUCKET" \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role=roles/storage.objectAdmin >/dev/null 2>&1 \
+    || echo "NOTE: could not (re)grant objectAdmin — fine if the owner grant block already ran"
+fi
 
 # The repo is private, so the VM gets its source as a tarball through the
 # bucket (this script runs from a checkout — usually sparky's).

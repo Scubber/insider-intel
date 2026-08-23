@@ -162,8 +162,25 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    `scripts/gcp_sweep_vm.sh` (c2d-standard-16 spot ≈ $20-40 total, ~2-5
    days, S3→GCP ingress free, chunks+state rsync to
    `raw/sweeps/indiacourts` in the corpus bucket; `spark_refresh.sh` pulls
-   that prefix and retires merged chunks). **NOT STARTED — venue + spend
-   are the operator's call.**
+   that prefix and retires merged chunks). **Venue chosen 2026-08-23: GCP
+   spot VM, launched from sparky via sparky-ops `gcp-sweep-launch`. First
+   launch BLOCKED on IAM**: sparky's only gcloud identity is the minimal
+   `spark-corpus` SA (good hygiene — keep it that way), which cannot
+   enable APIs, grant IAM, or create instances; no VM was created. The
+   operator runs this ONE-TIME grant block from owner context (Cloud
+   Shell is easiest), delegating scoped VM powers to the SA the box
+   already holds — after it, launch/status/delete are fully automated:
+   ```
+   PROJECT=insider-intel-502413
+   gcloud services enable compute.googleapis.com cloudresourcemanager.googleapis.com --project $PROJECT
+   PN=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+   gcloud storage buckets add-iam-policy-binding gs://$PROJECT-corpus \
+     --member=serviceAccount:${PN}-compute@developer.gserviceaccount.com --role=roles/storage.objectAdmin
+   gcloud projects add-iam-policy-binding $PROJECT \
+     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com --role=roles/compute.instanceAdmin.v1
+   gcloud iam service-accounts add-iam-policy-binding ${PN}-compute@developer.gserviceaccount.com \
+     --member=serviceAccount:spark-corpus@$PROJECT.iam.gserviceaccount.com --role=roles/iam.serviceAccountUser --project $PROJECT
+   ```
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
