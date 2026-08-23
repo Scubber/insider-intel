@@ -441,6 +441,24 @@ def test_parked_pdf_issues_do_not_fail_the_lane(
     assert len(PendingQueue(tmp_path / "state")) == 2
 
 
+def test_corrupt_dataset_object_is_retired_not_retried(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The upstream scraper sometimes stored an error body under the .pdf key
+    (live find 2026-08-23: bytes starting '{"msg'). Those can never parse or
+    OCR — retire them immediately instead of five spaced retries each."""
+    _enable(monkeypatch)
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="CORRUPT1", text=b'{"msg": "scrape failed upstream"}')
+    result = _run_forward(bucket, tmp_path)
+    assert result.sources[0].success
+    # Never parked — the basename is done for good.
+    assert len(PendingQueue(tmp_path / "state")) == 0
+    state_files = list((tmp_path / "state").glob("*.json"))
+    payload = json.loads(state_files[0].read_text())
+    assert any("CORRUPT1" in name for name in payload["done"])
+
+
 def test_partition_listing_failure_fails_the_lane(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
