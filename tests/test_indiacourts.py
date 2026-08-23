@@ -373,6 +373,46 @@ def test_forward_ingestion_stores_only_matches_with_text(
     assert payload["complete"] and len(payload["done"]) == 2
 
 
+def test_parked_pdf_issues_do_not_fail_the_lane(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The 2026-08-23 live smoke: 5/200 truncated PDFs parked cleanly, yet the
+    run reported [FAIL] — per-document problems ARE the pending queue's
+    designed path and must never fail the lane (a real cycle almost always has
+    some, so the old behavior meant a permanent false [LANE-BROKEN])."""
+    _enable(monkeypatch)
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    bucket.add_judgment(cnr="GONE1", text=None)  # 404s -> parks in pending
+    bucket.add_judgment(cnr="TRUNC1", text=b"%PDF-1.4 truncated garbage")  # parse fails
+    result = _run_forward(bucket, tmp_path)
+    src = result.sources[0]
+    assert src.success, src.error
+    assert src.error is None
+    assert result.total_articles_saved == 1
+    assert len(PendingQueue(tmp_path / "state")) == 2
+
+
+def test_partition_listing_failure_fails_the_lane(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Systemic failures (the lane cannot enumerate the dataset) still fail
+    the run — only per-document issues are exempt."""
+    _enable(monkeypatch)
+    from apps.aggregator import indiacourts_pipeline as pipeline
+    from apps.aggregator.indiacourts import IndiaCourtsError
+
+    def boom(*args, **kwargs):
+        raise IndiaCourtsError("listing exploded")
+
+    monkeypatch.setattr(pipeline, "list_partitions", boom)
+    bucket = FakeBucket()
+    result = _run_forward(bucket, tmp_path)
+    src = result.sources[0]
+    assert not src.success
+    assert "listing exploded" in (src.error or "")
+
+
 def test_forward_second_run_skips_unchanged_partitions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
