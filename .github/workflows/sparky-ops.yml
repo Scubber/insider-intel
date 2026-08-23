@@ -43,6 +43,7 @@ on:
           - gcp-sweep-launch
           - gcp-sweep-status
           - gcp-sweep-delete
+          - sweep-audit
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -306,6 +307,30 @@ jobs:
           gcloud auth list 2>&1 || true
           echo
           bash scripts/gcp_sweep_vm.sh status
+
+      - name: sweep-audit
+        if: ${{ github.event.inputs.op == 'sweep-audit' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          command -v gsutil >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          AUDIT_DIR=/tmp/sweep-audit
+          mkdir -p "$AUDIT_DIR"
+          gsutil -m rsync gs://insider-intel-502413-corpus/raw/sweeps/indiacourts "$AUDIT_DIR" \
+            2>/dev/null || true
+          echo "== bucket spool contents =="
+          ls -la "$AUDIT_DIR" | head -25
+          echo; echo "== status.json =="
+          cat "$AUDIT_DIR/status.json" 2>/dev/null || echo "(no status yet)"
+          echo; echo "== chunk quality audit =="
+          if ls "$AUDIT_DIR"/*.jsonl >/dev/null 2>&1; then
+            docker compose -f docker-compose.spark.yml run --rm \
+              -v "$AUDIT_DIR:/audit:ro" -v "$PWD/scripts:/app/scripts:ro" refresh \
+              python scripts/audit_sweep_chunks.py /audit
+          else
+            echo "(no chunks in the bucket spool yet — nothing to audit)"
+          fi
 
       - name: gcp-sweep-delete
         if: ${{ github.event.inputs.op == 'gcp-sweep-delete' }}
