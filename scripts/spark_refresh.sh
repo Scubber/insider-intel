@@ -115,6 +115,12 @@ for p in "${PULL_PREFIXES[@]}"; do
   mkdir -p "data/${p}"
   gsutil -m rsync -r "${SPARK_CORPUS_BUCKET}/${p}" "data/${p}" || [ "${p}" = "config" ]
 done
+# Bulk-sweep spool: when the sweep runs on a cloud VM its match chunks land
+# under this prefix; pull them so the pipeline's spool merge ingests them.
+# Empty/absent prefix is a no-op; local-sweep chunks are already in place.
+mkdir -p data/raw/sweep_spool
+gsutil -m rsync "${SPARK_CORPUS_BUCKET}/raw/sweeps/indiacourts" data/raw/sweep_spool \
+  2>/dev/null || true
 
 if [ "$SWAPPED_MODEL" = "1" ]; then
   # Weights load while the corpus pulls; block only now, right before the run.
@@ -134,6 +140,16 @@ echo "spark_refresh: push"
 for p in "${PUSH_PREFIXES[@]}"; do
   gsutil -m rsync -r "data/${p}" "${SPARK_CORPUS_BUCKET}/${p}"
 done
+
+# Retire bucket-spool chunks the pipeline merged this cycle (they moved to
+# ingested/ locally); otherwise every pull re-downloads them. Re-merging is
+# harmless (link-dedupe) so a failure here is cosmetic.
+if compgen -G "data/raw/sweep_spool/ingested/*.jsonl" > /dev/null 2>&1; then
+  for f in data/raw/sweep_spool/ingested/*.jsonl; do
+    gsutil rm "${SPARK_CORPUS_BUCKET}/raw/sweeps/indiacourts/$(basename "$f")" \
+      2>/dev/null || true
+  done
+fi
 
 if [ -n "${SPARK_RELOAD_URL:-}" ]; then
   echo "spark_refresh: reload"

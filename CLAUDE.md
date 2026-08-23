@@ -309,6 +309,7 @@ python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECA
 python -m apps.aggregator sweep_courtlistener_history --windows 4  # pull historical case windows manually
 python -m apps.aggregator ingest_indiacourts          # scan new Indian HC judgments (INDIACOURTS_ENABLED)
 python -m apps.aggregator sweep_indiacourts_history   # walk Indian judgment years back to the 2000 floor
+python -m apps.aggregator sweep_indiacourts_bulk      # FULL-history tar-stream sweep (days; see HANDOFF #8)
 python -m apps.aggregator extract_indiacourts_pending # retry failed/OCR-pending judgment PDFs
 python scripts/replay_filings_gate.py                 # old-vs-new spend gate over the stored corpus (run on sparky)
 python -m apps.aggregator reenrich_missed --dry-run   # count filings whose forensics aren't on the current model/schema

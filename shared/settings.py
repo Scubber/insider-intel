@@ -235,6 +235,35 @@ class Settings(BaseSettings):
             "Path form of the dataset's court codes ('7_26' for '7~26')."
         ),
     )
+    indiacourts_sweep_workers: int = Field(
+        default=2,
+        alias="INDIACOURTS_SWEEP_WORKERS",
+        description=(
+            "Concurrent tar streams for the bulk history sweep — the "
+            "bandwidth throttle (each stream pulls a bench-year tar at line "
+            "rate). Raise on a datacenter VM; keep low on a residential link."
+        ),
+        ge=1,
+        le=16,
+    )
+    indiacourts_sweep_ocr: bool = Field(
+        default=True,
+        alias="INDIACOURTS_SWEEP_OCR",
+        description=(
+            "Bulk sweep only: OCR scanned members inline via the configured "
+            "INDIACOURTS_OCR_COMMAND. false = count and skip them (a later "
+            "targeted pass can revisit)."
+        ),
+    )
+    indiacourts_sweep_spool_dir: str = Field(
+        default="data/raw/sweep_spool",
+        alias="INDIACOURTS_SWEEP_SPOOL_DIR",
+        description=(
+            "Where the bulk sweep spools per-partition match chunks; the "
+            "nightly ingest merges and retires them (link-deduped, so "
+            "re-merging is harmless)."
+        ),
+    )
     indiacourts_history_floor: str = Field(
         default="2000-01-01",
         alias="INDIACOURTS_HISTORY_FLOOR",

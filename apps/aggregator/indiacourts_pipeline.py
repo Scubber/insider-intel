@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -417,6 +418,41 @@ def _save(store: ArticleStore, batch: list[RawArticle]) -> int:
     return store.save(batch) if batch else 0
 
 
+def merge_sweep_spool(store: ArticleStore, spool_dir: str | Path) -> int:
+    """Fold bulk-sweep chunk files into the raw store; retire what merged.
+
+    The bulk sweep (indiacourts_bulk) NEVER writes the main store — this is
+    the single writer, called at the start of the nightly forward ingest.
+    Idempotent: the store link-dedupes, so re-merging a chunk (e.g. after a
+    crash between save and retire, or a chunk re-synced from the bucket
+    spool prefix) is harmless. Merged chunks move to ``ingested/`` for
+    local tidiness; a bad line never sinks the merge.
+    """
+    spool = Path(spool_dir)
+    if not spool.is_dir():
+        return 0
+    merged = 0
+    done_dir = spool / "ingested"
+    for chunk in sorted(spool.glob("*.jsonl")):
+        batch: list[RawArticle] = []
+        for line in chunk.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                batch.append(RawArticle.model_validate_json(line))
+            except ValueError as exc:
+                logger.warning("[india-sweep] bad spool line in %s skipped: %s", chunk.name, exc)
+        saved = _save(store, batch)
+        merged += saved
+        done_dir.mkdir(exist_ok=True)
+        os.replace(chunk, done_dir / chunk.name)
+        logger.info(
+            "[india-sweep] merged chunk %s: %d/%d new row(s)", chunk.name, saved, len(batch)
+        )
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # Jobs
 
@@ -459,6 +495,9 @@ def run_indiacourts_ingestion(
     pending = PendingQueue(sdir)
     article_store: ArticleStore = store or JsonlArticleStore(store_path)
     ocr_backend = ocr if ocr is not None else resolve_ocr_backend(settings)
+    merged = merge_sweep_spool(article_store, settings.indiacourts_sweep_spool_dir)
+    if merged:
+        logger.info("[india-sweep] spool merge: %d bulk-sweep row(s) entered the store", merged)
     own_client = client is None
     http = client or httpx.Client(timeout=60.0)
     batch: list[RawArticle] = []
@@ -492,7 +531,7 @@ def run_indiacourts_ingestion(
     finally:
         if own_client:
             http.close()
-    saved = _save(article_store, batch)
+    saved = _save(article_store, batch) + merged
     return _finish(SOURCE_ID, SOURCE_NAME, stats=stats, saved=saved, started_at=now)
 
 

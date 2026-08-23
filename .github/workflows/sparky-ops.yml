@@ -37,6 +37,9 @@ on:
           - extract-india
           - run-replay
           - run-refresh
+          - sweep-start
+          - sweep-status
+          - sweep-stop
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -80,7 +83,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -248,3 +251,33 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/spark_refresh.sh
+
+      - name: sweep-start
+        if: ${{ github.event.inputs.op == 'sweep-start' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.spark.yml --profile sweep up -d --build sweep
+          echo "bulk sweep container started (detached — survives this job):"
+          docker compose -f docker-compose.spark.yml --profile sweep ps sweep
+
+      - name: sweep-status
+        if: ${{ github.event.inputs.op == 'sweep-status' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -uo pipefail
+          docker compose -f docker-compose.spark.yml --profile sweep ps sweep || true
+          echo; echo "== status.json =="
+          cat data/raw/sweep_spool/status.json 2>/dev/null || echo "(no status yet)"
+          echo; echo "== last 40 log lines =="
+          docker compose -f docker-compose.spark.yml --profile sweep logs --tail 40 sweep 2>&1 || true
+          echo; echo "== spooled chunks =="
+          ls -la data/raw/sweep_spool/*.jsonl 2>/dev/null | head -20 || echo "(none pending merge)"
+
+      - name: sweep-stop
+        if: ${{ github.event.inputs.op == 'sweep-stop' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.spark.yml --profile sweep stop sweep
+          echo "sweep stopped (resume later with sweep-start — partition markers persist)"
