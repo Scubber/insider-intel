@@ -122,11 +122,20 @@ jobs:
           #    softDeleted+alt=media. Restore it to live, copy it out, then
           #    immediately put current back — the live=donor window is seconds
           #    with nothing reloading, and current is backed up above.
-          echo "Restoring soft-deleted donor ${GEN} to read its bytes"
-          gcloud storage restore "${DONOR}" --project "${PROJECT_ID}"
-          gcloud storage cp "${OBJ}" donor.jsonl
-          echo "Reverting live corpus to the current (pre-recover) version"
-          gcloud storage cp current.jsonl "${OBJ}"
+          # A donor retained by object versioning is a LIVE noncurrent
+          # generation — readable directly by its generation-addressed URL,
+          # no restore needed and the live object is never touched. Only a
+          # genuinely soft-deleted donor needs the restore+revert dance
+          # (2026-08-23: the direct path; 2026-07: the soft-delete path).
+          if gcloud storage cp "${DONOR}" donor.jsonl --project "${PROJECT_ID}"; then
+            echo "Donor generation ${GEN} read directly (live noncurrent version)"
+          else
+            echo "Direct read failed — treating donor as soft-deleted; restoring to read its bytes"
+            gcloud storage restore "${DONOR}" --project "${PROJECT_ID}"
+            gcloud storage cp "${OBJ}" donor.jsonl
+            echo "Reverting live corpus to the current (pre-recover) version"
+            gcloud storage cp current.jsonl "${OBJ}"
+          fi
 
           wc -l donor.jsonl current.jsonl
           if [ "$(wc -l < donor.jsonl)" -lt 100 ]; then
