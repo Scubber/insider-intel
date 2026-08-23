@@ -204,7 +204,15 @@ class _Stats:
         self.partitions_checked = 0
         self.matches = 0
         self.pending_added = 0
+        # Systemic failures only (partition listing/parquet unreadable) — these
+        # mean the lane could not do its job and fail the run. Per-document
+        # problems (truncated PDF, scanned pages, fetch hiccup) are the
+        # pending queue's DESIGNED path and land in doc_issues instead: the
+        # first live smoke (2026-08-23) had 5/200 truncated PDFs park cleanly
+        # and the run wrongly reported [FAIL] — at that rate every real cycle
+        # would trip a false [LANE-BROKEN].
         self.errors: list[str] = []
+        self.doc_issues: list[str] = []
 
     @property
     def work_done(self) -> int:
@@ -246,14 +254,14 @@ def _process_meta(
     except IndiaCourtsError as exc:
         pending.add(meta.pdf_key, pending_entry(meta, "fetch"), now=now)
         stats.pending_added += 1
-        stats.errors.append(str(exc))
+        stats.doc_issues.append(str(exc))
         return None, False
 
     text = ""
     try:
         text = pdf_bytes_to_text(data, max_chars=settings.indiacourts_text_max_chars)
     except IndiaCourtsError as exc:
-        stats.errors.append(str(exc))
+        stats.doc_issues.append(str(exc))
     if len(text) < settings.indiacourts_min_text_chars:
         # Scanned/empty text layer: OCR now when a backend is configured,
         # otherwise park it for extract_indiacourts_pending.
@@ -265,7 +273,7 @@ def _process_meta(
                 text = truncate_head_tail(raw_text.strip(), settings.indiacourts_text_max_chars)
             except Exception as exc:  # noqa: BLE001 — an OCR backend must never
                 # kill the refresh run; the PDF parks and retries.
-                stats.errors.append(f"ocr: {exc}")
+                stats.doc_issues.append(f"ocr: {exc}")
         if len(text) < settings.indiacourts_min_text_chars:
             pending.add(meta.pdf_key, pending_entry(meta, "ocr"), now=now)
             stats.pending_added += 1
@@ -362,14 +370,22 @@ def _finish(
         error="; ".join(stats.errors[:5]) if stats.errors else None,
     )
     logger.info(
-        "[indiacourts] %s: pdfs=%d matches=%d saved=%d pending+=%d errors=%d",
+        "[indiacourts] %s: pdfs=%d matches=%d saved=%d pending+=%d errors=%d parked_issues=%d",
         result_id,
         stats.pdfs_attempted,
         stats.matches,
         saved,
         stats.pending_added,
         len(stats.errors),
+        len(stats.doc_issues),
     )
+    if stats.doc_issues:
+        logger.info(
+            "[indiacourts] %s: %d per-document issue(s) parked for retry, e.g.: %s",
+            result_id,
+            len(stats.doc_issues),
+            "; ".join(stats.doc_issues[:3]),
+        )
     return IngestionRunResult(
         started_at=started_at,
         finished_at=datetime.now(UTC),
