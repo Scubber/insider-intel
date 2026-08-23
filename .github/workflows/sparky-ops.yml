@@ -1,0 +1,181 @@
+name: sparky-ops
+
+# Operate the DGX Spark refresh tenant through the self-hosted runner ON the
+# box (registered 2026-08-23) — merge-audited, dispatch-gated ops instead of
+# operator-terminal relay. The runner user's permissions bound everything.
+#
+# Rules baked in:
+#   - workflow_dispatch ONLY: nothing on this runner fires from pushes or PRs.
+#   - No third-party actions (nothing to SHA-pin); no repo checkout — every op
+#     targets the box's OPERATIONAL clone (default ~/insider-intel), the one
+#     the 08:00Z cron builds, never the runner's workdir.
+#   - Secrets never print: .env.spark is only ever shown as key NAMES.
+#   - Mutating ops (pull-main, enable-india, smoke-india, run-refresh) require
+#     confirm=RUN. run-refresh respects the wrapper's own flock — a cycle in
+#     progress makes it skip loudly, so it cannot double-write the bucket.
+on:
+  workflow_dispatch:
+    inputs:
+      op:
+        description: >-
+          diagnose (identity/cron/log/checkout forensics) | tail-refresh-log |
+          env-audit (key NAMES only) | git-status | pull-main | enable-india |
+          smoke-india | run-replay | run-refresh
+        required: true
+        default: "diagnose"
+        type: choice
+        options:
+          - diagnose
+          - tail-refresh-log
+          - env-audit
+          - git-status
+          - pull-main
+          - enable-india
+          - smoke-india
+          - run-replay
+          - run-refresh
+      confirm:
+        description: "mutating ops only: must be the literal word RUN"
+        required: false
+        default: ""
+      lines:
+        description: "tail-refresh-log: line count"
+        required: false
+        default: "150"
+      reserve:
+        description: "enable-india: also set SUMMARIZER_BACKFILL_RESERVE to this (empty = leave as-is)"
+        required: false
+        default: ""
+
+concurrency:
+  group: sparky-ops
+  cancel-in-progress: false
+
+permissions:
+  contents: none
+
+jobs:
+  op:
+    runs-on: self-hosted
+    timeout-minutes: 510 # a full spark_refresh is bounded at 8h by its own timeout
+    env:
+      WORKDIR: ${{ vars.SPARKY_WORKDIR || '' }}
+      OP: ${{ github.event.inputs.op }}
+      CONFIRM: ${{ github.event.inputs.confirm }}
+      LINES: ${{ github.event.inputs.lines }}
+      RESERVE: ${{ github.event.inputs.reserve }}
+    steps:
+      - name: Resolve operational checkout
+        run: |
+          set -euo pipefail
+          WORKDIR="${WORKDIR:-$HOME/insider-intel}"
+          echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
+          [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
+          case "$OP" in
+            pull-main|enable-india|smoke-india|run-refresh)
+              [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
+          esac
+
+      - name: diagnose
+        if: ${{ github.event.inputs.op == 'diagnose' }}
+        run: |
+          set -uo pipefail
+          echo "== identity =="; whoami; id; hostname; echo "HOME=$HOME"
+          echo; echo "== operational checkout ($WORKDIR) =="
+          git -C "$WORKDIR" log --oneline -1; git -C "$WORKDIR" branch --show-current
+          git -C "$WORKDIR" status --short | head -20
+          echo; echo "== cron (expect exactly one 0 8 * * * entry) =="
+          crontab -l 2>/dev/null || echo "(no crontab for $(whoami))"
+          echo; echo "== systemd timers (top 15) =="
+          systemctl list-timers --all 2>/dev/null | head -15 || true
+          echo; echo "== other compose checkouts under \$HOME (stale-data suspects) =="
+          find "$HOME" -maxdepth 3 -name docker-compose.spark.yml -not -path "*/actions-runner/*" 2>/dev/null || true
+          echo; echo "== data dir vintage in each =="
+          for f in $(find "$HOME" -maxdepth 3 -name docker-compose.spark.yml -not -path "*/actions-runner/*" 2>/dev/null); do
+            d="$(dirname "$f")/data/processed/articles.jsonl"
+            [ -f "$d" ] && stat -c '%y  %s bytes  %n' "$d" || echo "(no processed corpus in $(dirname "$f"))"
+          done
+          echo; echo "== docker =="
+          docker ps --format '{{.Names}}  {{.Image}}  {{.Status}}' 2>/dev/null || echo "(no docker access for runner user)"
+          echo; echo "== refresh lock =="
+          ls -la /tmp/insider-intel-spark-refresh.lock 2>/dev/null || echo "(no lock held)"
+          echo; echo "== spark_refresh.log tail (last 120) =="
+          tail -n 120 "$WORKDIR/logs/spark_refresh.log" 2>/dev/null || echo "(no log at $WORKDIR/logs/spark_refresh.log)"
+          echo; echo "== log lines around the 00:04Z window (08-22/08-23) =="
+          grep -n "2026-08-2[23]" "$WORKDIR/logs/spark_refresh.log" 2>/dev/null | tail -40 || true
+
+      - name: tail-refresh-log
+        if: ${{ github.event.inputs.op == 'tail-refresh-log' }}
+        run: |
+          set -euo pipefail
+          tail -n "${LINES:-150}" "$WORKDIR/logs/spark_refresh.log"
+
+      - name: env-audit
+        if: ${{ github.event.inputs.op == 'env-audit' }}
+        run: |
+          set -euo pipefail
+          echo "== .env.spark key NAMES (values never printed) =="
+          grep -Ev '^\s*(#|$)' "$WORKDIR/.env.spark" | cut -d= -f1 | sort
+
+      - name: git-status
+        if: ${{ github.event.inputs.op == 'git-status' }}
+        run: |
+          set -euo pipefail
+          git -C "$WORKDIR" fetch origin main -q || true
+          git -C "$WORKDIR" log --oneline -1
+          git -C "$WORKDIR" branch --show-current
+          git -C "$WORKDIR" status --short | head -30
+          echo "behind origin/main by: $(git -C "$WORKDIR" rev-list --count HEAD..origin/main 2>/dev/null || echo '?') commit(s)"
+
+      - name: pull-main
+        if: ${{ github.event.inputs.op == 'pull-main' }}
+        run: |
+          set -euo pipefail
+          git -C "$WORKDIR" checkout main
+          git -C "$WORKDIR" pull origin main
+          git -C "$WORKDIR" log --oneline -1
+
+      - name: enable-india
+        if: ${{ github.event.inputs.op == 'enable-india' }}
+        run: |
+          set -euo pipefail
+          ENV_FILE="$WORKDIR/.env.spark"
+          [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE"; exit 1; }
+          if grep -q '^INDIACOURTS_ENABLED=' "$ENV_FILE"; then
+            sed -i 's/^INDIACOURTS_ENABLED=.*/INDIACOURTS_ENABLED=true/' "$ENV_FILE"
+          else
+            printf '\nINDIACOURTS_ENABLED=true\n' >> "$ENV_FILE"
+          fi
+          if [ -n "${RESERVE}" ]; then
+            if grep -q '^SUMMARIZER_BACKFILL_RESERVE=' "$ENV_FILE"; then
+              sed -i "s/^SUMMARIZER_BACKFILL_RESERVE=.*/SUMMARIZER_BACKFILL_RESERVE=${RESERVE}/" "$ENV_FILE"
+            else
+              printf 'SUMMARIZER_BACKFILL_RESERVE=%s\n' "${RESERVE}" >> "$ENV_FILE"
+            fi
+          fi
+          echo "now set (names/flags only):"
+          grep -E '^(INDIACOURTS_ENABLED|SUMMARIZER_BACKFILL_RESERVE)=' "$ENV_FILE"
+
+      - name: smoke-india
+        if: ${{ github.event.inputs.op == 'smoke-india' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.spark.yml run --rm --build refresh \
+            python -m apps.aggregator ingest_indiacourts -v
+
+      - name: run-replay
+        if: ${{ github.event.inputs.op == 'run-replay' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.spark.yml run --rm --build \
+            -v "$PWD/scripts:/app/scripts:ro" refresh \
+            python scripts/replay_filings_gate.py
+
+      - name: run-refresh
+        if: ${{ github.event.inputs.op == 'run-refresh' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          bash scripts/spark_refresh.sh
