@@ -884,3 +884,40 @@ def test_refresh_lock_probe(tmp_path: Path) -> None:
     with lock.open() as fh:
         fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert refresh_lock_held(str(lock)) is True  # held elsewhere
+
+
+def test_audit_sweep_chunks_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """The sweep-audit script: a clean chunk passes with sane aggregates; a
+    contract breach (junk line) turns the audit red."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "audit_sweep_chunks",
+        Path(__file__).resolve().parents[1] / "scripts" / "audit_sweep_chunks.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)
+
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    _run_bulk(bucket, tmp_path)
+    spool = tmp_path / "spool"
+
+    assert mod.main(["audit", str(spool)]) == 0
+    out = capsys.readouterr().out
+    assert "rows             : 1" in out
+    assert "contract breaches: 0" in out
+    assert "All contract checks passed." in out
+
+    (spool / "junk.jsonl").write_text('{"not": "a raw article"}\n', encoding="utf-8")
+    assert mod.main(["audit", str(spool)]) == 1
+    assert "VIOLATIONS" in capsys.readouterr().out
