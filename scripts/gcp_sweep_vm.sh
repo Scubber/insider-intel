@@ -8,15 +8,18 @@
 #   bash scripts/gcp_sweep_vm.sh status     # tail the sweep's serial output
 #   bash scripts/gcp_sweep_vm.sh delete     # tear the VM down
 #
-# Costs (spot, us-east1): c2d-standard-16 ≈ $0.10–0.15/hr → ~$20–40 for the
-# full ~18.5M-judgment sweep. Preemption is fine: partition markers make the
-# sweep resumable and the VM restarts the container on boot.
+# Costs (spot, us-east1): c2d-standard-32 ≈ $0.20–0.30/hr → ~$25–50 for the
+# full ~18.5M-judgment sweep at the measured extraction cost. Preemption is
+# fine: partition markers make the sweep resumable and the VM restarts the
+# container on boot. Sizing law: pypdf extraction is GIL-bound, so the
+# throughput knob is INDIACOURTS_SWEEP_EXTRACT_PROCS (process pool), not
+# threads — the first run wasted 8h at ~1 effective core before this.
 set -euo pipefail
 
 PROJECT="${PROJECT:-insider-intel-502413}"
 ZONE="${ZONE:-us-east1-b}"
 NAME="${NAME:-indiacourts-sweep}"
-MACHINE="${MACHINE:-c2d-standard-16}"
+MACHINE="${MACHINE:-c2d-standard-32}"
 BUCKET="gs://${PROJECT}-corpus"
 SPOOL_PREFIX="${BUCKET}/raw/sweeps/indiacourts"
 STATE_PREFIX="${BUCKET}/raw/sweeps/indiacourts-state"
@@ -81,7 +84,8 @@ gcloud storage rsync -r ${STATE_PREFIX} /opt/data/state/indiacourts || true
 docker rm -f sweep 2>/dev/null || true
 docker run -d --name sweep --restart on-failure \
   -e INDIACOURTS_ENABLED=true \
-  -e INDIACOURTS_SWEEP_WORKERS=8 \
+  -e INDIACOURTS_SWEEP_WORKERS=32 \
+  -e INDIACOURTS_SWEEP_EXTRACT_PROCS=28 \
   -e INDIACOURTS_OCR_COMMAND="python -m apps.aggregator.ocr_pdf" \
   -v /opt/data:/app/data \
   insider-intel-spark python -m apps.aggregator sweep_indiacourts_bulk -v
@@ -89,7 +93,7 @@ docker run -d --name sweep --restart on-failure \
 # heartbeat.log ships the container's latest lines to the bucket each cycle
 # so remote monitoring sees a live pulse instead of hour-long blind windows.
 while docker ps -q -f name=sweep | grep -q .; do
-  { date -u +%FT%TZ; docker logs --tail 8 sweep 2>&1; } \
+  { date -u +%FT%TZ; docker logs --tail 14 sweep 2>&1; } \
     > /opt/data/raw/sweep_spool/heartbeat.log || true
   gcloud storage rsync /opt/data/raw/sweep_spool ${SPOOL_PREFIX} || true
   gcloud storage rsync -r /opt/data/state/indiacourts ${STATE_PREFIX} || true

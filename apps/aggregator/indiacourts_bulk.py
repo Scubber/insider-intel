@@ -28,11 +28,14 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import multiprocessing
 import os
 import tarfile
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures.process import BrokenProcessPool
 from datetime import UTC, datetime
 from pathlib import Path
 from xml.etree import ElementTree
@@ -66,6 +69,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_SPOOL_DIR = "data/raw/sweep_spool"
 REFRESH_LOCK_PATH = "/tmp/insider-intel-spark-refresh.lock"
 _NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
+
+# Worker threads fold their local counters into the shared stats every
+# FLUSH_EVERY pdfs, and each time the GLOBAL pdf count crosses a
+# PROGRESS_LOG_EVERY boundary the crossing thread logs a rate line and
+# rewrites status.json — so docker-logs tails and the bucket heartbeat carry
+# a live pulse even while every worker sits inside a 100k-member tar (the
+# first live run was blind for 8h because all telemetry waited for a
+# partition to complete).
+FLUSH_EVERY = 50
+PROGRESS_LOG_EVERY = 2000
+EXTRACT_TIMEOUT_SECONDS = 300.0
 
 
 def refresh_lock_held(path: str | None = None) -> bool:
@@ -147,15 +161,107 @@ class _SweepStats:
         self.scanned_skipped = 0
         self.ocr_used = 0
         self.non_english = 0
+        self.extract_timeouts = 0
         self.errors = 0
+
+    def bump(
+        self,
+        *,
+        pdfs: int = 0,
+        matches: int = 0,
+        corrupt: int = 0,
+        scanned_skipped: int = 0,
+        ocr_used: int = 0,
+        non_english: int = 0,
+        extract_timeouts: int = 0,
+    ) -> int:
+        """Fold worker-local deltas in mid-partition; returns the global pdf
+        count so the caller can detect a progress-log boundary crossing."""
+        with self.lock:
+            self.pdfs += pdfs
+            self.matches += matches
+            self.corrupt += corrupt
+            self.scanned_skipped += scanned_skipped
+            self.ocr_used += ocr_used
+            self.non_english += non_english
+            self.extract_timeouts += extract_timeouts
+            return self.pdfs
 
     def snapshot(self) -> dict:
         with self.lock:
-            return {
-                k: v
-                for k, v in self.__dict__.items()
-                if isinstance(v, int)
-            }
+            return {k: v for k, v in self.__dict__.items() if isinstance(v, int)}
+
+
+class _PartitionCounts:
+    """Per-partition tallies that flush into the shared stats incrementally.
+
+    Keeps two views: lifetime totals (for the partition-completion log line)
+    and the un-flushed remainder (folded into _SweepStats every FLUSH_EVERY
+    pdfs and once more at partition end, so nothing double-counts)."""
+
+    FIELDS = (
+        "pdfs",
+        "matches",
+        "corrupt",
+        "scanned_skipped",
+        "ocr_used",
+        "non_english",
+        "extract_timeouts",
+    )
+
+    def __init__(self) -> None:
+        for f in self.FIELDS:
+            setattr(self, f, 0)
+            setattr(self, f + "_flushed", 0)
+
+    def flush(self, stats: _SweepStats) -> tuple[int, int]:
+        """Push the un-flushed remainder; returns (global pdfs, pdf delta)."""
+        deltas = {f: getattr(self, f) - getattr(self, f + "_flushed") for f in self.FIELDS}
+        for f in self.FIELDS:
+            setattr(self, f + "_flushed", getattr(self, f))
+        return stats.bump(**deltas), deltas["pdfs"]
+
+
+class _ExtractPool:
+    """pdf_bytes_to_text on a spawn-context process pool.
+
+    pypdf extraction is (almost) pure Python, so running it on the streaming
+    threads caps aggregate throughput near ONE core no matter how many
+    workers — the first live VM run finished zero partitions in 8h on 8
+    threads / 16 vCPUs. Processes sidestep the GIL; spawn (not fork) because
+    the parent is heavily threaded. Self-heals a broken pool once per call
+    (a segfaulting child must never quietly end days of run time)."""
+
+    def __init__(self, procs: int) -> None:
+        self._procs = procs
+        self._lock = threading.Lock()
+        self._pool = self._new_pool()
+
+    def _new_pool(self) -> ProcessPoolExecutor:
+        return ProcessPoolExecutor(
+            max_workers=self._procs, mp_context=multiprocessing.get_context("spawn")
+        )
+
+    def run(self, data: bytes, max_chars: int) -> str:
+        """Extract text; raises IndiaCourtsError / FutureTimeoutError upward."""
+        for attempt in (0, 1):
+            with self._lock:
+                pool = self._pool
+            try:
+                fut = pool.submit(pdf_bytes_to_text, data, max_chars=max_chars)
+                return fut.result(timeout=EXTRACT_TIMEOUT_SECONDS)
+            except BrokenProcessPool:
+                if attempt:
+                    raise IndiaCourtsError("extraction pool broke twice in a row") from None
+                logger.warning("[india-sweep] extraction pool broke — rebuilding")
+                with self._lock:
+                    if self._pool is pool:  # first thread in rebuilds; the rest reuse
+                        self._pool.shutdown(wait=False, cancel_futures=True)
+                        self._pool = self._new_pool()
+        raise IndiaCourtsError("unreachable")  # pragma: no cover
+
+    def close(self) -> None:
+        self._pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _tar_key(ref: PartitionRef) -> str:
@@ -173,14 +279,13 @@ def _sweep_partition(
     stats: _SweepStats,
     record_names: bool,
     parquet_etag: str = "",
+    extract: _ExtractPool | None = None,
 ) -> None:
     """Stream one bench-year tar; spool matches; mark the partition swept."""
     started = time.monotonic()
     # The completion marker must carry the PARQUET etag — that is what the
     # nightly forward/history walkers compare before skipping a partition.
-    parquet_ref = PartitionRef(
-        year=ref.year, court=ref.court, bench=ref.bench, etag=parquet_etag
-    )
+    parquet_ref = PartitionRef(year=ref.year, court=ref.court, bench=ref.bench, etag=parquet_etag)
     try:
         parquet = fetch_bytes(
             client,
@@ -199,7 +304,7 @@ def _sweep_partition(
     by_basename: dict[str, JudgmentMeta] = {m.pdf_basename: m for m in metas}
 
     rows: list[str] = []
-    pdfs = matches = corrupt = scanned = ocr_used = non_english = 0
+    counts = _PartitionCounts()
     url = f"{settings.indiacourts_base_url.rstrip('/')}/{_tar_key(ref)}"
     with client.stream("GET", url) as resp:
         if resp.status_code != 200:
@@ -220,12 +325,24 @@ def _sweep_partition(
                 if fh is None:
                     continue
                 data = fh.read()
-                pdfs += 1
+                counts.pdfs += 1
+                if counts.pdfs % FLUSH_EVERY == 0:
+                    total, delta = counts.flush(stats)
+                    if total // PROGRESS_LOG_EVERY != (total - delta) // PROGRESS_LOG_EVERY:
+                        _log_progress(stats, spool, ref.year)
                 if b"%PDF" not in data[:1024]:
-                    corrupt += 1
+                    counts.corrupt += 1
                     continue
                 try:
-                    text = pdf_bytes_to_text(data, max_chars=settings.indiacourts_text_max_chars)
+                    if extract is not None:
+                        text = extract.run(data, settings.indiacourts_text_max_chars)
+                    else:
+                        text = pdf_bytes_to_text(
+                            data, max_chars=settings.indiacourts_text_max_chars
+                        )
+                except FutureTimeoutError:
+                    counts.extract_timeouts += 1
+                    text = ""
                 except IndiaCourtsError:
                     text = ""
                 if len(text) < settings.indiacourts_min_text_chars and ocr is not None:
@@ -233,18 +350,18 @@ def _sweep_partition(
                         text = truncate_head_tail(
                             ocr(data).strip(), settings.indiacourts_text_max_chars
                         )
-                        ocr_used += 1
+                        counts.ocr_used += 1
                     except Exception:  # noqa: BLE001 — OCR must never kill the sweep
                         pass
                 if len(text) < settings.indiacourts_min_text_chars:
-                    scanned += 1
+                    counts.scanned_skipped += 1
                     continue
                 if detect_language(text) == "hi":
-                    non_english += 1
+                    counts.non_english += 1
                 matched = scan_insider_patterns(text)
                 if not matched:
                     continue
-                matches += 1
+                counts.matches += 1
                 article = judgment_to_raw_article(
                     meta, matched, text, base_url=settings.indiacourts_base_url
                 )
@@ -263,14 +380,9 @@ def _sweep_partition(
     state.complete = True
     state.save()
 
+    counts.flush(stats)
     with stats.lock:
         stats.partitions_done += 1
-        stats.pdfs += pdfs
-        stats.matches += matches
-        stats.corrupt += corrupt
-        stats.scanned_skipped += scanned
-        stats.ocr_used += ocr_used
-        stats.non_english += non_english
     # Per-PARTITION status write: per-year alone left hours-long blind windows
     # on big years (first live check, 2026-08-23) — monitoring needs a pulse.
     _write_status(spool, stats, stats.started_monotonic, ref.year)
@@ -280,14 +392,34 @@ def _sweep_partition(
         ref.year,
         ref.court,
         ref.bench,
-        pdfs,
-        matches,
-        corrupt,
-        scanned,
-        ocr_used,
-        non_english,
+        counts.pdfs,
+        counts.matches,
+        counts.corrupt,
+        counts.scanned_skipped,
+        counts.ocr_used,
+        counts.non_english,
         time.monotonic() - started,
     )
+
+
+def _log_progress(stats: _SweepStats, spool: Path, year: int) -> None:
+    """Mid-partition pulse: a rate line for the heartbeat + a status rewrite."""
+    snap = stats.snapshot()
+    elapsed = max(1.0, time.monotonic() - stats.started_monotonic)
+    logger.info(
+        "[india-sweep] progress: pdfs=%d (%.0f/h) matches=%d corrupt=%d "
+        "scanned_skipped=%d ocr=%d non_english=%d timeouts=%d partitions_done=%d",
+        snap["pdfs"],
+        snap["pdfs"] / elapsed * 3600,
+        snap["matches"],
+        snap["corrupt"],
+        snap["scanned_skipped"],
+        snap["ocr_used"],
+        snap["non_english"],
+        snap["extract_timeouts"],
+        snap["partitions_done"],
+    )
+    _write_status(spool, stats, stats.started_monotonic, year)
 
 
 def run_indiacourts_bulk_sweep(
@@ -314,6 +446,10 @@ def run_indiacourts_bulk_sweep(
     ocr = resolve_ocr_backend(settings) if settings.indiacourts_sweep_ocr else None
     order, scope = _scoped_court_order(settings)
     workers = max(1, int(settings.indiacourts_sweep_workers))
+    procs = max(0, int(settings.indiacourts_sweep_extract_procs))
+    extract = _ExtractPool(procs) if procs else None
+    if extract is not None:
+        logger.info("[india-sweep] extraction on a %d-process pool", procs)
     own_client = client is None
     http = client or httpx.Client(timeout=120.0)
     started = time.monotonic()
@@ -365,12 +501,15 @@ def run_indiacourts_bulk_sweep(
                             stats=stats,
                             record_names=year >= now.year - 1,
                             parquet_etag=parquet_etags.get((ref.court, ref.bench), ""),
+                            extract=extract,
                         )
                     )
                 for fut in futures:
                     fut.result()
                 _write_status(spool, stats, started, year)
     finally:
+        if extract is not None:
+            extract.close()
         if own_client:
             http.close()
     summary = stats.snapshot()
@@ -388,6 +527,7 @@ def _write_status(spool: Path, stats: _SweepStats, started: float, year: int) ->
     payload = stats.snapshot()
     payload["current_year"] = year
     payload["elapsed_seconds"] = int(time.monotonic() - started)
+    payload["pdfs_per_hour"] = int(payload["pdfs"] / max(1, payload["elapsed_seconds"]) * 3600)
     payload["updated_at"] = datetime.now(UTC).isoformat()
     tmp = spool / f".status.{threading.get_ident()}.tmp"
     tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
