@@ -91,6 +91,10 @@ echo "SWEEP-COMPLETE \$(date -u)" > /opt/done
 EOS
 )
 
+# --metadata parses its value as a comma-separated dict, which mangles any
+# real script — the file form is the only safe way to pass one.
+STARTUP_FILE=$(mktemp /tmp/indiacourts-sweep-startup.XXXXXX.sh)
+printf '%s\n' "$STARTUP" > "$STARTUP_FILE"
 gcloud compute instances create "$NAME" \
   --project "$PROJECT" --zone "$ZONE" \
   --machine-type "$MACHINE" \
@@ -98,7 +102,8 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --boot-disk-size=50GB \
   --scopes=storage-rw \
-  --metadata=startup-script="$STARTUP"
+  --metadata-from-file=startup-script="$STARTUP_FILE"
+rm -f "$STARTUP_FILE"
 
 echo
 echo "VM '$NAME' creating (spot ${MACHINE}, ${ZONE}). Boot takes a few minutes:"
