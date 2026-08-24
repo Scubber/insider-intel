@@ -369,9 +369,9 @@ jobs:
               echo; echo '== hottest processes (main python vs spawn children) =='
               ps -eo pcpu,rss:9,pid,ppid,comm --sort=-pcpu | head -36
               echo; echo '== network rx over 10s =='
-              R1=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {print s}' /proc/net/dev)
+              R1=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {printf \"%.0f\", s}' /proc/net/dev)
               sleep 10
-              R2=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {print s}' /proc/net/dev)
+              R2=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {printf \"%.0f\", s}' /proc/net/dev)
               echo \"rx \$(( (R2 - R1) / 10 / 1048576 )) MiB/s (\$(( (R2 - R1) / 10 )) B/s)\"
             "
 

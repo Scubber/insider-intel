@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-23 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-24 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -241,13 +241,34 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    was re-run via run-refresh. LAW for future ops that write .env.spark:
    any value with spaces must be double-quoted — the file has TWO parsers
    (shell source + compose env_file). **Chat-stack default (2026-08-24,
-   operator choice)**: the nightly hand-back restores the model named by
-   `SPARKY_CHAT_OVERRIDE` in `.env.spark` (an overlay yml in `~/sparky`);
-   set to the Nemotron enrich overlay — qwen3:8b was only ever the base
-   compose fallback the trap kept restoring. Ops: `chat-status` /
-   `chat-swap` (live swap, flock-guarded) / `chat-default`. The operator
-   can run any model ad hoc via `chat-swap`; it lasts until the next
-   cycle's hand-back restores the default.
+   operator choice)**: default model = Nemotron. Recon showed the base
+   compose.yml already serves the Nemotron NVFP4 build, so the nightly
+   hand-back restores it with `SPARKY_CHAT_OVERRIDE` UNSET (the knob
+   exists in `.env.spark`/`spark_refresh.sh` for a future non-base
+   default; qwen3:8b in open-webui's picker is the separate Ollama
+   backend, not vLLM). Operator also wanted the Huihui Qwen3.6-35B FP8
+   active for chats ad hoc: `chat-huihui` generates `model-huihui.yml`
+   from the enrich overlay, swaps vllm+open-webui, and polls the served
+   id (confirmed serving 2026-08-24 12:05Z, ~7min load); any nightly
+   hand-back reverts to Nemotron, one re-dispatch brings huihui back.
+   Ops: `chat-status` / `chat-swap` (live swap, flock-guarded) /
+   `chat-huihui` / `chat-default`.
+   **Sweep NETWORK-BOUND — prefetch fix (2026-08-24 ~12:30Z).** OCR-off
+   relaunch still ran at a flat ~20k pdfs/h (~38-day projection). New
+   read-only `gcp-sweep-perf` op (top / docker stats / per-proc CPU /
+   rx delta over SSH) showed: main process 0.6% CPU, ONE extraction
+   child at 99%, 27 idle, ~1MB/s aggregate ingress (~30KB/s per
+   stream) — not extraction, not the GIL: the tar consumer stop-starts
+   (blocks in the extraction round-trip between members) and on the
+   long-RTT path to the dataset's S3 region every pause stalls TCP. So
+   the "OCR-bound" 08-24 07:30Z read was half-right: OCR made pauses
+   longer, but the collapse mechanism was always the stop-start stream.
+   Fix: `_PrefetchIterator` in `indiacourts_bulk.py` — a per-stream
+   pump thread drains the socket continuously into a bounded 32MiB
+   read-ahead queue (back-pressure holds memory; errors re-raise on the
+   consumer side; close() reaps the pump). Download and extraction now
+   overlap; expected ceiling moves back to the extraction pool
+   (~300k+/h). Requires VM relaunch (image bakes at create).
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
