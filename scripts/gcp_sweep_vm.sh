@@ -8,8 +8,8 @@
 #   bash scripts/gcp_sweep_vm.sh status     # tail the sweep's serial output
 #   bash scripts/gcp_sweep_vm.sh delete     # tear the VM down
 #
-# Costs (spot, us-east1): c2d-standard-32 ≈ $0.20–0.30/hr → ~$25–50 for the
-# full ~18.5M-judgment sweep at the measured extraction cost. Preemption is
+# Costs (spot): c2d/n2d-standard-32 ≈ $0.20–0.40/hr by region → ~$25–50 for
+# the full ~18.5M-judgment sweep at the measured extraction cost. Preemption is
 # fine: partition markers make the sweep resumable and the VM restarts the
 # container on boot. Sizing law: pypdf extraction is GIL-bound, so the
 # throughput knob is INDIACOURTS_SWEEP_EXTRACT_PROCS (process pool), not
@@ -18,11 +18,17 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-insider-intel-502413}"
 # Spot capacity is per-zone and stockouts are routine (the 2026-08-24 relaunch
-# lost its slot the moment the old VM was deleted): create tries each zone in
-# order, and every VM-addressed op discovers the live zone by instance lookup.
-ZONES="${ZONES:-us-east1-b us-east1-c us-east1-d}"
+# lost its slot the moment the old VM was deleted and ALL of us-east1 was out
+# of spot c2d): create tries each machine type across each zone in order, and
+# every VM-addressed op discovers the live zone by instance lookup.
+# asia-south1 (Mumbai) leads the list on purpose: the dataset bucket is S3
+# ap-south-1 (verified via x-amz-bucket-region), so a Mumbai VM reads it at
+# ~3ms RTT instead of ~190ms — the stop-start TCP stalls that capped the
+# us-east1 run never get room to bite. The corpus-bucket spool sync is tiny,
+# so its cross-region cost is noise.
+ZONES="${ZONES:-asia-south1-a asia-south1-b asia-south1-c us-east1-b us-east1-c us-east1-d us-central1-a us-central1-c us-central1-f}"
 NAME="${NAME:-indiacourts-sweep}"
-MACHINE="${MACHINE:-c2d-standard-32}"
+MACHINES="${MACHINES:-c2d-standard-32 n2d-standard-32}"
 BUCKET="gs://${PROJECT}-corpus"
 SPOOL_PREFIX="${BUCKET}/raw/sweeps/indiacourts"
 STATE_PREFIX="${BUCKET}/raw/sweeps/indiacourts-state"
@@ -139,22 +145,26 @@ EOS
 STARTUP_FILE=$(mktemp /tmp/indiacourts-sweep-startup.XXXXXX.sh)
 printf '%s\n' "$STARTUP" > "$STARTUP_FILE"
 ZONE=""
-for Z in $ZONES; do
-  if gcloud compute instances create "$NAME" \
-    --project "$PROJECT" --zone "$Z" \
-    --machine-type "$MACHINE" \
-    --provisioning-model=SPOT --instance-termination-action=STOP \
-    --image-family=debian-12 --image-project=debian-cloud \
-    --boot-disk-size=50GB \
-    --scopes=storage-rw \
-    --metadata-from-file=startup-script="$STARTUP_FILE"; then
-    ZONE="$Z"
-    break
-  fi
-  echo "zone $Z has no spot ${MACHINE} capacity — trying the next zone"
+MACHINE=""
+for M in $MACHINES; do
+  for Z in $ZONES; do
+    if gcloud compute instances create "$NAME" \
+      --project "$PROJECT" --zone "$Z" \
+      --machine-type "$M" \
+      --provisioning-model=SPOT --instance-termination-action=STOP \
+      --image-family=debian-12 --image-project=debian-cloud \
+      --boot-disk-size=50GB \
+      --scopes=storage-rw \
+      --metadata-from-file=startup-script="$STARTUP_FILE"; then
+      ZONE="$Z"
+      MACHINE="$M"
+      break 2
+    fi
+    echo "zone $Z has no spot ${M} capacity — trying the next zone"
+  done
 done
 rm -f "$STARTUP_FILE"
-[ -n "$ZONE" ] || { echo "ERROR: no zone in '$ZONES' had spot capacity — retry later"; exit 1; }
+[ -n "$ZONE" ] || { echo "ERROR: no machine in '$MACHINES' had spot capacity in any of '$ZONES' — retry later"; exit 1; }
 
 echo
 echo "VM '$NAME' creating (spot ${MACHINE}, ${ZONE}). Boot takes a few minutes:"
