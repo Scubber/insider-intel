@@ -281,6 +281,51 @@ def _sweep_partition(
     parquet_etag: str = "",
     extract: _ExtractPool | None = None,
 ) -> None:
+    """Worker-crash containment around the real partition sweep.
+
+    A partition failure must cost exactly that partition — the first live
+    c2d-standard-32 run (2026-08-24) died ~19min in when one worker's
+    exception unwound the whole CLI through the year barrier and docker
+    restart-looped the sweep from scratch. Errors are counted (systemic
+    failure still fails the run's exit code) and the traceback goes to the
+    log, where the bucket heartbeat makes it remotely visible."""
+    try:
+        _sweep_partition_inner(
+            ref,
+            client=client,
+            settings=settings,
+            ocr=ocr,
+            spool=spool,
+            state_dir=state_dir,
+            stats=stats,
+            record_names=record_names,
+            parquet_etag=parquet_etag,
+            extract=extract,
+        )
+    except Exception:
+        with stats.lock:
+            stats.errors += 1
+        logger.exception(
+            "[india-sweep] %s/%s/%s worker failed (partition skipped, sweep continues)",
+            ref.year,
+            ref.court,
+            ref.bench,
+        )
+
+
+def _sweep_partition_inner(
+    ref: PartitionRef,
+    *,
+    client: httpx.Client,
+    settings,
+    ocr,
+    spool: Path,
+    state_dir: Path,
+    stats: _SweepStats,
+    record_names: bool,
+    parquet_etag: str = "",
+    extract: _ExtractPool | None = None,
+) -> None:
     """Stream one bench-year tar; spool matches; mark the partition swept."""
     started = time.monotonic()
     # The completion marker must carry the PARQUET etag — that is what the
@@ -302,6 +347,13 @@ def _sweep_partition(
         )
         return
     by_basename: dict[str, JudgmentMeta] = {m.pdf_basename: m for m in metas}
+    logger.info(
+        "[india-sweep] start %s/%s/%s (%d judgments listed)",
+        ref.year,
+        ref.court,
+        ref.bench,
+        len(by_basename),
+    )
 
     rows: list[str] = []
     counts = _PartitionCounts()
@@ -522,13 +574,18 @@ def run_indiacourts_bulk_sweep(
 def _write_status(spool: Path, stats: _SweepStats, started: float, year: int) -> None:
     """Progress file for the sweep-status op (and post-mortems).
 
-    Called per partition from worker threads — the tmp name is per-thread so
-    concurrent writers never trample each other's rename."""
-    payload = stats.snapshot()
-    payload["current_year"] = year
-    payload["elapsed_seconds"] = int(time.monotonic() - started)
-    payload["pdfs_per_hour"] = int(payload["pdfs"] / max(1, payload["elapsed_seconds"]) * 3600)
-    payload["updated_at"] = datetime.now(UTC).isoformat()
-    tmp = spool / f".status.{threading.get_ident()}.tmp"
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(tmp, spool / "status.json")
+    Called from worker threads — the tmp name is per-thread so concurrent
+    writers never trample each other's rename. Telemetry must never kill a
+    worker: any failure here is logged (visible in the bucket heartbeat)
+    and swallowed."""
+    try:
+        payload = stats.snapshot()
+        payload["current_year"] = year
+        payload["elapsed_seconds"] = int(time.monotonic() - started)
+        payload["pdfs_per_hour"] = int(payload["pdfs"] / max(1, payload["elapsed_seconds"]) * 3600)
+        payload["updated_at"] = datetime.now(UTC).isoformat()
+        tmp = spool / f".status.{threading.get_ident()}.tmp"
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(tmp, spool / "status.json")
+    except Exception as exc:  # noqa: BLE001 — a progress file is never worth a worker
+        logger.warning("[india-sweep] status write failed: %r", exc)
