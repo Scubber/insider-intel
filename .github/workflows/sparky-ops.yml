@@ -186,7 +186,7 @@ jobs:
           git -C "$WORKDIR" fetch origin main -q || true
           git -C "$WORKDIR" log --oneline -1
           git -C "$WORKDIR" branch --show-current
-          git -C "$WORKDIR" status --short | head -30
+          git -C "$WORKDIR" status --short | head -30 || true
           echo "behind origin/main by: $(git -C "$WORKDIR" rev-list --count HEAD..origin/main 2>/dev/null || echo '?') commit(s)"
 
       - name: pull-main
@@ -394,7 +394,9 @@ jobs:
           gsutil -m rsync gs://insider-intel-502413-corpus/raw/sweeps/indiacourts "$AUDIT_DIR" \
             2>/dev/null || true
           echo "== bucket spool contents =="
-          ls -la "$AUDIT_DIR" | head -25
+          # || true: head truncating a >25-line listing SIGPIPEs ls, which
+          # pipefail would turn into a step failure once the spool grows
+          ls -la "$AUDIT_DIR" | head -25 || true
           echo; echo "== status.json =="
           cat "$AUDIT_DIR/status.json" 2>/dev/null || echo "(no status yet)"
           echo; echo "== chunk quality audit =="
