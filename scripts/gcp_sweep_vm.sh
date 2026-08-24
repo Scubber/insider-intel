@@ -17,7 +17,10 @@
 set -euo pipefail
 
 PROJECT="${PROJECT:-insider-intel-502413}"
-ZONE="${ZONE:-us-east1-b}"
+# Spot capacity is per-zone and stockouts are routine (the 2026-08-24 relaunch
+# lost its slot the moment the old VM was deleted): create tries each zone in
+# order, and every VM-addressed op discovers the live zone by instance lookup.
+ZONES="${ZONES:-us-east1-b us-east1-c us-east1-d}"
 NAME="${NAME:-indiacourts-sweep}"
 MACHINE="${MACHINE:-c2d-standard-32}"
 BUCKET="gs://${PROJECT}-corpus"
@@ -25,10 +28,20 @@ SPOOL_PREFIX="${BUCKET}/raw/sweeps/indiacourts"
 STATE_PREFIX="${BUCKET}/raw/sweeps/indiacourts-state"
 SRC_TARBALL="${BUCKET}/raw/sweeps/indiacourts-src.tar.gz"
 
+vm_zone() { # prints the live instance's zone, empty if no VM exists
+  gcloud compute instances list --project "$PROJECT" \
+    --filter="name=${NAME}" --format="value(zone.basename())" 2>/dev/null | head -1
+}
+
 case "${1:-create}" in
   status)
-    gcloud compute instances get-serial-port-output "$NAME" \
-      --zone "$ZONE" --project "$PROJECT" | tail -40
+    ZONE=$(vm_zone)
+    if [ -n "$ZONE" ]; then
+      gcloud compute instances get-serial-port-output "$NAME" \
+        --zone "$ZONE" --project "$PROJECT" | tail -40
+    else
+      echo "(no ${NAME} VM exists right now — bucket spool state below)"
+    fi
     echo "--- status.json (per-partition progress) ---"
     gcloud storage cat "${SPOOL_PREFIX}/status.json" 2>/dev/null \
       || echo "(no status.json in the bucket spool yet)"
@@ -41,6 +54,8 @@ case "${1:-create}" in
     exit 0
     ;;
   delete)
+    ZONE=$(vm_zone)
+    [ -n "$ZONE" ] || { echo "no ${NAME} VM exists — nothing to delete"; exit 0; }
     gcloud compute instances delete "$NAME" --zone "$ZONE" --project "$PROJECT" --quiet
     exit 0
     ;;
@@ -123,15 +138,23 @@ EOS
 # real script — the file form is the only safe way to pass one.
 STARTUP_FILE=$(mktemp /tmp/indiacourts-sweep-startup.XXXXXX.sh)
 printf '%s\n' "$STARTUP" > "$STARTUP_FILE"
-gcloud compute instances create "$NAME" \
-  --project "$PROJECT" --zone "$ZONE" \
-  --machine-type "$MACHINE" \
-  --provisioning-model=SPOT --instance-termination-action=STOP \
-  --image-family=debian-12 --image-project=debian-cloud \
-  --boot-disk-size=50GB \
-  --scopes=storage-rw \
-  --metadata-from-file=startup-script="$STARTUP_FILE"
+ZONE=""
+for Z in $ZONES; do
+  if gcloud compute instances create "$NAME" \
+    --project "$PROJECT" --zone "$Z" \
+    --machine-type "$MACHINE" \
+    --provisioning-model=SPOT --instance-termination-action=STOP \
+    --image-family=debian-12 --image-project=debian-cloud \
+    --boot-disk-size=50GB \
+    --scopes=storage-rw \
+    --metadata-from-file=startup-script="$STARTUP_FILE"; then
+    ZONE="$Z"
+    break
+  fi
+  echo "zone $Z has no spot ${MACHINE} capacity — trying the next zone"
+done
 rm -f "$STARTUP_FILE"
+[ -n "$ZONE" ] || { echo "ERROR: no zone in '$ZONES' had spot capacity — retry later"; exit 1; }
 
 echo
 echo "VM '$NAME' creating (spot ${MACHINE}, ${ZONE}). Boot takes a few minutes:"
