@@ -67,6 +67,11 @@ SPARKY_MODEL_WAIT_SECONDS="${SPARKY_MODEL_WAIT_SECONDS:-2400}"
 # compose at container-create time, so recreating only vllm would leave the UI
 # holding a stale key after any rotation.
 SPARKY_CHAT_SERVICES="${SPARKY_CHAT_SERVICES:-vllm open-webui}"
+# What the hand-back serves. Empty = base compose.yml's model. Set to an
+# overlay file in ~/sparky (e.g. model-enrich.yml for Nemotron) in .env.spark
+# to make that the STANDING chat default without editing compose.yml —
+# operator choice 2026-08-24: default is the Nemotron enrich overlay.
+SPARKY_CHAT_OVERRIDE="${SPARKY_CHAT_OVERRIDE:-}"
 
 vllm_up() { # $1: override file (empty for base) ; $2...: services
   local files=(-f compose.yml)
@@ -91,10 +96,15 @@ vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
 }
 
 restore_chat_model() {
-  echo "spark_refresh: restoring chat model"
+  local override="$SPARKY_CHAT_OVERRIDE"
+  if [ -n "$override" ] && [ ! -f "$SPARKY_COMPOSE_DIR/$override" ]; then
+    echo "spark_refresh: chat override $override missing — restoring base model" >&2
+    override=""
+  fi
+  echo "spark_refresh: restoring chat model${override:+ ($override)}"
   # Deliberate word-split: SPARKY_CHAT_SERVICES is a service-name list.
   # shellcheck disable=SC2086
-  vllm_up "" $SPARKY_CHAT_SERVICES ||
+  vllm_up "$override" $SPARKY_CHAT_SERVICES ||
     echo "spark_refresh: [FAIL] chat stack not restored" >&2
 }
 

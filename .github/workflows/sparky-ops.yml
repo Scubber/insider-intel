@@ -45,6 +45,9 @@ on:
           - gcp-sweep-logs
           - gcp-sweep-delete
           - sweep-audit
+          - chat-status
+          - chat-swap
+          - chat-default
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -59,6 +62,10 @@ on:
         default: ""
       retry_days:
         description: "extract-india: override INDIACOURTS_RETRY_DAYS for this run (0 = retry parked PDFs now; empty = configured cool-down)"
+        required: false
+        default: ""
+      overlay:
+        description: "chat-swap/chat-default: overlay yml in ~/sparky (e.g. model-enrich.yml); empty = base compose.yml model"
         required: false
         default: ""
 
@@ -80,6 +87,7 @@ jobs:
       LINES: ${{ github.event.inputs.lines }}
       RESERVE: ${{ github.event.inputs.reserve }}
       RETRY_DAYS: ${{ github.event.inputs.retry_days }}
+      OVERLAY: ${{ github.event.inputs.overlay }}
     steps:
       - name: Resolve operational checkout
         run: |
@@ -88,7 +96,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-default)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -371,3 +379,76 @@ jobs:
           command -v gcloud >/dev/null 2>&1 || \
             export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
           bash scripts/gcp_sweep_vm.sh delete
+
+      # Chat-stack ops: the Spark is a chat host between refresh cycles
+      # (~/sparky compose: vllm + open-webui). These never run while the
+      # refresh flock is held — the borrow law is sequential models only.
+      - name: chat-status
+        if: ${{ github.event.inputs.op == 'chat-status' }}
+        run: |
+          set -uo pipefail
+          SPARKY="$HOME/sparky"
+          echo "== refresh lock =="
+          if flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null; then
+            echo "free"
+          else
+            echo "HELD (a refresh cycle is borrowing the box)"
+          fi
+          echo; echo "== served model (id only) =="
+          KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
+            | grep -o '"id":"[^"]*"' | head -1 || echo "(vllm not answering)"
+          echo; echo "== chat containers =="
+          docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -Ei 'vllm|webui' || true
+          echo; echo "== overlays in ~/sparky =="
+          ls -la "$SPARKY"/*.yml 2>/dev/null || echo "(none)"
+          echo; echo "== model lines per overlay (no secrets) =="
+          grep -H -- '--model\|--served-model-name\|MODEL' "$SPARKY"/*.yml 2>/dev/null \
+            | grep -vi 'key' || true
+          echo; echo "== standing chat default (SPARKY_CHAT_OVERRIDE in .env.spark) =="
+          grep -E '^SPARKY_CHAT_OVERRIDE=' "$WORKDIR/.env.spark" 2>/dev/null || echo "(unset — base compose model)"
+          echo; echo "== local model dirs (names + sizes only) =="
+          du -sh "$SPARKY"/models/* 2>/dev/null || true
+          du -sh "$HOME"/.cache/huggingface/hub/models--* 2>/dev/null | head -20 || true
+
+      - name: chat-swap
+        if: ${{ github.event.inputs.op == 'chat-swap' }}
+        run: |
+          set -euo pipefail
+          SPARKY="$HOME/sparky"
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — swap after it finishes"; exit 1; }
+          if [ -n "$OVERLAY" ] && [ ! -f "$SPARKY/$OVERLAY" ]; then
+            echo "no $SPARKY/$OVERLAY"; exit 1
+          fi
+          FILES=(-f compose.yml); [ -n "$OVERLAY" ] && FILES+=(-f "$OVERLAY")
+          echo "swapping chat stack to ${OVERLAY:-base compose model}"
+          (cd "$SPARKY" && docker compose "${FILES[@]}" up -d --no-deps vllm open-webui)
+          KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          for _ in $(seq 1 80); do
+            ID=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
+              | grep -o '"id":"[^"]*"' | head -1 || true)
+            [ -n "$ID" ] && { echo "serving: $ID"; exit 0; }
+            sleep 15
+          done
+          echo "model did not answer within 20min — check docker logs on the box"; exit 1
+
+      - name: chat-default
+        if: ${{ github.event.inputs.op == 'chat-default' }}
+        run: |
+          set -euo pipefail
+          ENV_FILE="$WORKDIR/.env.spark"
+          [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE"; exit 1; }
+          if [ -n "$OVERLAY" ] && [ ! -f "$HOME/sparky/$OVERLAY" ]; then
+            echo "no ~/sparky/$OVERLAY"; exit 1
+          fi
+          # Two-parser file: values always double-quoted (see 08-24 outage).
+          if [ -z "$OVERLAY" ]; then
+            sed -i '/^SPARKY_CHAT_OVERRIDE=/d' "$ENV_FILE"
+            echo "cleared — nightly restore serves the base compose model"
+          elif grep -q '^SPARKY_CHAT_OVERRIDE=' "$ENV_FILE"; then
+            sed -i "s|^SPARKY_CHAT_OVERRIDE=.*|SPARKY_CHAT_OVERRIDE=\"${OVERLAY}\"|" "$ENV_FILE"
+          else
+            printf 'SPARKY_CHAT_OVERRIDE="%s"\n' "$OVERLAY" >> "$ENV_FILE"
+          fi
+          echo "now set:"; grep -E '^SPARKY_CHAT_OVERRIDE=' "$ENV_FILE" || true
