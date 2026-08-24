@@ -864,6 +864,47 @@ def test_bulk_sweep_progress_flush_never_double_counts(
     assert status["pdfs"] == 3 and "pdfs_per_hour" in status
 
 
+def test_bulk_sweep_contains_worker_crashes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A worker exception costs exactly its partition: counted in errors,
+    logged, and the run itself completes (the first live run crash-looped
+    the whole CLI off one worker failure)."""
+    from apps.aggregator import indiacourts_bulk as bulk
+
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    bucket.add_judgment(cnr="BENIGN1", text=BENIGN_TEXT)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("synthetic worker crash")
+
+    monkeypatch.setattr(bulk, "scan_insider_patterns", boom)
+    summary = _run_bulk(bucket, tmp_path)
+    assert summary["errors"] == 1
+    assert summary["partitions_done"] == 0  # the poisoned partition was skipped
+    # No completion marker: the partition re-sweeps on the next run.
+    from apps.aggregator.indiacourts_pipeline import PartitionState
+
+    ref = PartitionRef(year=2026, court="27_1", bench="benchx")
+    assert not PartitionState(tmp_path / "state", ref).complete
+
+
+def test_write_status_failure_never_raises(tmp_path: Path) -> None:
+    """Telemetry hardening: a failing status write logs and returns."""
+    from apps.aggregator.indiacourts_bulk import _SweepStats, _write_status
+
+    blocked = tmp_path / "not-a-dir"
+    blocked.write_text("occupied", encoding="utf-8")
+    _write_status(blocked / "sub", _SweepStats(), 0.0, 2026)  # must not raise
+
+
 def test_bulk_sweep_resumes_without_refetching(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

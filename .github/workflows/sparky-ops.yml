@@ -42,6 +42,7 @@ on:
           - sweep-stop
           - gcp-sweep-launch
           - gcp-sweep-status
+          - gcp-sweep-logs
           - gcp-sweep-delete
           - sweep-audit
       confirm:
@@ -308,8 +309,30 @@ jobs:
           echo
           bash scripts/gcp_sweep_vm.sh status
 
-      - name: sweep-audit
-        if: ${{ github.event.inputs.op == 'sweep-audit' }}
+      # Diagnostic SSH into the sweep VM: container log tail (the serial
+      # console never carries container stdout, so a crash traceback is
+      # invisible without this), restart count, mounts, and the on-host
+      # spool/state dirs. Injects the runner user's SSH key into instance
+      # metadata (standard gcloud ssh mechanics) — diagnostic, no confirm.
+      - name: gcp-sweep-logs
+        if: ${{ github.event.inputs.op == 'gcp-sweep-logs' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -uo pipefail
+          command -v gcloud >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          gcloud compute ssh indiacourts-sweep \
+            --zone us-east1-b --project insider-intel-502413 --command "
+              echo '== containers =='; sudo docker ps -a
+              echo; echo '== sweep container config =='
+              sudo docker inspect sweep --format 'workdir={{.Config.WorkingDir}} restarts={{.RestartCount}} started={{.State.StartedAt}} status={{.State.Status}}' 2>/dev/null || true
+              sudo docker inspect sweep --format '{{json .Mounts}}' 2>/dev/null || true
+              echo; echo '== host spool/state dirs =='
+              ls -la /opt/data/raw/sweep_spool 2>/dev/null | head -20
+              ls -la /opt/data/state/indiacourts 2>/dev/null | head -10
+              echo; echo '== sweep container log tail =='
+              sudo docker logs --tail ${LINES:-150} sweep 2>&1 | tail -n ${LINES:-150}
+            "
         working-directory: ${{ env.WORKDIR }}
         run: |
           set -euo pipefail
