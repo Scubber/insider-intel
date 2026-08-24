@@ -43,6 +43,7 @@ on:
           - gcp-sweep-launch
           - gcp-sweep-status
           - gcp-sweep-logs
+          - gcp-sweep-perf
           - gcp-sweep-delete
           - sweep-audit
           - chat-status
@@ -346,6 +347,32 @@ jobs:
               ls -la /opt/data/state/indiacourts 2>/dev/null | head -10
               echo; echo '== sweep container log tail =='
               sudo docker logs --tail ${LINES:-150} sweep 2>&1 | tail -n ${LINES:-150}
+            "
+
+      # Resource profile of the sweep VM: distinguishes an extraction-bound
+      # run (all cores busy — the pool is the ceiling) from a GIL/feeder-bound
+      # one (1-2 cores busy, extraction procs idle — the main process is the
+      # ceiling) from a bandwidth-bound one (low CPU, high rx). Read-only.
+      - name: gcp-sweep-perf
+        if: ${{ github.event.inputs.op == 'gcp-sweep-perf' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -uo pipefail
+          command -v gcloud >/dev/null 2>&1 || \
+            export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          gcloud compute ssh indiacourts-sweep \
+            --zone us-east1-b --project insider-intel-502413 --command "
+              echo '== load / aggregate cpu (nproc:' \$(nproc) ') =='
+              top -bn1 | head -12
+              echo; echo '== container cpu =='
+              sudo docker stats --no-stream 2>/dev/null || true
+              echo; echo '== hottest processes (main python vs spawn children) =='
+              ps -eo pcpu,rss:9,pid,ppid,comm --sort=-pcpu | head -36
+              echo; echo '== network rx over 10s =='
+              R1=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {print s}' /proc/net/dev)
+              sleep 10
+              R2=\$(awk -F'[: ]+' '/:/ {if (\$2 != \"lo\") s += \$3} END {print s}' /proc/net/dev)
+              echo \"rx \$(( (R2 - R1) / 10 / 1048576 )) MiB/s (\$(( (R2 - R1) / 10 )) B/s)\"
             "
 
       - name: sweep-audit
