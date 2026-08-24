@@ -214,11 +214,16 @@ jobs:
           set -euo pipefail
           ENV_FILE="$WORKDIR/.env.spark"
           [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE"; exit 1; }
+          # The value MUST be double-quoted in the file: spark_refresh.sh
+          # `source`s .env.spark, where an unquoted space ends the assignment
+          # and executes the rest ("-m: command not found" killed the
+          # 2026-08-24 08:00Z cycle at line 31). docker compose env_file
+          # strips the surrounding quotes, so both consumers read it right.
           CMD="python -m apps.aggregator.ocr_pdf"
           if grep -q '^INDIACOURTS_OCR_COMMAND=' "$ENV_FILE"; then
-            sed -i "s|^INDIACOURTS_OCR_COMMAND=.*|INDIACOURTS_OCR_COMMAND=${CMD}|" "$ENV_FILE"
+            sed -i "s|^INDIACOURTS_OCR_COMMAND=.*|INDIACOURTS_OCR_COMMAND=\"${CMD}\"|" "$ENV_FILE"
           else
-            printf 'INDIACOURTS_OCR_COMMAND=%s\n' "${CMD}" >> "$ENV_FILE"
+            printf 'INDIACOURTS_OCR_COMMAND="%s"\n' "${CMD}" >> "$ENV_FILE"
           fi
           echo "now set:"
           grep -E '^INDIACOURTS_OCR_COMMAND=' "$ENV_FILE"
