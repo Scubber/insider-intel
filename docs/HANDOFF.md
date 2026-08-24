@@ -203,7 +203,23 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    measured `pdfs_per_hour` in `status.json` — if the projection still
    exceeds ~5 days, next levers are a bigger spot machine and/or
    `INDIACOURTS_SWEEP_OCR=false` (count-and-skip scans, targeted OCR pass
-   later).
+   later). **Second bug, same night (00:10-00:30Z watch)**: the fixed
+   build hit 545-570k pdfs/h and matched immediately — then crash-looped
+   every ~64k pdfs with zero durable output. Root cause: the image runs
+   as uid 1000 (`USER app`) but the VM startup created `/opt/data`
+   root-owned 755, so EVERY durable write (chunks, status, partition
+   markers) died on EACCES; each failed status write killed its worker
+   thread and at exactly 32 crossings (= worker count) the run collapsed.
+   Sparky's compose never sees this — `./data` is uid-1000-owned. Fixes:
+   `chown -R 1000:1000 /opt/data` in the VM startup (after the root-run
+   resume rsync); worker-crash containment + never-fatal status writes
+   (a partition failure costs exactly that partition, traceback lands in
+   the heartbeat); per-partition start lines; and the `gcp-sweep-logs`
+   sparky-ops op (SSH: container log tail, restart count, mounts, host
+   dir listings — the serial console never carries container stdout).
+   The tell that cracked it: the spool directory's mtime never moved off
+   its creation time — the container had never created a file there
+   despite healthy progress logs.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.

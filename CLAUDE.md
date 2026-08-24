@@ -544,7 +544,12 @@ legacy fallback.
   the 48h default cadence + 5-post pulls — don't loosen without a paid tier.
 - **GHA runners run containers with a different uid** than the checkout owner:
   tests must write only under `tmp_path` / patched settings paths (see
-  `tests/test_extract_rate_limit.py`).
+  `tests/test_extract_rate_limit.py`). Same trap on any bare `docker run`
+  of the image: it runs as uid 1000 (`USER app`), so a root-owned host
+  mount is silently unwritable — the first GCP sweep VM lost every chunk
+  and crash-looped on exactly this (the launch script now chowns
+  `/opt/data` to 1000). Compose on sparky never sees it because `./data`
+  is uid-1000-owned.
 - Ubuntu's bare `docker.io` lacks BuildKit; the Dockerfile uses heredocs, so
   `apt install docker-buildx` is required (compose builds are fine).
 
