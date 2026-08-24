@@ -34,6 +34,7 @@ import queue
 import tarfile
 import threading
 import time
+from collections import deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.process import BrokenProcessPool
@@ -83,6 +84,10 @@ PROGRESS_LOG_EVERY = 2000
 EXTRACT_TIMEOUT_SECONDS = 300.0
 STREAM_CHUNK_BYTES = 64 * 1024
 STREAM_READAHEAD_CHUNKS = 512  # × 64KiB = 32MiB of read-ahead per tar stream
+# Per-worker cap on PDF bytes held in the extraction window (the count cap is
+# the pool size): keeps a scan-heavy stretch (15MB members) from ballooning
+# parent memory while still letting one straggler partition fill the pool.
+EXTRACT_INFLIGHT_MAX_BYTES = 64 * 1024 * 1024
 
 
 def refresh_lock_held(path: str | None = None) -> bool:
@@ -298,36 +303,68 @@ class _ExtractPool:
     threads caps aggregate throughput near ONE core no matter how many
     workers — the first live VM run finished zero partitions in 8h on 8
     threads / 16 vCPUs. Processes sidestep the GIL; spawn (not fork) because
-    the parent is heavily threaded. Self-heals a broken pool once per call
-    (a segfaulting child must never quietly end days of run time)."""
+    the parent is heavily threaded. Self-heals a broken pool once
+    (a segfaulting child must never quietly end days of run time).
+
+    submit()/result() are separated so a partition worker can keep a WINDOW
+    of extractions in flight: the 2026-08-24 Mumbai run proved a year's tail
+    often collapses to ONE giant partition (the nightly lane's shared
+    PartitionState marks the rest complete), and a lone worker doing one
+    blocking round-trip per member pins the whole 32-vCPU box at one child's
+    throughput (~20k pdfs/h, measured three runs in a row)."""
 
     def __init__(self, procs: int) -> None:
-        self._procs = procs
+        self.procs = procs
         self._lock = threading.Lock()
         self._pool = self._new_pool()
 
     def _new_pool(self) -> ProcessPoolExecutor:
         return ProcessPoolExecutor(
-            max_workers=self._procs, mp_context=multiprocessing.get_context("spawn")
+            max_workers=self.procs, mp_context=multiprocessing.get_context("spawn")
         )
 
-    def run(self, data: bytes, max_chars: int) -> str:
-        """Extract text; raises IndiaCourtsError / FutureTimeoutError upward."""
+    def _rebuild(self, broken: ProcessPoolExecutor) -> None:
+        logger.warning("[india-sweep] extraction pool broke — rebuilding")
+        with self._lock:
+            if self._pool is broken:  # first thread in rebuilds; the rest reuse
+                self._pool.shutdown(wait=False, cancel_futures=True)
+                self._pool = self._new_pool()
+
+    def submit(self, data: bytes, max_chars: int):
+        """Queue one extraction; returns its Future (one rebuild on a broken pool)."""
         for attempt in (0, 1):
             with self._lock:
                 pool = self._pool
             try:
                 fut = pool.submit(pdf_bytes_to_text, data, max_chars=max_chars)
-                return fut.result(timeout=EXTRACT_TIMEOUT_SECONDS)
+                # The rebuild guard must target the pool that MADE a future —
+                # by result() time self._pool may already be a fresh one.
+                fut.origin_pool = pool
+                return fut
             except BrokenProcessPool:
                 if attempt:
                     raise IndiaCourtsError("extraction pool broke twice in a row") from None
-                logger.warning("[india-sweep] extraction pool broke — rebuilding")
-                with self._lock:
-                    if self._pool is pool:  # first thread in rebuilds; the rest reuse
-                        self._pool.shutdown(wait=False, cancel_futures=True)
-                        self._pool = self._new_pool()
+                self._rebuild(pool)
         raise IndiaCourtsError("unreachable")  # pragma: no cover
+
+    def result(self, fut, data: bytes, max_chars: int) -> str:
+        """Await one Future; a broken pool gets one rebuild + resubmit.
+
+        Raises IndiaCourtsError / FutureTimeoutError upward like run() did —
+        the caller buckets both as no-text."""
+        try:
+            return fut.result(timeout=EXTRACT_TIMEOUT_SECONDS)
+        except BrokenProcessPool:
+            self._rebuild(fut.origin_pool)
+            retry = self.submit(data, max_chars)
+            try:
+                return retry.result(timeout=EXTRACT_TIMEOUT_SECONDS)
+            except BrokenProcessPool:
+                raise IndiaCourtsError("extraction pool broke twice in a row") from None
+
+    def run(self, data: bytes, max_chars: int) -> str:
+        """Extract text synchronously (submit + result)."""
+        return self.result(self.submit(data, max_chars), data, max_chars)
 
     def close(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=True)
@@ -426,6 +463,49 @@ def _sweep_partition_inner(
 
     rows: list[str] = []
     counts = _PartitionCounts()
+
+    def finish(meta: JudgmentMeta, data: bytes, text: str) -> None:
+        """Post-extraction pipeline: OCR fallback, language stamp, lexicon scan."""
+        if len(text) < settings.indiacourts_min_text_chars and ocr is not None:
+            try:
+                text = truncate_head_tail(ocr(data).strip(), settings.indiacourts_text_max_chars)
+                counts.ocr_used += 1
+            except Exception:  # noqa: BLE001 — OCR must never kill the sweep
+                pass
+        if len(text) < settings.indiacourts_min_text_chars:
+            counts.scanned_skipped += 1
+            return
+        if detect_language(text) == "hi":
+            counts.non_english += 1
+        matched = scan_insider_patterns(text)
+        if not matched:
+            return
+        counts.matches += 1
+        article = judgment_to_raw_article(
+            meta, matched, text, base_url=settings.indiacourts_base_url
+        )
+        rows.append(article.model_dump_json())
+
+    # Extraction window: (meta, data, future) kept in flight so ONE streaming
+    # worker can occupy the whole pool — a year's tail is often a single giant
+    # partition, and a blocking per-member round trip left 31 of 32 cores idle
+    # (2026-08-24, ~20k pdfs/h across three otherwise-different runs).
+    window: deque = deque()
+    window_bytes = 0
+
+    def drain_one() -> None:
+        nonlocal window_bytes
+        meta_w, data_w, fut = window.popleft()
+        window_bytes -= len(data_w)
+        try:
+            text = extract.result(fut, data_w, settings.indiacourts_text_max_chars)
+        except FutureTimeoutError:
+            counts.extract_timeouts += 1
+            text = ""
+        except IndiaCourtsError:
+            text = ""
+        finish(meta_w, data_w, text)
+
     url = f"{settings.indiacourts_base_url.rstrip('/')}/{_tar_key(ref)}"
     with client.stream("GET", url) as resp:
         if resp.status_code != 200:
@@ -456,39 +536,23 @@ def _sweep_partition_inner(
                     if b"%PDF" not in data[:1024]:
                         counts.corrupt += 1
                         continue
-                    try:
-                        if extract is not None:
-                            text = extract.run(data, settings.indiacourts_text_max_chars)
-                        else:
+                    if extract is None:
+                        try:
                             text = pdf_bytes_to_text(
                                 data, max_chars=settings.indiacourts_text_max_chars
                             )
-                    except FutureTimeoutError:
-                        counts.extract_timeouts += 1
-                        text = ""
-                    except IndiaCourtsError:
-                        text = ""
-                    if len(text) < settings.indiacourts_min_text_chars and ocr is not None:
-                        try:
-                            text = truncate_head_tail(
-                                ocr(data).strip(), settings.indiacourts_text_max_chars
-                            )
-                            counts.ocr_used += 1
-                        except Exception:  # noqa: BLE001 — OCR must never kill the sweep
-                            pass
-                    if len(text) < settings.indiacourts_min_text_chars:
-                        counts.scanned_skipped += 1
+                        except IndiaCourtsError:
+                            text = ""
+                        finish(meta, data, text)
                         continue
-                    if detect_language(text) == "hi":
-                        counts.non_english += 1
-                    matched = scan_insider_patterns(text)
-                    if not matched:
-                        continue
-                    counts.matches += 1
-                    article = judgment_to_raw_article(
-                        meta, matched, text, base_url=settings.indiacourts_base_url
+                    window.append(
+                        (meta, data, extract.submit(data, settings.indiacourts_text_max_chars))
                     )
-                    rows.append(article.model_dump_json())
+                    window_bytes += len(data)
+                    while len(window) >= extract.procs or window_bytes > EXTRACT_INFLIGHT_MAX_BYTES:
+                        drain_one()
+            while window:
+                drain_one()
         finally:
             prefetch.close()
 
