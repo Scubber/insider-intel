@@ -4514,13 +4514,13 @@
   /* The ledger fetch has no panel of its own since the stream rail was cut
      (2026-08-21) — EVIDENCE owns that view. It still runs on every load
      because it is the only writer of state.evidenceLedger (the MODUS
-     OPERANDI "CORPUS: seen in N real case(s)" footnote reads it) and the
-     only path to the masthead corpus counts on the stream. */
+     OPERANDI "CORPUS: seen in N real case(s)" footnote reads it). The
+     masthead line is a static tagline now (operator call 2026-08-24) —
+     live corpus counts render on the EVIDENCE page, not the brand block. */
   async function loadEvidenceLedger() {
     try {
       const data = await api("/evidence/ledger", { top: 25 }, { timeoutMs: 10000 });
       state.evidenceLedger = data;
-      renderCorpusStats(data);
     } catch (err) {
       console.warn("Evidence ledger unavailable", err);
     }
@@ -4582,20 +4582,7 @@
     }
   }
 
-  function renderCorpusStats(data) {
-    const el = document.getElementById("corpus-stats");
-    if (!el || !data || !data.enriched_cases) return;
-    const s = data.strength_totals || {};
-    const bits = [];
-    if (state.lastTotalIndexed) bits.push(`CORPUS ${state.lastTotalIndexed.toLocaleString()}`);
-    bits.push(`METHOD-BEARING ${data.enriched_cases.toLocaleString()}`);
-    if (s.adjudicated_admitted) bits.push(`CONFIRMED IN COURT ${s.adjudicated_admitted}`);
-    el.textContent = bits.join(" · ");
-  }
-
-
   function renderEvidencePage(data) {
-    renderCorpusStats(data);
     const stats = document.getElementById("evp-stats");
     if (!stats) return;
     if (!data || !data.enriched_cases) {
@@ -6628,7 +6615,6 @@
         .then((ledger) => {
           if (ledger && ledger.enriched_cases && !state.evidenceLedger) {
             state.evidenceLedger = ledger;
-            renderCorpusStats(ledger);
           }
         })
         .catch(() => {});
