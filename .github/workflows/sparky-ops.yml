@@ -47,6 +47,7 @@ on:
           - sweep-audit
           - chat-status
           - chat-swap
+          - chat-huihui
           - chat-default
       confirm:
         description: "mutating ops only: must be the literal word RUN"
@@ -96,7 +97,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-default)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -355,6 +356,7 @@ jobs:
           command -v gsutil >/dev/null 2>&1 || \
             export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
           AUDIT_DIR=/tmp/sweep-audit
+          rm -rf "$AUDIT_DIR"   # rsync never deletes: stale chunks from prior audits otherwise accumulate
           mkdir -p "$AUDIT_DIR"
           gsutil -m rsync gs://insider-intel-502413-corpus/raw/sweeps/indiacourts "$AUDIT_DIR" \
             2>/dev/null || true
@@ -405,6 +407,8 @@ jobs:
           echo; echo "== model lines per overlay (no secrets) =="
           grep -H -- '--model\|--served-model-name\|MODEL' "$SPARKY"/*.yml 2>/dev/null \
             | grep -vi 'key' || true
+          echo; echo "== model-enrich.yml (key lines redacted) =="
+          sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$SPARKY/model-enrich.yml" 2>/dev/null || echo "(none)"
           echo; echo "== standing chat default (SPARKY_CHAT_OVERRIDE in .env.spark) =="
           grep -E '^SPARKY_CHAT_OVERRIDE=' "$WORKDIR/.env.spark" 2>/dev/null || echo "(unset — base compose model)"
           echo; echo "== local model dirs (names + sizes only) =="
@@ -452,3 +456,37 @@ jobs:
             printf 'SPARKY_CHAT_OVERRIDE="%s"\n' "$OVERLAY" >> "$ENV_FILE"
           fi
           echo "now set:"; grep -E '^SPARKY_CHAT_OVERRIDE=' "$ENV_FILE" || true
+
+      # Purpose-built for the operator's huihui chat model: derive a chat
+      # overlay from the enrich overlay by model-string substitution (any
+      # --quantization pin is dropped — the FP8-DYNAMIC checkpoint
+      # auto-detects), show it redacted, swap, and confirm the served id.
+      - name: chat-huihui
+        if: ${{ github.event.inputs.op == 'chat-huihui' }}
+        run: |
+          set -euo pipefail
+          SPARKY="$HOME/sparky"
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — swap after it finishes"; exit 1; }
+          TEMPLATE="$SPARKY/model-enrich.yml"
+          [ -f "$TEMPLATE" ] || { echo "no $TEMPLATE to derive from"; exit 1; }
+          NEMO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+          HUIHUI="coolthor/Huihui-Qwen3.6-35B-A3B-abliterated-FP8-DYNAMIC"
+          if ! grep -q "$NEMO" "$TEMPLATE"; then
+            echo "template does not mention $NEMO — structure below (redacted), fix the op:"
+            sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$TEMPLATE"
+            exit 1
+          fi
+          sed -e "s|${NEMO}|${HUIHUI}|g" -e '/--quantization/,+1d' \
+            "$TEMPLATE" > "$SPARKY/model-huihui.yml"
+          echo "== generated model-huihui.yml (key lines redacted) =="
+          sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$SPARKY/model-huihui.yml"
+          (cd "$SPARKY" && docker compose -f compose.yml -f model-huihui.yml up -d --no-deps vllm open-webui)
+          KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          for _ in $(seq 1 60); do
+            ID=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
+              | grep -o '"id":"[^"]*"' | head -1 || true)
+            [ -n "$ID" ] && { echo "serving: $ID"; exit 0; }
+            sleep 15
+          done
+          echo "model did not answer within 15min — check docker logs sparky-vllm on the box"; exit 1
