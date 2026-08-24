@@ -905,6 +905,61 @@ def test_write_status_failure_never_raises(tmp_path: Path) -> None:
     _write_status(blocked / "sub", _SweepStats(), 0.0, 2026)  # must not raise
 
 
+class _FakeTarResponse:
+    """iter_raw()-shaped stand-in for the prefetch unit tests."""
+
+    def __init__(self, chunks: list[bytes], err: Exception | None = None) -> None:
+        self._chunks = chunks
+        self._err = err
+
+    def iter_raw(self, chunk_size: int | None = None):
+        yield from self._chunks
+        if self._err is not None:
+            raise self._err
+
+
+def test_prefetch_iterator_delivers_the_stream_and_reaps_its_thread() -> None:
+    """The read-ahead pump hands every byte over in order, EOF stays sticky
+    (tarfile's reader polls past it), and close() reaps the thread."""
+    from apps.aggregator.indiacourts_bulk import _PrefetchIterator, _StreamReader
+
+    chunks = [b"a" * 1000, b"b" * 10, b"", b"c" * 65536]
+    pf = _PrefetchIterator(_FakeTarResponse(chunks))
+    reader = _StreamReader(pf)
+    assert reader.read(-1) == b"".join(chunks)
+    assert reader.read(10) == b""
+    pf.close()
+    assert not pf._thread.is_alive()
+
+
+def test_prefetch_iterator_propagates_stream_errors() -> None:
+    """A mid-stream network error surfaces on the consumer side (and stays
+    raised on re-poll) so the partition containment wrapper counts it."""
+    from apps.aggregator.indiacourts_bulk import _PrefetchIterator
+
+    pf = _PrefetchIterator(_FakeTarResponse([b"x"], err=httpx.ReadError("mid-stream cut")))
+    assert next(pf) == b"x"
+    with pytest.raises(httpx.ReadError):
+        next(pf)
+    with pytest.raises(httpx.ReadError):
+        next(pf)
+    pf.close()
+
+
+def test_prefetch_close_unblocks_a_wedged_pump(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An abandoned consumer (the partition error path) must not leave the
+    pump thread stuck inside its put — close() drains and reaps it."""
+    import time as _time
+
+    from apps.aggregator import indiacourts_bulk as bulk
+
+    monkeypatch.setattr(bulk, "STREAM_READAHEAD_CHUNKS", 2)
+    pf = bulk._PrefetchIterator(_FakeTarResponse([b"x"] * 50))
+    _time.sleep(0.05)  # let the pump fill the 2-slot queue and block
+    pf.close()
+    assert not pf._thread.is_alive()
+
+
 def test_bulk_sweep_resumes_without_refetching(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

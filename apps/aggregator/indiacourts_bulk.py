@@ -30,6 +30,7 @@ import json
 import logging
 import multiprocessing
 import os
+import queue
 import tarfile
 import threading
 import time
@@ -80,6 +81,8 @@ _NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 FLUSH_EVERY = 50
 PROGRESS_LOG_EVERY = 2000
 EXTRACT_TIMEOUT_SECONDS = 300.0
+STREAM_CHUNK_BYTES = 64 * 1024
+STREAM_READAHEAD_CHUNKS = 512  # × 64KiB = 32MiB of read-ahead per tar stream
 
 
 def refresh_lock_held(path: str | None = None) -> bool:
@@ -128,6 +131,72 @@ def list_tar_partitions(client: httpx.Client, *, base_url: str, year: int) -> li
             break
         token = nxt
     return refs
+
+
+class _PrefetchIterator:
+    """Byte-chunk iterator that drains an httpx stream on its own thread.
+
+    The tar consumer stop-starts: it blocks in the extraction pool between
+    members, and on the long-RTT path to the dataset's S3 region every pause
+    stalls TCP — the 2026-08-24 perf sample showed the 32-stream sweep
+    drawing ~1MB/s aggregate ingress (~30KB/s per stream, one extraction
+    child busy, the main process at 0.6% CPU, ~20k PDFs/h). A bounded
+    read-ahead queue keeps each socket continuously drained regardless of
+    consumer pace, so download and extraction overlap instead of
+    serializing per member; back-pressure holds memory at the queue cap.
+    """
+
+    _DONE = object()
+
+    def __init__(self, resp: httpx.Response) -> None:
+        self._q: queue.Queue = queue.Queue(maxsize=STREAM_READAHEAD_CHUNKS)
+        self._stop = threading.Event()
+        self._err: BaseException | None = None
+        self._eof = False
+        self._thread = threading.Thread(target=self._pump, args=(resp,), daemon=True)
+        self._thread.start()
+
+    def _pump(self, resp: httpx.Response) -> None:
+        try:
+            for chunk in resp.iter_raw(STREAM_CHUNK_BYTES):
+                if not self._put(chunk):
+                    return
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the consumer side
+            self._err = exc
+        self._put(self._DONE)
+
+    def _put(self, item) -> bool:
+        """Stop-aware put: never deadlocks against a consumer that left."""
+        while not self._stop.is_set():
+            try:
+                self._q.put(item, timeout=1.0)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def __iter__(self) -> _PrefetchIterator:
+        return self
+
+    def __next__(self) -> bytes:
+        if not self._eof:
+            item = self._q.get()
+            if item is not self._DONE:
+                return item
+            self._eof = True
+        if self._err is not None:
+            raise self._err
+        raise StopIteration
+
+    def close(self) -> None:
+        """Unblock and reap the pump thread (idempotent, consumer-side)."""
+        self._stop.set()
+        while True:  # a full queue would hold the pump inside its put loop
+            try:
+                self._q.get_nowait()
+            except queue.Empty:
+                break
+        self._thread.join(timeout=10.0)
 
 
 class _StreamReader:
@@ -364,60 +433,64 @@ def _sweep_partition_inner(
                 stats.errors += 1
             logger.warning("[india-sweep] tar HTTP %s for %s", resp.status_code, _tar_key(ref))
             return
-        reader = _StreamReader(resp.iter_raw())
-        with tarfile.open(fileobj=reader, mode="r|") as tar:
-            for member in tar:
-                if not member.isfile() or not member.name.endswith(".pdf"):
-                    continue
-                basename = member.name.rsplit("/", 1)[-1]
-                meta = by_basename.get(basename)
-                if meta is None or member.size > settings.indiacourts_pdf_max_bytes:
-                    continue
-                fh = tar.extractfile(member)
-                if fh is None:
-                    continue
-                data = fh.read()
-                counts.pdfs += 1
-                if counts.pdfs % FLUSH_EVERY == 0:
-                    total, delta = counts.flush(stats)
-                    if total // PROGRESS_LOG_EVERY != (total - delta) // PROGRESS_LOG_EVERY:
-                        _log_progress(stats, spool, ref.year)
-                if b"%PDF" not in data[:1024]:
-                    counts.corrupt += 1
-                    continue
-                try:
-                    if extract is not None:
-                        text = extract.run(data, settings.indiacourts_text_max_chars)
-                    else:
-                        text = pdf_bytes_to_text(
-                            data, max_chars=settings.indiacourts_text_max_chars
-                        )
-                except FutureTimeoutError:
-                    counts.extract_timeouts += 1
-                    text = ""
-                except IndiaCourtsError:
-                    text = ""
-                if len(text) < settings.indiacourts_min_text_chars and ocr is not None:
+        prefetch = _PrefetchIterator(resp)
+        try:
+            reader = _StreamReader(prefetch)
+            with tarfile.open(fileobj=reader, mode="r|") as tar:
+                for member in tar:
+                    if not member.isfile() or not member.name.endswith(".pdf"):
+                        continue
+                    basename = member.name.rsplit("/", 1)[-1]
+                    meta = by_basename.get(basename)
+                    if meta is None or member.size > settings.indiacourts_pdf_max_bytes:
+                        continue
+                    fh = tar.extractfile(member)
+                    if fh is None:
+                        continue
+                    data = fh.read()
+                    counts.pdfs += 1
+                    if counts.pdfs % FLUSH_EVERY == 0:
+                        total, delta = counts.flush(stats)
+                        if total // PROGRESS_LOG_EVERY != (total - delta) // PROGRESS_LOG_EVERY:
+                            _log_progress(stats, spool, ref.year)
+                    if b"%PDF" not in data[:1024]:
+                        counts.corrupt += 1
+                        continue
                     try:
-                        text = truncate_head_tail(
-                            ocr(data).strip(), settings.indiacourts_text_max_chars
-                        )
-                        counts.ocr_used += 1
-                    except Exception:  # noqa: BLE001 — OCR must never kill the sweep
-                        pass
-                if len(text) < settings.indiacourts_min_text_chars:
-                    counts.scanned_skipped += 1
-                    continue
-                if detect_language(text) == "hi":
-                    counts.non_english += 1
-                matched = scan_insider_patterns(text)
-                if not matched:
-                    continue
-                counts.matches += 1
-                article = judgment_to_raw_article(
-                    meta, matched, text, base_url=settings.indiacourts_base_url
-                )
-                rows.append(article.model_dump_json())
+                        if extract is not None:
+                            text = extract.run(data, settings.indiacourts_text_max_chars)
+                        else:
+                            text = pdf_bytes_to_text(
+                                data, max_chars=settings.indiacourts_text_max_chars
+                            )
+                    except FutureTimeoutError:
+                        counts.extract_timeouts += 1
+                        text = ""
+                    except IndiaCourtsError:
+                        text = ""
+                    if len(text) < settings.indiacourts_min_text_chars and ocr is not None:
+                        try:
+                            text = truncate_head_tail(
+                                ocr(data).strip(), settings.indiacourts_text_max_chars
+                            )
+                            counts.ocr_used += 1
+                        except Exception:  # noqa: BLE001 — OCR must never kill the sweep
+                            pass
+                    if len(text) < settings.indiacourts_min_text_chars:
+                        counts.scanned_skipped += 1
+                        continue
+                    if detect_language(text) == "hi":
+                        counts.non_english += 1
+                    matched = scan_insider_patterns(text)
+                    if not matched:
+                        continue
+                    counts.matches += 1
+                    article = judgment_to_raw_article(
+                        meta, matched, text, base_url=settings.indiacourts_base_url
+                    )
+                    rows.append(article.model_dump_json())
+        finally:
+            prefetch.close()
 
     if rows:
         chunk = spool / f"{ref.year}_{ref.court}_{ref.bench}.jsonl"
