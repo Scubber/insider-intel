@@ -79,6 +79,11 @@ docker build --target spark -t insider-intel-spark .
 mkdir -p /opt/data/raw/sweep_spool /opt/data/state/indiacourts
 # Resume state from any prior attempt (spot preemption survival).
 gcloud storage rsync -r ${STATE_PREFIX} /opt/data/state/indiacourts || true
+# The image runs as uid 1000 ("app") — root-owned dirs are unwritable to it.
+# The first live run lost EVERY durable write (chunks, status.json, partition
+# markers) to EACCES and crash-looped; chown must follow the resume rsync,
+# which runs as root and re-creates root-owned files.
+chown -R 1000:1000 /opt/data
 # Sweep container: the sweep needs no secrets — the dataset is public and
 # the spool syncs via the VM's service account, never from inside.
 docker rm -f sweep 2>/dev/null || true
