@@ -340,6 +340,11 @@ self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;
 `pull-main` / `enable-india` / `smoke-india` / `run-refresh` mutate the box
 and require `confirm=RUN`; `run-replay` runs the spend-gate replay there.
+Chat-stack ops (the box is a chat host between cycles): `chat-status`
+(read-only), `chat-swap` (load an overlay's model now; refuses while the
+refresh flock is held), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
+`.env.spark` — the model every nightly hand-back restores; the Nemotron
+enrich overlay since 2026-08-24, operator choice).
 A dispatch workflow must exist on `main` to be invokable; it then runs the
 file from whatever ref you pass, so branch diagnostics work without merging.
 

@@ -240,7 +240,14 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    parses them), re-ran to repair the line in place, and the missed cycle
    was re-run via run-refresh. LAW for future ops that write .env.spark:
    any value with spaces must be double-quoted — the file has TWO parsers
-   (shell source + compose env_file).
+   (shell source + compose env_file). **Chat-stack default (2026-08-24,
+   operator choice)**: the nightly hand-back restores the model named by
+   `SPARKY_CHAT_OVERRIDE` in `.env.spark` (an overlay yml in `~/sparky`);
+   set to the Nemotron enrich overlay — qwen3:8b was only ever the base
+   compose fallback the trap kept restoring. Ops: `chat-status` /
+   `chat-swap` (live swap, flock-guarded) / `chat-default`. The operator
+   can run any model ad hoc via `chat-swap`; it lasts until the next
+   cycle's hand-back restores the default.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
