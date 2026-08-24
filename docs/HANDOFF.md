@@ -251,6 +251,11 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    from the enrich overlay, swaps vllm+open-webui, and polls the served
    id (confirmed serving 2026-08-24 12:05Z, ~7min load); any nightly
    hand-back reverts to Nemotron, one re-dispatch brings huihui back.
+   Live fix same day: open-webui sends `tool_choice: "auto"` and vLLM
+   400s without `--enable-auto-tool-choice` + `--tool-call-parser`
+   (operator hit it in chat), so the generated overlay now adds those
+   flags (`hermes`, the Qwen-family parser) and the op ends with a
+   tool-enabled probe that must return HTTP 200.
    Ops: `chat-status` / `chat-swap` (live swap, flock-guarded) /
    `chat-huihui` / `chat-default`.
    **Sweep NETWORK-BOUND — prefetch fix (2026-08-24 ~12:30Z).** OCR-off

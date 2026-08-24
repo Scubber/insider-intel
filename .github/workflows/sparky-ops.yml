@@ -493,7 +493,11 @@ jobs:
       # Purpose-built for the operator's huihui chat model: derive a chat
       # overlay from the enrich overlay by model-string substitution (any
       # --quantization pin is dropped — the FP8-DYNAMIC checkpoint
-      # auto-detects), show it redacted, swap, and confirm the served id.
+      # auto-detects; tool-calling flags are ADDED — the enrich overlay never
+      # needs them, but open-webui sends tool_choice "auto" and vLLM 400s
+      # without --enable-auto-tool-choice + --tool-call-parser, hit live
+      # 2026-08-24; hermes is the Qwen-family parser), show it redacted,
+      # swap, confirm the served id, and probe a tool-enabled request.
       - name: chat-huihui
         if: ${{ github.event.inputs.op == 'chat-huihui' }}
         run: |
@@ -511,15 +515,25 @@ jobs:
             exit 1
           fi
           sed -e "s|${NEMO}|${HUIHUI}|g" -e '/--quantization/,+1d' \
+            -e "/Huihui/a\\      - --enable-auto-tool-choice\\n      - --tool-call-parser\\n      - hermes" \
             "$TEMPLATE" > "$SPARKY/model-huihui.yml"
           echo "== generated model-huihui.yml (key lines redacted) =="
           sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$SPARKY/model-huihui.yml"
           (cd "$SPARKY" && docker compose -f compose.yml -f model-huihui.yml up -d --no-deps vllm open-webui)
           KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          SERVED=""
           for _ in $(seq 1 60); do
             ID=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
               | grep -o '"id":"[^"]*"' | head -1 || true)
-            [ -n "$ID" ] && { echo "serving: $ID"; exit 0; }
+            [ -n "$ID" ] && { echo "serving: $ID"; SERVED=1; break; }
             sleep 15
           done
-          echo "model did not answer within 15min — check docker logs sparky-vllm on the box"; exit 1
+          [ -n "$SERVED" ] || { echo "model did not answer within 15min — check docker logs sparky-vllm on the box"; exit 1; }
+          # Prove the reported failure mode is gone: a request with a tool and
+          # tool_choice auto must return 200, not the parser-flags 400.
+          CODE=$(curl -s -o /tmp/huihui-tooltest.json -w '%{http_code}' -m 90 \
+            -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' \
+            -d '{"model":"'"$HUIHUI"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8,"tools":[{"type":"function","function":{"name":"noop","description":"no-op","parameters":{"type":"object","properties":{}}}}],"tool_choice":"auto"}' \
+            http://127.0.0.1:8001/v1/chat/completions)
+          echo "tool_choice=auto probe: HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "tool-enabled request still failing:"; head -c 400 /tmp/huihui-tooltest.json; echo; exit 1; }
