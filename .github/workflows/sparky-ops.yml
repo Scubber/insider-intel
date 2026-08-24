@@ -333,6 +333,9 @@ jobs:
               echo; echo '== sweep container log tail =='
               sudo docker logs --tail ${LINES:-150} sweep 2>&1 | tail -n ${LINES:-150}
             "
+
+      - name: sweep-audit
+        if: ${{ github.event.inputs.op == 'sweep-audit' }}
         working-directory: ${{ env.WORKDIR }}
         run: |
           set -euo pipefail
