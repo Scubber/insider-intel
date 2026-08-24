@@ -336,8 +336,11 @@ jobs:
           set -uo pipefail
           command -v gcloud >/dev/null 2>&1 || \
             export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          Z=$(gcloud compute instances list --project insider-intel-502413 \
+            --filter="name=indiacourts-sweep" --format="value(zone.basename())" | head -1)
+          [ -n "$Z" ] || { echo "no indiacourts-sweep VM exists right now"; exit 1; }
           gcloud compute ssh indiacourts-sweep \
-            --zone us-east1-b --project insider-intel-502413 --command "
+            --zone "$Z" --project insider-intel-502413 --command "
               echo '== containers =='; sudo docker ps -a
               echo; echo '== sweep container config =='
               sudo docker inspect sweep --format 'workdir={{.Config.WorkingDir}} restarts={{.RestartCount}} started={{.State.StartedAt}} status={{.State.Status}}' 2>/dev/null || true
@@ -360,8 +363,11 @@ jobs:
           set -uo pipefail
           command -v gcloud >/dev/null 2>&1 || \
             export PATH="$PATH:$HOME/google-cloud-sdk/bin:/home/tim/google-cloud-sdk/bin:/snap/bin"
+          Z=$(gcloud compute instances list --project insider-intel-502413 \
+            --filter="name=indiacourts-sweep" --format="value(zone.basename())" | head -1)
+          [ -n "$Z" ] || { echo "no indiacourts-sweep VM exists right now"; exit 1; }
           gcloud compute ssh indiacourts-sweep \
-            --zone us-east1-b --project insider-intel-502413 --command "
+            --zone "$Z" --project insider-intel-502413 --command "
               echo '== load / aggregate cpu (nproc:' \$(nproc) ') =='
               top -bn1 | head -12
               echo; echo '== container cpu =='
