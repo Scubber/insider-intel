@@ -87,10 +87,17 @@ chown -R 1000:1000 /opt/data
 # Sweep container: the sweep needs no secrets — the dataset is public and
 # the spool syncs via the VM's service account, never from inside.
 docker rm -f sweep 2>/dev/null || true
+# OCR stays OFF for the bulk pass: the 2026-08-24 07:30Z watch measured a
+# 95% throughput collapse (300k+/h -> ~14.5k/h) once workers hit scan-heavy
+# benches — each inline Tesseract pass costs ~2min of CPU, so a ~6% scanned
+# share makes the whole sweep OCR-bound (~50-day projection). Scans are
+# counted (scanned_skipped) and skipped; a targeted OCR pass revisits them
+# later. The nightly sparky lane keeps its own OCR path unchanged.
 docker run -d --name sweep --restart on-failure \
   -e INDIACOURTS_ENABLED=true \
   -e INDIACOURTS_SWEEP_WORKERS=32 \
   -e INDIACOURTS_SWEEP_EXTRACT_PROCS=28 \
+  -e INDIACOURTS_SWEEP_OCR=false \
   -e INDIACOURTS_OCR_COMMAND="python -m apps.aggregator.ocr_pdf" \
   -v /opt/data:/app/data \
   insider-intel-spark python -m apps.aggregator sweep_indiacourts_bulk -v

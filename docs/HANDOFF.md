@@ -219,7 +219,16 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    dir listings — the serial console never carries container stdout).
    The tell that cracked it: the spool directory's mtime never moved off
    its creation time — the container had never created a file there
-   despite healthy progress logs.
+   despite healthy progress logs. **OCR lever pulled 2026-08-24 07:30Z**:
+   with all three fixes live the sweep verified healthy (982k pdfs / 315
+   matches / 313 audited rows, 0 breaches, in its first ~7h) but
+   throughput collapsed 300k+/h → ~14.5k/h once workers hit scan-heavy
+   benches — inline Tesseract (~2min CPU each) made a ~6% scanned share
+   OCR-bound (~50-day projection). Per the pre-declared lever the VM now
+   runs `INDIACOURTS_SWEEP_OCR=false`: scans are counted
+   (`scanned_skipped`) and skipped, and a TARGETED OCR pass over
+   scan-heavy partitions is the follow-up once the text-native sweep
+   lands. The nightly sparky lane keeps OCR on.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
