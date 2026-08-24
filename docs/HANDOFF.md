@@ -229,6 +229,18 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    (`scanned_skipped`) and skipped, and a TARGETED OCR pass over
    scan-heavy partitions is the follow-up once the text-native sweep
    lands. The nightly sparky lane keeps OCR on.
+   **2026-08-24 08:00Z cycle DIED on .env.spark line 31** (caught by the
+   09:30Z verify): the `enable-ocr` op had written
+   `INDIACOURTS_OCR_COMMAND=python -m apps.aggregator.ocr_pdf` UNQUOTED —
+   compose env_file reads that fine, but `spark_refresh.sh` `source`s the
+   file, where the space ends the assignment and bash executes
+   `-m ...` → exit 127 → `set -e` killed the cycle before ingest (no
+   push, no chunk merge, no enrichment that night). Fix: enable-ocr now
+   writes the value double-quoted (compose strips the quotes, shell
+   parses them), re-ran to repair the line in place, and the missed cycle
+   was re-run via run-refresh. LAW for future ops that write .env.spark:
+   any value with spaces must be double-quoted — the file has TWO parsers
+   (shell source + compose env_file).
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
