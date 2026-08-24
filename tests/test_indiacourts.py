@@ -918,6 +918,52 @@ class _FakeTarResponse:
             raise self._err
 
 
+def test_bulk_sweep_windows_extractions_across_the_pool(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A single streaming worker must keep a pool-sized WINDOW of extractions
+    in flight — a year's tail is often one giant partition, and a blocking
+    per-member round trip pinned the whole 32-vCPU sweep VM at one child's
+    throughput (2026-08-24). Proven by event order: `procs` submissions land
+    before the first result is awaited, and every counter stays exact."""
+    from apps.aggregator import indiacourts_bulk as bulk
+
+    events: list[tuple[str, bytes]] = []
+
+    class _WindowSpyPool:
+        def __init__(self, procs: int) -> None:
+            self.procs = procs
+
+        def submit(self, data: bytes, max_chars: int) -> object:
+            events.append(("submit", data))
+            return object()
+
+        def result(self, fut: object, data: bytes, max_chars: int) -> str:
+            events.append(("result", data))
+            return pdf_bytes_to_text(data, max_chars=max_chars)
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(bulk, "_ExtractPool", _WindowSpyPool)
+    _enable(
+        monkeypatch,
+        INDIACOURTS_SWEEP_WORKERS="1",
+        INDIACOURTS_SWEEP_EXTRACT_PROCS="3",
+        INDIACOURTS_SWEEP_OCR="false",
+        INDIACOURTS_HISTORY_FLOOR="2026-01-01",
+    )
+    bucket = FakeBucket()
+    bucket.add_judgment(cnr="MATCH1", text=INSIDER_TEXT)
+    for i in range(7):
+        bucket.add_judgment(cnr=f"BENIGN{i}", text=BENIGN_TEXT)
+    summary = _run_bulk(bucket, tmp_path)
+    assert summary["pdfs"] == 8 and summary["matches"] == 1
+    first_result = next(i for i, (kind, _) in enumerate(events) if kind == "result")
+    assert first_result >= 3, f"window never filled: first result at event {first_result}"
+    assert [d for k, d in events if k == "submit"] == [d for k, d in events if k == "result"]
+
+
 def test_prefetch_iterator_delivers_the_stream_and_reaps_its_thread() -> None:
     """The read-ahead pump hands every byte over in order, EOF stays sticky
     (tarfile's reader polls past it), and close() reaps the thread."""

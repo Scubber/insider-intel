@@ -269,6 +269,25 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    consumer side; close() reaps the pump). Download and extraction now
    overlap; expected ceiling moves back to the extraction pool
    (~300k+/h). Requires VM relaunch (image bakes at create).
+   **Relaunch found the REAL ceiling (2026-08-24 ~13:20Z).** The
+   us-east1 spot slot was gone (all three zones stocked out), so the
+   launcher gained zone fallback + zone discovery on every VM op, then
+   a Mumbai-first zone list — the dataset bucket is S3 ap-south-1, so
+   `asia-south1` reads it at ~3ms RTT (+ n2d machine fallback). The
+   Mumbai run STILL did ~20k pdfs/h, which killed the network story:
+   perf showed load average 1.00, one extraction child at 100% for its
+   whole life, pool of 28 idle. The container log had the cause in one
+   line: `year 2025: 1 partition(s) to sweep` — the nightly lane's
+   shared PartitionState had already marked the rest of 2025 complete,
+   so ONE worker was grinding the one straggler (phhc, 145k judgments,
+   17.5GB tar) with a BLOCKING extraction round-trip per member: one
+   child's throughput (~0.18s/PDF = 20k/h) was the whole machine, in
+   every run. Fix: per-worker extraction WINDOW
+   (`_ExtractPool.submit()/result()`, window = pool size, 64MiB byte
+   cap) so even a single straggler partition fills all 28 procs;
+   broken-pool rebuild is per-future with origin-pool identity guard.
+   Expected: ~150+ pdfs/s pool-limited (~550k/h) whenever streams keep
+   up — years with many partitions AND single-partition tails alike.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
