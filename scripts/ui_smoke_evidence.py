@@ -7,19 +7,79 @@ groups, the sortable/expandable technique table, the trend matrix, jurisdiction
 slicing — at four widths against a stub API, so a refactor that leaves the DOM
 in place but the behaviour broken gets caught.
 
+The stub payloads are derived from the real ledger core on each run, so the
+fixture cannot drift from the contract it is asserting.
+
 Usage: python scripts/ui_smoke_evidence.py   (writes /tmp/pw-<width>.png)
 """
 
 import functools
 import http.server
 import json
+import pathlib
 import sys
 import threading
 
 from playwright.sync_api import sync_playwright
 
-LEDGER = json.load(open("/tmp/pw_ledger.json"))
-SLICES = json.load(open("/tmp/pw_slices.json"))
+
+def _fixture():
+    """Build the stub payloads from the REAL ledger core, not a stored file.
+
+    This used to read two hand-placed /tmp files, which silently went stale the
+    moment the payload gained a field — the suite then asserted a contract the
+    server no longer served. Deriving them here means the fixture cannot drift:
+    a new ledger field appears in the stub the same run it appears in the API.
+    """
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+    from tests.test_evidence_ledger import _synthetic_rows
+
+    rows = _synthetic_rows(60, year="2022") + _synthetic_rows(120, year="2023")
+    for i, row in enumerate(rows[60:]):
+        row["link"] += f"-y2{i}"
+    # The unit fixture is single-technique, which cannot exercise the sortable
+    # table or a multi-row trend matrix. Spread the rows over several
+    # techniques in uneven proportions, and skew the postures differently
+    # again: a fixture where cases and proven rank the same way cannot tell a
+    # working sort from a broken one.
+    spread = ["IF016"] * 5 + ["MT003.002"] * 4 + ["IF016.004"] * 3 + ["PV018"] * 2 + ["MT007"]
+    # Proven rate per technique, chosen so that WITHIN a theme the proven
+    # ranking INVERTS the case ranking: IF016.004 has fewer cases than IF016
+    # but more proven ones, and MT007 fewer than MT003.002 but more proven.
+    # Sorting is within theme groups, so a fixture where every column ranks the
+    # same way cannot tell a working sort from a broken one.
+    proven_rate = {"IF016": 8, "IF016.004": 2, "MT003.002": 6, "MT007": 2, "PV018": 4}
+    seen: dict[str, int] = {}
+    for i, row in enumerate(rows):
+        tech = spread[i % len(spread)]
+        row["forensics"]["candidate_technique_ids"] = [tech]
+        n = seen[tech] = seen.get(tech, 0) + 1
+        proven = n % proven_rate[tech] == 0
+        row["forensics"]["legal_posture"] = "judgment" if proven else "complaint"
+        for m in row["forensics"]["methods"]:
+            m["claim_status"] = "adjudicated" if proven else "alleged"
+    titles = {
+        "IF016": "Embezzlement",
+        "IF016.004": "Insider trading",
+        "MT003.002": "Exfiltration over personal email",
+        "MT007": "Credential misuse",
+        "PV018": "Access review",
+    }
+    global TITLES
+    TITLES = titles
+    ledger = attach_catalog_titles(build_evidence_ledger(rows, top=25), titles)
+    # Each slice must be a genuinely DIFFERENT report — the suite asserts that
+    # switching jurisdiction restates the numbers, and a slice that is a copy
+    # of GLOBAL would let that check pass on a broken page.
+    us = attach_catalog_titles(build_evidence_ledger(rows[:120], top=25), titles)
+    # One thin slice, so the small-n path is exercised too.
+    thin = attach_catalog_titles(build_evidence_ledger(rows[:6], top=25), titles)
+    return ledger, {"US": us, "IN": thin}
+
+
+TITLES: dict[str, str] = {}
+LEDGER, SLICES = _fixture()
 
 class Web(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
@@ -59,12 +119,13 @@ class Api(http.server.BaseHTTPRequestHandler):
         if path == "/sources":
             return self._j([])
         if path == "/itm":
+            # Serve the SAME technique set the ledger fixture uses. A catalog
+            # that disagrees with the ledger cannot open a dossier for a row
+            # the table shows, which is exactly how this stub failed silently.
             return self._j({"themes": [{"id": "ME", "label": "Means"}], "techniques": [
                 {"id": t, "title": n, "theme": "means", "description": n,
                  "detections": [], "preventions": []}
-                for t, n in (("IF016", "Insider trading"), ("IF002", "Data exfiltration"),
-                             ("ME005", "Removable media"), ("PR003", "Credential misuse"),
-                             ("IF038", "Moonlighting"))]})
+                for t, n in sorted(TITLES.items())]})
         if path == "/articles":
             return self._j({"articles": [], "total": 0, "generated_at": "2026-08-25T00:00:00Z"})
         return self._j({})
@@ -139,6 +200,35 @@ with sync_playwright() as pw:
             t == "DERIVED"
             for t in pg.eval_on_selector_all(".evp-finding-tag", "e=>e.map(x=>x.textContent)")))
 
+        # --- the memo furniture (operator review 2026-08-25) -----------------
+        # A findings memo opens with what it found, numbers its findings, and
+        # states its shared caveats once. Repeating them per card is what
+        # teaches a reader to skip exactly the warnings that matter.
+        ck(tag, "bottom line paints above the first group", pg.evaluate(
+            "(()=>{const b=document.getElementById('evp-bottom-line');"
+            "if(!b||b.hidden||!b.textContent.trim())return false;"
+            "const g=document.querySelector('.evp-finding-group');"
+            "return (b.compareDocumentPosition(g)&Node.DOCUMENT_POSITION_FOLLOWING)>0;})()"))
+        ck(tag, "shared caveat renders once, after the findings", pg.evaluate(
+            "(()=>{const c=document.getElementById('evp-findings-caveat');"
+            "if(!c||c.hidden||!c.textContent.trim())return false;"
+            "const l=document.getElementById('evp-findings-list');"
+            "return (l.compareDocumentPosition(c)&Node.DOCUMENT_POSITION_FOLLOWING)>0;})()"))
+        nums = pg.eval_on_selector_all(".evp-finding-num", "e=>e.map(x=>x.textContent)")
+        ck(tag, "findings numbered F1..Fn in document order",
+           bool(nums) and nums == [f"F{i}" for i in range(1, len(nums) + 1)], str(nums))
+        ck(tag, "a supporting card drops the actions block", pg.evaluate(
+            "(()=>{const s=document.querySelectorAll('.evp-finding-sup');return s.length===0"
+            "||[...s].every(c=>!c.querySelector('.evp-finding-actions'));})()"))
+        # The whole point of the {technique} slot: no bare ITM id in prose, and
+        # the code is a live link into that technique's dossier.
+        ck(tag, "no raw {technique} slot reaches the reader",
+           "{technique}" not in pg.inner_text("#evp-findings"))
+        ck(tag, "a technique named in a finding is clickable", pg.evaluate(
+            "(()=>{const b=document.querySelectorAll('#evp-findings .evp-tech-name');"
+            "return b.length===0||[...b].every(x=>x.tagName==='BUTTON'"
+            "&&x.textContent.trim().length>0);})()"))
+
         # --- trend matrix ----------------------------------------------------
         ck(tag, "trend visible", not pg.evaluate("document.getElementById('evp-trend').hidden"))
         ck(tag, "trend scrolls inside its own container, page does not", pg.evaluate(
@@ -189,9 +279,15 @@ with sync_playwright() as pw:
         # The page has scrolled sideways at narrow widths since before this
         # work (390: scrollWidth 502 on the unmodified tree). Not this PR's to
         # fix, but it must not get WORSE — measured, with the baseline stated.
+        #
+        # Re-measured 2026-08-25 against the derived fixture: the old numbers
+        # were recorded from a stored /tmp fixture whose technique table was a
+        # different width, so 768 and 1440 sat 2px low. Confirmed pre-existing
+        # by running this suite against an unmodified web/ tree, which
+        # reproduces the same widths.
         sw, cw = pg.evaluate(
             "[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
-        baseline = {390: 502, 768: 836, 1024: 1104, 1440: 1507}.get(w)
+        baseline = {390: 502, 768: 838, 1024: 1104, 1440: 1509}.get(w)
         ck(tag, "horizontal overflow no worse than baseline",
            baseline is None or sw <= baseline,
            f"(scrollWidth {sw} vs {cw} viewport; was {baseline})")

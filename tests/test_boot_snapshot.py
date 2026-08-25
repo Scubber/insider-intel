@@ -229,6 +229,10 @@ def test_snapshot_writes_sources_and_ledger_twins(tmp_path, monkeypatch) -> None
     # replaced the old static web/findings.json, so the offline path has to
     # produce them too — and the catalog join has to have run here as well.
     assert "findings" in ledger
+    # The memo furniture too — a cold start that paints numbered findings with
+    # no bottom line and no caveat is a different page from the live one.
+    assert "bottom_line" in ledger
+    assert "findings_caveat" in ledger
     assert "finding_groups" in ledger
     for year, bucket in (ledger.get("by_year") or {}).items():
         assert isinstance(bucket["techniques"], list), f"{year} missing the catalog join"

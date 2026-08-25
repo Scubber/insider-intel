@@ -567,6 +567,47 @@
   margin: 0;
 }
 
+/* --- REPORT FURNITURE (mirrors .evp-bottom-line / .evp-findings-caveat /
+   .evp-finding-num / .evp-finding-sup; values copied verbatim from
+   web/styles.css, per .design-sync/NOTES.md) --- */
+.ds-bottom-line {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  max-width: 74ch;
+  margin: 0 0 0.9rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--accent);
+}
+.ds-findings-caveat {
+  font-size: 0.66rem;
+  line-height: 1.4;
+  color: var(--muted);
+  max-width: 78ch;
+  margin: 0.7rem 0 0;
+}
+.ds-finding-num {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  align-self: center;
+}
+.ds-finding-sup {
+  border-left-width: 1px;
+  padding: 0.55rem 0.8rem;
+}
+.ds-finding-sup .ds-finding-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.ds-finding-sup .ds-stat-sm .ds-finding-stat-num {
+  font-size: 1.3rem;
+}
+.ds-finding-sup .ds-finding-stat {
+  margin: 0.1rem 0 0.35rem;
+}
+
 /* --- FINDING GROUP (mirrors .evp-finding-group over the .matrix-col
    disclosure: marker suppressed, rotating accent chevron, count badge) --- */
 .ds-fgroup {

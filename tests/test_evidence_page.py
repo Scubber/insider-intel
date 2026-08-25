@@ -263,3 +263,84 @@ def test_trend_labels_the_axis_as_filing_year() -> None:
     html = _index()
     assert "TECHNIQUES BY FILING YEAR" in html
     assert "not the year the incident happened" in html
+
+
+# ---------------------------------------------------------------------------
+# The memo layout (operator review, 2026-08-25)
+#
+# The findings were correct and still read like generated filler. These pin the
+# structural half of the fix: a bottom line above, numbered findings, two card
+# weights, the shared caveat once, and a technique rendered as the clickable
+# control rather than as a bare ITM id in a sentence.
+# ---------------------------------------------------------------------------
+
+
+def test_bottom_line_lands_above_the_first_finding_group() -> None:
+    """A memo opens with what it found, not with the first of five cards."""
+    html = _index()
+    assert html.index('id="evp-bottom-line"') < html.index('id="evp-findings-list"')
+
+
+def test_shared_caveat_lands_once_below_the_findings() -> None:
+    html = _index()
+    assert html.count('id="evp-findings-caveat"') == 1
+    assert html.index('id="evp-findings-list"') < html.index('id="evp-findings-caveat"')
+
+
+def test_bottom_line_and_caveat_appear_only_with_findings() -> None:
+    """Both are furniture for the findings; a thin slice shows neither."""
+    body = _fn_body(_app_js(), "renderFindings")
+    assert "data.bottom_line" in body
+    assert "data.findings_caveat" in body
+    assert "findings.length" in body
+
+
+def test_findings_are_numbered_like_a_report() -> None:
+    body = _fn_body(_app_js(), "evpFindingCard")
+    assert "evp-finding-num" in body
+    assert "`F${f.rank}`" in body
+
+
+def test_a_supporting_finding_drops_the_full_card_anatomy() -> None:
+    """Five cards at identical weight read as filler however good each one is.
+
+    Recommendations still ship in the payload and still print in the CLI
+    report — the page de-emphasises them, it does not lose them.
+    """
+    body = _fn_body(_app_js(), "evpFindingCard")
+    assert 'f.weight !== "supporting"' in body
+    assert "lead && (f.recommendations" in body
+    assert "lead && f.method" in body
+
+
+def test_a_technique_in_prose_renders_as_the_dossier_control() -> None:
+    """Same control as the trend matrix and the technique table.
+
+    A bare "MT003.002" in a sentence is unreadable and, worse, unclickable.
+    The server writes a {technique} slot; the client fills it with the button.
+    """
+    src = _app_js()
+    body = _fn_body(src, "evpFillProse")
+    assert "evpTechniqueButton" in body
+    assert "EVP_TECH_SLOT" in body
+    assert 'const EVP_TECH_SLOT = "{technique}";' in src
+    # A catalog miss must still produce words, never an empty hole.
+    assert '"this technique"' in body
+
+
+def test_finding_prose_never_renders_the_slot_as_text() -> None:
+    card = _fn_body(_app_js(), "evpFindingCard")
+    for field in ("f.title", "f.takeaway"):
+        assert field in card
+    # Every prose field goes through the filler, not straight into textContent.
+    assert 'evpProse("evp-finding-takeaway", f.takeaway, ref)' in card
+    assert 'evpFillProse(evpEl("span", "evp-finding-title"), f.title, ref)' in card
+
+
+def test_the_inline_technique_button_flows_with_the_sentence() -> None:
+    """.evp-tech-name is display:flex for the table; in prose it must be
+    inline, or a finding's headline breaks onto its own line."""
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert ".evp-finding .evp-tech-name" in css
+    block = css[css.index(".evp-finding .evp-tech-name") :][:220]
+    assert "inline-flex" in block

@@ -27,6 +27,7 @@ _core = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_core)
 CHANNELS = _core.CHANNELS
 build_evidence_ledger = _core.build_evidence_ledger
+fill_technique_slot = _core.fill_technique_slot
 
 
 def _iter_rows(path: str):
@@ -85,6 +86,9 @@ def render_markdown(ledger: dict) -> str:
         out.append("")
         out.append("Derived from the aggregates below on every run — nothing here is stored.")
         out.append("Grouped by the question each answers, the same way the page groups them.")
+        if ledger.get("bottom_line"):
+            out.append("")
+            out.append(f"**Bottom line.** {ledger['bottom_line']}")
         for g in groups:
             out.append("")
             out.append(f"### {g['label']}")
@@ -93,7 +97,7 @@ def render_markdown(ledger: dict) -> str:
             # Groups are metadata only; the flat list is the source of truth.
             for f in [x for x in findings if x.get("group") == g["id"]]:
                 out.append("")
-                out.append(f"#### {f['rank']}. {f['title']}")
+                out.append(f"#### F{f['rank']} — {f['title']}")
                 out.append("")
                 out.append(f"**{f['stat']}** {f['stat_label']}")
                 out.append("")
@@ -102,8 +106,14 @@ def render_markdown(ledger: dict) -> str:
                     out.append("")
                     for rec in f["recommendations"]:
                         out.append(f"- {rec}")
-                out.append("")
-                out.append(f"_Method: {f['method']}_")
+                if f.get("method"):
+                    out.append("")
+                    out.append(f"_Method: {f['method']}_")
+        # Once, for the whole section. Repeating the shared caveats per finding
+        # is what trains a reader to skip exactly the warnings that matter.
+        if ledger.get("findings_caveat"):
+            out.append("")
+            out.append(f"_{ledger['findings_caveat']}_")
 
     out.append("")
     out.append("## 1 · Technique frequency (ITM)")
@@ -206,6 +216,17 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     ledger = build_evidence_ledger(_iter_rows(args.corpus), top=args.top)
+    # This report has no ITM catalog (that is the whole reason the core is
+    # catalog-free) and nowhere to link to, so a technique renders as its bare
+    # id. What it must never do is print the raw {technique} slot.
+    for finding in ledger.get("findings") or []:
+        ref = finding.get("evidence") or {}
+        if ref.get("kind") == "technique" and ref.get("label"):
+            fill_technique_slot(finding, str(ref["label"]))
+            if ledger.get("bottom_line") and finding is ledger["findings"][0]:
+                ledger["bottom_line"] = ledger["bottom_line"].replace(
+                    _core.TECHNIQUE_SLOT, str(ref["label"])
+                )
     print(render_markdown(ledger))
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as fh:

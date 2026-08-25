@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -856,6 +857,22 @@ def test_findings_grouped_on_the_endpoint(tmp_path, monkeypatch) -> None:
         assert data["finding_groups"] == []
 
 
+def test_memo_furniture_survives_the_service_layer(tmp_path, monkeypatch) -> None:
+    """bottom_line and findings_caveat are keys the API must not drop.
+
+    The service pops five technique_* maps before serving, so anything the page
+    reads has to be checked on the ENDPOINT, not on the core payload. Both keys
+    ship here as null because the fixture is below the floor — present and
+    null, never absent.
+    """
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert "bottom_line" in data
+        assert "findings_caveat" in data
+        assert data["bottom_line"] is None
+        assert data["findings_caveat"] is None
+
+
 # ---------------------------------------------------------------------------
 # Rules state findings, not caveats
 # ---------------------------------------------------------------------------
@@ -937,3 +954,269 @@ def test_no_rule_describes_the_corpus_instead_of_the_cases() -> None:
         headline = f"{finding['title']} {finding['stat_label']}".lower()
         for tell in meta_tells:
             assert tell not in headline, f"{finding['id']} headlines a caveat: {tell}"
+
+
+# ---------------------------------------------------------------------------
+# Anti-slop guards (operator review, 2026-08-25)
+#
+# The findings section was correct and still read like generated filler: five
+# identically-shaped cards, headlines that restated their own group header,
+# rhetorical scaffolding standing in for claims, advice that named nothing,
+# and the same three caveats repeated on every card. Each tell below is now
+# mechanically unrepeatable, because prose regressions are invisible to a test
+# that only checks arithmetic.
+# ---------------------------------------------------------------------------
+
+# Scaffolding a findings memo never uses. Each of these shipped once.
+_RHETORICAL_TELLS = (
+    "the question is not",
+    "it is whether",
+    "is the finding",
+    "what this means is",
+    "at the end of the day",
+    "the reality is",
+)
+
+_ITM_ID = re.compile(r"\b[A-Z]{2}\d{3}(?:\.\d{3})?\b")
+
+
+def _finding_strings(finding: dict) -> list[str]:
+    return [
+        finding["title"],
+        finding["takeaway"],
+        finding.get("method") or "",
+        *(finding.get("recommendations") or []),
+    ]
+
+
+def _two_year_rows() -> list[dict]:
+    """A corpus that grows year over year, so rising-technique fires.
+
+    _synthetic_rows is single-year by design; the technique rules need two
+    complete years, both clear of the floor, with the later one larger.
+    """
+    rows = _synthetic_rows(60, year="2022") + _synthetic_rows(120, year="2023")
+    for i, row in enumerate(rows[60:]):
+        row["link"] += f"-y2{i}"
+    return rows
+
+
+def test_no_finding_uses_rhetorical_scaffolding() -> None:
+    """State the finding; never announce that you are stating one."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"]
+    for finding in ledger["findings"]:
+        blob = " ".join(_finding_strings(finding)).lower()
+        for tell in _RHETORICAL_TELLS:
+            assert tell not in blob, f"{finding['id']} uses rhetorical filler: {tell}"
+
+
+def test_headline_carries_its_own_subject() -> None:
+    """A title must still read true with its group header deleted.
+
+    The tell this kills is "One technique climbed faster than the rest" — a
+    headline with no subject, whose subject was buried in the body as a bare
+    ITM id.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    a = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    b = build_evidence_ledger(_synthetic_rows(40), now=NOW)
+    titles_a = {f["id"]: f["title"] for f in a["findings"]}
+    titles_b = {f["id"]: f["title"] for f in b["findings"]}
+    shared_ids = set(titles_a) & set(titles_b)
+    assert shared_ids
+    # Every title carries at least one value read off its own ledger, so two
+    # corpora that differ cannot produce byte-identical headlines.
+    assert any(titles_a[i] != titles_b[i] for i in shared_ids), (
+        "no headline varies with the data — the titles are static strings"
+    )
+
+
+def test_headline_does_not_restate_its_group_header() -> None:
+    from shared.utils.evidence import FINDING_GROUPS, build_evidence_ledger
+
+    labels = {gid: (label, blurb) for gid, label, blurb in FINDING_GROUPS}
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"]
+    for finding in ledger["findings"]:
+        label, blurb = labels[finding["group"]]
+        title = finding["title"].casefold()
+        assert label.casefold() not in title
+        assert blurb.casefold() not in title
+
+
+def test_shared_caveats_render_once_not_per_card() -> None:
+    """The three caveats true of every card live in FINDINGS_CAVEAT.
+
+    Repeating them per finding is what teaches a reader to skip exactly the
+    warnings that matter.
+    """
+    from shared.utils.evidence import FINDINGS_CAVEAT, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings_caveat"] == FINDINGS_CAVEAT
+    methods = [f["method"] for f in ledger["findings"] if f.get("method")]
+    assert len(methods) == len(set(methods)), "two findings ship the same caveat"
+    for sentence in ("read out of filings by a model", "filtered sample", "how deep we have swept"):
+        for method in methods:
+            assert sentence not in method, f"a card repeats the shared caveat: {sentence}"
+
+
+def test_recommendations_name_their_own_finding() -> None:
+    """Advice that could sit under any card is padding, not advice."""
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+
+    # The two-year fixture so the technique rule is covered too — its advice
+    # names the technique through the slot, and must survive the join naming it.
+    ledger = build_evidence_ledger(_two_year_rows(), now=NOW)
+    assert ledger["findings"]
+    attach_catalog_titles(
+        ledger,
+        {
+            str(f["evidence"]["label"]).upper(): "Exfiltration over personal email"
+            for f in ledger["findings"]
+            if (f.get("evidence") or {}).get("kind") == "technique"
+        },
+    )
+    for finding in ledger["findings"]:
+        recs = finding.get("recommendations") or []
+        assert recs, f"{finding['id']} gives no advice"
+        assert len(recs) <= 2, f"{finding['id']} ships {len(recs)} bullets — the cap is 2"
+        ref = finding.get("evidence") or {}
+        subject = str(ref.get("title") or ref.get("label") or "")
+        assert subject
+        assert subject in recs[0], f"{finding['id']}'s first bullet does not name {subject!r}"
+
+
+def test_takeaway_is_at_most_two_sentences() -> None:
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"]
+    for finding in ledger["findings"]:
+        sentences = [s for s in re.split(r"(?<=[.!?])\s+", finding["takeaway"].strip()) if s]
+        assert len(sentences) <= 2, f"{finding['id']} runs to {len(sentences)} sentences"
+
+
+def test_findings_carry_a_lead_and_supporting_weight() -> None:
+    """One card per group leads; the rest support.
+
+    Five cards at identical visual weight read as generated filler however good
+    each one is, so the weight is part of the payload, not a client whim.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    findings = ledger["findings"]
+    assert findings
+    assert {f["weight"] for f in findings} <= {"lead", "supporting"}
+    by_group: dict[str, list[dict]] = {}
+    for f in findings:
+        by_group.setdefault(f["group"], []).append(f)
+    for members in by_group.values():
+        assert members[0]["weight"] == "lead"
+        assert all(m["weight"] == "supporting" for m in members[1:])
+
+
+def test_bottom_line_states_no_claim_the_findings_do_not() -> None:
+    """A precis, never a sixth rule."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    line = ledger["bottom_line"]
+    assert line
+    known = {str(ledger["enriched_cases"]), str(ledger["strength_totals"]["adjudicated_admitted"])}
+    for f in ledger["findings"]:
+        known.update(re.findall(r"\d+", f["title"]))
+        known.update(str(v) for v in (f.get("basis") or {}).values() if isinstance(v, int))
+    for number in re.findall(r"\d+", line):
+        assert number in known, f"the bottom line introduces {number}, which no finding states"
+
+
+def test_bottom_line_is_silent_below_the_floor() -> None:
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(2), now=NOW)
+    assert ledger["findings"] == []
+    assert ledger["bottom_line"] is None
+    assert ledger["findings_caveat"] is None
+
+
+def test_a_technique_is_never_a_bare_itm_id_once_the_catalog_has_joined() -> None:
+    """Operator rule: spell the technique out, and make the code a link.
+
+    The core cannot do this itself — it has no catalog by contract — so it
+    writes TECHNIQUE_SLOT and attach_catalog_titles fills it at the one seam
+    that does.
+    """
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_two_year_rows(), now=NOW)
+    tech = [f for f in ledger["findings"] if (f.get("evidence") or {}).get("kind") == "technique"]
+    assert tech, "fixture no longer fires a technique finding — this guard is asleep"
+    titles = {str(f["evidence"]["label"]).upper(): "Exfiltration over personal email" for f in tech}
+    attach_catalog_titles(ledger, titles)
+    for finding in tech:
+        for text in _finding_strings(finding):
+            assert not _ITM_ID.search(text), f"{finding['id']} prints a bare ITM id: {text!r}"
+            assert "Exfiltration over personal email" in text or "{technique}" not in text
+
+
+def test_no_surface_ever_ships_an_unfilled_technique_slot() -> None:
+    """Joined, catalog-miss and CLI paths must each degrade to real words."""
+    from shared.utils.evidence import (
+        TECHNIQUE_SLOT,
+        attach_catalog_titles,
+        build_evidence_ledger,
+        fill_technique_slot,
+    )
+
+    # Catalog MISS: no title for the id. Must fall back to the id, never to a
+    # hole and never to the raw slot.
+    miss = build_evidence_ledger(_two_year_rows(), now=NOW)
+    attach_catalog_titles(miss, {})
+    # CLI path: fills with the bare id directly, which is correct for a text
+    # report with nowhere to link.
+    cli = build_evidence_ledger(_two_year_rows(), now=NOW)
+    for finding in cli["findings"]:
+        ref = finding.get("evidence") or {}
+        if ref.get("kind") == "technique":
+            fill_technique_slot(finding, str(ref["label"]))
+    for ledger in (miss, cli):
+        for finding in ledger["findings"]:
+            for text in _finding_strings(finding):
+                assert TECHNIQUE_SLOT not in text, f"{finding['id']} leaks the raw slot"
+
+
+def test_cli_report_never_prints_the_technique_slot() -> None:
+    """The CLI has no catalog, so it fills the slot with the bare id itself.
+
+    Loaded the way the CLI loads its own core — as a bare file — because that
+    load is the file's hardest constraint.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "evidence_ledger.py"
+    spec = importlib.util.spec_from_file_location("evidence_ledger_slot", script)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    ledger = cli.build_evidence_ledger(_two_year_rows(), top=25)
+    for finding in ledger["findings"]:
+        ref = finding.get("evidence") or {}
+        if ref.get("kind") == "technique":
+            cli.fill_technique_slot(finding, str(ref["label"]))
+            if finding is ledger["findings"][0] and ledger.get("bottom_line"):
+                ledger["bottom_line"] = ledger["bottom_line"].replace(
+                    "{technique}", str(ref["label"])
+                )
+    text = cli.render_markdown(ledger)
+    assert "{technique}" not in text
+    assert "**Bottom line.**" in text
+    assert "#### F1 — " in text
+    # The shared caveat prints once for the section, not once per finding.
+    assert text.count("read out of filings by a model") == 1

@@ -1286,6 +1286,62 @@ a.tlv-case-title:focus-visible {
   max-width: 72ch;
   margin: 0;
 }
+/* A technique named inside a sentence. Same control as the trend matrix and
+   the technique table — spelled out, ITM code trailing, click opens the
+   dossier — but flowing with the text rather than owning its own line, so a
+   finding never has to print a bare "MT003.002". */
+.evp-finding .evp-tech-name {
+  display: inline-flex;
+  vertical-align: baseline;
+  gap: 0.3rem;
+}
+.evp-finding-title .evp-tech-title {
+  font-weight: 700;
+}
+/* The memo furniture: one bottom line above the groups, one shared caveat
+   below them. Everything a reader needs if they read nothing else, and the
+   warnings that used to repeat on every card. */
+.evp-bottom-line {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  max-width: 74ch;
+  margin: 0 0 0.9rem;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--accent);
+}
+.evp-findings-caveat {
+  font-size: 0.66rem;
+  line-height: 1.4;
+  color: var(--muted);
+  max-width: 78ch;
+  margin: 0.7rem 0 0;
+}
+/* F1, F2, … — the single strongest signal that this is a report and not a
+   feed. Mono, so it reads as a reference and not as body text. */
+.evp-finding-num {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  align-self: center;
+}
+/* A supporting finding states its claim and stops. Five cards at identical
+   weight read as generated filler however good each one is. */
+.evp-finding-sup {
+  border-left-width: 1px;
+  padding: 0.55rem 0.8rem;
+}
+.evp-finding-sup .evp-finding-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.evp-finding-sup .evp-stat-sm .evp-finding-stat-num {
+  font-size: 1.3rem;
+}
+.evp-finding-sup .evp-finding-stat {
+  margin: 0.1rem 0 0.35rem;
+}
 .evp-more-link {
   display: inline-block;
   margin-top: 0.4rem;

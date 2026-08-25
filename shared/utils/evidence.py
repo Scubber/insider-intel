@@ -849,6 +849,8 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
     # every caller (API, CLI report, boot snapshot) gets the same cards.
     ledger["findings"] = derive_findings(ledger)
     ledger["finding_groups"] = group_findings(ledger["findings"])
+    ledger["bottom_line"] = derive_bottom_line(ledger, ledger["findings"])
+    ledger["findings_caveat"] = FINDINGS_CAVEAT if ledger["findings"] else None
     return ledger
 
 
@@ -905,37 +907,60 @@ FINDINGS_PER_GROUP = 3
 # Voice: short sentences, one idea each, concrete subject and verb. Read every
 # line aloud before changing it — if it would sound wrong spoken to a general
 # counsel, it is wrong here too.
+#
+# Three rules learned the hard way, after a review found the section reading
+# like generated filler rather than a findings memo:
+#
+#   1. A recommendation must name its own finding's subject — the role, the
+#      record class, the technique. A line that could sit under any card is
+#      not advice, it is padding, and the reader learns to skip the block.
+#   2. No rhetorical scaffolding. No "the question is not X, it is Y", no
+#      "that gap is the finding". State the finding; do not announce that you
+#      are stating one.
+#   3. Caveats that apply to every card live in FINDINGS_CAVEAT and render
+#      once. Repeating them per card trains the reader to skip exactly the
+#      warnings that matter.
 _ROLE_ADVICE = [
-    "Set escalation triggers by behavior, not seniority — and set them before there is a case.",
-    "Give senior-level concerns a path around the usual chain: the audit committee,"
-    " or outside counsel.",
-    "Watch the public record. Stock-sale filings, and gaps between public statements"
-    " and internal reports, are free signal.",
+    "Apply the same escalation triggers to {label} that everyone else gets, and set"
+    " them before there is a case.",
+    "Give concerns about this group a reporting path that does not run through it —"
+    " the audit committee, or outside counsel.",
 ]
 _OUTSIDE_ADVICE = [
-    "Name who can obtain each of these today — counsel, compliance, or the"
-    " investigator — before a case needs one.",
-    "Write the request path into the investigation playbook: who asks, under"
-    " what authority, and how long it takes.",
-    "Rehearse that path once a year, the way a backup restore gets tested.",
+    "Name who can obtain {label} today — counsel, compliance, or the investigator —"
+    " and how long it takes them.",
+    "Rehearse that request once a year, the way a backup restore gets tested.",
 ]
 _ARTIFACT_ADVICE = [
-    "Fund retention and legal-hold readiness for this record like the case-winning asset it is.",
-    "For each major record type, ask your team two questions: can we produce it on"
-    " demand, and how far back?",
-    "Treat detection tools as detection. Catching something and proving it are different"
-    " capabilities, and courts need the second.",
+    "Ask your team two questions about {label}: can we produce it on demand, and how far back.",
+    "Fund retention and legal hold for it at the level the case record says it carries.",
 ]
 _OVER_INDEX_ADVICE = [
-    "Monitor these accounts with the same rigor as the rest — same logging, same alerts,"
-    " same reviews.",
-    "Put audit rights and evidence-preservation duties into contracts before you need them.",
-    "Run joint offboarding: when someone rolls off, their access ends that day, verified.",
+    "Log and review {label} accounts on the same terms as everyone else — the gap"
+    " usually starts as a convenience exception.",
+    "Write audit rights and evidence-preservation duties into the contract that"
+    " creates the relationship, not the incident response that ends it.",
 ]
 _TREND_ADVICE = [
-    "Check whether your controls cover this technique before it shows up in your own environment.",
-    "Ask what changed to make this technique easier — usually a tool, a workflow, or a policy gap.",
+    "Check whether your controls cover {label} before it appears in your own environment.",
 ]
+
+# Caveats true of EVERY finding on this page. Rendered once, under the section,
+# rather than repeated on each card. A card's own ``method`` carries only what
+# is specific to that card.
+FINDINGS_CAVEAT = (
+    "How to read these. Roles, records and techniques are read out of filings by a"
+    " model, not hand-audited, so treat sizes as directional. Court records are a"
+    " filtered sample: they show insiders who were caught and litigated, which is"
+    " exactly the population internal controls missed. Counts by year reflect how"
+    " deep we have swept that year's courts as much as what happened in it."
+)
+
+# Slot the rules write instead of an ITM id. The aggregation core has no
+# catalog by contract, so a rule cannot spell a technique out itself;
+# attach_catalog_titles fills this at the one seam that does have the catalog,
+# and the client swaps it for a button into that technique's dossier.
+TECHNIQUE_SLOT = "{technique}"
 
 
 def _pct(part: int, whole: int) -> int | None:
@@ -970,6 +995,16 @@ def _finding(
     }
 
 
+def _advice(templates: list[str], label: str) -> list[str]:
+    """Fill each recommendation with its own finding's subject.
+
+    Every template names ``{label}``. That is the point: advice that could sit
+    under any card is padding, and a reader who spots one generic line stops
+    reading the rest.
+    """
+    return [line.format(label=label) for line in templates]
+
+
 def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
     """Which kind of person shows up most, when the record names one."""
     roles = ledger.get("roles") or {}
@@ -997,21 +1032,21 @@ def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
         return _finding(
             "role-skew",
             group="who",
-            title=f"{label.capitalize()} is the group these cases name most",
+            # The headline carries its own subject and its own magnitude, so it
+            # still reads true with the group header deleted.
+            title=f"{label.capitalize()} is named in {share}% of these cases",
             stat=f"{share}%",
             stat_label="of all cases name this group",
             takeaway=(
-                f"{top['cases']} of {cases} cases name {label} — well clear of the next "
-                f"group, {runner_up['label']} at {runner_up['cases']}. "
+                f"{top['cases']} of {cases} cases name {label}; the next group, "
+                f"{runner_up['label']}, appears in {runner_up['cases']}. "
                 f"{top.get('adjudicated_admitted', 0)} of those are proven in court."
-                + (f" A role is named at all in {known} of them." if known < cases else "")
             ),
-            recommendations=_ROLE_ADVICE,
+            recommendations=_advice(_ROLE_ADVICE, label),
             method=(
-                "Roles are read out of filings by a model, not hand-audited, so treat the "
-                "size as directional. Court data is also a filtered sample — it shows "
-                "insiders who were caught and litigated, which is exactly the population "
-                "internal controls missed."
+                "Counted against every case with methods, which is the base the bars"
+                " below use."
+                + (f" A role is named at all in {known} of them." if known < cases else "")
             ),
             basis={"n": cases, "of": cases, "floor": floor, "role_known": known},
             evidence={"kind": f"role_{axis}", "label": label},
@@ -1034,21 +1069,20 @@ def _finding_dominant_artifact(ledger: dict, floor: int) -> dict | None:
     return _finding(
         "dominant-artifact",
         group="evidence",
-        title=f"{artifact.capitalize()} is what proven cases are built on",
+        title=f"{share}% of proven cases are built on {artifact}",
         stat=f"{share}%",
         stat_label="of proven cases leave this record behind",
         takeaway=(
             f"{top.get('adjudicated_admitted_cases', 0)} of {proven} proven cases turned on "
-            f"{artifact}. The next record class, {runner_up['artifact']}, appears in "
-            f"{next_share}%. The question is not whether you have another detection feed. "
-            "It is whether you could produce this record, intact, if the case went to court "
-            "next month."
+            f"{artifact}. The next record class, {runner_up['artifact']}, carries "
+            f"{next_share}% — catching something and being able to prove it are"
+            " different capabilities, and this is the record that does the second."
         ),
-        recommendations=_ARTIFACT_ADVICE,
+        recommendations=_advice(_ARTIFACT_ADVICE, artifact),
         method=(
-            "Share of proven cases whose recorded evidence trail touches this record class. "
-            "Touching means the record figured in the case evidence, not that it triggered "
-            "the original detection."
+            "Counts proven cases whose evidence trail touches this record class."
+            " Touching means the record figured in the case evidence, not that it"
+            " triggered the original detection."
         ),
         basis={"n": proven, "of": int(ledger.get("enriched_cases") or 0), "floor": floor},
         evidence={"kind": "artifact", "label": artifact},
@@ -1085,20 +1119,22 @@ def _finding_over_index(ledger: dict, floor: int) -> dict | None:
     return _finding(
         "proven-over-index",
         group="who",
-        title=f"{label.capitalize()} cases are few — but they get proven",
+        title=(
+            f"{label.capitalize()} accounts for {overall}% of cases but "
+            f"{among_proven}% of the proven ones"
+        ),
         stat=f"{among_proven}%",
         stat_label="of proven cases involve this group",
         takeaway=(
-            f"{label.capitalize()} accounts for {overall}% of cases overall but "
-            f"{among_proven}% of the proven ones — {strong} of {proven}. That gap is the "
-            "finding: this group's cases survive to a verdict at more than twice their "
-            "share of the corpus."
+            f"{strong} of the {proven} proven cases involve {label}, against "
+            f"{row['cases']} of {cases} overall. Something about these cases survives to"
+            " a ruling that the others do not."
         ),
-        recommendations=_OVER_INDEX_ADVICE,
+        recommendations=_advice(_OVER_INDEX_ADVICE, label),
         method=(
-            "Employment state is read out of case descriptions by a model. The overall "
-            "share counts every case with methods; the proven share counts only cases a "
-            "court ruled on or the insider admitted."
+            "Two different denominators. The overall share counts every case with"
+            " methods; the proven share counts only cases a court ruled on or the"
+            " insider admitted."
         ),
         basis={"n": proven, "of": cases, "floor": floor, "role_known": known},
         evidence={"kind": "role_employment_state", "label": label},
@@ -1111,6 +1147,10 @@ def _finding_rising_technique(ledger: dict, floor: int) -> dict | None:
     Deliberately one-sided. A falling count in a query-driven corpus usually
     describes how deep we swept that year, not what insiders stopped doing, so
     there is no falling-technique card.
+
+    The technique goes into the prose as TECHNIQUE_SLOT rather than as its ITM
+    id: this module has no catalog, and a bare "MT003.002" in a headline is
+    both unreadable and unclickable. attach_catalog_titles fills the slot.
     """
     by_year = ledger.get("by_year") or {}
     current = str(ledger.get("generated_at") or "")[:4]
@@ -1130,20 +1170,18 @@ def _finding_rising_technique(ledger: dict, floor: int) -> dict | None:
     return _finding(
         "rising-technique",
         group="change",
-        title="One technique climbed faster than the rest",
+        title=f"Cases citing {TECHNIQUE_SLOT} rose from {then_count} to {now_count} in {later}",
         stat=f"+{best_delta}",
         stat_label=f"more cases in {later} than {earlier}",
         takeaway=(
-            f"Cases citing {best_tech} went from {then_count} in {earlier} to {now_count} in "
-            f"{later}. Both years are complete and clear the reporting floor, so the "
-            "direction is real for this corpus."
+            f"{TECHNIQUE_SLOT} appears in {now_count} cases filed in {later}, against "
+            f"{then_count} in {earlier}. Both years are complete and clear the reporting"
+            " floor, so the direction holds for this corpus."
         ),
-        recommendations=_TREND_ADVICE,
+        recommendations=_advice(_TREND_ADVICE, TECHNIQUE_SLOT),
         method=(
-            "Counted by the year the document was filed or published, not the year the "
-            "incident happened. How many cases a year holds also reflects how deep we have "
-            "swept that year's courts, so read a rise as a change in the record, not a "
-            "measurement of insider behavior at large."
+            "Counted by the year the document was filed or published, not the year the"
+            " incident happened."
         ),
         basis={
             "n": by_year[later]["cases"],
@@ -1183,31 +1221,30 @@ def _finding_outside_telemetry(ledger: dict, floor: int) -> dict | None:
     if hits < floor:
         return None
     share = _pct(hits, proven)
+    artifact = str(lead["artifact"])
     others = ", ".join(str(r["artifact"]) for r in rows[1:3])
     return _finding(
         "outside-telemetry",
         group="evidence",
-        title="Some cases are proven by records no sensor of yours produces",
+        title=f"{share}% of proven cases turn on records your company never holds",
         stat=f"{share}%",
         stat_label="of proven cases turn on a record you cannot log",
         takeaway=(
-            f"{hits} of {proven} proven cases rest on {lead['artifact']} — held by "
-            f"{OUTSIDE_TELEMETRY_HOLDERS[lead['artifact']]}, not by your company."
+            f"{hits} of {proven} proven cases rest on {artifact}, held by "
+            f"{OUTSIDE_TELEMETRY_HOLDERS[artifact]}."
             + (f" So do cases resting on {others}." if others else "")
-            + " No amount of logging produces these records. Counsel, a regulator, or"
-            " the person's own consent does."
+            + " No amount of logging produces these; counsel, a regulator, or the"
+            " person's own consent does."
         ),
-        recommendations=_OUTSIDE_ADVICE,
+        recommendations=_advice(_OUTSIDE_ADVICE, artifact),
         method=(
-            "Counts distinct proven cases whose evidence trail touches this record "
-            "class. A case can touch several, so these counts overlap and must not be "
-            "added together. Which classes sit outside company telemetry is a short "
-            "authored list. Securities cases are over-represented in this corpus "
-            "because the court queries search for them by name, so read this as where "
-            "proof came from in these cases, not how often it happens."
+            "A case can touch several of these classes, so the counts overlap and must"
+            " not be added together. Which classes sit outside company telemetry is a"
+            " short authored list. Securities cases are over-represented here because"
+            " the court queries search for them by name."
         ),
         basis={"n": proven, "of": int(ledger.get("enriched_cases") or 0), "floor": floor},
-        evidence={"kind": "artifact", "label": str(lead["artifact"])},
+        evidence={"kind": "artifact", "label": artifact},
     )
 
 
@@ -1245,9 +1282,39 @@ def attach_catalog_titles(ledger: dict, titles: dict[str, str]) -> dict:
     }
     for finding in ledger.get("findings") or []:
         ref = finding.get("evidence") or {}
-        if ref.get("kind") == "technique" and ref.get("label"):
-            ref["title"] = titles.get(str(ref["label"]).upper(), ref["label"])
+        if ref.get("kind") != "technique" or not ref.get("label"):
+            continue
+        tech = str(ref["label"])
+        # Degrade to the id on a catalog miss. An unspelled technique is worse
+        # than the id; an EMPTY slot is worse than both.
+        ref["title"] = titles.get(tech.upper(), tech)
+        fill_technique_slot(finding, ref["title"])
+    # The bottom line quotes the FIRST finding's title verbatim, so when that
+    # finding is a technique one the slot rides along and has to be filled from
+    # the same seam, with that finding's name and no other's.
+    first = (ledger.get("findings") or [None])[0]
+    if ledger.get("bottom_line") and first and (first.get("evidence") or {}).get("title"):
+        ledger["bottom_line"] = ledger["bottom_line"].replace(
+            TECHNIQUE_SLOT, str(first["evidence"]["title"])
+        )
     return ledger
+
+
+def fill_technique_slot(finding: dict, name: str) -> dict:
+    """Substitute TECHNIQUE_SLOT throughout one finding's prose.
+
+    Every consumer that can spell a technique out calls this: the API service
+    and the boot-snapshot exporter through attach_catalog_titles, and the CLI
+    report directly with the bare id (it has no catalog, and a text report has
+    nowhere to link anyway). Nothing may ship a raw slot to a reader.
+    """
+    for key in ("title", "takeaway", "method"):
+        if isinstance(finding.get(key), str):
+            finding[key] = finding[key].replace(TECHNIQUE_SLOT, name)
+    finding["recommendations"] = [
+        line.replace(TECHNIQUE_SLOT, name) for line in finding.get("recommendations") or []
+    ]
+    return finding
 
 
 def derive_findings(
@@ -1278,7 +1345,42 @@ def derive_findings(
     findings = [f for gid, _, _ in FINDING_GROUPS for f in by_group.get(gid, [])]
     for rank, finding in enumerate(findings, start=1):
         finding["rank"] = rank
+        # The first finding of each group leads; the rest support. The page
+        # renders a lead card at full weight and a supporting one compact, so
+        # five findings stop reading as five identical blocks.
+        finding["weight"] = "lead" if finding is by_group[finding["group"]][0] else "supporting"
     return findings
+
+
+def derive_bottom_line(
+    ledger: dict, findings: list[dict], *, floor: int = SMALL_N_FLOOR
+) -> str | None:
+    """The one paragraph a reader gets if they read nothing else.
+
+    A precis, never a sixth rule: every number here is already on the ledger
+    totals or in a finding below it, and it introduces no claim the findings do
+    not make. Returns None below the floor — a thin jurisdiction gets no
+    manufactured summary.
+    """
+    cases = int(ledger.get("enriched_cases") or 0)
+    if cases < floor or not findings:
+        return None
+    totals = ledger.get("strength_totals") or {}
+    proven = int(totals.get("adjudicated_admitted") or 0)
+
+    def _lower(title: str) -> str:
+        # Titles open with a capital or a number; only a capitalised word may be
+        # folded, or "50%" becomes "50%" and "US" becomes "uS".
+        return title[0].lower() + title[1:] if title[:1].isalpha() else title
+
+    sentences = [
+        f"{cases} cases in this slice describe how an insider acted; {proven} of them"
+        " are proven — a court ruled, or the person admitted it.",
+        f"The clearest pattern: {_lower(findings[0]['title'])}.",
+    ]
+    if len(findings) > 1:
+        sentences.append(f"Also: {_lower(findings[1]['title'])}.")
+    return " ".join(sentences)
 
 
 def group_findings(findings: list[dict]) -> list[dict]:
