@@ -982,6 +982,14 @@ a.tlv-case-title:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+/* Grid items default to min-width:auto, so a wide table refuses to shrink below
+   its content and pushes the whole page sideways instead of letting its own
+   .evp-scroll take over. Caught at 390 when the technique table grew an ALLEGED
+   column. */
+.evp-cols > *,
+.evp-who-grid > * {
+  min-width: 0;
+}
 .evp-scroll {
   overflow-x: auto;
 }
@@ -1055,6 +1063,62 @@ a.tlv-case-title:focus-visible {
 .evp-adjn {
   color: var(--accent);
 }
+/* Color law, per row: --accent proven, --signal observed/alleged. */
+.evp-algn {
+  color: var(--signal);
+}
+/* Sortable header. The app's first click-to-sort table; the caret dims until
+   the column is the active sort. */
+.evp-sort {
+  font: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.evp-sort:hover,
+.evp-sort:focus-visible {
+  color: var(--accent);
+}
+.evp-sort-car {
+  opacity: 0.3;
+}
+.evp-sort.on {
+  color: var(--accent);
+}
+.evp-sort.on .evp-sort-car {
+  opacity: 1;
+}
+/* Expand chevron — the same glyph and rotation as the findings groups, so the
+   page teaches one disclosure gesture. Kept distinct from the technique name,
+   which navigates away to the dossier. */
+.evp-expand {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  line-height: 1;
+}
+/* Trend matrix cell: the count sits IN the cell, so the sequential --signal
+   shading is a second encoding, never the only one. */
+.evp-cell {
+  transition: background 0.15s ease;
+}
+.evp-tech-detail td {
+  border-top: 0;
+  padding-bottom: 0.7rem;
+}
 .evp-row {
   margin-bottom: 0.55rem;
 }
@@ -1109,6 +1173,41 @@ a.tlv-case-title:focus-visible {
   border-top: 1px solid var(--line);
   padding-top: 0.7rem;
   margin-bottom: 0.9rem;
+}
+/* Findings group: one collapsible section per question the findings answer.
+   Reuses the matrix .matrix-col disclosure (marker suppressed, rotating
+   --accent chevron) so the page teaches ONE expand gesture, not two. */
+.evp-finding-group {
+  margin-bottom: 0.5rem;
+}
+.evp-group-summary {
+  /* 44px tap target — the summary is the only control on the row. */
+  min-height: 44px;
+  text-transform: none;
+  letter-spacing: 0;
+  flex-wrap: wrap;
+}
+.evp-group-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+/* A COLLAPSED header still teaches: the group's leading stat rides along. */
+.evp-group-lead {
+  flex: 1 1 auto;
+  text-align: right;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.evp-group-body {
+  padding: 0 0.6rem 0.5rem;
+}
+.evp-group-body > .evp-note {
+  margin: 0 0 0.6rem;
 }
 .evp-finding {
   border: 1px solid var(--line);
@@ -1172,6 +1271,13 @@ a.tlv-case-title:focus-visible {
 }
 .evp-finding-actions li {
   margin-bottom: 0.2rem;
+}
+.evp-finding-basis {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.3rem;
 }
 .evp-finding-method {
   font-size: 0.66rem;

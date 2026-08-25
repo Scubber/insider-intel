@@ -36,3 +36,14 @@ export {
   type EvidenceLegendProps,
 } from "./EvidenceBar";
 export { PatternCard, type PatternCardProps } from "./PatternCard";
+export { FindingGroup, type FindingGroupProps } from "./FindingGroup";
+export { TrendMatrix, type TrendMatrixProps, type TrendRow } from "./TrendMatrix";
+export {
+  SortHeader,
+  type SortHeaderProps,
+  type SortDirection,
+  ExpandToggle,
+  type ExpandToggleProps,
+  ExpandableRow,
+  type ExpandableRowProps,
+} from "./TableControls";

@@ -475,3 +475,465 @@ def test_crosswalk_ids_exist_in_catalog() -> None:
     mapped = {dt for dts in EVIDENCE_DT_CROSSWALK.values() for dt in dts}
     missing = mapped - catalog_ids
     assert not missing, f"crosswalk references unknown detections: {sorted(missing)}"
+
+
+# ---------------------------------------------------------------------------
+# Derived findings (the EVIDENCE headline cards)
+#
+# These replaced web/findings.json, whose numbers froze on the day they were
+# authored. The contract these pin: never state a claim the corpus is too thin
+# to support, never conflate proven with alleged, and never depend on anything
+# the API layer strips before serving.
+# ---------------------------------------------------------------------------
+
+_BANNED_TELLS = (
+    "delve",
+    "leverage",
+    "robust",
+    "comprehensive",
+    "seamless",
+    "holistic",
+    "landscape",
+    "utilize",
+    "it's important to note",
+    "in today's world",
+)
+
+
+def _synthetic_rows(count: int = 60, *, year: str = "2024") -> list[dict]:
+    """A corpus rich enough to fire the behaviour rules.
+
+    Deliberately varied: several roles across BOTH role axes, an explicit
+    (non-defaulted) employment state, and an outside-telemetry record class
+    alongside company-held ones. A single-role, single-artifact fixture cannot
+    exercise any rule that compares one group against another.
+    """
+    roles = [
+        ("chief financial officer", "corporate email"),
+        ("chief executive officer", "corporate email"),
+        ("chief executive officer", "brokerage trade records"),
+        ("software engineer", "file access logs"),
+        ("former employee engineer", "removable media"),
+        ("third-party vendor consultant", "brokerage trade records"),
+    ]
+    rows = []
+    for n in range(count):
+        proven = n % 4 == 0
+        role, artifact = roles[n % len(roles)]
+        rows.append(
+            {
+                "link": f"https://ex.com/s{n}",
+                "title": f"Synthetic case {n}",
+                "published": f"{year}-05-06T00:00:00+00:00",
+                "source_id": "courtlistener-test",
+                "forensics": {
+                    "is_insider_case": True,
+                    "model": "test-model",
+                    "legal_posture": "judgment" if proven else "complaint",
+                    "actor_role": role,
+                    "candidate_technique_ids": ["IF016"],
+                    "methods": [
+                        {
+                            "action": "wired funds to a personal account",
+                            "claim_status": "adjudicated" if proven else "alleged",
+                            "observables": [
+                                {
+                                    "description": "payment record",
+                                    "artifact": artifact,
+                                    "channel": "email",
+                                    "basis": "mechanically_implied",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        )
+    return rows
+
+
+def test_findings_empty_below_small_n_floor(tmp_path, monkeypatch) -> None:
+    """The headline assertion: too little data states nothing at all.
+
+    The two-case fixture is well under the floor, so an empty list — not a
+    hedged card built on n=2 — is the correct answer.
+    """
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["enriched_cases"] == 2
+        assert data["findings"] == []
+
+
+def test_findings_emit_above_floor() -> None:
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    findings = {f["id"]: f for f in ledger["findings"]}
+    assert "role-skew" in findings, "a varied corpus must state who these cases name"
+    gap = findings["role-skew"]
+    # Ranks are stamped in order and every card carries its own basis.
+    assert [f["rank"] for f in ledger["findings"]] == list(range(1, len(ledger["findings"]) + 1))
+    assert gap["basis"]["floor"] == 10
+    assert gap["basis"]["n"] == ledger["enriched_cases"]
+    assert gap["recommendations"] and gap["method"]
+
+
+def test_findings_never_conflate_proven_and_alleged() -> None:
+    """Any card quoting a proven share computes it from adjudicated_admitted
+    alone — never from a total that folds allegations in."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    proven = ledger["strength_totals"]["adjudicated_admitted"]
+    for fid in ("proven-over-index", "outside-telemetry"):
+        card = next((f for f in ledger["findings"] if f["id"] == fid), None)
+        if card is None:
+            continue
+        assert card["basis"]["n"] == proven, f"{fid} must rest on the proven count"
+        assert str(proven) in card["takeaway"]
+
+
+def test_findings_are_deterministic() -> None:
+    """Same rows in, byte-identical cards out — no randomness, no clock."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows(200)
+    assert (
+        build_evidence_ledger(rows, now=NOW)["findings"]
+        == (build_evidence_ledger(rows, now=NOW)["findings"])
+    )
+
+
+def test_findings_voice_bar() -> None:
+    """The automatable half of the house voice rule (CLAUDE.md)."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"], "need cards to check the prose of"
+    for finding in ledger["findings"]:
+        blob = " ".join(
+            [finding["title"], finding["takeaway"], finding["method"], *finding["recommendations"]]
+        )
+        for tell in _BANNED_TELLS:
+            assert tell not in blob.lower(), f"{finding['id']} uses a banned tell: {tell}"
+        # Numbers get verbs, and every card explains how it was counted.
+        assert finding["method"].strip()
+        assert finding["stat_label"].strip()
+        assert finding["recommendations"], f"{finding['id']} gives the reader nothing to do"
+
+
+def test_findings_survive_the_service_layer_pops() -> None:
+    """apps.search.service.evidence_ledger strips the per-technique maps.
+
+    A rule built on those would work in the CLI report and vanish from the API.
+    This pins that the served payload still carries intact cards.
+    """
+    from shared.utils.evidence import build_evidence_ledger, derive_findings
+
+    popped = (
+        "technique_families",
+        "technique_counts",
+        "technique_hunts",
+        "technique_terms",
+        "technique_behaviors",
+    )
+    core = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert core["findings"]
+    for finding in core["findings"]:
+        assert set(finding) >= {"id", "rank", "stat", "takeaway", "method", "basis"}
+
+    # Re-derive against a ledger with those maps already stripped: identical
+    # cards prove no rule reads one.
+    stripped = {k: v for k, v in core.items() if k not in popped}
+    assert derive_findings(stripped) == core["findings"]
+
+
+def test_by_year_uses_a_stable_technique_set() -> None:
+    """A zero must mean zero, not "ranked sixth that year".
+
+    Per-year top-N truncation used to drop a technique out of a year purely on
+    rank, which a trend surface reads as a decline that never happened.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows(30, year="2023") + _synthetic_rows(30, year="2024")
+    # A second technique present only in 2024.
+    extra = _synthetic_rows(12, year="2024")
+    for row in extra:
+        row["link"] += "-x"
+        row["forensics"]["candidate_technique_ids"] = ["IF002"]
+    ledger = build_evidence_ledger(rows + extra, now=NOW)
+    trend = ledger["trend_techniques"]
+    assert "IF002" in trend and "IF016" in trend
+    # Every year reports every tracked technique, explicitly zero when absent.
+    for year, bucket in ledger["by_year"].items():
+        assert set(bucket["techniques"]) == set(trend), f"{year} lost a tracked technique"
+    assert ledger["by_year"]["2023"]["techniques"]["IF002"] == 0
+    assert ledger["by_year"]["2024"]["techniques"]["IF002"] == 12
+    assert ledger["by_year"]["2023"]["cases"] == 30
+
+
+def test_by_year_excludes_undated_rows() -> None:
+    """Rows with no usable date are reported as a count, never drawn as a year."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows(20)
+    for row in rows[:5]:
+        row["published"] = ""
+    ledger = build_evidence_ledger(rows, now=NOW)
+    assert "????" not in ledger["by_year"]
+    assert ledger["by_year_undated_cases"] == 5
+
+
+def test_rising_technique_skips_the_partial_current_year() -> None:
+    """Comparing into a half-finished year manufactures a decline."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    current = str(NOW.year)
+    rows = _synthetic_rows(30, year=str(NOW.year - 1)) + _synthetic_rows(12, year=current)
+    for row in rows[-12:]:
+        row["link"] += "-cur"
+    ledger = build_evidence_ledger(rows, now=NOW)
+    rising = [f for f in ledger["findings"] if f["id"] == "rising-technique"]
+    for finding in rising:
+        assert current not in finding["stat_label"], "compared into the partial year"
+
+
+def test_evidence_core_loads_standalone_with_findings() -> None:
+    """scripts/evidence_ledger.py loads this module as a bare FILE, not a package.
+
+    The bare Actions runner has no pydantic, so a relative import or a
+    shared.* import anywhere in evidence.py breaks the ledger workflow. This
+    fails the moment someone adds one.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    core_path = Path(__file__).resolve().parent.parent / "shared" / "utils" / "evidence.py"
+    spec = importlib.util.spec_from_file_location("evidence_core_standalone", core_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module.derive_findings)
+    ledger = module.build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"]
+
+
+def test_by_year_titles_joined_on_the_endpoint(tmp_path, monkeypatch) -> None:
+    """The core stays catalog-free, so the service joins human titles on."""
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["by_year"], "the fixture rows carry a published date"
+        bucket = next(iter(data["by_year"].values()))
+        assert isinstance(bucket["techniques"], list)
+        entry = next(t for t in bucket["techniques"] if t["id"] == "IF002")
+        assert entry["title"] and entry["title"] != "IF002"
+        assert entry["cases"] == 2
+        assert "findings" in data
+
+
+def test_cli_report_renders_findings_and_the_trend_table() -> None:
+    """scripts/evidence_ledger.py renders the same ledger the API serves.
+
+    The by_year reshape broke this renderer once; it consumes the raw core
+    payload (no catalog join), so it has to keep working on that shape.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "evidence_ledger.py"
+    spec = importlib.util.spec_from_file_location("evidence_ledger_cli", script)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    ledger = cli.build_evidence_ledger(_synthetic_rows(200), top=25)
+    report = cli.render_markdown(ledger)
+    assert "## Findings" in report
+    assert "WHO DID IT" in report, "the CLI groups findings the way the page does"
+    # The appendix reads the stable-set shape without blowing up.
+    assert "| Year | Cases | Tracked techniques |" in report
+
+
+# ---------------------------------------------------------------------------
+# Finding groups — the collapsible section's contract
+# ---------------------------------------------------------------------------
+
+
+def test_every_rule_names_a_real_group() -> None:
+    """A rule pointing at a group id that does not exist would silently vanish
+    from the grouped view while still appearing in the flat list."""
+    from shared.utils.evidence import FINDING_GROUPS, build_evidence_ledger
+
+    known = {gid for gid, _, _ in FINDING_GROUPS}
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"], "need findings to check the grouping of"
+    for finding in ledger["findings"]:
+        assert finding["group"] in known, f"{finding['id']} names unknown group"
+
+
+def test_group_one_states_a_finding_not_a_caveat() -> None:
+    """Group one is the group the page opens on load, so it must carry a claim
+    about the cases. Two cards were cut in 2026-08 for describing the corpus
+    instead — "most cases are still allegations" and "confident language is not
+    a finding of fact". Both were already said by the stat strip, the legend and
+    LIMITATIONS; a card restating page furniture is filler.
+    """
+    from shared.utils.evidence import FINDING_GROUPS
+
+    assert FINDING_GROUPS[0][0] == "who"
+
+
+def test_groups_render_in_taxonomy_order_and_carry_a_collapsed_lead() -> None:
+    from shared.utils.evidence import FINDING_GROUPS, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    groups = ledger["finding_groups"]
+    assert groups, "a corpus above the floor must produce at least one group"
+    order = [gid for gid, _, _ in FINDING_GROUPS]
+    assert [g["id"] for g in groups] == [g for g in order if g in {x["id"] for x in groups}]
+    for group in groups:
+        assert group["label"] and group["blurb"]
+        members = [f for f in ledger["findings"] if f["group"] == group["id"]]
+        assert group["count"] == len(members)
+        # A collapsed header still teaches: it carries its leading stat.
+        assert group["lead"].startswith(members[0]["stat"])
+
+
+def test_empty_groups_are_omitted_not_rendered_hollow() -> None:
+    """An empty collapsed header advertises content that does not exist."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    rendered = {g["id"] for g in ledger["finding_groups"]}
+    represented = {f["group"] for f in ledger["findings"]}
+    assert rendered == represented
+    assert all(g["count"] > 0 for g in ledger["finding_groups"])
+
+
+def test_per_group_cap_replaces_the_global_limit() -> None:
+    """The old global cap of 4 existed to keep the section short. Collapsed
+    groups cost no space, so the cap is per group and a rule that fired is no
+    longer silently dropped because three unrelated rules fired first."""
+    import shared.utils.evidence as ev
+
+    assert not hasattr(ev, "FINDINGS_LIMIT"), "global cap should be gone"
+    assert ev.FINDINGS_PER_GROUP == 3
+    ledger = ev.build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    for group in ledger["finding_groups"]:
+        assert group["count"] <= ev.FINDINGS_PER_GROUP
+
+
+def test_groups_carry_no_embedded_findings() -> None:
+    """One source of truth on the wire.
+
+    Groups used to embed their findings, which shipped every finding twice —
+    44% of the payload, measured — and, once serialized, left the flat list and
+    the grouped view as two independent copies that nothing keeps in step.
+    Consumers join on finding["group"] instead.
+    """
+    import json
+
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    groups = ledger["finding_groups"]
+    assert groups
+    for group in groups:
+        assert set(group) == {"id", "label", "blurb", "count", "lead"}
+    # The join every consumer performs must reproduce each group's count.
+    for group in groups:
+        joined = [f for f in ledger["findings"] if f["group"] == group["id"]]
+        assert len(joined) == group["count"]
+    # And no finding text is serialized twice.
+    blob = json.dumps(groups)
+    assert ledger["findings"][0]["takeaway"] not in blob
+
+
+def test_findings_grouped_on_the_endpoint(tmp_path, monkeypatch) -> None:
+    """Both views ship, and the thin fixture states nothing in either."""
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["findings"] == []
+        assert data["finding_groups"] == []
+
+
+# ---------------------------------------------------------------------------
+# Rules state findings, not caveats
+# ---------------------------------------------------------------------------
+
+
+def test_no_rule_reports_the_defaulted_employment_state() -> None:
+    """normalize_role fills employment_state with "current" whenever a function
+    matched and no boundary language appeared. A card headlining that bucket
+    would be reporting the fill value, not a measurement — and both role rules
+    read that axis.
+    """
+    from shared.utils.evidence import DEFAULTED_EMPLOYMENT_STATE, build_evidence_ledger
+
+    # Every row here carries a role but NO boundary language, so the whole
+    # corpus lands in the defaulted bucket.
+    rows = _synthetic_rows(200)
+    for row in rows:
+        row["forensics"]["actor_role"] = "chief executive officer"
+    ledger = build_evidence_ledger(rows, now=NOW)
+    state_rows = {r["label"] for r in ledger["roles"]["employment_state"]}
+    assert DEFAULTED_EMPLOYMENT_STATE in state_rows, "fixture should hit the default"
+    for finding in ledger["findings"]:
+        label = (finding.get("evidence") or {}).get("label")
+        kind = (finding.get("evidence") or {}).get("kind")
+        assert not (kind == "role_employment_state" and label == DEFAULTED_EMPLOYMENT_STATE)
+
+
+def test_outside_telemetry_names_a_record_no_sensor_produces() -> None:
+    from shared.utils.evidence import OUTSIDE_TELEMETRY_HOLDERS, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    card = next((f for f in ledger["findings"] if f["id"] == "outside-telemetry"), None)
+    assert card is not None, "the fixture carries brokerage records; the rule should fire"
+    family = card["evidence"]["label"]
+    assert family in OUTSIDE_TELEMETRY_HOLDERS
+    # Names the actual holder rather than reciting every possibility.
+    assert OUTSIDE_TELEMETRY_HOLDERS[family] in card["takeaway"]
+    # The collection-bias caveat is load-bearing: these lanes are seeded by name.
+    assert "over-represented" in card["method"]
+
+
+def test_outside_telemetry_list_is_authored_not_inferred() -> None:
+    """An earlier draft inferred this set from the DT crosswalk and swept in
+    account-opening records (a bank generates those daily) and public-vs-internal
+    statements (whose internal half is company-held). Both must stay out."""
+    from shared.utils.evidence import OUTSIDE_TELEMETRY_FAMILIES
+
+    assert "entity-formation / account-opening records" not in OUTSIDE_TELEMETRY_FAMILIES
+    assert "public statements vs internal records" not in OUTSIDE_TELEMETRY_FAMILIES
+    # And every member must be a real artifact family, not a typo.
+    from shared.utils.evidence import _ARTIFACT_FAMILIES
+
+    known = {label for _, label in _ARTIFACT_FAMILIES}
+    assert OUTSIDE_TELEMETRY_FAMILIES <= known
+
+
+def test_no_rule_describes_the_corpus_instead_of_the_cases() -> None:
+    """The drift guard for the whole rule set.
+
+    Two cards were cut in 2026-08 for describing our data rather than the
+    cases — the page's stat strip, legend and LIMITATIONS already carried both.
+    A new rule whose headline is about counting, confidence, or how to read the
+    page is the same mistake.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    meta_tells = (
+        "still allegations",
+        "not verdicts",
+        "finding of fact",
+        "this page",
+        "these numbers",
+        "the corpus",
+        "read this",
+    )
+    ledger = build_evidence_ledger(_synthetic_rows(200), now=NOW)
+    assert ledger["findings"]
+    for finding in ledger["findings"]:
+        headline = f"{finding['title']} {finding['stat_label']}".lower()
+        for tell in meta_tells:
+            assert tell not in headline, f"{finding['id']} headlines a caveat: {tell}"

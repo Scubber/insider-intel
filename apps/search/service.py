@@ -230,9 +230,7 @@ def _catalog_detections() -> dict[str, list[dict]]:
     }
 
 
-def evidence_ledger(
-    path: str | Path | None = None, *, top: int = 25, country: str = "all"
-) -> dict:
+def evidence_ledger(path: str | Path | None = None, *, top: int = 25, country: str = "all") -> dict:
     """Corpus-wide evidence ledger from the loaded index (no LLM, no I/O).
 
     Same aggregation core as the evidence-ledger workflow, then joined against
@@ -241,7 +239,7 @@ def evidence_ledger(
     detections across observed techniques corroborated"). Recomputed from the
     in-memory index so it stays current with every /reload.
     """
-    from shared.utils.evidence import corroborate_detections
+    from shared.utils.evidence import attach_catalog_titles, corroborate_detections
 
     ledger = _raw_evidence_ledger(path, top=top, country=country)
     families = ledger.pop("technique_families", {})
@@ -262,10 +260,13 @@ def evidence_ledger(
             if det["corroborated"]:
                 corroborated_ids.add(det["id"])
     for tech in ledger["techniques"]:
-        tech["title"] = titles.get(str(tech["id"]).upper(), str(tech["id"]))
         tech["detections"] = corroborate_detections(
             by_tech.get(tech["id"], []), families.get(tech["id"], {})
         )
+    # One seam for every catalog join (technique titles, the trend surface, and
+    # any technique-keyed finding), shared with the boot-snapshot exporter so
+    # the offline first paint and the live payload have the same shape.
+    attach_catalog_titles(ledger, titles)
     ledger["corroboration"] = {
         "detections_in_scope": len(all_ids),
         "corroborated": len(corroborated_ids),

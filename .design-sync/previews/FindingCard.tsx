@@ -17,13 +17,19 @@ export const Flagship = () => (
   </div>
 );
 
-export const Compact = () => (
+export const Derived = () => (
   <div style={{ maxWidth: "560px" }}>
     <FindingCard
-      title="Most of what you'll read about insider threats is unproven"
-      stat="13%"
-      statLabel="of insider cases with a described method are court-proven — 112 of 853"
-      takeaway="Nearly nine in ten insider stories are a claim someone made in a lawsuit, not an established fact. Before a scary statistic moves your budget, ask which pile it came from."
+      title="Some cases are proven by records no sensor of yours produces"
+      stat="28%"
+      statLabel="of proven cases turn on a record you cannot log"
+      takeaway="29 of 105 proven cases rest on brokerage / trade records — held by the person's broker, not by your company. No amount of logging produces these records. Counsel, a regulator, or the person's own consent does."
+      recommendations={[
+        "Name who can obtain each of these today — counsel, compliance, or the investigator.",
+        "Write the request path into the investigation playbook: who asks, under what authority, how long it takes.",
+      ]}
+      basis="BASED ON 105 CASES"
+      method="Counts distinct proven cases whose evidence trail touches this record class. Securities cases are over-represented because the court queries search for them by name."
     />
   </div>
 );

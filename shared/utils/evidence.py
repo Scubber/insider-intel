@@ -134,6 +134,7 @@ def filter_rows_by_country(rows, country: str):
             out.append(row)
     return out
 
+
 # Freeform artifact strings from the enricher vary ("EDR removable-media
 # events" vs "endpoint EDR removable media logs"). Normalize into coarse
 # artifact families for counting; unmatched strings fall through verbatim
@@ -179,6 +180,23 @@ _ARTIFACT_FAMILIES: list[tuple[str, str]] = [
 ]
 _ARTIFACT_RX = [(re.compile(p, re.I), label) for p, label in _ARTIFACT_FAMILIES]
 
+# Record classes no COMPANY SENSOR produces. Authored deliberately, not derived:
+# an earlier draft inferred this from the DT crosswalk and wrongly swept in
+# account-opening records (a bank generates those daily) and "public statements
+# vs internal records" (whose internal half is company-held by construction).
+# These four are held by a broker, a carrier, a personal account, or a public
+# registry — an employer reaches them through counsel, a regulator or consent,
+# never by turning on logging.
+# family -> who actually holds it, so a card can name the holder instead of
+# reciting the whole list.
+OUTSIDE_TELEMETRY_HOLDERS: dict[str, str] = {
+    "SEC Form 4 / insider-transaction filings": "a public filing registry",
+    "brokerage / trade records": "the person's broker",
+    "personal messaging / phone records": "a phone carrier or a personal device",
+    "personal cloud storage contents": "a personal cloud account",
+}
+OUTSIDE_TELEMETRY_FAMILIES = frozenset(OUTSIDE_TELEMETRY_HOLDERS)
+
 
 def artifact_family(artifact: str) -> str:
     text = (artifact or "").strip()
@@ -204,6 +222,17 @@ THEMES = ("motive", "means", "preparation", "infringement", "anti-forensics")
 # (renderers show counts only). One misleading "75% of temps" (n=4) costs the
 # report its credibility.
 SMALL_N_FLOOR = 10
+
+# normalize_role fills employment_state with "current" whenever a function
+# matched and no boundary language appeared, so that bucket is a DEFAULT and
+# not a measurement. No finding may headline it — "most insiders were current
+# employees" would be reporting the fill value.
+DEFAULTED_EMPLOYMENT_STATE = "current"
+
+# How many techniques the year-over-year trend surface tracks. Fixed across
+# every year so an absent technique reads as zero, not as "fell out of the
+# top five" (see by_year).
+TREND_TECHNIQUES = 8
 
 # Caps on stored per-technique hunt material (deduped by normalized text).
 HUNTS_PER_TECHNIQUE = 12
@@ -481,6 +510,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
     tech_behaviors: dict[str, list[dict]] = defaultdict(list)  # technique -> observed actions
     behavior_seen: dict[str, set] = defaultdict(set)
     year_tech: dict[str, Counter] = defaultdict(Counter)
+    year_cases: Counter = Counter()
     strength_totals: Counter = Counter()
     country_mix: Counter = Counter()  # jurisdiction of contributing cases
 
@@ -521,6 +551,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
             posture_capped += 1
         strength_totals[strength] += 1
         year = str(row.get("published") or "")[:4] or "????"
+        year_cases[year] += 1
 
         # Quote grounding: tally the deterministic evidence_quote_verbatim
         # stamps (shared.schemas.forensics.stamp_quote_verbatim) so the page
@@ -653,6 +684,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
 
     strong_total = strength_totals["adjudicated/admitted"]
     ranked_techs = sorted(tech_cases.items(), key=lambda kv: -sum(kv[1].values()))
+    trend_set = [t for t, _ in ranked_techs[:TREND_TECHNIQUES]]
     ranked_artifacts = sorted(artifact_cases.items(), key=lambda kv: -len(kv[1]))
 
     theme_rollup: dict[str, dict] = {
@@ -686,7 +718,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
         return rows
 
     quoted_methods = quotes_verbatim + quotes_paraphrased + quotes_unstamped
-    return {
+    ledger = {
         "total_rows": total_rows,
         "enriched_cases": enriched_cases,
         "small_n_floor": SMALL_N_FLOOR,
@@ -794,5 +826,487 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
             for fam, links in ranked_artifacts[:top]
         ],
         "channels": {ch: len(channel_cases[ch]) for ch in CHANNELS},
-        "by_year": {y: dict(c.most_common(5)) for y, c in sorted(year_tech.items())},
+        # Trend surface. A STABLE technique set across every year (the
+        # corpus-wide top TREND_TECHNIQUES), not each year's own top-N: with a
+        # per-year cut, a technique disappears from a year because it ranked
+        # sixth, and the chart reads that absence as a decline. With a fixed
+        # set, a zero is a real zero. `cases` is the per-year contributing-case
+        # count so a renderer can suppress years under the small-n floor, and
+        # the "????" bucket (rows with no usable date) is reported separately
+        # rather than drawn as a year.
+        "by_year": {
+            y: {
+                "cases": year_cases[y],
+                "techniques": {t: year_tech[y].get(t, 0) for t in trend_set},
+            }
+            for y in sorted(year_tech)
+            if y != "????"
+        },
+        "by_year_undated_cases": year_cases.get("????", 0),
+        "trend_techniques": list(trend_set),
     }
+    # Derived last: the rules read the finished aggregates, so every slice and
+    # every caller (API, CLI report, boot snapshot) gets the same cards.
+    ledger["findings"] = derive_findings(ledger)
+    ledger["finding_groups"] = group_findings(ledger["findings"])
+    return ledger
+
+
+# ---------------------------------------------------------------------------
+# Derived findings
+#
+# The EVIDENCE page's headline cards. These used to live in web/findings.json —
+# hand-authored numbers that froze on the day they were written while the
+# corpus kept moving underneath them, which the "no frozen numbers, ever"
+# invariant exists to prevent. Now every number is read off the finished ledger
+# at request time, so the cards move with the corpus and re-derive per
+# jurisdiction slice for free.
+#
+# What stays authored is the PROSE: titles, takeaway framing, the program
+# advice, and the method caveats. That is judgment, not data — it does not go
+# stale when a percentage shifts — so it lives here as templates, in the same
+# class as the ITM catalog and tooling_map.json. Only numbers and subject slots
+# come from the ledger.
+#
+# Two rules for anyone adding a rule here:
+#   1. Return None rather than a weak claim. Nothing may publish a percentage
+#      the small-n floor already declined to publish.
+#   2. Read only fields that SURVIVE apps.search.service.evidence_ledger, which
+#      pops technique_families / technique_counts / technique_hunts /
+#      technique_terms / technique_behaviors. A rule built on those works in the
+#      CLI report and silently vanishes from the API.
+# ---------------------------------------------------------------------------
+
+# Findings are GROUPED by the question each answers, and the page collapses
+# each group. Order is the editorial decision: group one is the one open on
+# load, so it holds a claim about the cases themselves.
+#
+# A finding states something about INSIDER BEHAVIOR OR DEFENCE. It never
+# describes this corpus, this pipeline, or how to read the page — the stat
+# strip, the legend and LIMITATIONS already carry all of that, and a card
+# restating them is filler wearing a headline (two such cards were cut in
+# 2026-08: "most cases are still allegations" and "confident language is not a
+# finding of fact"). If a candidate rule's payload is a caveat, it belongs in
+# LIMITATIONS.
+#
+# Each entry: (id, label, sub-line). A rule names its group by id; a group whose
+# rules all declined is omitted entirely rather than rendered as an empty
+# header advertising content that does not exist.
+FINDING_GROUPS = (
+    ("who", "WHO DID IT", "Which kind of person these cases name"),
+    ("evidence", "WHAT PROVES A CASE", "Which records carry proven cases"),
+    ("change", "WHAT'S CHANGING", "Which tactics move year to year"),
+)
+
+# Per-group cap, not a global one. Collapsed groups cost no vertical space, so
+# the section stays short without silently dropping a rule that fired.
+FINDINGS_PER_GROUP = 3
+
+# Voice: short sentences, one idea each, concrete subject and verb. Read every
+# line aloud before changing it — if it would sound wrong spoken to a general
+# counsel, it is wrong here too.
+_ROLE_ADVICE = [
+    "Set escalation triggers by behavior, not seniority — and set them before there is a case.",
+    "Give senior-level concerns a path around the usual chain: the audit committee,"
+    " or outside counsel.",
+    "Watch the public record. Stock-sale filings, and gaps between public statements"
+    " and internal reports, are free signal.",
+]
+_OUTSIDE_ADVICE = [
+    "Name who can obtain each of these today — counsel, compliance, or the"
+    " investigator — before a case needs one.",
+    "Write the request path into the investigation playbook: who asks, under"
+    " what authority, and how long it takes.",
+    "Rehearse that path once a year, the way a backup restore gets tested.",
+]
+_ARTIFACT_ADVICE = [
+    "Fund retention and legal-hold readiness for this record like the case-winning asset it is.",
+    "For each major record type, ask your team two questions: can we produce it on"
+    " demand, and how far back?",
+    "Treat detection tools as detection. Catching something and proving it are different"
+    " capabilities, and courts need the second.",
+]
+_OVER_INDEX_ADVICE = [
+    "Monitor these accounts with the same rigor as the rest — same logging, same alerts,"
+    " same reviews.",
+    "Put audit rights and evidence-preservation duties into contracts before you need them.",
+    "Run joint offboarding: when someone rolls off, their access ends that day, verified.",
+]
+_TREND_ADVICE = [
+    "Check whether your controls cover this technique before it shows up in your own environment.",
+    "Ask what changed to make this technique easier — usually a tool, a workflow, or a policy gap.",
+]
+
+
+def _pct(part: int, whole: int) -> int | None:
+    """Whole-number percent, or None when the denominator is empty."""
+    return round(100 * part / whole) if whole else None
+
+
+def _finding(
+    fid: str,
+    *,
+    group: str,
+    title: str,
+    stat: str,
+    stat_label: str,
+    takeaway: str,
+    recommendations: list[str],
+    method: str,
+    basis: dict,
+    evidence: dict | None = None,
+) -> dict:
+    return {
+        "id": fid,
+        "group": group,
+        "title": title,
+        "stat": stat,
+        "stat_label": stat_label,
+        "takeaway": takeaway,
+        "recommendations": list(recommendations),
+        "method": method,
+        "basis": basis,
+        "evidence": evidence or {},
+    }
+
+
+def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
+    """Which kind of person shows up most, when the record names one."""
+    roles = ledger.get("roles") or {}
+    known = int(roles.get("known") or 0)
+    # NB: _axis computes share_pct against enriched_cases, not role_known, so
+    # every percentage this rule quotes has to use the same base or the card
+    # will state a denominator the bars beside it do not use.
+    cases = int(ledger.get("enriched_cases") or 0)
+    for axis in ("function", "employment_state"):
+        rows = [
+            r
+            for r in (roles.get(axis) or [])
+            if r.get("label") != "unknown"
+            # "current" on the employment axis is normalize_role's default fill,
+            # not a signal — headlining it would report the fill.
+            and not (axis == "employment_state" and r.get("label") == DEFAULTED_EMPLOYMENT_STATE)
+        ]
+        if len(rows) < 2 or known < floor or cases < floor:
+            continue
+        top, runner_up = rows[0], rows[1]
+        share = top.get("share_pct")
+        if share is None or top["cases"] < 1.5 * runner_up["cases"]:
+            continue
+        label = str(top["label"])
+        return _finding(
+            "role-skew",
+            group="who",
+            title=f"{label.capitalize()} is the group these cases name most",
+            stat=f"{share}%",
+            stat_label="of all cases name this group",
+            takeaway=(
+                f"{top['cases']} of {cases} cases name {label} — well clear of the next "
+                f"group, {runner_up['label']} at {runner_up['cases']}. "
+                f"{top.get('adjudicated_admitted', 0)} of those are proven in court."
+                + (f" A role is named at all in {known} of them." if known < cases else "")
+            ),
+            recommendations=_ROLE_ADVICE,
+            method=(
+                "Roles are read out of filings by a model, not hand-audited, so treat the "
+                "size as directional. Court data is also a filtered sample — it shows "
+                "insiders who were caught and litigated, which is exactly the population "
+                "internal controls missed."
+            ),
+            basis={"n": cases, "of": cases, "floor": floor, "role_known": known},
+            evidence={"kind": f"role_{axis}", "label": label},
+        )
+    return None
+
+
+def _finding_dominant_artifact(ledger: dict, floor: int) -> dict | None:
+    """Which record actually carries proven cases."""
+    proven = int((ledger.get("strength_totals") or {}).get("adjudicated_admitted") or 0)
+    rows = [r for r in (ledger.get("detected_by") or []) if (r.get("cases") or 0) >= floor]
+    if proven < floor or len(rows) < 2:
+        return None
+    top, runner_up = rows[0], rows[1]
+    share = top.get("adjudicated_share")
+    next_share = runner_up.get("adjudicated_share")
+    if share is None or next_share is None or share < next_share * 1.25:
+        return None
+    artifact = str(top["artifact"])
+    return _finding(
+        "dominant-artifact",
+        group="evidence",
+        title=f"{artifact.capitalize()} is what proven cases are built on",
+        stat=f"{share}%",
+        stat_label="of proven cases leave this record behind",
+        takeaway=(
+            f"{top.get('adjudicated_admitted_cases', 0)} of {proven} proven cases turned on "
+            f"{artifact}. The next record class, {runner_up['artifact']}, appears in "
+            f"{next_share}%. The question is not whether you have another detection feed. "
+            "It is whether you could produce this record, intact, if the case went to court "
+            "next month."
+        ),
+        recommendations=_ARTIFACT_ADVICE,
+        method=(
+            "Share of proven cases whose recorded evidence trail touches this record class. "
+            "Touching means the record figured in the case evidence, not that it triggered "
+            "the original detection."
+        ),
+        basis={"n": proven, "of": int(ledger.get("enriched_cases") or 0), "floor": floor},
+        evidence={"kind": "artifact", "label": artifact},
+    )
+
+
+def _finding_over_index(ledger: dict, floor: int) -> dict | None:
+    """A group that is small overall but large among proven cases."""
+    totals = ledger.get("strength_totals") or {}
+    proven = int(totals.get("adjudicated_admitted") or 0)
+    known = int((ledger.get("roles") or {}).get("known") or 0)
+    cases = int(ledger.get("enriched_cases") or 0)
+    if proven < floor or known < floor or cases < floor:
+        return None
+    best = None
+    for row in (ledger.get("roles") or {}).get("employment_state") or []:
+        if row.get("label") in ("unknown", DEFAULTED_EMPLOYMENT_STATE):
+            continue  # "current" is a default fill (see normalize_role)
+        if (row.get("cases") or 0) < 1:
+            continue
+        strong = int(row.get("adjudicated_admitted") or 0)
+        overall = _pct(int(row["cases"]), cases)
+        among_proven = _pct(strong, proven)
+        if overall is None or among_proven is None or overall == 0:
+            continue
+        if among_proven < 2 * overall:
+            continue
+        if best is None or among_proven > best[1]:
+            best = (row, among_proven, overall, strong)
+    if best is None:
+        return None
+    row, among_proven, overall, strong = best
+    label = str(row["label"])
+    return _finding(
+        "proven-over-index",
+        group="who",
+        title=f"{label.capitalize()} cases are few — but they get proven",
+        stat=f"{among_proven}%",
+        stat_label="of proven cases involve this group",
+        takeaway=(
+            f"{label.capitalize()} accounts for {overall}% of cases overall but "
+            f"{among_proven}% of the proven ones — {strong} of {proven}. That gap is the "
+            "finding: this group's cases survive to a verdict at more than twice their "
+            "share of the corpus."
+        ),
+        recommendations=_OVER_INDEX_ADVICE,
+        method=(
+            "Employment state is read out of case descriptions by a model. The overall "
+            "share counts every case with methods; the proven share counts only cases a "
+            "court ruled on or the insider admitted."
+        ),
+        basis={"n": proven, "of": cases, "floor": floor, "role_known": known},
+        evidence={"kind": "role_employment_state", "label": label},
+    )
+
+
+def _finding_rising_technique(ledger: dict, floor: int) -> dict | None:
+    """The largest year-over-year rise between two complete, well-populated years.
+
+    Deliberately one-sided. A falling count in a query-driven corpus usually
+    describes how deep we swept that year, not what insiders stopped doing, so
+    there is no falling-technique card.
+    """
+    by_year = ledger.get("by_year") or {}
+    current = str(ledger.get("generated_at") or "")[:4]
+    years = [y for y in sorted(by_year) if y != current and (by_year[y].get("cases") or 0) >= floor]
+    if len(years) < 2:
+        return None
+    later, earlier = years[-1], years[-2]
+    best_tech, best_delta = None, 0
+    for tech, count in (by_year[later].get("techniques") or {}).items():
+        delta = int(count) - int((by_year[earlier].get("techniques") or {}).get(tech, 0))
+        if count >= floor and delta > best_delta:
+            best_tech, best_delta = tech, delta
+    if best_tech is None:
+        return None
+    now_count = by_year[later]["techniques"][best_tech]
+    then_count = now_count - best_delta
+    return _finding(
+        "rising-technique",
+        group="change",
+        title="One technique climbed faster than the rest",
+        stat=f"+{best_delta}",
+        stat_label=f"more cases in {later} than {earlier}",
+        takeaway=(
+            f"Cases citing {best_tech} went from {then_count} in {earlier} to {now_count} in "
+            f"{later}. Both years are complete and clear the reporting floor, so the "
+            "direction is real for this corpus."
+        ),
+        recommendations=_TREND_ADVICE,
+        method=(
+            "Counted by the year the document was filed or published, not the year the "
+            "incident happened. How many cases a year holds also reflects how deep we have "
+            "swept that year's courts, so read a rise as a change in the record, not a "
+            "measurement of insider behavior at large."
+        ),
+        basis={
+            "n": by_year[later]["cases"],
+            "of": int(ledger.get("enriched_cases") or 0),
+            "floor": floor,
+        },
+        evidence={"kind": "technique", "label": best_tech},
+    )
+
+
+def _finding_outside_telemetry(ledger: dict, floor: int) -> dict | None:
+    """Proven cases resting on records no company sensor produces.
+
+    The crosswalk has said this in a comment since it was written — external
+    record classes map to almost no ITM detection because "courts often convict
+    on records org telemetry never sees" — and the page has never stated it.
+    It moves evidence readiness off the SOC and onto counsel and compliance,
+    which is a different team than every other card here addresses.
+    """
+    proven = int((ledger.get("strength_totals") or {}).get("adjudicated_admitted") or 0)
+    if proven < floor:
+        return None
+    rows = [
+        r
+        for r in (ledger.get("detected_by") or [])
+        if r.get("artifact") in OUTSIDE_TELEMETRY_FAMILIES
+        and int(r.get("adjudicated_admitted_cases") or 0) > 0
+    ]
+    if not rows:
+        return None
+    # Rank by each row's OWN proven count. Never sum the shares: their
+    # denominator is the corpus-wide proven total and a case can touch several
+    # classes, so they overlap and add past 100.
+    rows.sort(key=lambda r: (-int(r["adjudicated_admitted_cases"]), str(r["artifact"])))
+    lead = rows[0]
+    hits = int(lead["adjudicated_admitted_cases"])
+    if hits < floor:
+        return None
+    share = _pct(hits, proven)
+    others = ", ".join(str(r["artifact"]) for r in rows[1:3])
+    return _finding(
+        "outside-telemetry",
+        group="evidence",
+        title="Some cases are proven by records no sensor of yours produces",
+        stat=f"{share}%",
+        stat_label="of proven cases turn on a record you cannot log",
+        takeaway=(
+            f"{hits} of {proven} proven cases rest on {lead['artifact']} — held by "
+            f"{OUTSIDE_TELEMETRY_HOLDERS[lead['artifact']]}, not by your company."
+            + (f" So do cases resting on {others}." if others else "")
+            + " No amount of logging produces these records. Counsel, a regulator, or"
+            " the person's own consent does."
+        ),
+        recommendations=_OUTSIDE_ADVICE,
+        method=(
+            "Counts distinct proven cases whose evidence trail touches this record "
+            "class. A case can touch several, so these counts overlap and must not be "
+            "added together. Which classes sit outside company telemetry is a short "
+            "authored list. Securities cases are over-represented in this corpus "
+            "because the court queries search for them by name, so read this as where "
+            "proof came from in these cases, not how often it happens."
+        ),
+        basis={"n": proven, "of": int(ledger.get("enriched_cases") or 0), "floor": floor},
+        evidence={"kind": "artifact", "label": str(lead["artifact"])},
+    )
+
+
+# Fixed priority. Order is the editorial decision: the honesty card first, then
+# who, then what the record shows, then the caveats.
+_FINDING_RULES = (
+    _finding_role_skew,
+    _finding_over_index,
+    _finding_dominant_artifact,
+    _finding_outside_telemetry,
+    _finding_rising_technique,
+)
+
+
+def attach_catalog_titles(ledger: dict, titles: dict[str, str]) -> dict:
+    """Spell out ITM ids for a human reader. Mutates and returns the ledger.
+
+    The aggregation core is catalog-free by contract — the bare Actions runner
+    has no ITM index — so every caller that HAS the catalog joins the titles on
+    at this one seam: the API service and the boot-snapshot exporter both call
+    it, which is what keeps the live payload and the offline first paint the
+    same shape. ``titles`` maps upper-cased technique id to display title.
+    """
+    for tech in ledger.get("techniques") or []:
+        tech["title"] = titles.get(str(tech["id"]).upper(), str(tech["id"]))
+    ledger["by_year"] = {
+        year: {
+            "cases": bucket["cases"],
+            "techniques": [
+                {"id": tech, "title": titles.get(tech.upper(), tech), "cases": count}
+                for tech, count in bucket["techniques"].items()
+            ],
+        }
+        for year, bucket in (ledger.get("by_year") or {}).items()
+    }
+    for finding in ledger.get("findings") or []:
+        ref = finding.get("evidence") or {}
+        if ref.get("kind") == "technique" and ref.get("label"):
+            ref["title"] = titles.get(str(ref["label"]).upper(), ref["label"])
+    return ledger
+
+
+def derive_findings(
+    ledger: dict, *, floor: int = SMALL_N_FLOOR, per_group: int = FINDINGS_PER_GROUP
+) -> list[dict]:
+    """Headline findings read off a finished ledger. Pure, deterministic, no I/O.
+
+    Takes the assembled ledger dict so it works identically on a per-country
+    slice, in the CLI report, and in the boot snapshot. Emits nothing at all
+    when the corpus is too thin to support a claim — an empty list is the
+    correct answer for a small jurisdiction, not a failure.
+
+    Findings come back FLAT, in group order then rule order, each carrying its
+    ``group`` and a global ``rank``. Grouping for display is
+    ``group_findings``; a flat list keeps the CLI report, the API payload and
+    any future ordering working off one sequence.
+    """
+    if int(ledger.get("enriched_cases") or 0) < floor:
+        return []
+    by_group: dict[str, list[dict]] = {}
+    for rule in _FINDING_RULES:
+        found = rule(ledger, floor)
+        if found is None:
+            continue
+        bucket = by_group.setdefault(found["group"], [])
+        if len(bucket) < per_group:
+            bucket.append(found)
+    findings = [f for gid, _, _ in FINDING_GROUPS for f in by_group.get(gid, [])]
+    for rank, finding in enumerate(findings, start=1):
+        finding["rank"] = rank
+    return findings
+
+
+def group_findings(findings: list[dict]) -> list[dict]:
+    """Group HEADERS in FINDING_GROUPS order, for a collapsible section.
+
+    Metadata only — a group deliberately does NOT carry its findings. The flat
+    list is the single source of truth and a consumer joins on
+    ``finding["group"]``; embedding them here shipped every finding twice (44%
+    of the payload measured) and, once serialized, left two independent copies
+    that nothing keeps in step.
+
+    Groups with nothing to say are omitted — an empty collapsed header
+    advertises content that does not exist. Each group carries ``lead``, the
+    stat of its first finding, so a COLLAPSED header still teaches something
+    instead of reading as a bare label.
+    """
+    out = []
+    for gid, label, blurb in FINDING_GROUPS:
+        members = [f for f in findings if f.get("group") == gid]
+        if not members:
+            continue
+        out.append(
+            {
+                "id": gid,
+                "label": label,
+                "blurb": blurb,
+                "count": len(members),
+                "lead": f"{members[0]['stat']} {members[0]['stat_label']}",
+            }
+        )
+    return out

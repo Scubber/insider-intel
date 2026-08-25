@@ -4582,6 +4582,294 @@
     }
   }
 
+  // Technique cell: the spelled-out name reads first and opens the dossier; the
+  // ITM code trails small and dim, and is omitted when it would just repeat the
+  // name (a catalog miss).
+  function evpTechniqueButton(id, title) {
+    const btn = evpEl("button", "evp-tech-name");
+    btn.type = "button";
+    btn.appendChild(evpEl("span", "evp-tech-title", title || id));
+    if (title && title !== id) btn.appendChild(evpEl("span", "evp-tech-code", id));
+    btn.addEventListener("click", () => {
+      selectTechnique(id).catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+    return btn;
+  }
+
+  const EVP_THEME_ORDER = [
+    "motive",
+    "means",
+    "preparation",
+    "infringement",
+    "anti-forensics",
+    "other",
+  ];
+
+  // Technique-table controls. Lives outside the DOM because renderEvidencePage
+  // rebuilds the table on every load; resets on a jurisdiction switch.
+  const evidenceTechState = { sort: "cases", dir: "desc", open: new Set() };
+
+  // Pure: techniques + theme rollups + a sort -> the rows to draw. Grouping by
+  // theme is the page's spine, so a sort reorders WITHIN each theme, never
+  // across it. Node-unit-tested; keep it free of DOM.
+  function buildEvidenceTechRows(techniques, themes, sort, dir) {
+    const key = {
+      cases: (t) => t.cases || 0,
+      proven: (t) => t.adjudicated_admitted || 0,
+      alleged: (t) => t.alleged || 0,
+    }[sort] || ((t) => t.cases || 0);
+    const sign = dir === "asc" ? -1 : 1;
+    const rollups = new Map((themes || []).map((t) => [t.theme, t]));
+    const byTheme = new Map();
+    (techniques || []).forEach((t) => {
+      const theme = t.theme || "other";
+      if (!byTheme.has(theme)) byTheme.set(theme, []);
+      byTheme.get(theme).push(t);
+    });
+    const rows = [];
+    EVP_THEME_ORDER.forEach((theme) => {
+      const techs = byTheme.get(theme);
+      if (!techs || !techs.length) return;
+      rows.push({ kind: "theme", theme, rollup: rollups.get(theme) || null });
+      techs
+        .slice()
+        // Count desc with an id tiebreak — the house comparator idiom.
+        .sort((a, b) => sign * (key(b) - key(a)) || String(a.id).localeCompare(String(b.id)))
+        .forEach((t) => rows.push({ kind: "tech", tech: t }));
+    });
+    return rows;
+  }
+
+  function renderTechniqueTable(data) {
+    const table = document.getElementById("evp-techniques");
+    if (!table) return;
+    table.innerHTML = "";
+    const st = evidenceTechState;
+
+    const headRow = evpEl("tr");
+    headRow.appendChild(evpEl("th", "", ""));
+    headRow.appendChild(evpEl("th", "", "HOW THEY DID IT"));
+    [
+      ["cases", "CASES", "Every case exhibiting this technique, proven or not"],
+      ["proven", "PROVEN", "A judge ruled it, or the insider admitted it"],
+      ["alleged", "ALLEGED", "One side's account so far — never counted as proven"],
+    ].forEach(([k, label, tip]) => {
+      const th = evpEl("th", "num");
+      th.setAttribute("aria-sort", st.sort === k ? (st.dir === "asc" ? "ascending" : "descending") : "none");
+      const btn = evpEl("button", st.sort === k ? "evp-sort on" : "evp-sort");
+      btn.type = "button";
+      btn.appendChild(evpEl("span", "", label));
+      btn.appendChild(evpEl("span", "evp-sort-car", st.sort === k && st.dir === "asc" ? "▲" : "▼"));
+      btn.dataset.tip = `${tip} — click to sort`;
+      btn.addEventListener("click", () => {
+        if (st.sort === k) st.dir = st.dir === "desc" ? "asc" : "desc";
+        else {
+          st.sort = k;
+          st.dir = "desc";
+        }
+        renderTechniqueTable(data);
+      });
+      th.appendChild(btn);
+      headRow.appendChild(th);
+    });
+    const ctrlTh = evpEl("th", "num", "CONTROLS CATCH IT");
+    ctrlTh.dataset.tip = "ITM controls real cases confirm can catch this, of those the catalog lists";
+    headRow.appendChild(ctrlTh);
+    table.appendChild(headRow);
+
+    buildEvidenceTechRows(data.techniques, data.themes, st.sort, st.dir).forEach((r) => {
+      if (r.kind === "theme") {
+        const tr = evpEl("tr", "evp-theme-row");
+        const label = evpEl("td");
+        label.colSpan = 3;
+        label.appendChild(evpEl("b", "", EVP_THEME_LABELS[r.theme] || r.theme.toUpperCase()));
+        tr.appendChild(label);
+        tr.appendChild(evpEl("td", "num evp-adjn", r.rollup ? String(r.rollup.adjudicated_admitted) : ""));
+        const obs = evpEl("td", "", r.rollup ? `${r.rollup.cases} case-technique obs.` : "");
+        obs.colSpan = 2;
+        tr.appendChild(obs);
+        table.appendChild(tr);
+        return;
+      }
+
+      const t = r.tech;
+      const open = st.open.has(t.id);
+      const row = evpEl("tr");
+
+      // Two distinct affordances on one row: the chevron expands the evidence
+      // trail in place; the NAME navigates away to the full dossier.
+      const chev = evpEl("td");
+      const fams = t.top_families || [];
+      if (fams.length) {
+        const tog = evpEl("button", "evp-expand", open ? "▾" : "▸");
+        tog.type = "button";
+        tog.setAttribute("aria-expanded", open ? "true" : "false");
+        tog.dataset.tip = open ? "Hide where this evidence lives" : "Show where this tactic's evidence lives";
+        tog.addEventListener("click", () => {
+          if (open) st.open.delete(t.id);
+          else st.open.add(t.id);
+          renderTechniqueTable(data);
+        });
+        chev.appendChild(tog);
+      }
+      row.appendChild(chev);
+
+      const cell = evpEl("td");
+      const nameBtn = evpTechniqueButton(t.id, t.title);
+      nameBtn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
+      cell.appendChild(nameBtn);
+      row.appendChild(cell);
+
+      row.appendChild(evpEl("td", "num", String(t.cases)));
+      row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
+      // --signal against the --accent proven column: never conflated, per row.
+      row.appendChild(evpEl("td", "num evp-algn", String(t.alleged != null ? t.alleged : "—")));
+
+      const dets = t.detections || [];
+      const corroborated = dets.filter((d) => d.corroborated).length;
+      const dcell = evpEl("td", "num", dets.length ? `${corroborated} of ${dets.length}` : "—");
+      if (dets.length) {
+        dcell.dataset.tip =
+          "ITM controls that real cases confirm can catch this: " +
+          dets.map((d) => `${d.corroborated ? "✓" : "○"} ${d.title}`).join(" · ");
+      }
+      row.appendChild(dcell);
+      table.appendChild(row);
+
+      if (open && fams.length) {
+        const detail = evpEl("tr", "evp-tech-detail");
+        const pad = evpEl("td");
+        const box = evpEl("td");
+        box.colSpan = 5;
+        box.appendChild(evpEl("p", "evp-axis-head", "WHERE THIS TACTIC'S EVIDENCE LIVES"));
+        const top = fams[0].cases || 1;
+        fams.forEach((f) => {
+          const fr = evpEl("div", "evp-row");
+          const ftop = evpEl("div", "evp-row-top");
+          ftop.appendChild(evpEl("span", "evp-row-label", f.artifact));
+          ftop.appendChild(evpEl("span", "evp-row-count", `×${f.cases}`));
+          fr.appendChild(ftop);
+          fr.appendChild(evpShareBar((100 * f.cases) / top, 0));
+          box.appendChild(fr);
+        });
+        detail.append(pad, box);
+        table.appendChild(detail);
+      }
+    });
+  }
+
+  // WHAT CHANGED — techniques by filing year.
+  //
+  // A matrix of counts, not a line chart. Two reasons: the corpus is
+  // query-driven, so a smooth curve would imply a measurement of insider
+  // behavior over time that these documents cannot support; and a single
+  // sequential hue (--signal, light to dark) carries magnitude with no
+  // categorical palette to get wrong. The count sits IN each cell, so color is
+  // never the only encoding.
+  function renderEvidenceTrend(data) {
+    const box = document.getElementById("evp-trend");
+    const table = document.getElementById("evp-trend-table");
+    const note = document.getElementById("evp-trend-note");
+    if (!box || !table) return;
+    const floor = (data && data.small_n_floor) || 10;
+    const byYear = (data && data.by_year) || {};
+    // Thin years are suppressed rather than drawn as a fake ramp.
+    const years = Object.keys(byYear)
+      .filter((y) => (byYear[y].cases || 0) >= floor)
+      .sort();
+    if (years.length < 2) {
+      box.hidden = true;
+      return;
+    }
+    const shown = years.slice(-7);
+    const current = String((data && data.generated_at) || "").slice(0, 4);
+
+    // Rank the tracked techniques by total across the shown years.
+    const totals = new Map();
+    shown.forEach((y) => {
+      (byYear[y].techniques || []).forEach((t) => {
+        totals.set(t.id, (totals.get(t.id) || 0) + (t.cases || 0));
+      });
+    });
+    const techs = [...totals.entries()]
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+      .map(([id]) => id);
+    if (!techs.length) {
+      box.hidden = true;
+      return;
+    }
+    const titles = new Map();
+    shown.forEach((y) =>
+      (byYear[y].techniques || []).forEach((t) => titles.set(t.id, t.title || t.id)),
+    );
+    const cell = (y, id) => {
+      const hit = (byYear[y].techniques || []).find((t) => t.id === id);
+      return hit ? hit.cases || 0 : 0;
+    };
+    const peak = Math.max(1, ...shown.flatMap((y) => techs.map((id) => cell(y, id))));
+
+    // CHANGE compares the last two COMPLETE years — never into a partial one.
+    const complete = shown.filter((y) => y !== current);
+    const later = complete[complete.length - 1];
+    const earlier = complete[complete.length - 2];
+
+    table.innerHTML = "";
+    const head = evpEl("tr");
+    head.appendChild(evpEl("th", "", "TECHNIQUE"));
+    shown.forEach((y) => {
+      const th = evpEl("th", "num", y === current ? `${y}*` : y);
+      if (y === current) th.dataset.tip = `${y} is still filling — never used for CHANGE`;
+      head.appendChild(th);
+    });
+    const chgTh = evpEl("th", "num", "CHANGE");
+    chgTh.dataset.tip = earlier
+      ? `Cases in ${later} against ${earlier} — the last two complete years`
+      : "Needs two complete years above the reporting floor";
+    head.appendChild(chgTh);
+    table.appendChild(head);
+
+    techs.forEach((id) => {
+      const tr = evpEl("tr");
+      const name = evpEl("td");
+      name.appendChild(evpTechniqueButton(id, titles.get(id)));
+      tr.appendChild(name);
+
+      shown.forEach((y) => {
+        const n = cell(y, id);
+        const td = evpEl("td", n ? "num evp-cell" : "num evp-cell tlt-zero", n ? String(n) : "—");
+        if (n) {
+          // Sequential: one hue, light to dark, floored so a 1 still reads.
+          td.style.background = `color-mix(in srgb, var(--signal) ${Math.round(8 + 34 * (n / peak))}%, transparent)`;
+          td.dataset.tip = `${titles.get(id) || id} · ${n} case(s) filed in ${y}`;
+        }
+        tr.appendChild(td);
+      });
+
+      if (earlier) {
+        const d = cell(later, id) - cell(earlier, id);
+        // Colour law: --accent is reserved for court-proven. A rise in case
+        // VOLUME is observed signal, so it wears --signal, never the accent.
+        const td = evpEl("td", d > 0 ? "num evp-algn" : "num evp-row-count", d > 0 ? `+${d}` : String(d));
+        td.dataset.tip = `${cell(earlier, id)} in ${earlier} → ${cell(later, id)} in ${later}`;
+        tr.appendChild(td);
+      } else {
+        tr.appendChild(evpEl("td", "num tlt-zero", "—"));
+      }
+      table.appendChild(tr);
+    });
+
+    if (note) {
+      const undated = (data && data.by_year_undated_cases) || 0;
+      note.textContent =
+        "Darker means more cases that year. " +
+        (current && shown.includes(current) ? `${current} is still filling, so it is never compared. ` : "") +
+        (undated ? `${undated} case(s) carry no usable date and are left out. ` : "") +
+        "Years below the reporting floor are hidden.";
+    }
+    box.hidden = false;
+  }
+
   function renderEvidencePage(data) {
     const stats = document.getElementById("evp-stats");
     if (!stats) return;
@@ -4641,70 +4929,7 @@
     if (fnBox) evpAxisRows(fnBox, roles.function || [], data.enriched_cases, floor);
     if (stBox) evpAxisRows(stBox, roles.employment_state || [], data.enriched_cases, floor);
 
-    const table = document.getElementById("evp-techniques");
-    if (table) {
-      table.innerHTML = "";
-      const headRow = evpEl("tr");
-      ["HOW THEY DID IT", "CASES", "PROVEN IN COURT", "YOUR CONTROLS CATCH IT"].forEach((h, i) => {
-        const th = evpEl("th", i === 1 || i === 2 ? "num" : "", h);
-        headRow.appendChild(th);
-      });
-      table.appendChild(headRow);
-      const byTheme = new Map();
-      (data.techniques || []).forEach((t) => {
-        const key = t.theme || "other";
-        if (!byTheme.has(key)) byTheme.set(key, []);
-        byTheme.get(key).push(t);
-      });
-      const themeRollups = new Map((data.themes || []).map((t) => [t.theme, t]));
-      const order = ["motive", "means", "preparation", "infringement", "anti-forensics", "other"];
-      order.forEach((theme) => {
-        const techs = byTheme.get(theme);
-        if (!techs || !techs.length) return;
-        const roll = themeRollups.get(theme);
-        const tr = evpEl("tr", "evp-theme-row");
-        const label = evpEl("td");
-        label.colSpan = 2;
-        label.appendChild(evpEl("b", "", EVP_THEME_LABELS[theme] || theme.toUpperCase()));
-        tr.appendChild(label);
-        const adj = evpEl("td", "num evp-adjn", roll ? String(roll.adjudicated_admitted) : "");
-        const cases = evpEl("td", "", roll ? `${roll.cases} case-technique obs.` : "");
-        tr.append(adj, cases);
-        table.appendChild(tr);
-        techs.forEach((t) => {
-          const row = evpEl("tr");
-          const cell = evpEl("td");
-          // Spell out the technique name for a non-analyst reader; the ITM
-          // code rides along small and dim (still opens the dossier).
-          const btn = evpEl("button", "evp-tech-name");
-          btn.type = "button";
-          btn.appendChild(evpEl("span", "evp-tech-title", t.title || t.id));
-          btn.appendChild(evpEl("span", "evp-tech-code", t.id));
-          btn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
-          btn.addEventListener("click", () => {
-            selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
-          });
-          cell.appendChild(btn);
-          row.appendChild(cell);
-          row.appendChild(evpEl("td", "num", String(t.cases)));
-          row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
-          const dets = t.detections || [];
-          const corroborated = dets.filter((d) => d.corroborated).length;
-          const dcell = evpEl(
-            "td",
-            "num",
-            dets.length ? `${corroborated} of ${dets.length}` : "—"
-          );
-          if (dets.length) {
-            dcell.dataset.tip =
-              "ITM controls that real cases confirm can catch this: " +
-              dets.map((d) => `${d.corroborated ? "✓" : "○"} ${d.title}`).join(" · ");
-          }
-          row.appendChild(dcell);
-          table.appendChild(row);
-        });
-      });
-    }
+    renderTechniqueTable(data);
 
     const trail = document.getElementById("evp-trail");
     if (trail) {
@@ -4745,62 +4970,102 @@
     }
   }
 
+  // A finding card. The number carries it: headline, one big stat, one line of
+  // consequence, terse actions, one dim method footnote. `method` stays a
+  // VISIBLE paragraph — data-tip tooltips are CSS-only and never fire on
+  // touch, and a finding's caveat is load-bearing.
+  function evpFindingCard(f) {
+    const card = evpEl("article", "evp-finding");
+
+    const head = evpEl("div", "evp-finding-head");
+    head.appendChild(evpEl("span", "evp-finding-title", f.title));
+    const tag = evpEl("span", "evp-finding-tag", "DERIVED");
+    tag.dataset.tip = "Computed from this jurisdiction's ledger at read time — nothing is stored";
+    head.appendChild(tag);
+    card.appendChild(head);
+
+    if (f.stat) {
+      const stat = evpEl("div", "evp-finding-stat");
+      stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
+      if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
+      card.appendChild(stat);
+    }
+
+    if (f.takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", f.takeaway));
+
+    if ((f.recommendations || []).length) {
+      const ul = evpEl("ul", "evp-finding-actions");
+      f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
+      card.appendChild(ul);
+    }
+
+    const basis = f.basis && f.basis.n ? `BASED ON ${f.basis.n.toLocaleString()} CASES` : "";
+    if (basis) card.appendChild(evpEl("p", "evp-finding-basis", basis));
+    if (f.method) card.appendChild(evpEl("p", "evp-finding-method", f.method));
+    return card;
+  }
+
+  // Findings, grouped by the question each answers and collapsible. The server
+  // owns the taxonomy (FINDING_GROUPS) and ships group headers in
+  // `finding_groups`; groups are metadata only, so each one's cards are joined
+  // from the flat list here. Group one opens; the rest stay shut but still
+  // carry their leading stat, so the collapsed state teaches on its own.
   function renderFindings(data) {
     const box = document.getElementById("evp-findings");
     const list = document.getElementById("evp-findings-list");
     if (!box || !list) return;
     const findings = (data && data.findings) || [];
+    const groups = (data && data.finding_groups) || [];
+    list.innerHTML = "";
     if (!findings.length) {
-      box.hidden = true;
+      // A thin jurisdiction states nothing rather than a weak claim — say so,
+      // or the section reads as broken.
+      if (data && data.enriched_cases) {
+        const floor = data.small_n_floor || 10;
+        const where = evidenceCountry === "all" ? "the corpus" : `${countryName(evidenceCountry)} courts`;
+        list.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            `Not enough cases from ${where} yet to state a finding — the floor is ${floor} cases. ` +
+              "The tables below still show every count.",
+          ),
+        );
+        box.hidden = false;
+      } else {
+        box.hidden = true;
+      }
       return;
     }
-    list.innerHTML = "";
-    findings.forEach((f) => {
-      const card = evpEl("article", "evp-finding");
+    groups.forEach((g, i) => {
+      const members = findings.filter((f) => f.group === g.id);
+      if (!members.length) return;
+      const det = document.createElement("details");
+      det.className = "matrix-col evp-finding-group";
+      det.open = evidenceOpenGroups ? evidenceOpenGroups.has(g.id) : i === 0;
+      det.addEventListener("toggle", () => {
+        if (!evidenceOpenGroups) {
+          evidenceOpenGroups = new Set(groups.length ? [groups[0].id] : []);
+        }
+        if (det.open) evidenceOpenGroups.add(g.id);
+        else evidenceOpenGroups.delete(g.id);
+      });
 
-      // Scannable card: a headline, one big number, one line of consequence,
-      // terse actions, one dim footnote. No walls of prose.
-      const head = evpEl("div", "evp-finding-head");
-      head.appendChild(evpEl("span", "evp-finding-title", f.title));
-      head.appendChild(evpEl("span", "evp-finding-tag", "AI-ASSISTED"));
-      card.appendChild(head);
+      const sum = document.createElement("summary");
+      sum.className = "matrix-col-summary evp-group-summary";
+      sum.appendChild(evpEl("span", "evp-group-label", g.label));
+      // A collapsed header still teaches: the group's leading stat rides along.
+      if (g.lead) sum.appendChild(evpEl("span", "evp-group-lead", g.lead));
+      sum.appendChild(evpEl("span", "matrix-col-count", String(g.count)));
+      det.appendChild(sum);
 
-      if (f.stat) {
-        const stat = evpEl("div", "evp-finding-stat");
-        stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
-        if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
-        card.appendChild(stat);
-      }
-
-      // Backward-compatible: takeaway (new) or claim (old).
-      const takeaway = f.takeaway || f.claim;
-      if (takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", takeaway));
-
-      if ((f.recommendations || []).length) {
-        const ul = evpEl("ul", "evp-finding-actions");
-        f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
-        card.appendChild(ul);
-      }
-
-      const foot = f.method || f.caveat;
-      if (foot) card.appendChild(evpEl("p", "evp-finding-method", foot));
-
-      list.appendChild(card);
+      const body = evpEl("div", "evp-group-body");
+      if (g.blurb) body.appendChild(evpEl("p", "evp-note", g.blurb));
+      members.forEach((f) => body.appendChild(evpFindingCard(f)));
+      det.appendChild(body);
+      list.appendChild(det);
     });
     box.hidden = false;
-  }
-
-  async function loadFindings() {
-    // Findings ship as a static, Pages-served file (versioned + operator-
-    // approved by merge), so they render even while the API is waking.
-    try {
-      const resp = await fetch("findings.json", { cache: "no-cache" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      renderFindings(await resp.json());
-    } catch (err) {
-      console.warn("Findings unavailable", err);
-      renderFindings(null);
-    }
   }
 
   /* ── Jurisdiction views (operator directive 2026-08-22): each nation tab is
@@ -4811,6 +5076,11 @@
   let evidenceCountry = "all";
   let evidenceGlobalCountries = null; // {CC: caseCount} from the global read
   const evidenceLedgerCache = {}; // country -> ledger payload (session)
+  // Findings-group disclosure state. renderEvidencePage rebuilds the DOM on
+  // every load, so open/closed can't live on the elements. null = untouched,
+  // which means "group one open, rest collapsed"; a tab switch resets to null
+  // because a new jurisdiction is a new report.
+  let evidenceOpenGroups = null;
 
   // Country codes used as jurisdiction labels, spelled out for tooltips.
   const COUNTRY_NAMES = { US: "United States", IN: "India", CA: "Canada" };
@@ -4871,6 +5141,12 @@
       btn.addEventListener("click", () => {
         if (evidenceCountry === code) return;
         evidenceCountry = code;
+        // A new jurisdiction is a new report — reopen on the first group and
+        // drop any expanded technique rows and sort.
+        evidenceOpenGroups = null;
+        evidenceTechState.sort = "cases";
+        evidenceTechState.dir = "desc";
+        evidenceTechState.open.clear();
         loadEvidencePage();
       });
       return btn;
@@ -4951,7 +5227,6 @@
 
   async function loadEvidencePage(force) {
     if (!document.getElementById("evp-stats")) return;
-    loadFindings();
     if (force) {
       // Post-sweep /reload: drop the session cache so every jurisdiction view
       // recomputes from the fresh corpus. (Tab switches don't force — they
@@ -4966,12 +5241,15 @@
       if (globalData && globalData.countries) evidenceGlobalCountries = globalData.countries;
       const data = evidenceCountry === "all" ? globalData : await fetchLedger(evidenceCountry);
       renderEvidencePage(data);
+      renderFindings(data);
+      renderEvidenceTrend(data);
       renderEvidenceBasisLine(data);
       renderJurisdictionTabs();
       renderRegionCompare(globalData);
     } catch (err) {
       console.warn("Evidence page unavailable", err);
       renderEvidencePage(null);
+      renderFindings(null);
     }
   }
 
@@ -6024,11 +6302,21 @@
     box.hidden = true;
     renderDossierHunts(null);
     try {
-      const d = await api(`/evidence/technique/${encodeURIComponent(techId)}`, {}, { timeoutMs: 10000 });
+      // Honour the EVIDENCE page's jurisdiction tab: a sliced count reported
+      // as a global one is a silent lie. Deep links and MATRIX never touch the
+      // tabs, so they keep the default "all".
+      const slice = evidenceCountry && evidenceCountry !== "all" ? evidenceCountry : "";
+      const d = await api(
+        `/evidence/technique/${encodeURIComponent(techId)}`,
+        slice ? { country: slice } : {},
+        { timeoutMs: 10000 },
+      );
       if (!d || !d.cases) return;
       const countEl = document.getElementById("dossier-evidence-count");
       if (countEl) {
-        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged`;
+        countEl.textContent =
+          `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged` +
+          (slice ? ` · JURISDICTION: ${slice.toUpperCase()}` : "");
       }
       const dets = document.getElementById("dossier-evidence-detections");
       if (dets) {
@@ -6067,6 +6355,19 @@
       renderDossierHunts(d);
       box.hidden = false;
     } catch (err) {
+      // A technique observed globally can have zero cases in one court system.
+      // Say so rather than leaving the panel silently blank.
+      const slice = evidenceCountry && evidenceCountry !== "all" ? evidenceCountry : "";
+      if (slice && String(err.message || "").startsWith("404")) {
+        const countEl = document.getElementById("dossier-evidence-count");
+        if (countEl) {
+          countEl.textContent =
+            `No cases from ${countryName(slice)} courts exhibit this technique — ` +
+            "switch the EVIDENCE jurisdiction to GLOBAL to see all cases.";
+        }
+        box.hidden = false;
+        return;
+      }
       console.warn("Dossier evidence unavailable", err);
     }
   }

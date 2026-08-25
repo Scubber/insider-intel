@@ -193,7 +193,7 @@
               <dt>MATRIX</dt>
               <dd>The catalog of insider tactics, stage by stage. Click any tactic to see the real cases where it was used and what caught it.</dd>
               <dt>EVIDENCE</dt>
-              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
+              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. FINDINGS groups what the corpus says right now; WHAT CHANGED tracks which tactics rise and fall by filing year. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
               <dt>TOOLING</dt>
               <dd>Security products named in real court filings — which caught insiders, which got bypassed. Click a product for its cases.</dd>
               <dt>WORKBENCH</dt>
@@ -574,17 +574,21 @@
               <p class="evp-note" id="evp-basis-line" aria-live="polite"></p>
             </div>
             <div class="evp-stats" id="evp-stats" aria-live="polite"></div>
-            <div class="evp-findings" id="evp-findings" hidden>
-              <p class="evp-section-head">
-                FINDINGS
-                <span class="evp-note">(versioned · operator-approved by merge · numbers cite the stated ledger run)</span>
-              </p>
-              <div id="evp-findings-list"></div>
-            </div>
             <div class="evp-legend">
               <span><i class="evp-lg-all"></i>ALL CASES (mostly alleged)</span>
               <span><i class="evp-lg-adj"></i>CONFIRMED IN COURT — a judge ruled it, or the insider admitted it</span>
               <span><i class="evp-lg-corr"></i>ITM DETECTION CORROBORATED</span>
+            </div>
+            <div class="evp-findings" id="evp-findings" hidden>
+              <p class="evp-section-head">
+                FINDINGS
+                <span class="evp-note">(derived from this jurisdiction's ledger on every load · no stored numbers)</span>
+              </p>
+              <p class="evp-note">
+                What this corpus supports most strongly right now, grouped by the question
+                each answers — open a group to read it. Switching jurisdiction re-states them.
+              </p>
+              <div id="evp-findings-list"></div>
             </div>
             <div class="evp-corr" id="evp-corr"></div>
             <div class="evp-who">
@@ -599,6 +603,20 @@
                   <div id="evp-who-state"></div>
                 </div>
               </div>
+            </div>
+            <div class="evp-region" id="evp-trend" hidden>
+              <p class="evp-section-head">
+                WHAT CHANGED — TECHNIQUES BY FILING YEAR
+                <span class="evp-note"
+                  data-tip="Counted by the year the document was filed, not the year the incident happened. How many cases a year holds also reflects how deep we have swept that year's courts, so read a rise as a change in the record — not a measurement of insider behavior at large."
+                  data-tip-pos="bottom-end">(filing year · METHODOLOGY on hover)</span>
+              </p>
+              <p class="evp-note">
+                Which tactics show up more, and less, over time. Each cell is the number
+                of cases filed that year.
+              </p>
+              <div class="evp-scroll"><table class="evp-table" id="evp-trend-table"></table></div>
+              <p class="evp-note" id="evp-trend-note"></p>
             </div>
             <div class="evp-cols">
               <div class="evp-col">
@@ -620,7 +638,7 @@
                 TACTICS BY REGION
                 <span class="evp-note"
                   data-tip="Counts of cases per court system, on the shared ITM taxonomy. The jurisdictions are differently sourced (query-driven US dockets vs lexicon-scanned Indian judgments), so a rate difference describes the document mix, not populations — read rows, not league tables."
-                  data-tip-pos="top-end">(per-jurisdiction case counts · METHODOLOGY on hover)</span>
+                  data-tip-pos="bottom-end">(per-jurisdiction case counts · METHODOLOGY on hover)</span>
               </p>
               <p class="evp-note">
                 Which insider tactics skew regional — the same techniques, counted per court
@@ -642,7 +660,10 @@
                 <b>Jurisdictions differ:</b> each court system contributes different document
                 types and procedural stages, so numbers compare within a jurisdiction, not
                 across populations — and jurisdiction means the court, never the person's
-                nationality. Records are
+                nationality. <b>Document stage caps the claim:</b> a complaint states a
+                theory, not a finding, so however settled its language reads, a case it
+                describes is counted as alleged until a stage that can support more.
+                Records are
                 machine-extracted from filings and normalized; confirmed-in-court and alleged
                 are never conflated. ITM™ owned by Forscie Limited — not affiliated.
               </p>

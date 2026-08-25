@@ -212,7 +212,8 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
   CC BY 4.0 dataset + eCourts as ultimate source) on the ABOUT pane — extend
   `tests/test_about_page.py` (minimal-pane, attribution-lines, no-corpus-digits
   contracts). `ui-smoke` must pass at 390/1280; Playwright evidence in the PR body.
-  `web/findings.json` needs no rewrite (static, publish-by-merge).
+  Findings are derived from the ledger at read time (2026-08-25) — no static
+  file to rewrite; they re-state per jurisdiction slice on their own.
 - **Nation analysis is a primary product goal of this lane (operator directive
   2026-08-22): threat tactics differ by region, and EVIDENCE must present per-nation
   reports plus the cross-nation divergence — one ledger engine, many views. Never fork
@@ -255,8 +256,9 @@ commands, but the mechanics are dataset-shaped, not API-shaped:
     HC judgments), so the methodology tooltip carries that caveat the same way the
     small-n floor and the F1 selection-bias framing already do. Coverage equals the
     lexicon (no semantic discovery at the scan stage).
-  - `web/findings.json` stays global and untouched; the boot snapshot may carry only
-    the global slice (country slices can require the live API — CACHED view shows ALL).
+  - Findings recompute per slice from the ledger (2026-08-25), so a nation tab
+    states its own or says nothing below the floor; the boot snapshot may carry
+    only the global slice (country slices can require the live API — CACHED shows ALL).
   - TOOLING may inherit the same param later; out of scope for this change unless
     trivial. Contract tests in the style of `tests/test_matrix_data_sources.py` pin the
     param, the per-slice floor behavior, and byte-identical global output when the

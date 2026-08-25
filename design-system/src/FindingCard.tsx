@@ -11,6 +11,8 @@ export interface FindingCardProps {
   recommendations?: string[];
   /** Dim footnote: method + honest caveats. */
   method?: string;
+  /** What the claim rests on, e.g. "BASED ON 853 CASES". */
+  basis?: string;
   /** Corner tag; defaults to the site's provenance label. */
   tag?: string;
 }
@@ -19,6 +21,9 @@ export interface FindingCardProps {
  * EVIDENCE-page finding card: a headline, one big number, one line of
  * consequence, terse actions, one dim method footnote. Signal-colored left
  * bar marks it as observed/alleged-class content (accent = court-proven).
+ *
+ * The default tag is DERIVED: these are computed from the ledger at read time,
+ * per jurisdiction slice, with nothing stored. Only the prose is authored.
  */
 export function FindingCard({
   title,
@@ -27,7 +32,8 @@ export function FindingCard({
   takeaway,
   recommendations = [],
   method,
-  tag = "AI-ASSISTED",
+  basis,
+  tag = "DERIVED",
 }: FindingCardProps) {
   return (
     <article className="ds-finding">
@@ -47,6 +53,10 @@ export function FindingCard({
           ))}
         </ul>
       ) : null}
+      {basis ? <p className="ds-finding-basis">{basis}</p> : null}
+      {/* The method stays a VISIBLE paragraph, never a tooltip: data-tip is
+          CSS-only and never fires on touch, and a finding's caveat is
+          load-bearing. */}
       {method ? <p className="ds-finding-method">{method}</p> : null}
     </article>
   );
