@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-24 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-25 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -37,7 +37,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
-| **UI (2026-08-20 → 22 wave)** | Filter **chip bar** (SOURCE + FOCUS, "Attack footprints" = matrix stages) replaced the Refine drawer; Scope/SIG became SETTINGS defaults; the stream's left rail is deleted (EVIDENCE is a page); Refresh button became SETTINGS "Force corpus refresh"; sources-broken panel moved to SETTINGS; TOOLING is one grouped table with an IN COURT FILINGS toggle; plain-language GUIDE panel (#241); posture badges in plain language; vacuous hunt-term chips filtered (#243); findings F2 restated (#244). Provenance meta lines + proof-standard badges (CONFIRMED IN COURT / ALLEGED / REPORTED) carry over from the 2026-08-10 redesign. |
+| **UI (2026-08-20 → 22 wave)** | Filter **chip bar** (SOURCE + FOCUS, "Attack footprints" = matrix stages) replaced the Refine drawer; Scope/SIG became SETTINGS defaults; the stream's left rail is deleted (EVIDENCE is a page); Refresh button became SETTINGS "Force corpus refresh"; sources-broken panel moved to SETTINGS; TOOLING is one grouped table with an IN COURT FILINGS toggle; plain-language GUIDE panel (#241); posture badges in plain language; vacuous hunt-term chips filtered (#243); a finding's wording restated (#244). EVIDENCE findings are now derived from the ledger at read time and grouped into collapsible sections (2026-08-25); `web/findings.json` is deleted. Provenance meta lines + proof-standard badges (CONFIRMED IN COURT / ALLEGED / REPORTED) carry over from the 2026-08-10 redesign. |
 | **UI honesty** | Settings is reader-safe (no TODO / stub ADD / Notifications chrome). Empty board offers **TRY EXAMPLE HUNT**. Default theme **Wire Light** (cnn-lite; was Dossier Sage until 2026-08-11); desktop rail JS breakpoint matches CSS at **1024px**. |
 
 ---
@@ -296,11 +296,14 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
-9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE,
-   `web/findings.json` publish-by-merge). Findings F2–F4 added 2026-08-09
-   (proven-vs-alleged split, email-as-winning-evidence, third-party proven
-   share), written for business decision makers; F1 restated to the same
-   ledger run; findings block now renders at the top of the EVIDENCE page.
+9. **EVIDENCE flagship** — P1 + P2-findings SHIPPED (live at → EVIDENCE).
+   Findings are DERIVED now, not published: `derive_findings()` recomputes
+   every card off the finished ledger per jurisdiction slice, so the numbers
+   move with the corpus and re-slice for free. `web/findings.json` is deleted
+   (2026-08-25). What stays authored is the prose each rule wraps its numbers
+   in — title, takeaway, caveat, program advice — plus the `FINDING_GROUPS`
+   taxonomy the page renders as collapsible groups. A rule returns nothing
+   rather than a claim the small-n floor already declined.
    Remaining: CISA/NITTF maturity
    crosswalk (P2), dwell-time from forensics.timeline + static crawlable
    export + OG meta (P3), "departing" employment-state extractor-prompt
@@ -313,8 +316,9 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    anything about it. So how do you respond? How do you send the signal
    when it's to those you report to? This is the data. What do we do
    about it?"
-   Published as finding F1 with the selection-bias-is-the-finding framing;
-   data: executive/officer 230/320 role-known (47%), 26 adjudicated;
+   Carried by the derived findings with the selection-bias-is-the-finding
+   framing; data at that ledger run: executive/officer 230/320 role-known
+   (47%), 26 adjudicated;
    external record classes (Form 4 ×36, public-vs-internal ×83, brokerage)
    make the cases — detecting upward needs no permission to surveil upward.
 10. **Filings spend-gate leak — FIXED, MERGED 2026-08-22 (PR #247; live

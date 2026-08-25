@@ -4582,6 +4582,174 @@
     }
   }
 
+  const EVP_THEME_ORDER = [
+    "motive",
+    "means",
+    "preparation",
+    "infringement",
+    "anti-forensics",
+    "other",
+  ];
+
+  // Technique-table controls. Lives outside the DOM because renderEvidencePage
+  // rebuilds the table on every load; resets on a jurisdiction switch.
+  const evidenceTechState = { sort: "cases", dir: "desc", open: new Set() };
+
+  // Pure: techniques + theme rollups + a sort -> the rows to draw. Grouping by
+  // theme is the page's spine, so a sort reorders WITHIN each theme, never
+  // across it. Node-unit-tested; keep it free of DOM.
+  function buildEvidenceTechRows(techniques, themes, sort, dir) {
+    const key = {
+      cases: (t) => t.cases || 0,
+      proven: (t) => t.adjudicated_admitted || 0,
+      alleged: (t) => t.alleged || 0,
+    }[sort] || ((t) => t.cases || 0);
+    const sign = dir === "asc" ? -1 : 1;
+    const rollups = new Map((themes || []).map((t) => [t.theme, t]));
+    const byTheme = new Map();
+    (techniques || []).forEach((t) => {
+      const theme = t.theme || "other";
+      if (!byTheme.has(theme)) byTheme.set(theme, []);
+      byTheme.get(theme).push(t);
+    });
+    const rows = [];
+    EVP_THEME_ORDER.forEach((theme) => {
+      const techs = byTheme.get(theme);
+      if (!techs || !techs.length) return;
+      rows.push({ kind: "theme", theme, rollup: rollups.get(theme) || null });
+      techs
+        .slice()
+        // Count desc with an id tiebreak — the house comparator idiom.
+        .sort((a, b) => sign * (key(b) - key(a)) || String(a.id).localeCompare(String(b.id)))
+        .forEach((t) => rows.push({ kind: "tech", tech: t }));
+    });
+    return rows;
+  }
+
+  function renderTechniqueTable(data) {
+    const table = document.getElementById("evp-techniques");
+    if (!table) return;
+    table.innerHTML = "";
+    const st = evidenceTechState;
+
+    const headRow = evpEl("tr");
+    headRow.appendChild(evpEl("th", "", ""));
+    headRow.appendChild(evpEl("th", "", "HOW THEY DID IT"));
+    [
+      ["cases", "CASES", "Every case exhibiting this technique, proven or not"],
+      ["proven", "PROVEN", "A judge ruled it, or the insider admitted it"],
+      ["alleged", "ALLEGED", "One side's account so far — never counted as proven"],
+    ].forEach(([k, label, tip]) => {
+      const th = evpEl("th", "num");
+      th.setAttribute("aria-sort", st.sort === k ? (st.dir === "asc" ? "ascending" : "descending") : "none");
+      const btn = evpEl("button", st.sort === k ? "evp-sort on" : "evp-sort");
+      btn.type = "button";
+      btn.appendChild(evpEl("span", "", label));
+      btn.appendChild(evpEl("span", "evp-sort-car", st.sort === k && st.dir === "asc" ? "▲" : "▼"));
+      btn.dataset.tip = `${tip} — click to sort`;
+      btn.addEventListener("click", () => {
+        if (st.sort === k) st.dir = st.dir === "desc" ? "asc" : "desc";
+        else {
+          st.sort = k;
+          st.dir = "desc";
+        }
+        renderTechniqueTable(data);
+      });
+      th.appendChild(btn);
+      headRow.appendChild(th);
+    });
+    const ctrlTh = evpEl("th", "num", "CONTROLS CATCH IT");
+    ctrlTh.dataset.tip = "ITM controls real cases confirm can catch this, of those the catalog lists";
+    headRow.appendChild(ctrlTh);
+    table.appendChild(headRow);
+
+    buildEvidenceTechRows(data.techniques, data.themes, st.sort, st.dir).forEach((r) => {
+      if (r.kind === "theme") {
+        const tr = evpEl("tr", "evp-theme-row");
+        const label = evpEl("td");
+        label.colSpan = 3;
+        label.appendChild(evpEl("b", "", EVP_THEME_LABELS[r.theme] || r.theme.toUpperCase()));
+        tr.appendChild(label);
+        tr.appendChild(evpEl("td", "num evp-adjn", r.rollup ? String(r.rollup.adjudicated_admitted) : ""));
+        const obs = evpEl("td", "", r.rollup ? `${r.rollup.cases} case-technique obs.` : "");
+        obs.colSpan = 2;
+        tr.appendChild(obs);
+        table.appendChild(tr);
+        return;
+      }
+
+      const t = r.tech;
+      const open = st.open.has(t.id);
+      const row = evpEl("tr");
+
+      // Two distinct affordances on one row: the chevron expands the evidence
+      // trail in place; the NAME navigates away to the full dossier.
+      const chev = evpEl("td");
+      const fams = t.top_families || [];
+      if (fams.length) {
+        const tog = evpEl("button", "evp-expand", open ? "▾" : "▸");
+        tog.type = "button";
+        tog.setAttribute("aria-expanded", open ? "true" : "false");
+        tog.dataset.tip = open ? "Hide where this evidence lives" : "Show where this tactic's evidence lives";
+        tog.addEventListener("click", () => {
+          if (open) st.open.delete(t.id);
+          else st.open.add(t.id);
+          renderTechniqueTable(data);
+        });
+        chev.appendChild(tog);
+      }
+      row.appendChild(chev);
+
+      const cell = evpEl("td");
+      const btn = evpEl("button", "evp-tech-name");
+      btn.type = "button";
+      btn.appendChild(evpEl("span", "evp-tech-title", t.title || t.id));
+      btn.appendChild(evpEl("span", "evp-tech-code", t.id));
+      btn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
+      btn.addEventListener("click", () => {
+        selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
+      });
+      cell.appendChild(btn);
+      row.appendChild(cell);
+
+      row.appendChild(evpEl("td", "num", String(t.cases)));
+      row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
+      // --signal against the --accent proven column: never conflated, per row.
+      row.appendChild(evpEl("td", "num evp-algn", String(t.alleged != null ? t.alleged : "—")));
+
+      const dets = t.detections || [];
+      const corroborated = dets.filter((d) => d.corroborated).length;
+      const dcell = evpEl("td", "num", dets.length ? `${corroborated} of ${dets.length}` : "—");
+      if (dets.length) {
+        dcell.dataset.tip =
+          "ITM controls that real cases confirm can catch this: " +
+          dets.map((d) => `${d.corroborated ? "✓" : "○"} ${d.title}`).join(" · ");
+      }
+      row.appendChild(dcell);
+      table.appendChild(row);
+
+      if (open && fams.length) {
+        const detail = evpEl("tr", "evp-tech-detail");
+        const pad = evpEl("td");
+        const box = evpEl("td");
+        box.colSpan = 5;
+        box.appendChild(evpEl("p", "evp-axis-head", "WHERE THIS TACTIC'S EVIDENCE LIVES"));
+        const top = fams[0].cases || 1;
+        fams.forEach((f) => {
+          const fr = evpEl("div", "evp-row");
+          const ftop = evpEl("div", "evp-row-top");
+          ftop.appendChild(evpEl("span", "evp-row-label", f.artifact));
+          ftop.appendChild(evpEl("span", "evp-row-count", `×${f.cases}`));
+          fr.appendChild(ftop);
+          fr.appendChild(evpShareBar((100 * f.cases) / top, 0));
+          box.appendChild(fr);
+        });
+        detail.append(pad, box);
+        table.appendChild(detail);
+      }
+    });
+  }
+
   function renderEvidencePage(data) {
     const stats = document.getElementById("evp-stats");
     if (!stats) return;
@@ -4641,70 +4809,7 @@
     if (fnBox) evpAxisRows(fnBox, roles.function || [], data.enriched_cases, floor);
     if (stBox) evpAxisRows(stBox, roles.employment_state || [], data.enriched_cases, floor);
 
-    const table = document.getElementById("evp-techniques");
-    if (table) {
-      table.innerHTML = "";
-      const headRow = evpEl("tr");
-      ["HOW THEY DID IT", "CASES", "PROVEN IN COURT", "YOUR CONTROLS CATCH IT"].forEach((h, i) => {
-        const th = evpEl("th", i === 1 || i === 2 ? "num" : "", h);
-        headRow.appendChild(th);
-      });
-      table.appendChild(headRow);
-      const byTheme = new Map();
-      (data.techniques || []).forEach((t) => {
-        const key = t.theme || "other";
-        if (!byTheme.has(key)) byTheme.set(key, []);
-        byTheme.get(key).push(t);
-      });
-      const themeRollups = new Map((data.themes || []).map((t) => [t.theme, t]));
-      const order = ["motive", "means", "preparation", "infringement", "anti-forensics", "other"];
-      order.forEach((theme) => {
-        const techs = byTheme.get(theme);
-        if (!techs || !techs.length) return;
-        const roll = themeRollups.get(theme);
-        const tr = evpEl("tr", "evp-theme-row");
-        const label = evpEl("td");
-        label.colSpan = 2;
-        label.appendChild(evpEl("b", "", EVP_THEME_LABELS[theme] || theme.toUpperCase()));
-        tr.appendChild(label);
-        const adj = evpEl("td", "num evp-adjn", roll ? String(roll.adjudicated_admitted) : "");
-        const cases = evpEl("td", "", roll ? `${roll.cases} case-technique obs.` : "");
-        tr.append(adj, cases);
-        table.appendChild(tr);
-        techs.forEach((t) => {
-          const row = evpEl("tr");
-          const cell = evpEl("td");
-          // Spell out the technique name for a non-analyst reader; the ITM
-          // code rides along small and dim (still opens the dossier).
-          const btn = evpEl("button", "evp-tech-name");
-          btn.type = "button";
-          btn.appendChild(evpEl("span", "evp-tech-title", t.title || t.id));
-          btn.appendChild(evpEl("span", "evp-tech-code", t.id));
-          btn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
-          btn.addEventListener("click", () => {
-            selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
-          });
-          cell.appendChild(btn);
-          row.appendChild(cell);
-          row.appendChild(evpEl("td", "num", String(t.cases)));
-          row.appendChild(evpEl("td", "num evp-adjn", String(t.adjudicated_admitted)));
-          const dets = t.detections || [];
-          const corroborated = dets.filter((d) => d.corroborated).length;
-          const dcell = evpEl(
-            "td",
-            "num",
-            dets.length ? `${corroborated} of ${dets.length}` : "—"
-          );
-          if (dets.length) {
-            dcell.dataset.tip =
-              "ITM controls that real cases confirm can catch this: " +
-              dets.map((d) => `${d.corroborated ? "✓" : "○"} ${d.title}`).join(" · ");
-          }
-          row.appendChild(dcell);
-          table.appendChild(row);
-        });
-      });
-    }
+    renderTechniqueTable(data);
 
     const trail = document.getElementById("evp-trail");
     if (trail) {
@@ -4916,8 +5021,12 @@
       btn.addEventListener("click", () => {
         if (evidenceCountry === code) return;
         evidenceCountry = code;
-        // A new jurisdiction is a new report — reopen on the first group.
+        // A new jurisdiction is a new report — reopen on the first group and
+        // drop any expanded technique rows and sort.
         evidenceOpenGroups = null;
+        evidenceTechState.sort = "cases";
+        evidenceTechState.dir = "desc";
+        evidenceTechState.open.clear();
         loadEvidencePage();
       });
       return btn;
@@ -6072,11 +6181,21 @@
     box.hidden = true;
     renderDossierHunts(null);
     try {
-      const d = await api(`/evidence/technique/${encodeURIComponent(techId)}`, {}, { timeoutMs: 10000 });
+      // Honour the EVIDENCE page's jurisdiction tab: a sliced count reported
+      // as a global one is a silent lie. Deep links and MATRIX never touch the
+      // tabs, so they keep the default "all".
+      const slice = evidenceCountry && evidenceCountry !== "all" ? evidenceCountry : "";
+      const d = await api(
+        `/evidence/technique/${encodeURIComponent(techId)}`,
+        slice ? { country: slice } : {},
+        { timeoutMs: 10000 },
+      );
       if (!d || !d.cases) return;
       const countEl = document.getElementById("dossier-evidence-count");
       if (countEl) {
-        countEl.textContent = `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged`;
+        countEl.textContent =
+          `${d.cases} case(s) · ${d.adjudicated_admitted} confirmed in court · ${d.alleged} alleged` +
+          (slice ? ` · JURISDICTION: ${slice.toUpperCase()}` : "");
       }
       const dets = document.getElementById("dossier-evidence-detections");
       if (dets) {
@@ -6115,6 +6234,19 @@
       renderDossierHunts(d);
       box.hidden = false;
     } catch (err) {
+      // A technique observed globally can have zero cases in one court system.
+      // Say so rather than leaving the panel silently blank.
+      const slice = evidenceCountry && evidenceCountry !== "all" ? evidenceCountry : "";
+      if (slice && String(err.message || "").startsWith("404")) {
+        const countEl = document.getElementById("dossier-evidence-count");
+        if (countEl) {
+          countEl.textContent =
+            `No cases from ${countryName(slice)} courts exhibit this technique — ` +
+            "switch the EVIDENCE jurisdiction to GLOBAL to see all cases.";
+        }
+        box.hidden = false;
+        return;
+      }
       console.warn("Dossier evidence unavailable", err);
     }
   }

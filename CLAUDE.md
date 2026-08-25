@@ -237,8 +237,10 @@ without the pydantic import chain (see `scripts/evidence_ledger.py`). Served
 at `GET /evidence/ledger` and `GET /evidence/technique/{id}`
 (`apps/search/service.py`), rendered as the EVIDENCE page (`#/evidence`
 takeover pane) with per-technique tie-ins in the dossier and workbench.
-Published findings live in `web/findings.json` — **merging the authoring PR
-IS operator approval**; the page renders findings even during API cold-start.
+Findings are derived at read time, never checked in: `derive_findings()`
+recomputes them off the ledger per slice, so the numbers are always live; the
+per-rule prose is authored (invariant-legal, like the ITM catalog) and grouped
+by `FINDING_GROUPS`. The boot snapshot carries them, so cold-start still paints.
 
 Its invariants: **roles, never individuals** (no persona/entity resolution —
 permanently scrapped as PII-shaped); **adjudicated/admitted vs alleged vs

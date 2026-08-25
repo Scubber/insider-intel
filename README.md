@@ -45,10 +45,14 @@ case in the corpus:
   record classes back to matrix detections, marking which are corroborated by
   real cases.
 
-Published findings live in [`web/findings.json`](web/findings.json) and render
-on the EVIDENCE page with their claim, the ledger data behind it, the honest
-caveat, and program recommendations. Findings are operator-approved by merge —
-the GitOps trail *is* the editorial record.
+Findings are **derived from the ledger at read time** — nothing is stored, so
+no number can go stale. Each rule in `derive_findings()`
+([`shared/utils/evidence.py`](shared/utils/evidence.py)) reads the finished
+ledger and returns one card: the claim, the data behind it, the honest caveat,
+and program recommendations. The prose is authored; the numbers are whatever
+the corpus says now, recomputed for the jurisdiction you are viewing. Cards are
+grouped by the question each answers, and a rule that cannot clear the small-n
+floor says nothing at all.
 
 ### Methodology and limitations
 

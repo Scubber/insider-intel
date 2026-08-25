@@ -1055,6 +1055,57 @@ a.tlv-case-title:focus-visible {
 .evp-adjn {
   color: var(--accent);
 }
+/* Color law, per row: --accent proven, --signal observed/alleged. */
+.evp-algn {
+  color: var(--signal);
+}
+/* Sortable header. The app's first click-to-sort table; the caret dims until
+   the column is the active sort. */
+.evp-sort {
+  font: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.evp-sort:hover,
+.evp-sort:focus-visible {
+  color: var(--accent);
+}
+.evp-sort-car {
+  opacity: 0.3;
+}
+.evp-sort.on {
+  color: var(--accent);
+}
+.evp-sort.on .evp-sort-car {
+  opacity: 1;
+}
+/* Expand chevron — the same glyph and rotation as the findings groups, so the
+   page teaches one disclosure gesture. Kept distinct from the technique name,
+   which navigates away to the dossier. */
+.evp-expand {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  line-height: 1;
+}
+.evp-tech-detail td {
+  border-top: 0;
+  padding-bottom: 0.7rem;
+}
 .evp-row {
   margin-bottom: 0.55rem;
 }
