@@ -982,6 +982,14 @@ a.tlv-case-title:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+/* Grid items default to min-width:auto, so a wide table refuses to shrink below
+   its content and pushes the whole page sideways instead of letting its own
+   .evp-scroll take over. Caught at 390 when the technique table grew an ALLEGED
+   column. */
+.evp-cols > *,
+.evp-who-grid > * {
+  min-width: 0;
+}
 .evp-scroll {
   overflow-x: auto;
 }
