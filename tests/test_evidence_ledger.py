@@ -475,3 +475,261 @@ def test_crosswalk_ids_exist_in_catalog() -> None:
     mapped = {dt for dts in EVIDENCE_DT_CROSSWALK.values() for dt in dts}
     missing = mapped - catalog_ids
     assert not missing, f"crosswalk references unknown detections: {sorted(missing)}"
+
+
+# ---------------------------------------------------------------------------
+# Derived findings (the EVIDENCE headline cards)
+#
+# These replaced web/findings.json, whose numbers froze on the day they were
+# authored. The contract these pin: never state a claim the corpus is too thin
+# to support, never conflate proven with alleged, and never depend on anything
+# the API layer strips before serving.
+# ---------------------------------------------------------------------------
+
+_BANNED_TELLS = (
+    "delve",
+    "leverage",
+    "robust",
+    "comprehensive",
+    "seamless",
+    "holistic",
+    "landscape",
+    "utilize",
+    "it's important to note",
+    "in today's world",
+)
+
+
+def _synthetic_rows(count: int = 60, *, year: str = "2024") -> list[dict]:
+    """A corpus large enough to clear the small-n floor, with a mixed record."""
+    rows = []
+    for n in range(count):
+        proven = n % 4 == 0
+        rows.append(
+            {
+                "link": f"https://ex.com/s{n}",
+                "title": f"Synthetic case {n}",
+                "published": f"{year}-05-06T00:00:00+00:00",
+                "source_id": "courtlistener-test",
+                "forensics": {
+                    "is_insider_case": True,
+                    "model": "test-model",
+                    "legal_posture": "judgment" if proven else "complaint",
+                    "actor_role": "chief financial officer",
+                    "candidate_technique_ids": ["IF016"],
+                    "methods": [
+                        {
+                            "action": "wired funds to a personal account",
+                            "claim_status": "adjudicated" if proven else "alleged",
+                            "observables": [
+                                {
+                                    "description": "payment record",
+                                    "artifact": "corporate email",
+                                    "channel": "email",
+                                    "basis": "mechanically_implied",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        )
+    return rows
+
+
+def test_findings_empty_below_small_n_floor(tmp_path, monkeypatch) -> None:
+    """The headline assertion: too little data states nothing at all.
+
+    The two-case fixture is well under the floor, so an empty list — not a
+    hedged card built on n=2 — is the correct answer.
+    """
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["enriched_cases"] == 2
+        assert data["findings"] == []
+
+
+def test_findings_emit_above_floor() -> None:
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    findings = {f["id"]: f for f in ledger["findings"]}
+    assert "proof-gap" in findings, "the proven-vs-alleged card must survive"
+    gap = findings["proof-gap"]
+    # Ranks are stamped in order and every card carries its own basis.
+    assert [f["rank"] for f in ledger["findings"]] == list(range(1, len(ledger["findings"]) + 1))
+    assert gap["basis"]["floor"] == 10
+    assert gap["basis"]["n"] == ledger["enriched_cases"]
+    assert gap["recommendations"] and gap["method"]
+
+
+def test_findings_never_conflate_proven_and_alleged() -> None:
+    """The proof-gap stat comes from adjudicated_admitted alone."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    gap = next(f for f in ledger["findings"] if f["id"] == "proof-gap")
+    totals = ledger["strength_totals"]
+    cases = totals["adjudicated_admitted"] + totals["alleged"] + totals["reported_unclear"]
+    assert gap["stat"] == f"{round(100 * totals['adjudicated_admitted'] / cases)}%"
+    assert str(totals["adjudicated_admitted"]) in gap["takeaway"]
+
+
+def test_findings_are_deterministic() -> None:
+    """Same rows in, byte-identical cards out — no randomness, no clock."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows()
+    assert (
+        build_evidence_ledger(rows, now=NOW)["findings"]
+        == (build_evidence_ledger(rows, now=NOW)["findings"])
+    )
+
+
+def test_findings_voice_bar() -> None:
+    """The automatable half of the house voice rule (CLAUDE.md)."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    assert ledger["findings"], "need cards to check the prose of"
+    for finding in ledger["findings"]:
+        blob = " ".join(
+            [finding["title"], finding["takeaway"], finding["method"], *finding["recommendations"]]
+        )
+        for tell in _BANNED_TELLS:
+            assert tell not in blob.lower(), f"{finding['id']} uses a banned tell: {tell}"
+        # Numbers get verbs, and every card explains how it was counted.
+        assert finding["method"].strip()
+        assert finding["stat_label"].strip()
+        assert finding["recommendations"], f"{finding['id']} gives the reader nothing to do"
+
+
+def test_findings_survive_the_service_layer_pops() -> None:
+    """apps.search.service.evidence_ledger strips the per-technique maps.
+
+    A rule built on those would work in the CLI report and vanish from the API.
+    This pins that the served payload still carries intact cards.
+    """
+    from shared.utils.evidence import build_evidence_ledger, derive_findings
+
+    popped = (
+        "technique_families",
+        "technique_counts",
+        "technique_hunts",
+        "technique_terms",
+        "technique_behaviors",
+    )
+    core = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    assert core["findings"]
+    for finding in core["findings"]:
+        assert set(finding) >= {"id", "rank", "stat", "takeaway", "method", "basis"}
+
+    # Re-derive against a ledger with those maps already stripped: identical
+    # cards prove no rule reads one.
+    stripped = {k: v for k, v in core.items() if k not in popped}
+    assert derive_findings(stripped) == core["findings"]
+
+
+def test_by_year_uses_a_stable_technique_set() -> None:
+    """A zero must mean zero, not "ranked sixth that year".
+
+    Per-year top-N truncation used to drop a technique out of a year purely on
+    rank, which a trend surface reads as a decline that never happened.
+    """
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows(30, year="2023") + _synthetic_rows(30, year="2024")
+    # A second technique present only in 2024.
+    extra = _synthetic_rows(12, year="2024")
+    for row in extra:
+        row["link"] += "-x"
+        row["forensics"]["candidate_technique_ids"] = ["IF002"]
+    ledger = build_evidence_ledger(rows + extra, now=NOW)
+    trend = ledger["trend_techniques"]
+    assert "IF002" in trend and "IF016" in trend
+    # Every year reports every tracked technique, explicitly zero when absent.
+    for year, bucket in ledger["by_year"].items():
+        assert set(bucket["techniques"]) == set(trend), f"{year} lost a tracked technique"
+    assert ledger["by_year"]["2023"]["techniques"]["IF002"] == 0
+    assert ledger["by_year"]["2024"]["techniques"]["IF002"] == 12
+    assert ledger["by_year"]["2023"]["cases"] == 30
+
+
+def test_by_year_excludes_undated_rows() -> None:
+    """Rows with no usable date are reported as a count, never drawn as a year."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    rows = _synthetic_rows(20)
+    for row in rows[:5]:
+        row["published"] = ""
+    ledger = build_evidence_ledger(rows, now=NOW)
+    assert "????" not in ledger["by_year"]
+    assert ledger["by_year_undated_cases"] == 5
+
+
+def test_rising_technique_skips_the_partial_current_year() -> None:
+    """Comparing into a half-finished year manufactures a decline."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    current = str(NOW.year)
+    rows = _synthetic_rows(30, year=str(NOW.year - 1)) + _synthetic_rows(12, year=current)
+    for row in rows[-12:]:
+        row["link"] += "-cur"
+    ledger = build_evidence_ledger(rows, now=NOW)
+    rising = [f for f in ledger["findings"] if f["id"] == "rising-technique"]
+    for finding in rising:
+        assert current not in finding["stat_label"], "compared into the partial year"
+
+
+def test_evidence_core_loads_standalone_with_findings() -> None:
+    """scripts/evidence_ledger.py loads this module as a bare FILE, not a package.
+
+    The bare Actions runner has no pydantic, so a relative import or a
+    shared.* import anywhere in evidence.py breaks the ledger workflow. This
+    fails the moment someone adds one.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    core_path = Path(__file__).resolve().parent.parent / "shared" / "utils" / "evidence.py"
+    spec = importlib.util.spec_from_file_location("evidence_core_standalone", core_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module.derive_findings)
+    ledger = module.build_evidence_ledger(_synthetic_rows(), now=NOW)
+    assert ledger["findings"]
+
+
+def test_by_year_titles_joined_on_the_endpoint(tmp_path, monkeypatch) -> None:
+    """The core stays catalog-free, so the service joins human titles on."""
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["by_year"], "the fixture rows carry a published date"
+        bucket = next(iter(data["by_year"].values()))
+        assert isinstance(bucket["techniques"], list)
+        entry = next(t for t in bucket["techniques"] if t["id"] == "IF002")
+        assert entry["title"] and entry["title"] != "IF002"
+        assert entry["cases"] == 2
+        assert "findings" in data
+
+
+def test_cli_report_renders_findings_and_the_trend_table() -> None:
+    """scripts/evidence_ledger.py renders the same ledger the API serves.
+
+    The by_year reshape broke this renderer once; it consumes the raw core
+    payload (no catalog join), so it has to keep working on that shape.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "evidence_ledger.py"
+    spec = importlib.util.spec_from_file_location("evidence_ledger_cli", script)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    ledger = cli.build_evidence_ledger(_synthetic_rows(), top=25)
+    report = cli.render_markdown(ledger)
+    assert "## Findings" in report
+    assert "Most cases here are still allegations" in report
+    # The appendix reads the stable-set shape without blowing up.
+    assert "| Year | Cases | Tracked techniques |" in report

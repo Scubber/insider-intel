@@ -77,6 +77,26 @@ def render_markdown(ledger: dict) -> str:
     out.append("> ground truth; alleged is a complaint's theory. Never read the two")
     out.append("> columns as equivalent.")
 
+    findings = ledger.get("findings") or []
+    if findings:
+        out.append("")
+        out.append("## Findings")
+        out.append("")
+        out.append("Derived from the aggregates below on every run — nothing here is stored.")
+        for f in findings:
+            out.append("")
+            out.append(f"### {f['rank']}. {f['title']}")
+            out.append("")
+            out.append(f"**{f['stat']}** {f['stat_label']}")
+            out.append("")
+            out.append(f["takeaway"])
+            if f.get("recommendations"):
+                out.append("")
+                for rec in f["recommendations"]:
+                    out.append(f"- {rec}")
+            out.append("")
+            out.append(f"_Method: {f['method']}_")
+
     out.append("")
     out.append("## 1 · Technique frequency (ITM)")
     out.append("")
@@ -156,11 +176,17 @@ def render_markdown(ledger: dict) -> str:
     out.append("> The corpus reflects OUR CourtListener query lexicon and sweep history —")
     out.append("> a shift below may be a change in what we collect, not in the world.")
     out.append("")
-    out.append("| Year | Cases w/ techniques | Top techniques |")
+    out.append("| Year | Cases | Tracked techniques |")
     out.append("|---|---|---|")
-    for year, counts in ledger["by_year"].items():
-        top = ", ".join(f"{t}×{n}" for t, n in counts.items())
-        out.append(f"| {year} | {sum(counts.values())} | {top} |")
+    for year, bucket in ledger["by_year"].items():
+        # A fixed technique set across every year, so a 0 is a real 0 rather
+        # than "ranked below the cut that year".
+        mix = ", ".join(f"{t}×{n}" for t, n in bucket["techniques"].items())
+        out.append(f"| {year} | {bucket['cases']} | {mix} |")
+    undated = ledger.get("by_year_undated_cases") or 0
+    if undated:
+        out.append("")
+        out.append(f"_{undated} case(s) carry no usable date and are excluded from this table._")
     return "\n".join(out)
 
 

@@ -224,6 +224,17 @@ def test_snapshot_writes_sources_and_ledger_twins(tmp_path, monkeypatch) -> None
     assert isinstance(sources, list)
     ledger = json.loads((out / "ledger.json").read_text())
     assert "enriched_cases" in ledger
+    # The snapshot must carry the SAME shape the live payload does, or the
+    # cold-start paint and the live re-render disagree. Derived findings
+    # replaced the old static web/findings.json, so the offline path has to
+    # produce them too — and the catalog join has to have run here as well.
+    assert "findings" in ledger
+    for year, bucket in (ledger.get("by_year") or {}).items():
+        assert isinstance(bucket["techniques"], list), f"{year} missing the catalog join"
+        for entry in bucket["techniques"]:
+            assert {"id", "title", "cases"} <= set(entry)
+    for tech in ledger.get("techniques") or []:
+        assert tech.get("title")
 
 
 def test_snapshot_mirrors_the_boot_query() -> None:
@@ -267,10 +278,6 @@ def test_articles_twin_equals_slimmed_live_response(tmp_path, monkeypatch) -> No
         c["siblings"] = [_slim_hit(sib) for sib in cluster.siblings or []]
         expected_clusters.append(c)
 
-    assert json.loads(json.dumps(articles["results"])) == json.loads(
-        json.dumps(expected_results)
-    )
-    assert json.loads(json.dumps(articles["clusters"])) == json.loads(
-        json.dumps(expected_clusters)
-    )
+    assert json.loads(json.dumps(articles["results"])) == json.loads(json.dumps(expected_results))
+    assert json.loads(json.dumps(articles["clusters"])) == json.loads(json.dumps(expected_clusters))
     assert articles["total_indexed"] == index.size

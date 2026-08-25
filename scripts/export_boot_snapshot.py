@@ -30,8 +30,9 @@ from pathlib import Path
 
 from apps.aggregator.lane_health import read_lane_health
 from apps.search.service import get_index, list_sources, tooling_rankings
+from shared.itm.index import load_itm_index
 from shared.settings import get_settings
-from shared.utils.evidence import build_evidence_ledger
+from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
 
 # The snapshot IS the visit for most readers: at ~13 visits/day every request
 # hits a Cloud Run cold start, so the stream painted from this file is what
@@ -146,6 +147,10 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict, list,
         ),
         top=25,
     )
+    # Same catalog join the API applies, so the cold-start paint reads the same
+    # shape as the live payload (technique titles, the trend surface, and the
+    # derived findings that replaced the old static findings.json).
+    attach_catalog_titles(ledger, {t.id.upper(): t.title for t in load_itm_index().techniques})
     meta = {
         "generated_at": datetime.now(UTC).isoformat(),
         "indexed_articles": index.size,
