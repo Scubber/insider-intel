@@ -180,6 +180,23 @@ _ARTIFACT_FAMILIES: list[tuple[str, str]] = [
 ]
 _ARTIFACT_RX = [(re.compile(p, re.I), label) for p, label in _ARTIFACT_FAMILIES]
 
+# Record classes no COMPANY SENSOR produces. Authored deliberately, not derived:
+# an earlier draft inferred this from the DT crosswalk and wrongly swept in
+# account-opening records (a bank generates those daily) and "public statements
+# vs internal records" (whose internal half is company-held by construction).
+# These four are held by a broker, a carrier, a personal account, or a public
+# registry — an employer reaches them through counsel, a regulator or consent,
+# never by turning on logging.
+# family -> who actually holds it, so a card can name the holder instead of
+# reciting the whole list.
+OUTSIDE_TELEMETRY_HOLDERS: dict[str, str] = {
+    "SEC Form 4 / insider-transaction filings": "a public filing registry",
+    "brokerage / trade records": "the person's broker",
+    "personal messaging / phone records": "a phone carrier or a personal device",
+    "personal cloud storage contents": "a personal cloud account",
+}
+OUTSIDE_TELEMETRY_FAMILIES = frozenset(OUTSIDE_TELEMETRY_HOLDERS)
+
 
 def artifact_family(artifact: str) -> str:
     text = (artifact or "").strip()
@@ -205,6 +222,12 @@ THEMES = ("motive", "means", "preparation", "infringement", "anti-forensics")
 # (renderers show counts only). One misleading "75% of temps" (n=4) costs the
 # report its credibility.
 SMALL_N_FLOOR = 10
+
+# normalize_role fills employment_state with "current" whenever a function
+# matched and no boundary language appeared, so that bucket is a DEFAULT and
+# not a measurement. No finding may headline it — "most insiders were current
+# employees" would be reporting the fill value.
+DEFAULTED_EMPLOYMENT_STATE = "current"
 
 # How many techniques the year-over-year trend surface tracks. Fixed across
 # every year so an absent technique reads as zero, not as "fell out of the
@@ -855,16 +878,21 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
 # ---------------------------------------------------------------------------
 
 # Findings are GROUPED by the question each answers, and the page collapses
-# each group. Order is the editorial decision and it matters: group one is the
-# one open on load, and `proof-standard` holds the never-conflate card — the one
-# finding that must never sit behind a click. Leading with the proof standard
-# also frames every number under it, which is the house discipline anyway.
+# each group. Order is the editorial decision: group one is the one open on
+# load, so it holds a claim about the cases themselves.
+#
+# A finding states something about INSIDER BEHAVIOR OR DEFENCE. It never
+# describes this corpus, this pipeline, or how to read the page — the stat
+# strip, the legend and LIMITATIONS already carry all of that, and a card
+# restating them is filler wearing a headline (two such cards were cut in
+# 2026-08: "most cases are still allegations" and "confident language is not a
+# finding of fact"). If a candidate rule's payload is a caveat, it belongs in
+# LIMITATIONS.
 #
 # Each entry: (id, label, sub-line). A rule names its group by id; a group whose
 # rules all declined is omitted entirely rather than rendered as an empty
 # header advertising content that does not exist.
 FINDING_GROUPS = (
-    ("proof-standard", "HOW SOLID IS THIS", "What a court has actually ruled on"),
     ("who", "WHO DID IT", "Which kind of person these cases name"),
     ("evidence", "WHAT PROVES A CASE", "Which records carry proven cases"),
     ("change", "WHAT'S CHANGING", "Which tactics move year to year"),
@@ -884,13 +912,12 @@ _ROLE_ADVICE = [
     "Watch the public record. Stock-sale filings, and gaps between public statements"
     " and internal reports, are free signal.",
 ]
-_PROOF_ADVICE = [
-    "When a briefing or a sales pitch cites insider-threat numbers, ask how many come"
-    " from proven cases.",
-    "Allegations still teach. They show where companies believe they were hurt, and what"
-    " evidence they bring. Do not quote them as fact.",
-    "Label suspected and confirmed separately in your own incident metrics, the way this"
-    " page does.",
+_OUTSIDE_ADVICE = [
+    "Name who can obtain each of these today — counsel, compliance, or the"
+    " investigator — before a case needs one.",
+    "Write the request path into the investigation playbook: who asks, under"
+    " what authority, and how long it takes.",
+    "Rehearse that path once a year, the way a backup restore gets tested.",
 ]
 _ARTIFACT_ADVICE = [
     "Fund retention and legal-hold readiness for this record like the case-winning asset it is.",
@@ -904,12 +931,6 @@ _OVER_INDEX_ADVICE = [
     " same reviews.",
     "Put audit rights and evidence-preservation duties into contracts before you need them.",
     "Run joint offboarding: when someone rolls off, their access ends that day, verified.",
-]
-_POSTURE_ADVICE = [
-    "Read the document stage before you read the claim. A complaint states a theory; a"
-    " judgment states a finding.",
-    "Apply the same discipline internally: an investigator's working hypothesis is not a"
-    " conclusion.",
 ]
 _TREND_ADVICE = [
     "Check whether your controls cover this technique before it shows up in your own environment.",
@@ -949,40 +970,6 @@ def _finding(
     }
 
 
-def _finding_proof_gap(ledger: dict, floor: int) -> dict | None:
-    """The honesty card: how much of this corpus a court has actually ruled on."""
-    totals = ledger.get("strength_totals") or {}
-    proven = int(totals.get("adjudicated_admitted") or 0)
-    alleged = int(totals.get("alleged") or 0)
-    unclear = int(totals.get("reported_unclear") or 0)
-    cases = proven + alleged + unclear
-    if cases < floor:
-        return None
-    share = _pct(proven, cases)
-    unclear_note = f" {unclear} cannot be called either way." if unclear else ""
-    return _finding(
-        "proof-gap",
-        group="proof-standard",
-        title="Most cases here are still allegations, not verdicts",
-        stat=f"{share}%",
-        stat_label="of cases are proven in court",
-        takeaway=(
-            f"{proven} of {cases} cases are proven — a judge ruled it, or the insider "
-            f"admitted it. The other {alleged} are one side's account so far.{unclear_note} "
-            "Court cases take years, and most of the paper trail is written at the "
-            "accusation stage. This page counts the two separately, everywhere."
-        ),
-        recommendations=_PROOF_ADVICE,
-        method=(
-            "A case counts as proven only when one of its described actions carries an "
-            "admitted or adjudicated status, and the document it came from is far enough "
-            "along to support that. Everything else stays alleged."
-        ),
-        basis={"n": cases, "of": cases, "floor": floor},
-        evidence={"kind": "strength"},
-    )
-
-
 def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
     """Which kind of person shows up most, when the record names one."""
     roles = ledger.get("roles") or {}
@@ -992,7 +979,14 @@ def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
     # will state a denominator the bars beside it do not use.
     cases = int(ledger.get("enriched_cases") or 0)
     for axis in ("function", "employment_state"):
-        rows = [r for r in (roles.get(axis) or []) if r.get("label") != "unknown"]
+        rows = [
+            r
+            for r in (roles.get(axis) or [])
+            if r.get("label") != "unknown"
+            # "current" on the employment axis is normalize_role's default fill,
+            # not a signal — headlining it would report the fill.
+            and not (axis == "employment_state" and r.get("label") == DEFAULTED_EMPLOYMENT_STATE)
+        ]
         if len(rows) < 2 or known < floor or cases < floor:
             continue
         top, runner_up = rows[0], rows[1]
@@ -1071,7 +1065,9 @@ def _finding_over_index(ledger: dict, floor: int) -> dict | None:
         return None
     best = None
     for row in (ledger.get("roles") or {}).get("employment_state") or []:
-        if row.get("label") == "unknown" or (row.get("cases") or 0) < 1:
+        if row.get("label") in ("unknown", DEFAULTED_EMPLOYMENT_STATE):
+            continue  # "current" is a default fill (see normalize_role)
+        if (row.get("cases") or 0) < 1:
             continue
         strong = int(row.get("adjudicated_admitted") or 0)
         overall = _pct(int(row["cases"]), cases)
@@ -1106,37 +1102,6 @@ def _finding_over_index(ledger: dict, floor: int) -> dict | None:
         ),
         basis={"n": proven, "of": cases, "floor": floor, "role_known": known},
         evidence={"kind": "role_employment_state", "label": label},
-    )
-
-
-def _finding_posture_cap(ledger: dict, floor: int) -> dict | None:
-    """Cases whose 'proven' language was demoted by the document's own stage."""
-    posture = ledger.get("posture") or {}
-    capped = int(posture.get("capped_cases") or 0)
-    cases = int(ledger.get("enriched_cases") or 0)
-    if capped < floor or cases < floor:
-        return None
-    share = _pct(capped, cases)
-    return _finding(
-        "posture-cap",
-        group="proof-standard",
-        title="Confident language is not the same as a finding of fact",
-        stat=f"{capped}",
-        stat_label="cases demoted from proven to alleged",
-        takeaway=(
-            f"{capped} of {cases} cases — {share}% — read as settled fact until you check "
-            "which document said it. A complaint can assert anything; it states a theory, "
-            "not a ruling. This page caps a case's strength at what its document stage can "
-            "actually support, so those cases count as alleged."
-        ),
-        recommendations=_POSTURE_ADVICE,
-        method=(
-            "Each case's strength is the strongest claim its described actions carry, then "
-            "capped by the legal stage of the document those actions came from. The cap "
-            "only ever lowers a case, never raises one."
-        ),
-        basis={"n": capped, "of": cases, "floor": floor},
-        evidence={"kind": "posture"},
     )
 
 
@@ -1189,14 +1154,70 @@ def _finding_rising_technique(ledger: dict, floor: int) -> dict | None:
     )
 
 
+def _finding_outside_telemetry(ledger: dict, floor: int) -> dict | None:
+    """Proven cases resting on records no company sensor produces.
+
+    The crosswalk has said this in a comment since it was written — external
+    record classes map to almost no ITM detection because "courts often convict
+    on records org telemetry never sees" — and the page has never stated it.
+    It moves evidence readiness off the SOC and onto counsel and compliance,
+    which is a different team than every other card here addresses.
+    """
+    proven = int((ledger.get("strength_totals") or {}).get("adjudicated_admitted") or 0)
+    if proven < floor:
+        return None
+    rows = [
+        r
+        for r in (ledger.get("detected_by") or [])
+        if r.get("artifact") in OUTSIDE_TELEMETRY_FAMILIES
+        and int(r.get("adjudicated_admitted_cases") or 0) > 0
+    ]
+    if not rows:
+        return None
+    # Rank by each row's OWN proven count. Never sum the shares: their
+    # denominator is the corpus-wide proven total and a case can touch several
+    # classes, so they overlap and add past 100.
+    rows.sort(key=lambda r: (-int(r["adjudicated_admitted_cases"]), str(r["artifact"])))
+    lead = rows[0]
+    hits = int(lead["adjudicated_admitted_cases"])
+    if hits < floor:
+        return None
+    share = _pct(hits, proven)
+    others = ", ".join(str(r["artifact"]) for r in rows[1:3])
+    return _finding(
+        "outside-telemetry",
+        group="evidence",
+        title="Some cases are proven by records no sensor of yours produces",
+        stat=f"{share}%",
+        stat_label="of proven cases turn on a record you cannot log",
+        takeaway=(
+            f"{hits} of {proven} proven cases rest on {lead['artifact']} — held by "
+            f"{OUTSIDE_TELEMETRY_HOLDERS[lead['artifact']]}, not by your company."
+            + (f" So do cases resting on {others}." if others else "")
+            + " No amount of logging produces these records. Counsel, a regulator, or"
+            " the person's own consent does."
+        ),
+        recommendations=_OUTSIDE_ADVICE,
+        method=(
+            "Counts distinct proven cases whose evidence trail touches this record "
+            "class. A case can touch several, so these counts overlap and must not be "
+            "added together. Which classes sit outside company telemetry is a short "
+            "authored list. Securities cases are over-represented in this corpus "
+            "because the court queries search for them by name, so read this as where "
+            "proof came from in these cases, not how often it happens."
+        ),
+        basis={"n": proven, "of": int(ledger.get("enriched_cases") or 0), "floor": floor},
+        evidence={"kind": "artifact", "label": str(lead["artifact"])},
+    )
+
+
 # Fixed priority. Order is the editorial decision: the honesty card first, then
 # who, then what the record shows, then the caveats.
 _FINDING_RULES = (
-    _finding_proof_gap,
     _finding_role_skew,
-    _finding_dominant_artifact,
     _finding_over_index,
-    _finding_posture_cap,
+    _finding_dominant_artifact,
+    _finding_outside_telemetry,
     _finding_rising_technique,
 )
 

@@ -246,7 +246,9 @@ def test_trend_respects_the_colour_law() -> None:
 def test_trend_table_scrolls_inside_its_own_container() -> None:
     """A wide year matrix must never make the page scroll sideways."""
     html = _index()
-    trend = re.search(r'<div class="evp-region" id="evp-trend".*?\n            </div>', html, re.DOTALL)
+    trend = re.search(
+        r'<div class="evp-region" id="evp-trend".*?\n            </div>', html, re.DOTALL
+    )
     assert trend, "#evp-trend block not found"
     assert 'class="evp-scroll"' in trend.group(0)
     assert 'id="evp-trend-table"' in trend.group(0)
