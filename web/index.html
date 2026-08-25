@@ -193,7 +193,7 @@
               <dt>MATRIX</dt>
               <dd>The catalog of insider tactics, stage by stage. Click any tactic to see the real cases where it was used and what caught it.</dd>
               <dt>EVIDENCE</dt>
-              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
+              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. FINDINGS groups what the corpus says right now; WHAT CHANGED tracks which tactics rise and fall by filing year. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
               <dt>TOOLING</dt>
               <dd>Security products named in real court filings — which caught insiders, which got bypassed. Click a product for its cases.</dd>
               <dt>WORKBENCH</dt>
@@ -603,6 +603,20 @@
                   <div id="evp-who-state"></div>
                 </div>
               </div>
+            </div>
+            <div class="evp-region" id="evp-trend" hidden>
+              <p class="evp-section-head">
+                WHAT CHANGED — TECHNIQUES BY FILING YEAR
+                <span class="evp-note"
+                  data-tip="Counted by the year the document was filed, not the year the incident happened. How many cases a year holds also reflects how deep we have swept that year's courts, so read a rise as a change in the record — not a measurement of insider behavior at large."
+                  data-tip-pos="bottom-end">(filing year · METHODOLOGY on hover)</span>
+              </p>
+              <p class="evp-note">
+                Which tactics show up more, and less, over time. Each cell is the number
+                of cases filed that year.
+              </p>
+              <div class="evp-scroll"><table class="evp-table" id="evp-trend-table"></table></div>
+              <p class="evp-note" id="evp-trend-note"></p>
             </div>
             <div class="evp-cols">
               <div class="evp-col">

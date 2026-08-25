@@ -200,3 +200,64 @@ def test_dossier_evidence_passes_the_jurisdiction_slice() -> None:
     assert "country: slice" in body or "{ country: slice }" in body
     assert "JURISDICTION" in body, "the panel must name the slice it is reporting"
     assert "404" in body, "absent-in-slice needs an explicit empty state"
+
+
+# ---------------------------------------------------------------------------
+# Trend surface
+# ---------------------------------------------------------------------------
+
+
+def test_trend_never_compares_into_the_partial_current_year() -> None:
+    """CHANGE reads the last two COMPLETE years. Comparing into a year that is
+    still filling manufactures a decline that never happened."""
+    body = _fn_body(_app_js(), "renderEvidenceTrend")
+    assert "const complete = shown.filter((y) => y !== current)" in body
+    assert "generated_at" in body, "the current year must come from the ledger stamp"
+
+
+def test_trend_suppresses_thin_years_and_hides_when_too_short() -> None:
+    body = _fn_body(_app_js(), "renderEvidenceTrend")
+    assert "small_n_floor" in body
+    assert ">= floor" in body, "years under the reporting floor must be dropped"
+    assert "years.length < 2" in body and "box.hidden = true" in body
+
+
+def test_trend_is_a_count_matrix_not_a_line_chart() -> None:
+    """A smooth curve would imply a measurement of insider behavior over time
+    that a query-driven corpus cannot support. Counts, in cells, with the
+    number present so the shading is never the only encoding."""
+    body = _fn_body(_app_js(), "renderEvidenceTrend")
+    assert "svg" not in body.lower() and "canvas" not in body.lower()
+    # The count is written into the cell, not conveyed by color alone.
+    assert 'n ? String(n) : "—"' in body
+    # Sequential magnitude: one hue, light to dark.
+    assert "var(--signal)" in body and "color-mix" in body
+
+
+def test_trend_respects_the_colour_law() -> None:
+    """--accent is reserved for court-proven. A rise in case VOLUME is observed
+    signal and must not borrow the proven colour."""
+    body = _fn_body(_app_js(), "renderEvidenceTrend")
+    rise = body[body.index("const d = cell(later, id)") :][:400]
+    assert "evp-algn" in rise, "a positive delta must wear --signal"
+    assert "evp-adjn" not in rise, "a positive delta must not wear the court-proven accent"
+
+
+def test_trend_table_scrolls_inside_its_own_container() -> None:
+    """A wide year matrix must never make the page scroll sideways."""
+    html = _index()
+    trend = re.search(r'<div class="evp-region" id="evp-trend".*?\n            </div>', html, re.DOTALL)
+    assert trend, "#evp-trend block not found"
+    assert 'class="evp-scroll"' in trend.group(0)
+    assert 'id="evp-trend-table"' in trend.group(0)
+    # Teaches itself: section head, purpose line, methodology tooltip, note.
+    assert "evp-section-head" in trend.group(0)
+    assert "data-tip=" in trend.group(0)
+    assert 'id="evp-trend-note"' in trend.group(0)
+
+
+def test_trend_labels_the_axis_as_filing_year() -> None:
+    """Never 'when it happened' — the corpus knows when a document was filed."""
+    html = _index()
+    assert "TECHNIQUES BY FILING YEAR" in html
+    assert "not the year the incident happened" in html

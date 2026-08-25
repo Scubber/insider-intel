@@ -1102,6 +1102,11 @@ a.tlv-case-title:focus-visible {
   padding: 0;
   line-height: 1;
 }
+/* Trend matrix cell: the count sits IN the cell, so the sequential --signal
+   shading is a second encoding, never the only one. */
+.evp-cell {
+  transition: background 0.15s ease;
+}
 .evp-tech-detail td {
   border-top: 0;
   padding-bottom: 0.7rem;

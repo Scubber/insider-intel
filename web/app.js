@@ -4582,6 +4582,20 @@
     }
   }
 
+  // Technique cell: the spelled-out name reads first and opens the dossier; the
+  // ITM code trails small and dim, and is omitted when it would just repeat the
+  // name (a catalog miss).
+  function evpTechniqueButton(id, title) {
+    const btn = evpEl("button", "evp-tech-name");
+    btn.type = "button";
+    btn.appendChild(evpEl("span", "evp-tech-title", title || id));
+    if (title && title !== id) btn.appendChild(evpEl("span", "evp-tech-code", id));
+    btn.addEventListener("click", () => {
+      selectTechnique(id).catch((err) => setStatus(`Load failed: ${err.message}`));
+    });
+    return btn;
+  }
+
   const EVP_THEME_ORDER = [
     "motive",
     "means",
@@ -4701,15 +4715,9 @@
       row.appendChild(chev);
 
       const cell = evpEl("td");
-      const btn = evpEl("button", "evp-tech-name");
-      btn.type = "button";
-      btn.appendChild(evpEl("span", "evp-tech-title", t.title || t.id));
-      btn.appendChild(evpEl("span", "evp-tech-code", t.id));
-      btn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
-      btn.addEventListener("click", () => {
-        selectTechnique(t.id).catch((err) => setStatus(`Load failed: ${err.message}`));
-      });
-      cell.appendChild(btn);
+      const nameBtn = evpTechniqueButton(t.id, t.title);
+      nameBtn.dataset.tip = (t.exemplars || []).join(" · ") || "Open the full technique dossier";
+      cell.appendChild(nameBtn);
       row.appendChild(cell);
 
       row.appendChild(evpEl("td", "num", String(t.cases)));
@@ -4748,6 +4756,118 @@
         table.appendChild(detail);
       }
     });
+  }
+
+  // WHAT CHANGED — techniques by filing year.
+  //
+  // A matrix of counts, not a line chart. Two reasons: the corpus is
+  // query-driven, so a smooth curve would imply a measurement of insider
+  // behavior over time that these documents cannot support; and a single
+  // sequential hue (--signal, light to dark) carries magnitude with no
+  // categorical palette to get wrong. The count sits IN each cell, so color is
+  // never the only encoding.
+  function renderEvidenceTrend(data) {
+    const box = document.getElementById("evp-trend");
+    const table = document.getElementById("evp-trend-table");
+    const note = document.getElementById("evp-trend-note");
+    if (!box || !table) return;
+    const floor = (data && data.small_n_floor) || 10;
+    const byYear = (data && data.by_year) || {};
+    // Thin years are suppressed rather than drawn as a fake ramp.
+    const years = Object.keys(byYear)
+      .filter((y) => (byYear[y].cases || 0) >= floor)
+      .sort();
+    if (years.length < 2) {
+      box.hidden = true;
+      return;
+    }
+    const shown = years.slice(-7);
+    const current = String((data && data.generated_at) || "").slice(0, 4);
+
+    // Rank the tracked techniques by total across the shown years.
+    const totals = new Map();
+    shown.forEach((y) => {
+      (byYear[y].techniques || []).forEach((t) => {
+        totals.set(t.id, (totals.get(t.id) || 0) + (t.cases || 0));
+      });
+    });
+    const techs = [...totals.entries()]
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+      .map(([id]) => id);
+    if (!techs.length) {
+      box.hidden = true;
+      return;
+    }
+    const titles = new Map();
+    shown.forEach((y) =>
+      (byYear[y].techniques || []).forEach((t) => titles.set(t.id, t.title || t.id)),
+    );
+    const cell = (y, id) => {
+      const hit = (byYear[y].techniques || []).find((t) => t.id === id);
+      return hit ? hit.cases || 0 : 0;
+    };
+    const peak = Math.max(1, ...shown.flatMap((y) => techs.map((id) => cell(y, id))));
+
+    // CHANGE compares the last two COMPLETE years — never into a partial one.
+    const complete = shown.filter((y) => y !== current);
+    const later = complete[complete.length - 1];
+    const earlier = complete[complete.length - 2];
+
+    table.innerHTML = "";
+    const head = evpEl("tr");
+    head.appendChild(evpEl("th", "", "TECHNIQUE"));
+    shown.forEach((y) => {
+      const th = evpEl("th", "num", y === current ? `${y}*` : y);
+      if (y === current) th.dataset.tip = `${y} is still filling — never used for CHANGE`;
+      head.appendChild(th);
+    });
+    const chgTh = evpEl("th", "num", "CHANGE");
+    chgTh.dataset.tip = earlier
+      ? `Cases in ${later} against ${earlier} — the last two complete years`
+      : "Needs two complete years above the reporting floor";
+    head.appendChild(chgTh);
+    table.appendChild(head);
+
+    techs.forEach((id) => {
+      const tr = evpEl("tr");
+      const name = evpEl("td");
+      name.appendChild(evpTechniqueButton(id, titles.get(id)));
+      tr.appendChild(name);
+
+      shown.forEach((y) => {
+        const n = cell(y, id);
+        const td = evpEl("td", n ? "num evp-cell" : "num evp-cell tlt-zero", n ? String(n) : "—");
+        if (n) {
+          // Sequential: one hue, light to dark, floored so a 1 still reads.
+          td.style.background = `color-mix(in srgb, var(--signal) ${Math.round(8 + 34 * (n / peak))}%, transparent)`;
+          td.dataset.tip = `${titles.get(id) || id} · ${n} case(s) filed in ${y}`;
+        }
+        tr.appendChild(td);
+      });
+
+      if (earlier) {
+        const d = cell(later, id) - cell(earlier, id);
+        // Colour law: --accent is reserved for court-proven. A rise in case
+        // VOLUME is observed signal, so it wears --signal, never the accent.
+        const td = evpEl("td", d > 0 ? "num evp-algn" : "num evp-row-count", d > 0 ? `+${d}` : String(d));
+        td.dataset.tip = `${cell(earlier, id)} in ${earlier} → ${cell(later, id)} in ${later}`;
+        tr.appendChild(td);
+      } else {
+        tr.appendChild(evpEl("td", "num tlt-zero", "—"));
+      }
+      table.appendChild(tr);
+    });
+
+    if (note) {
+      const undated = (data && data.by_year_undated_cases) || 0;
+      note.textContent =
+        "Darker means more cases that year. " +
+        (current && shown.includes(current) ? `${current} is still filling, so it is never compared. ` : "") +
+        (undated ? `${undated} case(s) carry no usable date and are left out. ` : "") +
+        "Years below the reporting floor are hidden.";
+    }
+    box.hidden = false;
   }
 
   function renderEvidencePage(data) {
@@ -5122,6 +5242,7 @@
       const data = evidenceCountry === "all" ? globalData : await fetchLedger(evidenceCountry);
       renderEvidencePage(data);
       renderFindings(data);
+      renderEvidenceTrend(data);
       renderEvidenceBasisLine(data);
       renderJurisdictionTabs();
       renderRegionCompare(globalData);
