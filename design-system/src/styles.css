@@ -552,12 +552,202 @@
 .ds-finding-actions li {
   margin-bottom: 0.2rem;
 }
+.ds-finding-basis {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.3rem;
+}
 .ds-finding-method {
   font-size: 0.66rem;
   line-height: 1.35;
   color: var(--muted);
   max-width: 72ch;
   margin: 0;
+}
+
+/* --- FINDING GROUP (mirrors .evp-finding-group over the .matrix-col
+   disclosure: marker suppressed, rotating accent chevron, count badge) --- */
+.ds-fgroup {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--side-bg) 80%, transparent);
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+.ds-fgroup-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  /* 44px target — the summary is the only control on the row. */
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+  flex-wrap: wrap;
+}
+.ds-fgroup-summary::-webkit-details-marker {
+  display: none;
+}
+.ds-fgroup-summary::before {
+  content: "▾";
+  margin-right: 0.35rem;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+.ds-fgroup:not([open]) > .ds-fgroup-summary::before {
+  transform: rotate(-90deg);
+}
+.ds-fgroup-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+/* A COLLAPSED header still teaches: the leading stat rides along. */
+.ds-fgroup-lead {
+  flex: 1 1 auto;
+  text-align: right;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.ds-fgroup-count {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.ds-fgroup-body {
+  padding: 0 0.6rem 0.5rem;
+}
+.ds-fgroup-blurb {
+  font-size: 0.72rem;
+  color: var(--muted);
+  max-width: 68ch;
+  margin: 0 0 0.6rem;
+}
+
+/* --- TREND MATRIX (mirrors .evp-table + the .evp-cell sequential shading) --- */
+.ds-trend-scroll {
+  overflow-x: auto;
+}
+.ds-trend-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+.ds-trend-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 0.2rem 0.5rem 0.3rem 0;
+}
+.ds-trend-table td {
+  padding: 0.26rem 0.5rem 0.26rem 0;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+.ds-trend-table .ds-num {
+  text-align: right;
+}
+.ds-trend-cell {
+  transition: background 0.15s ease;
+}
+.ds-trend-zero {
+  color: var(--muted);
+}
+.ds-trend-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ds-trend-title {
+  color: var(--signal);
+  font-weight: 700;
+  border-bottom: 1px dotted color-mix(in srgb, var(--signal) 55%, transparent);
+}
+.ds-trend-code {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+/* Colour law: --accent is reserved for court-proven. A rise in case VOLUME is
+   observed signal, so it wears --signal. */
+.ds-trend-rise {
+  color: var(--signal);
+  font-weight: 700;
+}
+.ds-trend-flat {
+  color: var(--muted);
+}
+.ds-trend-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  max-width: 68ch;
+  margin: 0.4rem 0 0;
+}
+
+/* --- TABLE CONTROLS (sortable header + in-place row expand) --- */
+.ds-sort {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.ds-sort:hover,
+.ds-sort:focus-visible {
+  color: var(--accent);
+}
+.ds-sort-caret {
+  opacity: 0.3;
+}
+.ds-sort-on {
+  color: var(--accent);
+}
+.ds-sort-on .ds-sort-caret {
+  opacity: 1;
+}
+/* Same glyph and rotation as .ds-fgroup, so the page teaches one gesture. */
+.ds-expand {
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  line-height: 1;
+}
+.ds-row-detail td {
+  border-top: 0;
+  padding-bottom: 0.7rem;
 }
 
 /* --- EVIDENCE BAR (mirrors .evp-row/.evp-bar: all-cases vs court-proven) --- */
