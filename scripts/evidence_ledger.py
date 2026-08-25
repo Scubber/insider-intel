@@ -77,6 +77,7 @@ def render_markdown(ledger: dict) -> str:
     out.append("> ground truth; alleged is a complaint's theory. Never read the two")
     out.append("> columns as equivalent.")
 
+    findings = ledger.get("findings") or []
     groups = ledger.get("finding_groups") or []
     if groups:
         out.append("")
@@ -89,7 +90,8 @@ def render_markdown(ledger: dict) -> str:
             out.append(f"### {g['label']}")
             out.append("")
             out.append(f"_{g['blurb']}_")
-            for f in g["findings"]:
+            # Groups are metadata only; the flat list is the source of truth.
+            for f in [x for x in findings if x.get("group") == g["id"]]:
                 out.append("")
                 out.append(f"#### {f['rank']}. {f['title']}")
                 out.append("")

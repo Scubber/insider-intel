@@ -1261,7 +1261,13 @@ def derive_findings(
 
 
 def group_findings(findings: list[dict]) -> list[dict]:
-    """Findings bucketed into FINDING_GROUPS order, for a collapsible section.
+    """Group HEADERS in FINDING_GROUPS order, for a collapsible section.
+
+    Metadata only — a group deliberately does NOT carry its findings. The flat
+    list is the single source of truth and a consumer joins on
+    ``finding["group"]``; embedding them here shipped every finding twice (44%
+    of the payload measured) and, once serialized, left two independent copies
+    that nothing keeps in step.
 
     Groups with nothing to say are omitted — an empty collapsed header
     advertises content that does not exist. Each group carries ``lead``, the
@@ -1280,7 +1286,6 @@ def group_findings(findings: list[dict]) -> list[dict]:
                 "blurb": blurb,
                 "count": len(members),
                 "lead": f"{members[0]['stat']} {members[0]['stat_label']}",
-                "findings": members,
             }
         )
     return out

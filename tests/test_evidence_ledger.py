@@ -779,9 +779,10 @@ def test_groups_render_in_taxonomy_order_and_carry_a_collapsed_lead() -> None:
     assert [g["id"] for g in groups] == [g for g in order if g in {x["id"] for x in groups}]
     for group in groups:
         assert group["label"] and group["blurb"]
-        assert group["count"] == len(group["findings"])
+        members = [f for f in ledger["findings"] if f["group"] == group["id"]]
+        assert group["count"] == len(members)
         # A collapsed header still teaches: it carries its leading stat.
-        assert group["lead"].startswith(group["findings"][0]["stat"])
+        assert group["lead"].startswith(members[0]["stat"])
 
 
 def test_empty_groups_are_omitted_not_rendered_hollow() -> None:
@@ -792,7 +793,7 @@ def test_empty_groups_are_omitted_not_rendered_hollow() -> None:
     rendered = {g["id"] for g in ledger["finding_groups"]}
     represented = {f["group"] for f in ledger["findings"]}
     assert rendered == represented
-    assert all(g["findings"] for g in ledger["finding_groups"])
+    assert all(g["count"] > 0 for g in ledger["finding_groups"])
 
 
 def test_per_group_cap_replaces_the_global_limit() -> None:
@@ -805,20 +806,33 @@ def test_per_group_cap_replaces_the_global_limit() -> None:
     assert ev.FINDINGS_PER_GROUP == 3
     ledger = ev.build_evidence_ledger(_synthetic_rows(), now=NOW)
     for group in ledger["finding_groups"]:
-        assert len(group["findings"]) <= ev.FINDINGS_PER_GROUP
+        assert group["count"] <= ev.FINDINGS_PER_GROUP
 
 
-def test_grouped_view_shares_objects_with_the_flat_list() -> None:
-    """attach_catalog_titles mutates ledger['findings']; the grouped view must
-    see those edits, and must survive the service layer's deepcopy."""
-    import copy
+def test_groups_carry_no_embedded_findings() -> None:
+    """One source of truth on the wire.
 
-    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+    Groups used to embed their findings, which shipped every finding twice —
+    44% of the payload, measured — and, once serialized, left the flat list and
+    the grouped view as two independent copies that nothing keeps in step.
+    Consumers join on finding["group"] instead.
+    """
+    import json
+
+    from shared.utils.evidence import build_evidence_ledger
 
     ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
-    attach_catalog_titles(ledger, {})
-    copied = copy.deepcopy(ledger)
-    assert copied["finding_groups"][0]["findings"][0] is copied["findings"][0]
+    groups = ledger["finding_groups"]
+    assert groups
+    for group in groups:
+        assert set(group) == {"id", "label", "blurb", "count", "lead"}
+    # The join every consumer performs must reproduce each group's count.
+    for group in groups:
+        joined = [f for f in ledger["findings"] if f["group"] == group["id"]]
+        assert len(joined) == group["count"]
+    # And no finding text is serialized twice.
+    blob = json.dumps(groups)
+    assert ledger["findings"][0]["takeaway"] not in blob
 
 
 def test_findings_grouped_on_the_endpoint(tmp_path, monkeypatch) -> None:
