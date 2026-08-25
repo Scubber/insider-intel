@@ -1110,6 +1110,41 @@ a.tlv-case-title:focus-visible {
   padding-top: 0.7rem;
   margin-bottom: 0.9rem;
 }
+/* Findings group: one collapsible section per question the findings answer.
+   Reuses the matrix .matrix-col disclosure (marker suppressed, rotating
+   --accent chevron) so the page teaches ONE expand gesture, not two. */
+.evp-finding-group {
+  margin-bottom: 0.5rem;
+}
+.evp-group-summary {
+  /* 44px tap target — the summary is the only control on the row. */
+  min-height: 44px;
+  text-transform: none;
+  letter-spacing: 0;
+  flex-wrap: wrap;
+}
+.evp-group-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+/* A COLLAPSED header still teaches: the group's leading stat rides along. */
+.evp-group-lead {
+  flex: 1 1 auto;
+  text-align: right;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.evp-group-body {
+  padding: 0 0.6rem 0.5rem;
+}
+.evp-group-body > .evp-note {
+  margin: 0 0 0.6rem;
+}
 .evp-finding {
   border: 1px solid var(--line);
   border-left: 3px solid var(--signal);
@@ -1172,6 +1207,13 @@ a.tlv-case-title:focus-visible {
 }
 .evp-finding-actions li {
   margin-bottom: 0.2rem;
+}
+.evp-finding-basis {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 0.3rem;
 }
 .evp-finding-method {
   font-size: 0.66rem;

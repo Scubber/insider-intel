@@ -4745,62 +4745,102 @@
     }
   }
 
+  // A finding card. The number carries it: headline, one big stat, one line of
+  // consequence, terse actions, one dim method footnote. `method` stays a
+  // VISIBLE paragraph — data-tip tooltips are CSS-only and never fire on
+  // touch, and a finding's caveat is load-bearing.
+  function evpFindingCard(f) {
+    const card = evpEl("article", "evp-finding");
+
+    const head = evpEl("div", "evp-finding-head");
+    head.appendChild(evpEl("span", "evp-finding-title", f.title));
+    const tag = evpEl("span", "evp-finding-tag", "DERIVED");
+    tag.dataset.tip = "Computed from this jurisdiction's ledger at read time — nothing is stored";
+    head.appendChild(tag);
+    card.appendChild(head);
+
+    if (f.stat) {
+      const stat = evpEl("div", "evp-finding-stat");
+      stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
+      if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
+      card.appendChild(stat);
+    }
+
+    if (f.takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", f.takeaway));
+
+    if ((f.recommendations || []).length) {
+      const ul = evpEl("ul", "evp-finding-actions");
+      f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
+      card.appendChild(ul);
+    }
+
+    const basis = f.basis && f.basis.n ? `BASED ON ${f.basis.n.toLocaleString()} CASES` : "";
+    if (basis) card.appendChild(evpEl("p", "evp-finding-basis", basis));
+    if (f.method) card.appendChild(evpEl("p", "evp-finding-method", f.method));
+    return card;
+  }
+
+  // Findings, grouped by the question each answers and collapsible. The server
+  // owns the taxonomy (FINDING_GROUPS) and ships group headers in
+  // `finding_groups`; groups are metadata only, so each one's cards are joined
+  // from the flat list here. Group one opens; the rest stay shut but still
+  // carry their leading stat, so the collapsed state teaches on its own.
   function renderFindings(data) {
     const box = document.getElementById("evp-findings");
     const list = document.getElementById("evp-findings-list");
     if (!box || !list) return;
     const findings = (data && data.findings) || [];
+    const groups = (data && data.finding_groups) || [];
+    list.innerHTML = "";
     if (!findings.length) {
-      box.hidden = true;
+      // A thin jurisdiction states nothing rather than a weak claim — say so,
+      // or the section reads as broken.
+      if (data && data.enriched_cases) {
+        const floor = data.small_n_floor || 10;
+        const where = evidenceCountry === "all" ? "the corpus" : `${countryName(evidenceCountry)} courts`;
+        list.appendChild(
+          evpEl(
+            "p",
+            "evp-note",
+            `Not enough cases from ${where} yet to state a finding — the floor is ${floor} cases. ` +
+              "The tables below still show every count.",
+          ),
+        );
+        box.hidden = false;
+      } else {
+        box.hidden = true;
+      }
       return;
     }
-    list.innerHTML = "";
-    findings.forEach((f) => {
-      const card = evpEl("article", "evp-finding");
+    groups.forEach((g, i) => {
+      const members = findings.filter((f) => f.group === g.id);
+      if (!members.length) return;
+      const det = document.createElement("details");
+      det.className = "matrix-col evp-finding-group";
+      det.open = evidenceOpenGroups ? evidenceOpenGroups.has(g.id) : i === 0;
+      det.addEventListener("toggle", () => {
+        if (!evidenceOpenGroups) {
+          evidenceOpenGroups = new Set(groups.length ? [groups[0].id] : []);
+        }
+        if (det.open) evidenceOpenGroups.add(g.id);
+        else evidenceOpenGroups.delete(g.id);
+      });
 
-      // Scannable card: a headline, one big number, one line of consequence,
-      // terse actions, one dim footnote. No walls of prose.
-      const head = evpEl("div", "evp-finding-head");
-      head.appendChild(evpEl("span", "evp-finding-title", f.title));
-      head.appendChild(evpEl("span", "evp-finding-tag", "AI-ASSISTED"));
-      card.appendChild(head);
+      const sum = document.createElement("summary");
+      sum.className = "matrix-col-summary evp-group-summary";
+      sum.appendChild(evpEl("span", "evp-group-label", g.label));
+      // A collapsed header still teaches: the group's leading stat rides along.
+      if (g.lead) sum.appendChild(evpEl("span", "evp-group-lead", g.lead));
+      sum.appendChild(evpEl("span", "matrix-col-count", String(g.count)));
+      det.appendChild(sum);
 
-      if (f.stat) {
-        const stat = evpEl("div", "evp-finding-stat");
-        stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
-        if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
-        card.appendChild(stat);
-      }
-
-      // Backward-compatible: takeaway (new) or claim (old).
-      const takeaway = f.takeaway || f.claim;
-      if (takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", takeaway));
-
-      if ((f.recommendations || []).length) {
-        const ul = evpEl("ul", "evp-finding-actions");
-        f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
-        card.appendChild(ul);
-      }
-
-      const foot = f.method || f.caveat;
-      if (foot) card.appendChild(evpEl("p", "evp-finding-method", foot));
-
-      list.appendChild(card);
+      const body = evpEl("div", "evp-group-body");
+      if (g.blurb) body.appendChild(evpEl("p", "evp-note", g.blurb));
+      members.forEach((f) => body.appendChild(evpFindingCard(f)));
+      det.appendChild(body);
+      list.appendChild(det);
     });
     box.hidden = false;
-  }
-
-  async function loadFindings() {
-    // Findings ship as a static, Pages-served file (versioned + operator-
-    // approved by merge), so they render even while the API is waking.
-    try {
-      const resp = await fetch("findings.json", { cache: "no-cache" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      renderFindings(await resp.json());
-    } catch (err) {
-      console.warn("Findings unavailable", err);
-      renderFindings(null);
-    }
   }
 
   /* ── Jurisdiction views (operator directive 2026-08-22): each nation tab is
@@ -4811,6 +4851,11 @@
   let evidenceCountry = "all";
   let evidenceGlobalCountries = null; // {CC: caseCount} from the global read
   const evidenceLedgerCache = {}; // country -> ledger payload (session)
+  // Findings-group disclosure state. renderEvidencePage rebuilds the DOM on
+  // every load, so open/closed can't live on the elements. null = untouched,
+  // which means "group one open, rest collapsed"; a tab switch resets to null
+  // because a new jurisdiction is a new report.
+  let evidenceOpenGroups = null;
 
   // Country codes used as jurisdiction labels, spelled out for tooltips.
   const COUNTRY_NAMES = { US: "United States", IN: "India", CA: "Canada" };
@@ -4871,6 +4916,8 @@
       btn.addEventListener("click", () => {
         if (evidenceCountry === code) return;
         evidenceCountry = code;
+        // A new jurisdiction is a new report — reopen on the first group.
+        evidenceOpenGroups = null;
         loadEvidencePage();
       });
       return btn;
@@ -4951,7 +4998,6 @@
 
   async function loadEvidencePage(force) {
     if (!document.getElementById("evp-stats")) return;
-    loadFindings();
     if (force) {
       // Post-sweep /reload: drop the session cache so every jurisdiction view
       // recomputes from the fresh corpus. (Tab switches don't force — they
@@ -4966,12 +5012,14 @@
       if (globalData && globalData.countries) evidenceGlobalCountries = globalData.countries;
       const data = evidenceCountry === "all" ? globalData : await fetchLedger(evidenceCountry);
       renderEvidencePage(data);
+      renderFindings(data);
       renderEvidenceBasisLine(data);
       renderJurisdictionTabs();
       renderRegionCompare(globalData);
     } catch (err) {
       console.warn("Evidence page unavailable", err);
       renderEvidencePage(null);
+      renderFindings(null);
     }
   }
 
