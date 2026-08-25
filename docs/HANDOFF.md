@@ -293,6 +293,26 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
    broken-pool rebuild is per-future with origin-pool identity guard.
    Expected: ~150+ pdfs/s pool-limited (~550k/h) whenever streams keep
    up — years with many partitions AND single-partition tails alike.
+   **SWEEP COMPLETE 2026-08-25 20:21Z — VM DELETED 21:49Z.** The windowed
+   build held ~500-860k pdfs/h to the 2000 floor. Grand totals (final
+   `DONE` line): **15,713,058 PDFs scanned, 2,836 insider matches** (full
+   text, in `raw/sweeps/indiacourts`, 410 chunks / 58.5MiB), 940
+   partitions, corrupt 16,942 (0.11%), scanned-skipped 55,713 (0.35%),
+   non_english 27,308 (0.17%, language-stamped; 1 Hindi row stored),
+   0 extraction timeouts, 2 contained partition errors, final-run elapsed
+   30h40m; total spot spend across both VMs (us-east1 c2d-16 ~22h +
+   asia-south1 c2d-32 ~32h) ≈ **$15-20**. Final audit over all 2,833
+   stored rows: 0 contract breaches, 0 duplicate links, 233 gate-billable
+   (nightly reserve 120 → ~2 cycles to enrich). Teardown receipt: delete
+   run logged `Deleted [.../zones/asia-south1-b/instances/
+   indiacourts-sweep]` and a follow-up status confirmed "no
+   indiacourts-sweep VM exists". The 4h watch Routine is deleted.
+   Follow-ups: (a) re-sweep the 2 error-contained partitions (no
+   completion marker — a short `sweep-start` on sparky or a fresh spot VM
+   picks up exactly those); (b) the TARGETED OCR pass over the 55,713
+   scanned PDFs (partition list derivable from sweep state); (c) nightly
+   cycles keep merging the spooled chunks and enriching 120/night until
+   the 233-row billable backlog drains.
    **phase 1 UK Find Case Law** pipeline module still unbuilt — the new
    jurisdiction plumbing serves it. CanLII API stays a no-go
    (metadata-only). AU direct / EU national courts not chosen.
