@@ -69,3 +69,31 @@
   Fonts added to both imports: IBM Plex Mono, Space Grotesk, Space Mono,
   Cormorant Garamond, Xanh Mono. The pack's density/layout/redaction "tweak
   controls" are NOT yet implemented in the site — follow-up work if wanted.
+
+- 2026-08-25 EVIDENCE redesign: added FindingGroup, TrendMatrix, and the
+  TableControls trio (SortHeader / ExpandToggle / ExpandableRow); FindingCard
+  gained `basis` and its `tag` default moved AI-ASSISTED -> DERIVED (findings
+  are computed from the ledger now, nothing on that card is model-written).
+  Authored previews exist for all of them and typecheck against dist/*.d.ts.
+  `npm install && npm run build` in design-system/ both work in a Claude Code
+  web sandbox.
+
+  **The hosted re-sync did NOT run and could not.** The converter that emits
+  `_ds_bundle.js` / `_ds_manifest.json` / `_preview/*` / the per-component
+  `.jsx` `.d.ts` `.html` `.prompt.md` ships with the `design-sync` SKILL, which
+  is not installed in a Claude Code web session (only design, dataviz and
+  artifact-capabilities are bundled), and `.ds-sync/` is absent. The bundle is
+  not hand-rollable: esbuild alone does not reproduce it, because the converter
+  injects a `shim:react-shim` module mapping react onto `window.React` with its
+  own jsx/jsxs implementations, plus the `__dsMainNs` namespace merge on the
+  trailing `window.DossierUI=` line. Reproducing a compiler's output by
+  inspection and pushing it to a design system other people's previews render
+  from is not a safe trade, so it was left alone.
+
+  To finish: run `/design-sync` from a session that has the skill. Everything
+  it needs is committed — package source, previews, `.design-sync/config.json`
+  (projectId 29c26c75-…). The live project is still on the pre-2026-08-25
+  component set; the checked-in `design/redesign/_ds/` copy is older still
+  (11 components vs the live 17) and is sync OUTPUT, so let the sync refresh
+  it rather than hand-editing.
+
