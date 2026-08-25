@@ -733,3 +733,97 @@ def test_cli_report_renders_findings_and_the_trend_table() -> None:
     assert "Most cases here are still allegations" in report
     # The appendix reads the stable-set shape without blowing up.
     assert "| Year | Cases | Tracked techniques |" in report
+
+
+# ---------------------------------------------------------------------------
+# Finding groups — the collapsible section's contract
+# ---------------------------------------------------------------------------
+
+
+def test_every_rule_names_a_real_group() -> None:
+    """A rule pointing at a group id that does not exist would silently vanish
+    from the grouped view while still appearing in the flat list."""
+    from shared.utils.evidence import FINDING_GROUPS, build_evidence_ledger
+
+    known = {gid for gid, _, _ in FINDING_GROUPS}
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    assert ledger["findings"], "need findings to check the grouping of"
+    for finding in ledger["findings"]:
+        assert finding["group"] in known, f"{finding['id']} names unknown group"
+
+
+def test_proof_standard_leads_so_the_honesty_card_is_never_collapsed() -> None:
+    """Group one is the group the page opens on load.
+
+    proof-gap is the never-conflate card. If a later edit reorders the groups
+    and demotes it, the page opens without ever showing that proven and alleged
+    are counted separately — which is the one thing this product must say.
+    """
+    from shared.utils.evidence import FINDING_GROUPS, _finding_proof_gap
+
+    assert FINDING_GROUPS[0][0] == "proof-standard"
+    ledger_like = {
+        "enriched_cases": 60,
+        "strength_totals": {"adjudicated_admitted": 12, "alleged": 48, "reported_unclear": 0},
+    }
+    assert _finding_proof_gap(ledger_like, 10)["group"] == "proof-standard"
+
+
+def test_groups_render_in_taxonomy_order_and_carry_a_collapsed_lead() -> None:
+    from shared.utils.evidence import FINDING_GROUPS, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    groups = ledger["finding_groups"]
+    assert groups, "a corpus above the floor must produce at least one group"
+    order = [gid for gid, _, _ in FINDING_GROUPS]
+    assert [g["id"] for g in groups] == [g for g in order if g in {x["id"] for x in groups}]
+    for group in groups:
+        assert group["label"] and group["blurb"]
+        assert group["count"] == len(group["findings"])
+        # A collapsed header still teaches: it carries its leading stat.
+        assert group["lead"].startswith(group["findings"][0]["stat"])
+
+
+def test_empty_groups_are_omitted_not_rendered_hollow() -> None:
+    """An empty collapsed header advertises content that does not exist."""
+    from shared.utils.evidence import build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    rendered = {g["id"] for g in ledger["finding_groups"]}
+    represented = {f["group"] for f in ledger["findings"]}
+    assert rendered == represented
+    assert all(g["findings"] for g in ledger["finding_groups"])
+
+
+def test_per_group_cap_replaces_the_global_limit() -> None:
+    """The old global cap of 4 existed to keep the section short. Collapsed
+    groups cost no space, so the cap is per group and a rule that fired is no
+    longer silently dropped because three unrelated rules fired first."""
+    import shared.utils.evidence as ev
+
+    assert not hasattr(ev, "FINDINGS_LIMIT"), "global cap should be gone"
+    assert ev.FINDINGS_PER_GROUP == 3
+    ledger = ev.build_evidence_ledger(_synthetic_rows(), now=NOW)
+    for group in ledger["finding_groups"]:
+        assert len(group["findings"]) <= ev.FINDINGS_PER_GROUP
+
+
+def test_grouped_view_shares_objects_with_the_flat_list() -> None:
+    """attach_catalog_titles mutates ledger['findings']; the grouped view must
+    see those edits, and must survive the service layer's deepcopy."""
+    import copy
+
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_synthetic_rows(), now=NOW)
+    attach_catalog_titles(ledger, {})
+    copied = copy.deepcopy(ledger)
+    assert copied["finding_groups"][0]["findings"][0] is copied["findings"][0]
+
+
+def test_findings_grouped_on_the_endpoint(tmp_path, monkeypatch) -> None:
+    """Both views ship, and the thin fixture states nothing in either."""
+    with _client(tmp_path, monkeypatch) as client:
+        data = client.get("/evidence/ledger").json()
+        assert data["findings"] == []
+        assert data["finding_groups"] == []

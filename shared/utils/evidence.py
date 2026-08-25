@@ -825,6 +825,7 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
     # Derived last: the rules read the finished aggregates, so every slice and
     # every caller (API, CLI report, boot snapshot) gets the same cards.
     ledger["findings"] = derive_findings(ledger)
+    ledger["finding_groups"] = group_findings(ledger["findings"])
     return ledger
 
 
@@ -853,7 +854,25 @@ def build_evidence_ledger(rows, *, top: int = 25, now: datetime | None = None) -
 #      CLI report and silently vanishes from the API.
 # ---------------------------------------------------------------------------
 
-FINDINGS_LIMIT = 4
+# Findings are GROUPED by the question each answers, and the page collapses
+# each group. Order is the editorial decision and it matters: group one is the
+# one open on load, and `proof-standard` holds the never-conflate card — the one
+# finding that must never sit behind a click. Leading with the proof standard
+# also frames every number under it, which is the house discipline anyway.
+#
+# Each entry: (id, label, sub-line). A rule names its group by id; a group whose
+# rules all declined is omitted entirely rather than rendered as an empty
+# header advertising content that does not exist.
+FINDING_GROUPS = (
+    ("proof-standard", "HOW SOLID IS THIS", "What a court has actually ruled on"),
+    ("who", "WHO DID IT", "Which kind of person these cases name"),
+    ("evidence", "WHAT PROVES A CASE", "Which records carry proven cases"),
+    ("change", "WHAT'S CHANGING", "Which tactics move year to year"),
+)
+
+# Per-group cap, not a global one. Collapsed groups cost no vertical space, so
+# the section stays short without silently dropping a rule that fired.
+FINDINGS_PER_GROUP = 3
 
 # Voice: short sentences, one idea each, concrete subject and verb. Read every
 # line aloud before changing it — if it would sound wrong spoken to a general
@@ -906,6 +925,7 @@ def _pct(part: int, whole: int) -> int | None:
 def _finding(
     fid: str,
     *,
+    group: str,
     title: str,
     stat: str,
     stat_label: str,
@@ -917,6 +937,7 @@ def _finding(
 ) -> dict:
     return {
         "id": fid,
+        "group": group,
         "title": title,
         "stat": stat,
         "stat_label": stat_label,
@@ -941,6 +962,7 @@ def _finding_proof_gap(ledger: dict, floor: int) -> dict | None:
     unclear_note = f" {unclear} cannot be called either way." if unclear else ""
     return _finding(
         "proof-gap",
+        group="proof-standard",
         title="Most cases here are still allegations, not verdicts",
         stat=f"{share}%",
         stat_label="of cases are proven in court",
@@ -980,6 +1002,7 @@ def _finding_role_skew(ledger: dict, floor: int) -> dict | None:
         label = str(top["label"])
         return _finding(
             "role-skew",
+            group="who",
             title=f"{label.capitalize()} is the group these cases name most",
             stat=f"{share}%",
             stat_label="of all cases name this group",
@@ -1016,6 +1039,7 @@ def _finding_dominant_artifact(ledger: dict, floor: int) -> dict | None:
     artifact = str(top["artifact"])
     return _finding(
         "dominant-artifact",
+        group="evidence",
         title=f"{artifact.capitalize()} is what proven cases are built on",
         stat=f"{share}%",
         stat_label="of proven cases leave this record behind",
@@ -1064,6 +1088,7 @@ def _finding_over_index(ledger: dict, floor: int) -> dict | None:
     label = str(row["label"])
     return _finding(
         "proven-over-index",
+        group="who",
         title=f"{label.capitalize()} cases are few — but they get proven",
         stat=f"{among_proven}%",
         stat_label="of proven cases involve this group",
@@ -1094,6 +1119,7 @@ def _finding_posture_cap(ledger: dict, floor: int) -> dict | None:
     share = _pct(capped, cases)
     return _finding(
         "posture-cap",
+        group="proof-standard",
         title="Confident language is not the same as a finding of fact",
         stat=f"{capped}",
         stat_label="cases demoted from proven to alleged",
@@ -1138,6 +1164,7 @@ def _finding_rising_technique(ledger: dict, floor: int) -> dict | None:
     then_count = now_count - best_delta
     return _finding(
         "rising-technique",
+        group="change",
         title="One technique climbed faster than the rest",
         stat=f"+{best_delta}",
         stat_label=f"more cases in {later} than {earlier}",
@@ -1203,7 +1230,7 @@ def attach_catalog_titles(ledger: dict, titles: dict[str, str]) -> dict:
 
 
 def derive_findings(
-    ledger: dict, *, floor: int = SMALL_N_FLOOR, limit: int = FINDINGS_LIMIT
+    ledger: dict, *, floor: int = SMALL_N_FLOOR, per_group: int = FINDINGS_PER_GROUP
 ) -> list[dict]:
     """Headline findings read off a finished ledger. Pure, deterministic, no I/O.
 
@@ -1211,16 +1238,49 @@ def derive_findings(
     slice, in the CLI report, and in the boot snapshot. Emits nothing at all
     when the corpus is too thin to support a claim — an empty list is the
     correct answer for a small jurisdiction, not a failure.
+
+    Findings come back FLAT, in group order then rule order, each carrying its
+    ``group`` and a global ``rank``. Grouping for display is
+    ``group_findings``; a flat list keeps the CLI report, the API payload and
+    any future ordering working off one sequence.
     """
     if int(ledger.get("enriched_cases") or 0) < floor:
         return []
-    findings = []
+    by_group: dict[str, list[dict]] = {}
     for rule in _FINDING_RULES:
         found = rule(ledger, floor)
-        if found is not None:
-            findings.append(found)
-        if len(findings) >= limit:
-            break
+        if found is None:
+            continue
+        bucket = by_group.setdefault(found["group"], [])
+        if len(bucket) < per_group:
+            bucket.append(found)
+    findings = [f for gid, _, _ in FINDING_GROUPS for f in by_group.get(gid, [])]
     for rank, finding in enumerate(findings, start=1):
         finding["rank"] = rank
     return findings
+
+
+def group_findings(findings: list[dict]) -> list[dict]:
+    """Findings bucketed into FINDING_GROUPS order, for a collapsible section.
+
+    Groups with nothing to say are omitted — an empty collapsed header
+    advertises content that does not exist. Each group carries ``lead``, the
+    stat of its first finding, so a COLLAPSED header still teaches something
+    instead of reading as a bare label.
+    """
+    out = []
+    for gid, label, blurb in FINDING_GROUPS:
+        members = [f for f in findings if f.get("group") == gid]
+        if not members:
+            continue
+        out.append(
+            {
+                "id": gid,
+                "label": label,
+                "blurb": blurb,
+                "count": len(members),
+                "lead": f"{members[0]['stat']} {members[0]['stat_label']}",
+                "findings": members,
+            }
+        )
+    return out

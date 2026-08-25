@@ -77,25 +77,31 @@ def render_markdown(ledger: dict) -> str:
     out.append("> ground truth; alleged is a complaint's theory. Never read the two")
     out.append("> columns as equivalent.")
 
-    findings = ledger.get("findings") or []
-    if findings:
+    groups = ledger.get("finding_groups") or []
+    if groups:
         out.append("")
         out.append("## Findings")
         out.append("")
         out.append("Derived from the aggregates below on every run — nothing here is stored.")
-        for f in findings:
+        out.append("Grouped by the question each answers, the same way the page groups them.")
+        for g in groups:
             out.append("")
-            out.append(f"### {f['rank']}. {f['title']}")
+            out.append(f"### {g['label']}")
             out.append("")
-            out.append(f"**{f['stat']}** {f['stat_label']}")
-            out.append("")
-            out.append(f["takeaway"])
-            if f.get("recommendations"):
+            out.append(f"_{g['blurb']}_")
+            for f in g["findings"]:
                 out.append("")
-                for rec in f["recommendations"]:
-                    out.append(f"- {rec}")
-            out.append("")
-            out.append(f"_Method: {f['method']}_")
+                out.append(f"#### {f['rank']}. {f['title']}")
+                out.append("")
+                out.append(f"**{f['stat']}** {f['stat_label']}")
+                out.append("")
+                out.append(f["takeaway"])
+                if f.get("recommendations"):
+                    out.append("")
+                    for rec in f["recommendations"]:
+                        out.append(f"- {rec}")
+                out.append("")
+                out.append(f"_Method: {f['method']}_")
 
     out.append("")
     out.append("## 1 · Technique frequency (ITM)")
