@@ -327,6 +327,50 @@ with sync_playwright() as pw:
     ck("dossier", "names the jurisdiction it is reporting",
        "JURISDICTION: US" in txt, f"[{txt[:70]}]")
     pg.close()
+
+    # --- cold start: the API is DOWN, the snapshot carries the page ----------
+    # The regression this guards (measured 2026-08-26): with the API asleep the
+    # page painted nothing at all — EVIDENCE was missing from boot()'s
+    # pre-probe dispatch, so when the probe ladder threw, the route never
+    # fired. Writes ledger.json into web/data/ for the duration, then removes
+    # it — the smoke guard forbids committing that directory.
+    import json as _json
+    import shutil as _shutil
+
+    data_dir = pathlib.Path(__file__).resolve().parent.parent / "web" / "data"
+    made_dir = not data_dir.exists()
+    if made_dir:
+        data_dir.mkdir()
+    snap = data_dir / "ledger.json"
+    made_file = not snap.exists()
+    if made_file:
+        snap.write_text(_json.dumps(LEDGER), encoding="utf-8")
+    try:
+        pg = b.new_page(viewport={"width": 1280, "height": 900})
+        # Port 9 is unroutable: this is a cold Cloud Run instance, or none.
+        pg.add_init_script("window.INSIDER_INTEL_API_BASE='http://127.0.0.1:9';"
+                           "try{localStorage.setItem('insider-intel-guide-dismissed','1')}catch(e){}")
+        # Google Fonts has no egress in CI/sandbox and the stylesheet is
+        # render-blocking; without this the measurement is the font timeout,
+        # not the page (12.7s of a 13s "load" traced to exactly that).
+        pg.route("**://fonts.googleapis.com/**", lambda r: r.abort())
+        pg.route("**://fonts.gstatic.com/**", lambda r: r.abort())
+        pg.goto("http://127.0.0.1:8899/#/evidence", wait_until="domcontentloaded")
+        painted = True
+        try:
+            pg.wait_for_selector(".evp-finding-title", timeout=20000)
+        except Exception:
+            painted = False
+        ck("cold-start", "findings paint with the API down", painted)
+        ck("cold-start", "the cached paint says CACHED and never claims LIVE",
+           "CACHED" in (pg.eval_on_selector("#evp-basis-line", "e=>e.textContent") or ""))
+        pg.close()
+    finally:
+        if made_file and snap.exists():
+            snap.unlink()
+        if made_dir and data_dir.exists():
+            _shutil.rmtree(data_dir)
+
     b.close()
 
 print(f"\n{checks - len(fails)}/{checks} checks passed")

@@ -62,6 +62,10 @@ ALLOWED_CONSOLE = (
     "/data/articles.json",
     "/data/meta.json",
     "/data/tooling.json",
+    # Fourth snapshot file, same reason as the three above: this job serves
+    # web/ with no snapshot, so an absent boot file is the expected offline
+    # state, not a defect. EVIDENCE reads it since 2026-08-26.
+    "/data/ledger.json",
     "/favicon.ico",
     "fonts.googleapis.com",
     "fonts.gstatic.com",

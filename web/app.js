@@ -5138,6 +5138,22 @@
   let evidenceCountry = "all";
   let evidenceGlobalCountries = null; // {CC: caseCount} from the global read
   const evidenceLedgerCache = {}; // country -> ledger payload (session)
+  // Snapshot-first, inherited from TOOLING (ensureTooling / refreshToolingLive)
+  // and the STREAM's CACHED→LIVE idiom. data/ledger.json has shipped in the
+  // Pages artifact since the boot snapshot existed and paintFromSnapshot()
+  // already downloads it — the EVIDENCE page just never read it, so every
+  // visit waited on a Cloud Run cold start for a payload the browser already
+  // had. GLOBAL only: the snapshot is one corpus-wide report, and serving a
+  // per-country tab from it would report a filtered number as a global one.
+  let evidenceLedgerIsLive = false; // false while the ALL slot came from disk
+  let evidenceLiveInflight = null;
+  // The snapshot is a COLD-START aid only. Once live data has landed, or once
+  // a /reload has invalidated the corpus the snapshot was built from, the file
+  // on disk is stale by definition and must never seed the cache again — the
+  // two states are separate, because IsLive also drives the CACHED stamp and
+  // gets reset for the stamp's sake.
+  let evidenceSnapshotAllowed = true;
+  let evidenceRenderKey = ""; // what the painted surfaces currently say
   // Findings-group disclosure state. renderEvidencePage rebuilds the DOM on
   // every load, so open/closed can't live on the elements. null = untouched,
   // which means "group one open, rest collapsed"; a tab switch resets to null
@@ -5150,14 +5166,127 @@
     return COUNTRY_NAMES[String(code || "").toUpperCase()] || code;
   }
 
-  async function fetchLedger(country) {
+  // `live` forces the API path (post-sweep reload); see the snapshot note above.
+  async function fetchLedger(country, live) {
     const key = (country || "all").toUpperCase();
-    if (evidenceLedgerCache[key]) return evidenceLedgerCache[key];
+    if (evidenceLedgerCache[key]) {
+      // A snapshot payload is on screen — keep chasing the live one, so a
+      // failed background refresh (still-cold API) retries on the next need.
+      if (key === "ALL" && !evidenceLedgerIsLive) refreshEvidenceLive();
+      return evidenceLedgerCache[key];
+    }
+    // `live` is the forced-reload path: after a sweep the snapshot predates
+    // the corpus it would be refreshing for, so it must not seed the cache.
+    if (key === "ALL" && !live && evidenceSnapshotAllowed) {
+      const snap = await fetchLedgerSnapshot();
+      if (snap) {
+        evidenceLedgerCache.ALL = snap;
+        refreshEvidenceLive();
+        return snap;
+      }
+    }
     const params = { top: 25 };
     if (key !== "ALL") params.country = key;
     const data = await api("/evidence/ledger", params, { timeoutMs: 15000 });
     evidenceLedgerCache[key] = data;
+    if (key === "ALL") {
+      evidenceLedgerIsLive = true;
+      evidenceSnapshotAllowed = false;
+      evidenceLiveInflight = null; // any pending background refresh is superseded
+    }
     return data;
+  }
+
+  /** EVIDENCE first-paint cache: same fail-soft contract as
+   *  fetchToolingSnapshot() — a same-origin file generated into the Pages
+   *  artifact (web/data/, never in git). Absent (local dev, snapshot-less
+   *  deploy) or malformed → null, and the caller falls back to the live
+   *  api("/evidence/ledger") exactly as before. */
+  async function fetchLedgerSnapshot() {
+    try {
+      const res = await fetch("data/ledger.json", { cache: "no-store" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !data.enriched_cases) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Background CACHED→LIVE swap for the global ledger: single-flight, and a
+   *  superseded response never wins. The timeout matches probeLiveApi's ~75s
+   *  ladder because this request is itself what wakes the instance. */
+  function refreshEvidenceLive() {
+    if (evidenceLedgerIsLive || evidenceLiveInflight) return evidenceLiveInflight;
+    const inflight = api("/evidence/ledger", { top: 25 }, { timeoutMs: 75000 })
+      .then((data) => {
+        if (evidenceLiveInflight !== inflight) return; // superseded
+        if (!data || !data.enriched_cases) return;
+        evidenceLedgerCache.ALL = data;
+        evidenceLedgerIsLive = true;
+        evidenceSnapshotAllowed = false;
+        if (data.countries) evidenceGlobalCountries = data.countries;
+        // Repaint through the SAME renderers loadEvidencePage() uses, so there
+        // is one render path and the live swap can never drift from the cold
+        // paint. Only while GLOBAL is the view on screen: a reader who has
+        // since switched to a country tab is reading a different report.
+        if (evidenceCountry === "all") rerenderEvidenceSurfaces(data);
+        else renderJurisdictionTabs();
+      })
+      .catch((err) => {
+        console.warn("Live evidence refresh failed — keeping cached ledger", err);
+      })
+      .finally(() => {
+        if (evidenceLiveInflight === inflight) evidenceLiveInflight = null;
+      });
+    evidenceLiveInflight = inflight;
+    return inflight;
+  }
+
+  /** Render-identity key for the ledger, in the STREAM's idiom
+   *  (streamKeyOf): when the live payload says the same thing as the snapshot
+   *  it just replaced, there is nothing to repaint — only the CACHED stamp
+   *  changes. The usual case, since the snapshot is a same-day build. */
+  function evidenceKeyOf(data) {
+    if (!data) return "";
+    return [
+      data.enriched_cases,
+      (data.strength_totals || {}).adjudicated_admitted,
+      (data.findings || []).map((f) => `${f.id}:${f.stat}`).join(","),
+      (data.techniques || []).map((t) => `${t.id}:${t.cases}`).join(","),
+    ].join("|");
+  }
+
+  function rerenderEvidenceSurfaces(data) {
+    if (!document.getElementById("evp-stats")) return;
+    // A swap that moves the page under a reader mid-sentence is worse than a
+    // stale number. Two guards, in order of cheapness:
+    //   1. identical payload -> repaint nothing but the basis line;
+    //   2. genuinely-changed payload -> repaint, then put the scroll back.
+    // Renderers clear their containers, so the document briefly shortens and
+    // the browser clamps scrollY — measured moving the reader on every swap.
+    if (evidenceKeyOf(data) === evidenceRenderKey) {
+      renderEvidenceBasisLine(data);
+      return;
+    }
+    const y = window.scrollY;
+    renderEvidencePage(data);
+    renderFindings(data);
+    renderEvidenceTrend(data);
+    renderEvidenceBasisLine(data);
+    renderJurisdictionTabs();
+    renderRegionCompare(data);
+    evidenceRenderKey = evidenceKeyOf(data);
+    // Restore after layout has settled, not in the same tick: the containers
+    // are refilled synchronously but the document's final height is only known
+    // once the browser reflows, and a scrollTo before that just re-clamps.
+    if (window.scrollY !== y) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, y);
+        requestAnimationFrame(() => window.scrollTo(0, y));
+      });
+    }
   }
 
   function renderEvidenceBasisLine(data) {
@@ -5173,7 +5302,12 @@
     // block. That block is gone; the attribution is not a caveat and still has
     // to appear, so it lives on the basis line — the same place TOOLING puts
     // its own.
+    // A cached paint states its true age and NEVER claims to be live. The
+    // stamp reads off the payload's own generated_at, so it is honest with no
+    // extra plumbing — the same property TOOLING's basis line relies on.
+    const cached = evidenceCountry === "all" && !evidenceLedgerIsLive;
     line.textContent =
+      (cached ? "CACHED · " : "") +
       `BASED ON ${data.enriched_cases.toLocaleString()} VERDICT-TRUE CASES · ` +
       `JURISDICTION: ${juris}` +
       (day ? ` · AS OF ${day}Z` : "") +
@@ -5300,11 +5434,14 @@
       // re-render from the per-country cache.)
       Object.keys(evidenceLedgerCache).forEach((k) => delete evidenceLedgerCache[k]);
       evidenceGlobalCountries = null;
+      evidenceLedgerIsLive = false;
+      evidenceSnapshotAllowed = false;
+      evidenceLiveInflight = null;
     }
     try {
       // Tabs come from the GLOBAL payload; fetch it first (cache-first) so a
       // per-country view still knows which tabs exist.
-      const globalData = await fetchLedger("all");
+      const globalData = await fetchLedger("all", Boolean(force));
       if (globalData && globalData.countries) evidenceGlobalCountries = globalData.countries;
       const data = evidenceCountry === "all" ? globalData : await fetchLedger(evidenceCountry);
       renderEvidencePage(data);
@@ -5313,6 +5450,9 @@
       renderEvidenceBasisLine(data);
       renderJurisdictionTabs();
       renderRegionCompare(globalData);
+      // Record what is on screen, so a live payload that says the same thing
+      // repaints nothing (see rerenderEvidenceSurfaces).
+      evidenceRenderKey = evidenceKeyOf(data);
     } catch (err) {
       console.warn("Evidence page unavailable", err);
       renderEvidencePage(null);
@@ -6524,6 +6664,11 @@
       } else {
         Object.keys(evidenceLedgerCache).forEach((k) => delete evidenceLedgerCache[k]);
         evidenceGlobalCountries = null;
+        // Same reason as the forced path in loadEvidencePage: the next open
+        // must go to the API, not re-seed from a pre-sweep snapshot.
+        evidenceLedgerIsLive = false;
+        evidenceSnapshotAllowed = false;
+        evidenceLiveInflight = null;
       }
       // TOOLING is session-cached like the evidence page: drop the cached
       // /tooling payload (it also feeds category dossiers, vendor sheets,
@@ -7209,6 +7354,16 @@
           openToolingCategoryView(early.id).catch(() => {});
         } else if (early.view === "tools-vendor" && early.id) {
           openVendorToolView(early.id).catch(() => {});
+        } else if (early.view === "evidence") {
+          // Same rule, same reason, learned twice (2026-08-26): EVIDENCE was
+          // left out of this list, so a #/evidence visitor sat behind the
+          // whole probe ladder — and when the ladder failed outright the
+          // post-probe dispatch below never ran, so the pane never opened at
+          // all. Measured with the API down: nothing painted in 90s.
+          // openEvidenceView() is snapshot-first and repaints when live data
+          // lands, so this is safe to fire early — and idempotent with the
+          // post-probe dispatch that runs the same opener.
+          openEvidenceView();
         } else if (early.view === "about") {
           // ABOUT is static prose — it must not wait out the API probe either.
           openAboutView();

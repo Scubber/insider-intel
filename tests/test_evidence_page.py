@@ -395,3 +395,93 @@ def test_a_technique_the_catalog_cannot_name_is_marked_as_such() -> None:
     assert "has no name for" in body
     css = (WEB / "styles.css").read_text(encoding="utf-8")
     assert ".evp-tech-unnamed" in css
+
+
+# ---------------------------------------------------------------------------
+# Snapshot-first paint (2026-08-26)
+#
+# The page took ~75s to open and, when the probe ladder failed outright, never
+# opened at all — measured at 90s+ with the API down. Two causes: EVIDENCE was
+# missing from boot()'s pre-probe dispatch, and fetchLedger ignored
+# data/ledger.json, a payload paintFromSnapshot already downloads on every
+# load. These pin both, plus the one rule a cached paint must never break.
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_opens_before_the_api_probe() -> None:
+    """The single largest win: no reader waits out the cold-start ladder.
+
+    boot() dispatches TOOLING and ABOUT before `await probeLiveApi()`;
+    EVIDENCE was left out, so it sat behind the whole ladder — and when the
+    ladder threw, the post-probe dispatch never ran at all.
+    """
+    src = _app_js()
+    boot = src[src.index("const painted = await paintFromSnapshot();") :]
+    early = boot[: boot.index("const health = await probeLiveApi();")]
+    assert 'early.view === "evidence"' in early
+    assert "openEvidenceView()" in early
+
+
+def test_evidence_paints_from_the_snapshot_before_the_network() -> None:
+    body = _fn_body(_app_js(), "fetchLedger")
+    assert "fetchLedgerSnapshot()" in body
+    # …and the snapshot read happens before the api() call in the same function.
+    assert body.index("fetchLedgerSnapshot()") < body.index('api("/evidence/ledger"')
+
+
+def test_the_snapshot_reader_fails_soft() -> None:
+    """Absent or malformed file → null, and the caller goes live exactly as
+    before. Same contract as fetchToolingSnapshot."""
+    body = _fn_body(_app_js(), "fetchLedgerSnapshot")
+    assert '"data/ledger.json"' in body
+    assert "if (!res.ok) return null" in body
+    assert "catch" in body
+
+
+def test_only_the_global_view_is_served_from_the_snapshot() -> None:
+    """The snapshot is one corpus-wide report.
+
+    Serving a country tab from it would report a filtered number as a global
+    one — the same class of lie the dossier ?country= fix removed.
+    """
+    body = _fn_body(_app_js(), "fetchLedger")
+    snap = body[body.index("fetchLedgerSnapshot()") - 200 : body.index("fetchLedgerSnapshot()")]
+    assert 'key === "ALL"' in snap
+
+
+def test_a_cached_paint_never_claims_to_be_live() -> None:
+    """The one rule the snapshot design must not break."""
+    body = _fn_body(_app_js(), "renderEvidenceBasisLine")
+    assert "evidenceLedgerIsLive" in body
+    assert '"CACHED · "' in body
+
+
+def test_the_live_refresh_is_single_flight_and_cannot_be_superseded() -> None:
+    body = _fn_body(_app_js(), "refreshEvidenceLive")
+    assert "evidenceLiveInflight" in body
+    assert "!== inflight) return" in body, "a superseded response could overwrite live data"
+
+
+def test_a_reload_retires_the_snapshot_for_the_session() -> None:
+    """After a sweep the file on disk predates the corpus it would refresh for.
+
+    Tracked separately from the CACHED stamp: reusing one flag for both let a
+    /reload reset the stamp AND silently re-arm the stale snapshot.
+    """
+    src = _app_js()
+    assert src.count("evidenceSnapshotAllowed = false") >= 3
+    body = _fn_body(src, "fetchLedger")
+    assert "evidenceSnapshotAllowed" in body
+
+
+def test_the_live_swap_reuses_one_render_path() -> None:
+    """The cold paint and the live re-render must not drift."""
+    body = _fn_body(_app_js(), "rerenderEvidenceSurfaces")
+    for renderer in (
+        "renderEvidencePage",
+        "renderFindings",
+        "renderEvidenceTrend",
+        "renderEvidenceBasisLine",
+        "renderJurisdictionTabs",
+    ):
+        assert renderer in body

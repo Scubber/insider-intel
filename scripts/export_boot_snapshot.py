@@ -29,10 +29,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from apps.aggregator.lane_health import read_lane_health
-from apps.search.service import get_index, list_sources, tooling_rankings
-from shared.itm.index import load_itm_index
+from apps.search.service import evidence_ledger, get_index, list_sources, tooling_rankings
 from shared.settings import get_settings
-from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
 
 # The snapshot IS the visit for most readers: at ~13 visits/day every request
 # hits a Cloud Run cold start, so the stream painted from this file is what
@@ -132,25 +130,18 @@ def build_snapshot(limit: int = SNAPSHOT_LIMIT) -> tuple[dict, dict, dict, list,
             itm_alignment="insider",
         )
     ]
-    # Ledger twin (masthead corpus counts + the MODUS OPERANDI footnote's
-    # state.evidenceLedger) — the SAME payload GET /evidence/ledger serves;
-    # meta.evidence_basis derives from it instead of a second aggregation.
-    ledger = build_evidence_ledger(
-        (
-            {
-                "link": a.link,
-                "title": a.title,
-                "published": a.published.isoformat() if a.published else "",
-                "forensics": a.forensics.model_dump(mode="json") if a.forensics else None,
-            }
-            for a in index.articles
-        ),
-        top=25,
-    )
-    # Same catalog join the API applies, so the cold-start paint reads the same
-    # shape as the live payload (technique titles, the trend surface, and the
-    # derived findings that replaced the old static findings.json).
-    attach_catalog_titles(ledger, {t.id.upper(): t.title for t in load_itm_index().techniques})
+    # Ledger twin — now the EVIDENCE page's cold-start paint, not just the
+    # masthead corpus counts. Built by calling the SERVICE FUNCTION the API
+    # endpoint calls (same principle as `tooling` below: no second aggregation
+    # path, no drift), against the index loaded above.
+    #
+    # Re-deriving it here with build_evidence_ledger left two gaps that were
+    # invisible while nothing rendered this file: the corroboration join never
+    # ran (no `techniques[].detections`, no `corroboration`, so the evp-corr
+    # strip would paint empty and pop in), and the five technique_* maps the
+    # API strips were shipped to every visitor. Calling the endpoint's own
+    # function closes both by construction and keeps them closed.
+    ledger = evidence_ledger(settings.processed_articles_path, top=25)
     meta = {
         "generated_at": datetime.now(UTC).isoformat(),
         "indexed_articles": index.size,

@@ -242,6 +242,50 @@ def test_snapshot_writes_sources_and_ledger_twins(tmp_path, monkeypatch) -> None
         assert tech.get("title")
 
 
+def test_ledger_twin_equals_the_served_payload(tmp_path, monkeypatch) -> None:
+    """The snapshot IS the served payload, key for key.
+
+    The EVIDENCE page paints from this file on a cold start and swaps to the
+    live read in the background, so any shape difference is a visible pop.
+    Two real ones existed while nothing rendered the file: the corroboration
+    join never ran (no `detections`, no `corroboration` — the evp-corr strip
+    would paint empty), and the five technique_* maps the API strips were
+    shipped to every visitor. The exporter now calls the endpoint's own
+    service function; this asserts the two cannot diverge again.
+    """
+    import sys
+
+    from apps.search.service import evidence_ledger
+
+    corpus = _seed(tmp_path, monkeypatch)
+    from scripts import export_boot_snapshot
+
+    out = tmp_path / "webdata"
+    monkeypatch.setattr(sys, "argv", ["export_boot_snapshot", "--out", str(out)])
+    export_boot_snapshot.main()
+    snapshot = json.loads((out / "ledger.json").read_text())
+    served = evidence_ledger(corpus, top=25)
+
+    assert set(snapshot) == set(served), "snapshot and served payload disagree on keys"
+    # The five maps the service pops must not reach a visitor through the file.
+    for popped in (
+        "technique_families",
+        "technique_counts",
+        "technique_hunts",
+        "technique_terms",
+        "technique_behaviors",
+    ):
+        assert popped not in snapshot
+    # And the joins the service applies must have run.
+    assert "corroboration" in snapshot
+    for tech in snapshot.get("techniques") or []:
+        assert "detections" in tech
+    # generated_at is a wall-clock stamp; everything else compares exactly.
+    snapshot.pop("generated_at", None)
+    served.pop("generated_at", None)
+    assert snapshot == served
+
+
 def test_snapshot_mirrors_the_boot_query() -> None:
     """The articles twin must match web/app.js loadArticles or the live
     re-render replaces different content — the flash static-first kills."""
