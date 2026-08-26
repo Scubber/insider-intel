@@ -147,7 +147,16 @@ jobs:
           curl -sf "${URL}/social/catalog" >/dev/null && echo "social catalog OK"
           curl -sf "${URL}/trending?limit=3" >/dev/null && echo "trending OK"
           curl -sf "${URL}/feed.xml?limit=1" | grep -q '<feed' && echo "feed.xml OK"
-          curl -sf "${URL}/evidence/ledger?top=3" | grep -q '"detected_by"' && echo "evidence ledger OK"
+          # Assert the findings contract too, not just the aggregates: the
+          # EVIDENCE page's whole top half is derived server-side now, and a
+          # regression there used to deploy green.
+          LEDGER=$(curl -sf "${URL}/evidence/ledger?top=3")
+          echo "${LEDGER}" | grep -q '"detected_by"' && echo "evidence ledger OK"
+          echo "${LEDGER}" | grep -q '"findings"' && echo "evidence findings OK"
+          echo "${LEDGER}" | grep -q '"bottom_line"' && echo "evidence bottom line OK"
+          if echo "${LEDGER}" | grep -q '{technique}'; then
+            echo "FAIL: an unfilled {technique} slot reached the payload"; exit 1
+          fi
           # write/ops endpoints are token-gated: unauthenticated writes must 401
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${URL}/social/subscriptions" \
             -H 'Content-Type: application/json' \

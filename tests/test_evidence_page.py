@@ -263,3 +263,135 @@ def test_trend_labels_the_axis_as_filing_year() -> None:
     html = _index()
     assert "TECHNIQUES BY FILING YEAR" in html
     assert "not the year the incident happened" in html
+
+
+# ---------------------------------------------------------------------------
+# The memo layout (operator review, 2026-08-25)
+#
+# The findings were correct and still read like generated filler. These pin the
+# structural half of the fix: a bottom line above, numbered findings, two card
+# weights, the shared caveat once, and a technique rendered as the clickable
+# control rather than as a bare ITM id in a sentence.
+# ---------------------------------------------------------------------------
+
+
+def test_bottom_line_lands_above_the_first_finding_group() -> None:
+    """A memo opens with what it found, not with the first of five cards."""
+    html = _index()
+    assert html.index('id="evp-bottom-line"') < html.index('id="evp-findings-list"')
+
+
+def test_shared_caveat_lands_once_below_the_findings() -> None:
+    html = _index()
+    assert html.count('id="evp-findings-caveat"') == 1
+    assert html.index('id="evp-findings-list"') < html.index('id="evp-findings-caveat"')
+
+
+def test_bottom_line_and_caveat_appear_only_with_findings() -> None:
+    """Both are furniture for the findings; a thin slice shows neither."""
+    body = _fn_body(_app_js(), "renderFindings")
+    assert "data.bottom_line" in body
+    assert "data.findings_caveat" in body
+    assert "findings.length" in body
+
+
+def test_findings_are_numbered_like_a_report() -> None:
+    body = _fn_body(_app_js(), "evpFindingCard")
+    assert "evp-finding-num" in body
+    assert "`F${f.rank}`" in body
+
+
+def test_a_supporting_finding_drops_the_full_card_anatomy() -> None:
+    """Five cards at identical weight read as filler however good each one is.
+
+    Recommendations still ship in the payload and still print in the CLI
+    report — the page de-emphasises them, it does not lose them.
+    """
+    body = _fn_body(_app_js(), "evpFindingCard")
+    assert 'f.weight !== "supporting"' in body
+    assert "lead && (f.recommendations" in body
+    assert "lead && f.method" in body
+
+
+def test_a_technique_in_prose_renders_as_the_dossier_control() -> None:
+    """Same control as the trend matrix and the technique table.
+
+    A bare "MT003.002" in a sentence is unreadable and, worse, unclickable.
+    The server writes a {technique} slot; the client fills it with the button.
+    """
+    src = _app_js()
+    body = _fn_body(src, "evpFillProse")
+    assert "evpTechniqueButton" in body
+    assert "EVP_TECH_SLOT" in body
+    assert 'const EVP_TECH_SLOT = "{technique}";' in src
+    # A catalog miss must still produce words, never an empty hole.
+    assert '"this technique"' in body
+
+
+def test_finding_prose_never_renders_the_slot_as_text() -> None:
+    card = _fn_body(_app_js(), "evpFindingCard")
+    for field in ("f.title", "f.takeaway"):
+        assert field in card
+    # Every prose field goes through the filler, not straight into textContent.
+    assert 'evpProse("evp-finding-takeaway", f.takeaway, ref)' in card
+    assert 'evpFillProse(evpEl("span", "evp-finding-title"), f.title, ref)' in card
+
+
+def test_the_inline_technique_button_flows_with_the_sentence() -> None:
+    """.evp-tech-name is display:flex for the table; in prose it must be
+    inline, or a finding's headline breaks onto its own line."""
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert ".evp-finding .evp-tech-name" in css
+    block = css[css.index(".evp-finding .evp-tech-name") :][:220]
+    assert "inline-flex" in block
+
+
+def test_the_limitations_wall_stays_deleted() -> None:
+    """Removed 2026-08-26 (operator decision).
+
+    A wall of bolded caveats at the foot of the page is the same defect as a
+    finding that states a caveat: nobody reads it, and its presence makes the
+    page feel hedged rather than evidenced. Guarding it because a revert would
+    otherwise restore it quietly, and dead CSS is how a deleted section comes
+    back looking intentional.
+    """
+    html = _index()
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert "evp-limits" not in html
+    assert "evp-limits" not in css
+    assert "LIMITATIONS" not in html
+    assert "READ BEFORE CITING" not in html
+
+
+def test_nothing_still_points_at_the_deleted_limitations_section() -> None:
+    """TOOLING's methodology tooltip used to say "see EVIDENCE › LIMITATIONS".
+
+    A cross-reference to a section that no longer exists is worse than no
+    cross-reference: it sends the reader looking for a caveat they will never
+    find.
+    """
+    src = _app_js()
+    assert "EVIDENCE › LIMITATIONS" not in src
+    # The litigated-case bias it pointed at is stated where the pointer was.
+    assert "caught and litigated" in src
+
+
+def test_the_itm_attribution_survived_the_deletion() -> None:
+    """The trademark line rode inside the deleted block.
+
+    It is an attribution, not a limitation, so it moves rather than goes: the
+    EVIDENCE basis line now carries it, the same way TOOLING's does.
+    """
+    body = _fn_body(_app_js(), "renderEvidenceBasisLine")
+    assert "Forscie" in body
+
+
+def test_a_technique_the_catalog_cannot_name_is_marked_as_such() -> None:
+    """A bare ITM id reading as if it were the technique's name is the defect
+    the {technique} slot exists to prevent. When the catalog genuinely has no
+    name there is nothing better to show — but the reader is told."""
+    body = _fn_body(_app_js(), "evpTechniqueButton")
+    assert "evp-tech-unnamed" in body
+    assert "has no name for" in body
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert ".evp-tech-unnamed" in css

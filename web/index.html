@@ -193,7 +193,7 @@
               <dt>MATRIX</dt>
               <dd>The catalog of insider tactics, stage by stage. Click any tactic to see the real cases where it was used and what caught it.</dd>
               <dt>EVIDENCE</dt>
-              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. FINDINGS groups what the corpus says right now; WHAT CHANGED tracks which tactics rise and fall by filing year. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
+              <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. FINDINGS reads as a short report: a bottom line, then numbered findings F1 onward grouped by the question each answers; WHAT CHANGED tracks which tactics rise and fall by filing year. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
               <dt>TOOLING</dt>
               <dd>Security products named in real court filings — which caught insiders, which got bypassed. Click a product for its cases.</dd>
               <dt>WORKBENCH</dt>
@@ -585,10 +585,12 @@
                 <span class="evp-note">(derived from this jurisdiction's ledger on every load · no stored numbers)</span>
               </p>
               <p class="evp-note">
-                What this corpus supports most strongly right now, grouped by the question
-                each answers — open a group to read it. Switching jurisdiction re-states them.
+                Numbered findings, strongest first, grouped by the question each answers —
+                open a group to read it. Switching jurisdiction re-states every one.
               </p>
+              <p class="evp-bottom-line" id="evp-bottom-line" hidden></p>
               <div id="evp-findings-list"></div>
+              <p class="evp-findings-caveat" id="evp-findings-caveat" hidden></p>
             </div>
             <div class="evp-corr" id="evp-corr"></div>
             <div class="evp-who">
@@ -645,28 +647,6 @@
                 system. SKEWS marks a technique whose cases concentrate in one jurisdiction.
               </p>
               <div class="evp-scroll"><table class="evp-table" id="evp-region-table"></table></div>
-            </div>
-            <div class="evp-limits">
-              <p class="evp-section-head">LIMITATIONS — READ BEFORE CITING</p>
-              <p>
-                <b>Selection bias:</b> court data measures insiders who were <b>caught, and whose
-                cases were litigated</b> — not insider behavior at large. Read every number as
-                "of litigated insider cases" — equivalently, this is the evidence that survives
-                to court: the definition of evidence a program should be able to produce.
-                <b>Small samples:</b> percentages are suppressed below a floor of cases; counts
-                are always shown. <b>Attribution scope:</b> technique ids are case-level, so
-                evidence is scoped to cases <i>exhibiting</i> a technique. <b>Collection bias:</b>
-                the corpus reflects our own query lexicon and sweep history.
-                <b>Jurisdictions differ:</b> each court system contributes different document
-                types and procedural stages, so numbers compare within a jurisdiction, not
-                across populations — and jurisdiction means the court, never the person's
-                nationality. <b>Document stage caps the claim:</b> a complaint states a
-                theory, not a finding, so however settled its language reads, a case it
-                describes is counted as alleged until a stage that can support more.
-                Records are
-                machine-extracted from filings and normalized; confirmed-in-court and alleged
-                are never conflated. ITM™ owned by Forscie Limited — not affiliated.
-              </p>
             </div>
           </div>
         </section>

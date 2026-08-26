@@ -15,6 +15,18 @@ export interface FindingCardProps {
   basis?: string;
   /** Corner tag; defaults to the site's provenance label. */
   tag?: string;
+  /**
+   * Position in the report, rendered as "F1", "F2", …. Numbering is the single
+   * strongest signal that a section is a report and not a feed.
+   */
+  index?: number;
+  /**
+   * `lead` gets the full anatomy; `supporting` states its claim and its
+   * evidence and stops. Five cards at identical visual weight read as
+   * generated filler however good each one is — which is exactly the review
+   * that produced this prop.
+   */
+  weight?: "lead" | "supporting";
 }
 
 /**
@@ -34,19 +46,23 @@ export function FindingCard({
   method,
   basis,
   tag = "DERIVED",
+  index,
+  weight = "lead",
 }: FindingCardProps) {
+  const lead = weight !== "supporting";
   return (
-    <article className="ds-finding">
+    <article className={lead ? "ds-finding" : "ds-finding ds-finding-sup"}>
       <div className="ds-finding-head">
+        {index ? <span className="ds-finding-num">{`F${index}`}</span> : null}
         <span className="ds-finding-title">{title}</span>
         {tag ? <span className="ds-finding-tag">{tag}</span> : null}
       </div>
-      <div className="ds-finding-stat">
+      <div className={lead ? "ds-finding-stat" : "ds-finding-stat ds-stat-sm"}>
         <span className="ds-finding-stat-num">{stat}</span>
         {statLabel ? <span className="ds-finding-stat-label">{statLabel}</span> : null}
       </div>
       {takeaway ? <p className="ds-finding-takeaway">{takeaway}</p> : null}
-      {recommendations.length ? (
+      {lead && recommendations.length ? (
         <ul className="ds-finding-actions">
           {recommendations.map((r) => (
             <li key={r}>{r}</li>
@@ -57,7 +73,7 @@ export function FindingCard({
       {/* The method stays a VISIBLE paragraph, never a tooltip: data-tip is
           CSS-only and never fires on touch, and a finding's caveat is
           load-bearing. */}
-      {method ? <p className="ds-finding-method">{method}</p> : null}
+      {lead && method ? <p className="ds-finding-method">{method}</p> : null}
     </article>
   );
 }

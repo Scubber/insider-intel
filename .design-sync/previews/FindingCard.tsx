@@ -1,35 +1,46 @@
 import { FindingCard } from "insider-intel-dossier-ui";
 
-export const Flagship = () => (
+/**
+ * A lead finding — the full anatomy. Headline carries its own subject AND its
+ * own magnitude, so it still reads true with the group header deleted.
+ * Numbered, because numbering is what separates a report from a feed.
+ */
+export const Lead = () => (
   <div style={{ maxWidth: "560px" }}>
     <FindingCard
-      title="Email wins insider cases — not the security stack"
-      stat="59%"
-      statLabel="of court-proven insider cases turned on email evidence. Endpoint forensics: 22%. Central security logging (SIEM): 11%."
-      takeaway="When an insider case actually gets proven, the decisive record is usually ordinary business email — not the specialized detection tools most budgets prioritize."
+      index={1}
+      weight="lead"
+      title="Executive/officer is named in 52% of these cases"
+      stat="52%"
+      statLabel="of all cases name this group"
+      takeaway="400 of 766 cases name executive/officer; the next group, manager, appears in 81. 18 of those are proven in court."
       recommendations={[
-        "Fund email retention and legal-hold readiness like the case-winning asset it is.",
-        "For each major record type, ask: can we produce it on demand, and how far back?",
-        "Treat detection tools as detection, not evidence — courts need the second.",
+        "Apply the same escalation triggers to executive/officer that everyone else gets, and set them before there is a case.",
+        "Give concerns about this group a reporting path that does not run through it — the audit committee, or outside counsel.",
       ]}
-      method="Share of court-proven cases whose recorded evidence trail touches each record class, from model-extracted forensics on litigated cases."
+      basis="BASED ON 766 CASES"
+      method="Counted against every case with methods, which is the base the bars below use."
     />
   </div>
 );
 
-export const Derived = () => (
+/**
+ * A supporting finding — states its claim and its evidence and stops.
+ *
+ * The reason this variant exists: five cards at identical visual weight read as
+ * generated filler however good each one is. Recommendations still ship in the
+ * payload and still print in the CLI report; the page de-emphasises them.
+ */
+export const Supporting = () => (
   <div style={{ maxWidth: "560px" }}>
     <FindingCard
-      title="Some cases are proven by records no sensor of yours produces"
-      stat="28%"
-      statLabel="of proven cases turn on a record you cannot log"
-      takeaway="29 of 105 proven cases rest on brokerage / trade records — held by the person's broker, not by your company. No amount of logging produces these records. Counsel, a regulator, or the person's own consent does."
-      recommendations={[
-        "Name who can obtain each of these today — counsel, compliance, or the investigator.",
-        "Write the request path into the investigation playbook: who asks, under what authority, how long it takes.",
-      ]}
-      basis="BASED ON 105 CASES"
-      method="Counts distinct proven cases whose evidence trail touches this record class. Securities cases are over-represented because the court queries search for them by name."
+      index={2}
+      weight="supporting"
+      title="Former/fired accounts for 16% of cases but 33% of the proven ones"
+      stat="33%"
+      statLabel="of proven cases involve this group"
+      takeaway="21 of the 64 proven cases involve former/fired, against 122 of 766 overall. Something about these cases survives to a ruling that the others do not."
+      basis="BASED ON 64 CASES"
     />
   </div>
 );

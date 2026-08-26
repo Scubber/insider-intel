@@ -4585,11 +4585,21 @@
   // Technique cell: the spelled-out name reads first and opens the dossier; the
   // ITM code trails small and dim, and is omitted when it would just repeat the
   // name (a catalog miss).
+  //
+  // When the catalog has no name for the id there is nothing better to show,
+  // but the reader is told that rather than handed a code dressed as a title.
+  // A bare "MT003.002" reading as if it were the technique's name is the
+  // defect the whole {technique} slot exists to prevent.
   function evpTechniqueButton(id, title) {
     const btn = evpEl("button", "evp-tech-name");
     btn.type = "button";
+    const named = Boolean(title) && title !== id;
     btn.appendChild(evpEl("span", "evp-tech-title", title || id));
-    if (title && title !== id) btn.appendChild(evpEl("span", "evp-tech-code", id));
+    if (!named) {
+      btn.classList.add("evp-tech-unnamed");
+      btn.dataset.tip = `The ITM catalog has no name for ${id} — showing its id. Opens the dossier.`;
+    }
+    if (named) btn.appendChild(evpEl("span", "evp-tech-code", id));
     btn.addEventListener("click", () => {
       selectTechnique(id).catch((err) => setStatus(`Load failed: ${err.message}`));
     });
@@ -4970,46 +4980,86 @@
     }
   }
 
-  // A finding card. The number carries it: headline, one big stat, one line of
-  // consequence, terse actions, one dim method footnote. `method` stays a
-  // VISIBLE paragraph — data-tip tooltips are CSS-only and never fire on
-  // touch, and a finding's caveat is load-bearing.
+  // Render prose that may carry the server's {technique} slot. The slot is a
+  // structured hole, not text: wherever it appears the technique renders as
+  // the same control the trend matrix and the technique table use — spelled
+  // out, with its ITM code trailing, and clicking it opens that dossier. A
+  // bare "MT003.002" in a sentence is unreadable and, worse, unclickable.
+  const EVP_TECH_SLOT = "{technique}";
+  function evpProse(className, text, ref) {
+    const el = evpEl("p", className);
+    evpFillProse(el, text, ref);
+    return el;
+  }
+  function evpFillProse(el, text, ref) {
+    const id = ref && ref.kind === "technique" ? ref.label : null;
+    const parts = String(text || "").split(EVP_TECH_SLOT);
+    parts.forEach((chunk, i) => {
+      if (chunk) el.appendChild(document.createTextNode(chunk));
+      if (i < parts.length - 1) {
+        // The slot survived the catalog join only if there was no catalog at
+        // all. Fall back to the id as text rather than leaving a hole.
+        if (id) el.appendChild(evpTechniqueButton(id, (ref && ref.title) || id));
+        else el.appendChild(document.createTextNode("this technique"));
+      }
+    });
+    return el;
+  }
+
+  // A finding card, numbered like a memo item rather than stacked like a feed.
+  //
+  // Two weights, because five identically-shaped cards read as generated
+  // filler no matter how good each one is. A `lead` card gets the full
+  // anatomy; a `supporting` one states its claim and its evidence and stops —
+  // its recommendations still ship in the payload and still print in the CLI
+  // report, so nothing is lost, only de-emphasised.
+  //
+  // `method` stays a VISIBLE paragraph — data-tip tooltips are CSS-only and
+  // never fire on touch, and a finding's caveat is load-bearing. The caveats
+  // shared by every card render ONCE for the section (findings_caveat), not
+  // per card: repeating them here trains the reader to skip them.
   function evpFindingCard(f) {
-    const card = evpEl("article", "evp-finding");
+    const lead = f.weight !== "supporting";
+    const card = evpEl("article", lead ? "evp-finding" : "evp-finding evp-finding-sup");
+    const ref = f.evidence || {};
 
     const head = evpEl("div", "evp-finding-head");
-    head.appendChild(evpEl("span", "evp-finding-title", f.title));
+    if (f.rank) {
+      const num = evpEl("span", "evp-finding-num", `F${f.rank}`);
+      num.dataset.tip = "Finding " + f.rank + " of this report";
+      head.appendChild(num);
+    }
+    head.appendChild(evpFillProse(evpEl("span", "evp-finding-title"), f.title, ref));
     const tag = evpEl("span", "evp-finding-tag", "DERIVED");
     tag.dataset.tip = "Computed from this jurisdiction's ledger at read time — nothing is stored";
     head.appendChild(tag);
     card.appendChild(head);
 
     if (f.stat) {
-      const stat = evpEl("div", "evp-finding-stat");
+      const stat = evpEl("div", lead ? "evp-finding-stat" : "evp-finding-stat evp-stat-sm");
       stat.appendChild(evpEl("span", "evp-finding-stat-num", f.stat));
       if (f.stat_label) stat.appendChild(evpEl("span", "evp-finding-stat-label", f.stat_label));
       card.appendChild(stat);
     }
 
-    if (f.takeaway) card.appendChild(evpEl("p", "evp-finding-takeaway", f.takeaway));
+    if (f.takeaway) card.appendChild(evpProse("evp-finding-takeaway", f.takeaway, ref));
 
-    if ((f.recommendations || []).length) {
+    if (lead && (f.recommendations || []).length) {
       const ul = evpEl("ul", "evp-finding-actions");
-      f.recommendations.forEach((r) => ul.appendChild(evpEl("li", "", r)));
+      f.recommendations.forEach((r) => {
+        const li = evpEl("li", "");
+        evpFillProse(li, r, ref);
+        ul.appendChild(li);
+      });
       card.appendChild(ul);
     }
 
     const basis = f.basis && f.basis.n ? `BASED ON ${f.basis.n.toLocaleString()} CASES` : "";
     if (basis) card.appendChild(evpEl("p", "evp-finding-basis", basis));
-    if (f.method) card.appendChild(evpEl("p", "evp-finding-method", f.method));
+    if (lead && f.method) card.appendChild(evpProse("evp-finding-method", f.method, ref));
     return card;
   }
 
-  // Findings, grouped by the question each answers and collapsible. The server
-  // owns the taxonomy (FINDING_GROUPS) and ships group headers in
-  // `finding_groups`; groups are metadata only, so each one's cards are joined
-  // from the flat list here. Group one opens; the rest stay shut but still
-  // carry their leading stat, so the collapsed state teaches on its own.
   function renderFindings(data) {
     const box = document.getElementById("evp-findings");
     const list = document.getElementById("evp-findings-list");
@@ -5017,6 +5067,18 @@
     const findings = (data && data.findings) || [];
     const groups = (data && data.finding_groups) || [];
     list.innerHTML = "";
+    const bl = document.getElementById("evp-bottom-line");
+    const cav = document.getElementById("evp-findings-caveat");
+    // The bottom line is a precis of the findings below it, so it appears and
+    // disappears with them.
+    if (bl) {
+      bl.textContent = (data && data.bottom_line) || "";
+      bl.hidden = !(findings.length && data && data.bottom_line);
+    }
+    if (cav) {
+      cav.textContent = (data && data.findings_caveat) || "";
+      cav.hidden = !(findings.length && data && data.findings_caveat);
+    }
     if (!findings.length) {
       // A thin jurisdiction states nothing rather than a weak claim — say so,
       // or the section reads as broken.
@@ -5107,10 +5169,15 @@
     }
     const day = String(data.generated_at || "").slice(0, 10);
     const juris = evidenceCountry === "all" ? "GLOBAL" : evidenceCountry.toUpperCase();
+    // The ITM trademark attribution used to ride at the end of the LIMITATIONS
+    // block. That block is gone; the attribution is not a caveat and still has
+    // to appear, so it lives on the basis line — the same place TOOLING puts
+    // its own.
     line.textContent =
       `BASED ON ${data.enriched_cases.toLocaleString()} VERDICT-TRUE CASES · ` +
       `JURISDICTION: ${juris}` +
-      (day ? ` · AS OF ${day}Z` : "");
+      (day ? ` · AS OF ${day}Z` : "") +
+      " · ITM™ Forscie Ltd (not affiliated)";
   }
 
   function renderJurisdictionTabs() {
@@ -5473,9 +5540,10 @@
       "product quality, and not proof that control caught the insider. CAUGHT ×N counts " +
       "cases whose court-documented evidence names this control class. NAMED ×N = distinct " +
       "case documents naming the product — presence in the record, not effectiveness, " +
-      "never an endorsement; vendors never affect category rankings. Litigated-case bias " +
-      "applies — see EVIDENCE › LIMITATIONS. Category→control mapping is authored and " +
-      "versioned; rankings recompute from the corpus every sweep.";
+      "never an endorsement; vendors never affect category rankings. Court data measures " +
+      "insiders who were caught and litigated, not insider behavior at large. " +
+      "Category→control mapping is authored and versioned; rankings recompute from the " +
+      "corpus every sweep.";
     el.appendChild(meth);
     el.appendChild(document.createTextNode(" · ITM™ Forscie Ltd (not affiliated)"));
     el.hidden = false;
