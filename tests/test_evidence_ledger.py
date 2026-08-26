@@ -775,8 +775,10 @@ def test_group_one_states_a_finding_not_a_caveat() -> None:
     """Group one is the group the page opens on load, so it must carry a claim
     about the cases. Two cards were cut in 2026-08 for describing the corpus
     instead — "most cases are still allegations" and "confident language is not
-    a finding of fact". Both were already said by the stat strip, the legend and
-    LIMITATIONS; a card restating page furniture is filler.
+    a finding of fact". Both were already said by the stat strip and the legend;
+    a card restating page furniture is filler. (The page also carried a
+    LIMITATIONS wall then; that was removed 2026-08-26 — the rule stands
+    without it, and the caveats that survive live in FINDINGS_CAVEAT.)
     """
     from shared.utils.evidence import FINDING_GROUPS
 
@@ -933,9 +935,9 @@ def test_no_rule_describes_the_corpus_instead_of_the_cases() -> None:
     """The drift guard for the whole rule set.
 
     Two cards were cut in 2026-08 for describing our data rather than the
-    cases — the page's stat strip, legend and LIMITATIONS already carried both.
-    A new rule whose headline is about counting, confidence, or how to read the
-    page is the same mistake.
+    cases — the page's stat strip and legend already carried both, as did the
+    LIMITATIONS wall since removed. A new rule whose headline is about
+    counting, confidence, or how to read the page is the same mistake.
     """
     from shared.utils.evidence import build_evidence_ledger
 
@@ -1220,3 +1222,58 @@ def test_cli_report_never_prints_the_technique_slot() -> None:
     assert "#### F1 — " in text
     # The shared caveat prints once for the section, not once per finding.
     assert text.count("read out of filings by a model") == 1
+
+
+def test_the_shipped_catalog_names_the_technique_a_finding_can_cite() -> None:
+    """The original complaint, as a test.
+
+    A finding read "Cases citing MT003.002 went from 34 to 55" — a bare ITM id
+    where a name belongs. The slot fixes the plumbing, but only if the SHIPPED
+    catalog actually carries a title for the id: a join against an empty or
+    stale catalog degrades to the id and looks identical.
+
+    So: resolve against `shared/data/itm_index.json` itself, and assert the
+    resulting title is a real name rather than the id echoed back.
+    """
+    import json
+    from pathlib import Path
+
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+
+    catalog = json.loads(
+        (Path(__file__).resolve().parent.parent / "shared" / "data" / "itm_index.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    titles = {str(t["id"]).upper(): t["title"] for t in catalog["techniques"] if t.get("title")}
+
+    ledger = build_evidence_ledger(_two_year_rows(), now=NOW)
+    tech = [f for f in ledger["findings"] if (f.get("evidence") or {}).get("kind") == "technique"]
+    assert tech, "fixture no longer fires a technique finding — this guard is asleep"
+    attach_catalog_titles(ledger, titles)
+    for finding in tech:
+        ref = finding["evidence"]
+        assert ref["title_missing"] is False, f"{ref['label']} is not in the shipped ITM catalog"
+        assert ref["title"] != ref["label"], f"{ref['label']} resolved to its own id"
+        # And the name, not the id, is what the reader sees.
+        assert ref["title"] in finding["title"]
+        assert not _ITM_ID.search(finding["title"])
+
+
+def test_a_catalog_miss_is_stamped_not_swallowed() -> None:
+    """Degrading to the id is acceptable; degrading SILENTLY is not.
+
+    Without the stamp, a payload carrying `title == "MT003.002"` is
+    indistinguishable from a technique whose catalog title genuinely is its id,
+    so the client cannot mark it and no test can catch it.
+    """
+    from shared.utils.evidence import attach_catalog_titles, build_evidence_ledger
+
+    ledger = build_evidence_ledger(_two_year_rows(), now=NOW)
+    attach_catalog_titles(ledger, {})
+    tech = [f for f in ledger["findings"] if (f.get("evidence") or {}).get("kind") == "technique"]
+    assert tech
+    for finding in tech:
+        ref = finding["evidence"]
+        assert ref["title_missing"] is True
+        assert ref["title"] == ref["label"]

@@ -1287,7 +1287,14 @@ def attach_catalog_titles(ledger: dict, titles: dict[str, str]) -> dict:
         tech = str(ref["label"])
         # Degrade to the id on a catalog miss. An unspelled technique is worse
         # than the id; an EMPTY slot is worse than both.
+        #
+        # But say so. A finding that prints a bare "MT003.002" where a name
+        # belongs is the exact defect this slot exists to prevent, and until
+        # now that degradation was silent — indistinguishable, in the payload,
+        # from a technique whose catalog title genuinely is its id. The stamp
+        # lets the client mark it and lets a test catch it.
         ref["title"] = titles.get(tech.upper(), tech)
+        ref["title_missing"] = tech.upper() not in titles
         fill_technique_slot(finding, ref["title"])
     # The bottom line quotes the FIRST finding's title verbatim, so when that
     # finding is a technique one the slot rides along and has to be filled from

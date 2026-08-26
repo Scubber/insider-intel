@@ -344,3 +344,54 @@ def test_the_inline_technique_button_flows_with_the_sentence() -> None:
     assert ".evp-finding .evp-tech-name" in css
     block = css[css.index(".evp-finding .evp-tech-name") :][:220]
     assert "inline-flex" in block
+
+
+def test_the_limitations_wall_stays_deleted() -> None:
+    """Removed 2026-08-26 (operator decision).
+
+    A wall of bolded caveats at the foot of the page is the same defect as a
+    finding that states a caveat: nobody reads it, and its presence makes the
+    page feel hedged rather than evidenced. Guarding it because a revert would
+    otherwise restore it quietly, and dead CSS is how a deleted section comes
+    back looking intentional.
+    """
+    html = _index()
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert "evp-limits" not in html
+    assert "evp-limits" not in css
+    assert "LIMITATIONS" not in html
+    assert "READ BEFORE CITING" not in html
+
+
+def test_nothing_still_points_at_the_deleted_limitations_section() -> None:
+    """TOOLING's methodology tooltip used to say "see EVIDENCE › LIMITATIONS".
+
+    A cross-reference to a section that no longer exists is worse than no
+    cross-reference: it sends the reader looking for a caveat they will never
+    find.
+    """
+    src = _app_js()
+    assert "EVIDENCE › LIMITATIONS" not in src
+    # The litigated-case bias it pointed at is stated where the pointer was.
+    assert "caught and litigated" in src
+
+
+def test_the_itm_attribution_survived_the_deletion() -> None:
+    """The trademark line rode inside the deleted block.
+
+    It is an attribution, not a limitation, so it moves rather than goes: the
+    EVIDENCE basis line now carries it, the same way TOOLING's does.
+    """
+    body = _fn_body(_app_js(), "renderEvidenceBasisLine")
+    assert "Forscie" in body
+
+
+def test_a_technique_the_catalog_cannot_name_is_marked_as_such() -> None:
+    """A bare ITM id reading as if it were the technique's name is the defect
+    the {technique} slot exists to prevent. When the catalog genuinely has no
+    name there is nothing better to show — but the reader is told."""
+    body = _fn_body(_app_js(), "evpTechniqueButton")
+    assert "evp-tech-unnamed" in body
+    assert "has no name for" in body
+    css = (WEB / "styles.css").read_text(encoding="utf-8")
+    assert ".evp-tech-unnamed" in css

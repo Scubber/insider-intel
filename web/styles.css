@@ -1054,6 +1054,14 @@ a.tlv-case-title:focus-visible {
   font-weight: 700;
   border-bottom: 1px dotted color-mix(in srgb, var(--signal) 55%, transparent);
 }
+/* A technique the ITM catalog cannot name. Dotted-underlined like every other
+   technique so it still reads as a link, but dimmed and tooltipped so the id
+   is never mistaken for the name. */
+.evp-tech-unnamed .evp-tech-title {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  border-bottom-style: dashed;
+}
 .evp-tech-code {
   color: var(--muted);
   font-size: 0.62rem;
@@ -1369,19 +1377,6 @@ a.tlv-case-title:focus-visible {
   letter-spacing: 0.08em;
 }
 
-.evp-limits {
-  border-top: 1px solid var(--line);
-  margin-top: 1rem;
-  padding-top: 0.7rem;
-}
-.evp-limits p {
-  font-size: 0.7rem;
-  color: var(--muted);
-  max-width: 90ch;
-}
-.evp-limits b {
-  color: var(--ink);
-}
 
 /* Full-width workbench gets its explainer; in the stream side rail it stays
    out of the way. */

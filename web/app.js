@@ -4585,11 +4585,21 @@
   // Technique cell: the spelled-out name reads first and opens the dossier; the
   // ITM code trails small and dim, and is omitted when it would just repeat the
   // name (a catalog miss).
+  //
+  // When the catalog has no name for the id there is nothing better to show,
+  // but the reader is told that rather than handed a code dressed as a title.
+  // A bare "MT003.002" reading as if it were the technique's name is the
+  // defect the whole {technique} slot exists to prevent.
   function evpTechniqueButton(id, title) {
     const btn = evpEl("button", "evp-tech-name");
     btn.type = "button";
+    const named = Boolean(title) && title !== id;
     btn.appendChild(evpEl("span", "evp-tech-title", title || id));
-    if (title && title !== id) btn.appendChild(evpEl("span", "evp-tech-code", id));
+    if (!named) {
+      btn.classList.add("evp-tech-unnamed");
+      btn.dataset.tip = `The ITM catalog has no name for ${id} — showing its id. Opens the dossier.`;
+    }
+    if (named) btn.appendChild(evpEl("span", "evp-tech-code", id));
     btn.addEventListener("click", () => {
       selectTechnique(id).catch((err) => setStatus(`Load failed: ${err.message}`));
     });
@@ -5159,10 +5169,15 @@
     }
     const day = String(data.generated_at || "").slice(0, 10);
     const juris = evidenceCountry === "all" ? "GLOBAL" : evidenceCountry.toUpperCase();
+    // The ITM trademark attribution used to ride at the end of the LIMITATIONS
+    // block. That block is gone; the attribution is not a caveat and still has
+    // to appear, so it lives on the basis line — the same place TOOLING puts
+    // its own.
     line.textContent =
       `BASED ON ${data.enriched_cases.toLocaleString()} VERDICT-TRUE CASES · ` +
       `JURISDICTION: ${juris}` +
-      (day ? ` · AS OF ${day}Z` : "");
+      (day ? ` · AS OF ${day}Z` : "") +
+      " · ITM™ Forscie Ltd (not affiliated)";
   }
 
   function renderJurisdictionTabs() {
@@ -5525,9 +5540,10 @@
       "product quality, and not proof that control caught the insider. CAUGHT ×N counts " +
       "cases whose court-documented evidence names this control class. NAMED ×N = distinct " +
       "case documents naming the product — presence in the record, not effectiveness, " +
-      "never an endorsement; vendors never affect category rankings. Litigated-case bias " +
-      "applies — see EVIDENCE › LIMITATIONS. Category→control mapping is authored and " +
-      "versioned; rankings recompute from the corpus every sweep.";
+      "never an endorsement; vendors never affect category rankings. Court data measures " +
+      "insiders who were caught and litigated, not insider behavior at large. " +
+      "Category→control mapping is authored and versioned; rankings recompute from the " +
+      "corpus every sweep.";
     el.appendChild(meth);
     el.appendChild(document.createTextNode(" · ITM™ Forscie Ltd (not affiliated)"));
     el.hidden = false;
