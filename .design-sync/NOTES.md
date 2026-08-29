@@ -97,3 +97,29 @@
   (11 components vs the live 17) and is sync OUTPUT, so let the sync refresh
   it rather than hand-editing.
 
+- **2026-08-29 manual re-sync DONE (no skill, DesignSync tool only).** A remote
+  session that had the `DesignSync` transport tool but not the `/design-sync`
+  skill completed the 2026-08-25 backlog by replicating the converter's output
+  format, learned by reading the live project:
+  - `_ds_bundle.js` = esbuild IIFE of `dist/index.js`, `globalName DossierUI`,
+    react/jsx-runtime aliased to a `window.React` shim (source copied verbatim
+    from the live bundle), `/* @ds-bundle: {...} */` JSON banner
+    (components→sourcePath + sourceHashes), trailing
+    `window.DossierUI=DossierUI.__dsMainNs?…` line. `sourceHashes` /
+    `_ds_sync.json` hashes are **sha256[:12]** of the file bytes.
+  - `_preview/<C>.js` = same pattern, global `__dsPreview`, package import
+    aliased to `module.exports = window.DossierUI`.
+  - `<C>.html` harnesses are one template (first line `<!-- @dsCard … -->`
+    drives the pane's card index); `.jsx` files are two-line window re-export
+    stubs; `_ds_needs_recompile` marks the project for the app's self-check.
+  - Pushed: rebuilt bundle + CSS, quads and previews for FindingGroup,
+    TrendMatrix, TableControls (SortHeader/ExpandToggle/ExpandableRow) and the
+    refreshed FindingCard (basis/index/weight, tag default DERIVED). Validated
+    first with a headless Chromium render check (5 new/changed + 6 regression
+    stories, 0 bad) against the rebuilt bundle. Replica tooling lives in the
+    session scratchpad only — a future real `/design-sync` run remains the
+    canonical path and will treat any hash drift as ordinary changes.
+  - `_ds_sync.json` and `_ds_manifest.json` were deliberately left stale (CLI
+    bookkeeping / app-rebuilt); `design/redesign/_ds/` still awaits a real
+    sync run.
+
