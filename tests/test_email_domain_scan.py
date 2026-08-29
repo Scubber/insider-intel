@@ -263,3 +263,67 @@ def test_proximity_decides_when_conduct_and_counsel_share_a_window() -> None:
 
 def test_dotted_name_with_digits_is_handle_digits() -> None:
     assert scan_mod.local_shape("mark.delgado77") == "handle_digits"
+
+
+# ---------------------------------------------------------------------------
+# Precision fixes (2026-08 hand review: 38% counsel leakage into exfil)
+# ---------------------------------------------------------------------------
+
+
+def test_service_list_window_is_counsel_despite_sent_vocabulary() -> None:
+    """E-filing SENT lists carry conduct verbs but are plumbing, not conduct."""
+    text = (
+        "Notice has been sent to the following: alpha@wickfirm.com, "
+        "beta@yetterfirm.com, gamma@phangfirm.com per the docket."
+    )
+    _, pairs = scan_mod.scan([_row("l1", text)])
+    assert len(pairs) == 3
+    assert all(p["class"] == "counsel_service" for p in pairs)
+
+
+def test_forensics_field_with_many_addresses_stays_exfil() -> None:
+    fx = {
+        "methods": [
+            {
+                "action": ("sent data to a@gmail.com, b@gmail.com and c@gmail.com nightly"),
+                "observables": [],
+            }
+        ]
+    }
+    _, pairs = scan_mod.scan([_row("l1", "clean body", forensics=fx)])
+    assert len(pairs) == 3
+    assert all(p["class"] == "exfil_context" for p in pairs)
+
+
+def test_creditor_matrix_vocabulary_is_counsel() -> None:
+    text = (
+        "Copies sent to parties on the creditor matrix including trustee@somefirm.com as required."
+    )
+    _, pairs = scan_mod.scan([_row("l1", text)])
+    assert pairs[0]["class"] == "counsel_service"
+
+
+def test_legacy_hunt_queries_are_never_scanned() -> None:
+    fx = {
+        "hunt_queries": [
+            {"logic": "SELECT * WHERE dest LIKE '%ghost@kalshi.com%'", "rationale": "x"}
+        ]
+    }
+    _, pairs = scan_mod.scan([_row("l1", "No addresses in the body.", forensics=fx)])
+    assert len(pairs) == 0, "a legacy hunt_queries address leaked into the scan"
+
+
+def test_duplicate_snippets_collapse_in_evidence_but_not_tallies() -> None:
+    text = (
+        "Before resigning he forwarded the customer list to his personal "
+        "email jdoe@gmail.com that night."
+    )
+    stats, pairs = scan_mod.scan([_row("l1", text), _row("l2", text)])
+    assert len(pairs) == 2  # tallies stay per-pair
+    report = scan_mod.render(stats, pairs, max_snippets=50)
+    assert report.count("> Before resigning") == 1  # evidence collapses
+    assert "×2 (2 cases)" in report
+    blob = scan_mod.to_json(stats, pairs)
+    assert len(blob["exfil_pairs"]) == 1
+    assert blob["exfil_pairs"][0]["duplicate_pairs"] == 2
+    assert blob["by_class"]["exfil_context"] == 2

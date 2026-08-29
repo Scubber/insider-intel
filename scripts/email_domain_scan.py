@@ -134,9 +134,17 @@ _COUNSEL_RE = re.compile(
     r"attorneys? for|counsel (?:for|of record)|law (?:firm|office|group)|\bLLP\b|\bPLLC\b"
     r"|\bEsq\b|pro hac vice|\bECF\b|electronically filed|certificate of service"
     r"|/s/|\bs/\s|bar (?:no|number)|telephone[:\s]|facsimile|\bfax\b|clerk of (?:the )?court"
-    r"|respectfully submitted|cm/ecf|notice of (?:appearance|electronic filing)",
+    r"|respectfully submitted|cm/ecf|notice of (?:appearance|electronic filing)"
+    r"|creditor matrix|mailing matrix|notice will be sent|service list"
+    r"|served (?:via|by|upon)|parties in interest|(?:state )?bar association|state bar",
     re.IGNORECASE,
 )
+
+# A window packed with distinct addresses is an e-service distribution list,
+# creditor matrix, or party contact block — plumbing, not conduct. Hand review
+# of the 2026-08 run measured these lists as the main source of counsel
+# leakage into the exfil class (they carry "sent"/"copied" vocabulary).
+_SERVICE_LIST_MIN = 3
 
 # Conduct vocabulary: the address is where something was SENT, or it is called
 # a personal account. Applied to the same window.
@@ -229,12 +237,28 @@ def _nearest(rx: re.Pattern, window: str, hit_at: int) -> int | None:
     return best
 
 
-def classify_window(window: str, domain: str, from_forensics: bool, hit_at: int | None = None) -> str:
+def _looks_like_service_list(window: str) -> bool:
+    """True when the window holds >= _SERVICE_LIST_MIN distinct addresses."""
+    addrs = set()
+    for m in EMAIL_RE.finditer(window):
+        cleaned = _clean(m.group(0))
+        if cleaned:
+            addrs.add(cleaned[0].lower() + "@" + cleaned[1])
+        if len(addrs) >= _SERVICE_LIST_MIN:
+            return True
+    return False
+
+
+def classify_window(
+    window: str, domain: str, from_forensics: bool, hit_at: int | None = None
+) -> str:
     if domain_category(domain) == "gov_legal_infra":
         return "counsel_service"
     if from_forensics:
         # Forensics fields describe the conduct by construction.
         return "exfil_context"
+    if _looks_like_service_list(window):
+        return "counsel_service"
     if hit_at is None:
         hit_at = len(window) // 2
     d_counsel = _nearest(_COUNSEL_RE, window, hit_at)
@@ -279,10 +303,9 @@ def _texts(row: dict):
         for item in fx.get(lst) or []:
             if isinstance(item, str):
                 yield f"forensics.{lst}", True, item
-    for hq in fx.get("hunt_queries") or []:
-        for key in ("logic", "rationale"):
-            if isinstance(hq.get(key), str):
-                yield f"forensics.hunt_queries.{key}", True, hq[key]
+    # forensics.hunt_queries is deliberately NOT scanned: pre-v3 rows carry
+    # machine-generated query text (SQL LIKE patterns), not case evidence —
+    # v3 removed the field from the write path (docs/schema-freeze-v3.md).
     for tm in fx.get("tool_mentions") or []:
         if isinstance(tm.get("evidence"), str):
             yield "forensics.tool_mentions.evidence", True, tm["evidence"]
@@ -364,6 +387,31 @@ def _tally(pairs):
     return by_domain, by_class, exfil_cat, exfil_shape, exfil_flags
 
 
+def _snippet_fingerprint(p: dict) -> str:
+    """Redacted + lowercased + whitespace-collapsed snippet text.
+
+    Re-filed captions and repeated boilerplate collapse to one evidence entry
+    (the 2026-08 run printed nine copies of one arbitration caption); tallies
+    stay per-pair — only the evidence surfaces collapse.
+    """
+    return re.sub(r"\s+", " ", redact(p["snippet"])).strip().lower()
+
+
+def _dedupe_exfil(pairs):
+    """Group exfil-context pairs by (domain, snippet fingerprint).
+
+    Returns [(representative_pair, pair_count, case_count), ...] preserving
+    the webmail-first sort used by the report.
+    """
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for p in sorted(
+        (p for p in pairs if p["class"] == "exfil_context"),
+        key=lambda p: (p["category"] != "consumer_webmail", p["domain"], p["link"]),
+    ):
+        groups[(p["domain"], _snippet_fingerprint(p))].append(p)
+    return [(g[0], len(g), len({p["link"] for p in g})) for g in groups.values()]
+
+
 def render(stats, pairs, *, max_snippets: int = 150, top: int = 40) -> str:
     by_domain, by_class, exfil_cat, exfil_shape, exfil_flags = _tally(pairs)
     out = []
@@ -418,22 +466,23 @@ def render(stats, pairs, *, max_snippets: int = 150, top: int = 40) -> str:
     out.append(f"## Exfil-context evidence (redacted, first {max_snippets})")
     out.append("")
     shown = 0
-    for p in sorted(
-        (p for p in pairs if p["class"] == "exfil_context"),
-        key=lambda p: (p["category"] != "consumer_webmail", p["domain"], p["link"]),
-    ):
+    shown_pairs = 0
+    for p, n_pairs, n_cases in _dedupe_exfil(pairs):
         if shown >= max_snippets:
             break
         shown += 1
+        shown_pairs += n_pairs
         snippet = re.sub(r"\s+", " ", p["snippet"]).strip()
+        dup = f" · ×{n_pairs} ({n_cases} cases)" if n_pairs > 1 else ""
         out.append(
             f"### <redacted>@{p['domain']} · {p['category']} · shape:{p['shape']}"
             + (f" · flags:{','.join(p['flags'])}" if p["flags"] else "")
+            + dup
         )
         out.append(f"{p['title']}  \n{p['link']}  \nsource: {p['source']}")
         out.append(f"> {snippet}")
         out.append("")
-    remaining = by_class["exfil_context"] - shown
+    remaining = by_class["exfil_context"] - shown_pairs
     if remaining > 0:
         out.append(f"_… {remaining} more exfil-context pairs not shown (raise --max-snippets)._")
     # Every line through the choke point, unconditionally: titles, snippets,
@@ -464,9 +513,10 @@ def to_json(stats, pairs) -> dict:
                 "link": p["link"],
                 "source": p["source"],
                 "snippet": redact(re.sub(r"\s+", " ", p["snippet"]).strip()),
+                "duplicate_pairs": n_pairs,
+                "duplicate_cases": n_cases,
             }
-            for p in pairs
-            if p["class"] == "exfil_context"
+            for p, n_pairs, n_cases in _dedupe_exfil(pairs)
         ],
     }
 
