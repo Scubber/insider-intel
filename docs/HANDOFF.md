@@ -94,6 +94,16 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 
 ## Open threads
 
+0. **RESEARCH section — SHIPPED (2026-08-29, unmerged branch
+   `claude/evidence-page-redesign-awjijy`).** New masthead tab at
+   `#/research` with per-briefing routes `#/research/<slug>`; two briefings
+   ship: `danger-profiles-2026-08` (who the most dangerous insiders are) and
+   `email-destinations-2026-08` (where insider email actually goes).
+   Doctrine: briefings are AUTHORED, dated publications — publish by merge,
+   numbers frozen at their AS OF dateline, live numbers stay on EVIDENCE.
+   Static prose in index.html (ABOUT-pane style, no fetch in the opener);
+   contracts in `tests/test_research_page.py`; smoke deep links in
+   `scripts/ui_smoke_ci.py`.
 1. **In-repo settings + lexicon config** — decided direction unchanged
    (checked-in `config/app_config.json`, fallback to defaults, secrets stay
    in Secret Manager). Not built.

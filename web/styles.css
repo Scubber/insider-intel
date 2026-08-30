@@ -585,6 +585,25 @@ body {
   display: none !important;
 }
 
+/* RESEARCH takeover page: same contract as TOOLING. */
+.pane-research-page {
+  display: none;
+}
+
+.app-shell[data-pane="research"] .pane-research-page {
+  display: block;
+}
+
+.app-shell[data-pane="research"] .pane-grid {
+  grid-template-columns: 1fr;
+}
+
+.app-shell[data-pane="research"] .pane-articles,
+.app-shell[data-pane="research"] .pane-workbench,
+.app-shell[data-pane="research"] .pane-settings {
+  display: none !important;
+}
+
 /* TOOLING table (one grouped table, EVIDENCE .evp-table idiom): category
    group rows are plain labels; count cells are bare tabular numbers.
    Color law holds — INSIDER counts >0 render in var(--signal); zero/missing
@@ -4510,7 +4529,9 @@ body[data-pane="evidence"] .panels-row,
 body[data-pane="tooling"] .chip-bar,
 body[data-pane="tooling"] .panels-row,
 body[data-pane="about"] .chip-bar,
-body[data-pane="about"] .panels-row {
+body[data-pane="about"] .panels-row,
+body[data-pane="research"] .chip-bar,
+body[data-pane="research"] .panels-row {
   display: none;
 }
 
@@ -4571,12 +4592,12 @@ body[data-pane="about"] .panels-row {
 
 /* --- Redesign regrid (2026-08): stream = content + one right rail --- */
 @media (min-width: 1024px) {
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .pane-grid {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="research"]):not([data-pane="about"]) .pane-grid {
     /* One column since the side rail was cut (2026-08-21): the stream
        takes the full width instead of leaving a 300px gutter. */
     grid-template-columns: minmax(0, 1fr);
   }
-  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="about"]) .pane-articles {
+  .app-shell:not([data-pane="workbench"]):not([data-pane="settings"]):not([data-pane="evidence"]):not([data-pane="tooling"]):not([data-pane="research"]):not([data-pane="about"]) .pane-articles {
     order: 1;
     border-right: 0;
     border-left: 0;
@@ -4615,6 +4636,141 @@ body[data-pane="about"] .panels-row {
 .ii-about-attrib {
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+/* RESEARCH briefings: readable long-form measure, existing tokens only. */
+.ii-research {
+  max-width: 72ch;
+}
+.ii-research p,
+.ii-research li {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  max-width: 70ch;
+}
+.ii-research a {
+  color: var(--accent);
+}
+.research-purpose {
+  color: var(--muted);
+}
+.research-index {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0 1.4rem;
+}
+.research-index-item {
+  display: block;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0.8rem 1rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.research-index-item:hover,
+.research-index-item:focus-visible {
+  border-color: var(--accent);
+}
+.research-index-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 0 0 0.25rem;
+}
+.research-index-summary {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--muted);
+  margin-top: 0.35rem;
+}
+.research-meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.research-empty {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.research-briefing h3 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.15;
+  margin: 0.3rem 0 0.4rem;
+}
+.research-briefing h4 {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 1.6rem 0 0.5rem;
+  color: var(--ink);
+}
+.research-briefing .research-meta {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 0.45rem 0;
+  margin: 0 0 0.7rem;
+}
+.research-back {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.4rem;
+}
+.research-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.research-bottomline {
+  border-left: 3px solid var(--accent);
+  padding: 0.15rem 0 0.15rem 0.9rem;
+  font-size: 1rem;
+}
+.research-callout {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0.6rem 0.9rem;
+  margin: 0.9rem 0;
+}
+.research-callout p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+.research-findings {
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.4rem 0 0;
+}
+.research-limits {
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.4rem 0 0;
+}
+.research-foot {
+  border-top: 1px solid var(--line);
+  margin-top: 1.6rem;
+  padding-top: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+@media (max-width: 767px) {
+  .research-briefing h3 {
+    font-size: 1.25rem;
+  }
+  .research-index-item {
+    padding: 0.65rem 0.75rem;
+  }
 }
 
 /* --- Redesign fidelity pass (2026-08-10): match the prototype's chrome --- */
