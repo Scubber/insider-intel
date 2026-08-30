@@ -52,6 +52,7 @@
           <button type="button" class="masthead-nav-item" data-pane="matrix" data-tip="Browse the Insider Threat Matrix" data-tip-pos="bottom">MATRIX</button>
           <button type="button" class="masthead-nav-item" data-pane="evidence" data-tip="What real cases actually left behind — corpus-wide evidence research" data-tip-pos="bottom">EVIDENCE</button>
           <button type="button" class="masthead-nav-item" data-pane="tooling" data-tip="Enterprise tools for insider-threat programs — each product's court-filing record" data-tip-pos="bottom">TOOLING</button>
+          <button type="button" class="masthead-nav-item" data-pane="research" data-tip="Dated research briefings built from this corpus" data-tip-pos="bottom">RESEARCH</button>
           <button type="button" class="masthead-nav-item" data-pane="workbench" data-tip="Evidence board and modus operandi, full width" data-tip-pos="bottom">
             WORKBENCH <span class="nav-board-count" id="nav-board-count">[0]</span>
           </button>
@@ -140,6 +141,7 @@
         <button type="button" class="mobile-tab" data-pane="matrix">Insights</button>
         <button type="button" class="mobile-tab" data-pane="evidence">Evidence</button>
         <button type="button" class="mobile-tab" data-pane="tooling">Tooling</button>
+        <button type="button" class="mobile-tab" data-pane="research">Research</button>
         <button type="button" class="mobile-tab" data-pane="workbench">
           Workbench<span class="board-badge" id="board-badge" hidden></span>
         </button>
@@ -196,6 +198,8 @@
               <dd>The proof that shows up when insiders get caught — the records, logs, and witnesses real cases cite. FINDINGS reads as a short report: a bottom line, then numbered findings F1 onward grouped by the question each answers; WHAT CHANGED tracks which tactics rise and fall by filing year. Jurisdiction tabs give each court system its own report; TACTICS BY REGION shows which techniques skew regional.</dd>
               <dt>TOOLING</dt>
               <dd>Security products named in real court filings — which caught insiders, which got bypassed. Click a product for its cases.</dd>
+              <dt>RESEARCH</dt>
+              <dd>Dated research briefings — long-form findings from the corpus, published by merge and frozen at their as-of date (the live numbers stay on EVIDENCE).</dd>
               <dt>WORKBENCH</dt>
               <dd>Your saved cases, side by side. Save cases on STREAM with +, then compare what those insiders actually did here.</dd>
               <dt>SETTINGS</dt>
@@ -758,6 +762,204 @@
               open dataset (eCourts records, CC BY license, hosted on the AWS Open Data
               Registry). Canadian decisions via CanLII court feeds.
             </p>
+          </div>
+        </section>
+
+        <!-- RESEARCH (#/research): authored, dated briefings built from the
+             corpus. This is the ONE sanctioned home for frozen numbers on the
+             site — every briefing carries an AS OF dateline and points at
+             EVIDENCE for the live, recomputed figures. Static prose in the
+             ABOUT-pane style: app.js only routes and shows/hides. -->
+        <section class="pane pane-research-page" data-pane-panel="research" aria-label="Research briefings">
+          <div class="pane-head">
+            <h2>RESEARCH</h2>
+          </div>
+          <div class="pane-body ii-research">
+            <p class="research-purpose">
+              Long-form findings from the corpus. Each briefing is dated and frozen as of its
+              publication; the live, recomputed numbers are on <a href="#/evidence">EVIDENCE</a>.
+            </p>
+
+            <div class="research-index">
+              <a class="research-index-item" href="#/research/danger-profiles-2026-08">
+                <span class="research-index-title">Who the most dangerous insiders are</span>
+                <span class="research-meta">PUBLISHED 2026-08-28 · AS OF 2026-08-28 CORPUS</span>
+                <span class="research-index-summary">Six danger profiles ranked from 860 litigated
+                insider cases: proven harm concentrates in the departure window, technical insiders
+                are the most provable, and executives dominate the docket but rarely get proven.</span>
+              </a>
+              <a class="research-index-item" href="#/research/email-destinations-2026-08">
+                <span class="research-index-title">Where insider email actually goes</span>
+                <span class="research-meta">PUBLISHED 2026-08-29 · AS OF 2026-08-28 CORPUS</span>
+                <span class="research-index-summary">A hand-reviewed scan of every email address
+                quoted in the corpus: true exfil destinations are personal in character, the robotic
+                inboxes are never the employee, and personal webmail is more often the office of the
+                scheme than the warehouse.</span>
+              </a>
+            </div>
+            <p class="research-empty" id="research-missing" hidden>
+              No briefing by that name. The index above lists everything published so far.
+            </p>
+
+            <article class="research-briefing" data-briefing="danger-profiles-2026-08" hidden>
+              <p class="research-back"><a href="#/research">← ALL BRIEFINGS</a></p>
+              <h3>Who the most dangerous insiders are</h3>
+              <p class="research-meta">PUBLISHED 2026-08-28 · AS OF 2026-08-28 CORPUS SNAPSHOT (8,939 DOCUMENTS)</p>
+              <p class="research-note">Numbers below are frozen at publication. The live, recomputed
+              figures are on <a href="#/evidence">EVIDENCE</a>.</p>
+
+              <p class="research-bottomline"><strong>Proven insider harm concentrates in the
+              departure window.</strong> Departure-linked conduct appears in 511 of 860
+              method-bearing cases and carries 39 of the 68 proven ones — more than any other
+              pattern. But danger splits by kind: technical insiders are the most provable,
+              executives carry the biggest dollar harm while proving at only 4%, and the insider
+              who trades on nonpublic information is nearly invisible from inside the company.</p>
+
+              <div class="research-callout">
+                <p><strong>Read the numbers with the collection bias in view.</strong> The corpus
+                lexicon literally queries phrases like "former employee", "terminate", and "insider
+                trading", so those volumes are partly manufactured by collection. The within-corpus
+                rankings stand; real-world prevalence must not be read off them.</p>
+              </div>
+
+              <h4>Findings</h4>
+              <ol class="research-findings">
+                <li><strong>F1 — The departing or former employee is the top proven profile.</strong>
+                The Leaver pattern (ITM's departing-employee technique) appears in 511 of 860 cases
+                and carries 39 of the 68 proven ones — the top of the technique table. Former or
+                fired employees hold 30 of the 68 proven cases (44%), the largest proven block on
+                any axis. Consequence: revoke access the day notice is given, and start elevated
+                email and removable-media monitoring at resignation, not at the exit interview.</li>
+                <li><strong>F2 — Technical insiders convert to proven at the highest rate.</strong>
+                11 of their 58 cases end proven (19%), against 4% for executives (19 of 437) and an
+                8% corpus base rate. The systems they touch log them by necessity, and that machine
+                evidence holds up in court. Consequence: ship privileged-activity logs off the
+                systems the administrator controls, so the record survives the actor.</li>
+                <li><strong>F3 — Executives dominate the docket but rarely get proven.</strong>
+                Executives and officers are named in 437 of 860 cases — 51% of the docket — yet
+                convert at 4%. Misappropriation of Funds appears in 404 cases (29 proven), and the
+                largest sampled dollar figure is $58.7M in alleged outflows through accounts the
+                defendant controlled. Consequence: enforce segregation of duties on fund movement
+                at the top of the org, and give concerns about this group a reporting path that
+                does not run through it.</li>
+                <li><strong>F4 — Proven cases run through the company's own records.</strong>
+                Email evidence carries 29 of the 68 proven cases and system or file-access logs
+                carry 20; no externally held record class carries more than 4. Consequence: your
+                own mail and access logs are the courtroom record — keep them on retention long
+                enough to reconstruct a departure window months later.</li>
+                <li><strong>F5 — The market-informed trader is the least detectable from
+                inside.</strong> Insider Trading appears in 202 cases (15 proven — a count inflated
+                by construction, since the phrase is a literal collection query), and the records
+                that catch this conduct live at the broker, not in any company log. Consequence:
+                pre-clear trades, keep wall-crossing lists, and build the referral path to
+                regulators instead of pretending a sensor covers it.</li>
+                <li><strong>F6 — The undisclosed moonlighter proves at triple the base rate.</strong>
+                Undisclosed Concurrent Employment cases end proven 23% of the time (8 of 35) and
+                Conflicts of Interest at 14% (14 of 98), because the proof is documentary — payroll
+                against a second payroll, invoices against timesheets. Consequence: collect and
+                periodically re-collect outside-employment disclosures; the attestation makes the
+                later case mechanical.</li>
+              </ol>
+
+              <h4>How this was built</h4>
+              <p>The corpus ledger was regenerated from the live corpus on 2026-08-28 (8,939 rows,
+              2,410 enriched, 860 cases with methods, 68 proven). Six analysts each worked one
+              danger dimension and produced 24 candidate claims, every number tied to a quoted
+              source line. Each claim then faced an adversarial verifier instructed to refute it:
+              quotes re-checked, arithmetic recomputed, denominators audited, and the claim tested
+              against the collection lexicon that built the corpus. 23 of 24 claims survived — 19
+              only after amendment, mostly to admit collection bias — and one was killed outright
+              for comparing against a parser-default bucket.</p>
+
+              <h4>Limits</h4>
+              <ul class="research-limits">
+                <li>This corpus contains only insiders who were caught and litigated. The profile
+                whose concealment worked, or whose employer settled quietly, is structurally
+                absent. No prevalence here is a real-world base rate.</li>
+                <li>The collection lexicon manufactures part of every ranking. Executive,
+                departure, trading, and destruction volumes are all partly collection artifacts —
+                within-corpus rankings stand, absolute volumes do not generalize.</li>
+                <li>The proven slice is 68 cases, and 28 of them carry no role signal — role
+                shares of the proven slice are floors. All role tags are model-read from filings,
+                not hand-audited.</li>
+                <li>"Proven" pools adjudicated with admitted conduct; conversion-to-proven
+                measures provability and settlement economics, not harm.</li>
+              </ul>
+              <p class="research-foot">DERIVED FROM THE INSIDER-INTEL CORPUS LEDGER · ROLES, NEVER
+              INDIVIDUALS · TECHNIQUE NAMES FROM THE INSIDER THREAT MATRIX — ITM™ © Forscie
+              Limited — not affiliated · LIVE NUMBERS: <a href="#/evidence">EVIDENCE</a></p>
+            </article>
+
+            <article class="research-briefing" data-briefing="email-destinations-2026-08" hidden>
+              <p class="research-back"><a href="#/research">← ALL BRIEFINGS</a></p>
+              <h3>Where insider email actually goes</h3>
+              <p class="research-meta">PUBLISHED 2026-08-29 · AS OF 2026-08-28 CORPUS SNAPSHOT (8,939 DOCUMENTS)</p>
+              <p class="research-note">Numbers below are frozen at publication. The live, recomputed
+              figures are on <a href="#/evidence">EVIDENCE</a>.</p>
+
+              <p class="research-bottomline"><strong>The email addresses insiders send company data
+              to are personal, not professional.</strong> Of the 44 true exfil destinations found
+              in the whole corpus, half are ordinary name-like webmail accounts, the machine-named
+              inboxes are never the employee, and the "corporate" destinations are the insider's
+              own side venture — not the new employer. The biggest pattern is not a destination at
+              all: personal webmail as the office the scheme runs from.</p>
+
+              <h4>Findings</h4>
+              <ol class="research-findings">
+                <li><strong>F1 — The funnel: 8,939 documents narrow to 44 true destinations.</strong>
+                828 cases quote at least one email address, yielding 2,969 case-address pairs. 68%
+                of those are counsel and e-filing plumbing (ECF — the courts' electronic service
+                lists). 428 pairs matched exfil keywords; every one was hand-reviewed; 44 are real
+                destinations for company data. Consequence: raw address counts in filings measure
+                the litigation process, not the crime.</li>
+                <li><strong>F2 — Personal webmail exfil is personal in character (22 of 44).</strong>
+                Name-like account names, one-off self-forwards in the pre-resignation window — and
+                zero auto-forward rules among employee cases. Consequence: the detection target is
+                a manual forward to a name-like webmail address during the notice period, not a
+                mailbox rule.</li>
+                <li><strong>F3 — Robotic destinations are never the employee (4 of 44).</strong>
+                One is a nation-state exfil account; the other three belong to one gift-card fraud
+                ring bulk-routing to disposable yopmail inboxes. Consequence: a machine-named
+                inbox in your mail logs points at external crime, not a departing employee.</li>
+                <li><strong>F4 — Corporate destinations are the insider's own side venture
+                (18 of 44).</strong> Dominated by the insider's own company domain — including
+                lookalike and typosquat domains of the employer — not the new employer's domain.
+                Consequence: watch for lookalikes of your own domain in outbound mail; the new
+                employer's mail server is the wrong place to look.</li>
+                <li><strong>F5 — Encrypted mail shows zero employee exfil.</strong> All five
+                proton-domain pairs in the corpus are attacker ransom contacts, an account
+                takeover, an anonymous board complaint, and a pro se litigant. Consequence: do not
+                build the insider program around the encrypted-mail scare — this corpus records no
+                employee ever using it to move company data.</li>
+                <li><strong>F6 — Personal webmail is the office of the scheme more often than the
+                warehouse.</strong> 65 pairs show personal webmail as the communications channel
+                the scheme runs on — running a competitor from a personal account for months,
+                invoicing from a lookalike domain — outnumbering true exfil destinations about
+                1.5 to 1. Consequence: monitor the channel, not just attachments leaving; the
+                fraud's paper trail is in the mail body.</li>
+              </ol>
+
+              <h4>How this was built</h4>
+              <p>A read-only, redacted scan of the stored corpus: domains only, local parts never
+              printed — the site's roles-never-individuals rule applies to the analysis pipeline
+              too. A context classifier separated counsel-service plumbing from mentions and
+              keyword-exfil candidates; four reviewers then hand-read all 428 keyword-exfil pairs.
+              Two independent redaction audits found zero unredacted addresses in report content.</p>
+
+              <h4>Limits</h4>
+              <ul class="research-limits">
+                <li>Keyword classification leaked counsel-service traffic into the exfil bucket at
+                a measured 38% before the 2026-08-29 precision fixes; the hand review corrected
+                for it, but the automated counts alone are not trustworthy.</li>
+                <li>The corpus is collection-shaped: only litigated cases whose filings quote
+                addresses appear, so absence of a pattern here is weak evidence of absence in the
+                world.</li>
+                <li>Review worked from snippets of public filings, not full mailbox evidence — a
+                destination's character is read from how the filing describes it.</li>
+              </ul>
+              <p class="research-foot">DERIVED FROM THE INSIDER-INTEL CORPUS · ROLES, NEVER
+              INDIVIDUALS · LIVE NUMBERS: <a href="#/evidence">EVIDENCE</a></p>
+            </article>
           </div>
         </section>
         <section class="pane pane-settings" data-pane-panel="settings" aria-label="Settings">

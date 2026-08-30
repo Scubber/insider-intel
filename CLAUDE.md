@@ -369,6 +369,10 @@ legacy fallback.
   vendor aliases); a checked-in file holding corpus-derived numbers is a
   bug. Pin each new surface with contract tests in the style of
   `tests/test_matrix_data_sources.py`.
+- **RESEARCH briefings (`#/research`) are the one exception by design**:
+  AUTHORED, dated publications in `web/index.html` — the single sanctioned
+  home for frozen numbers, always carrying an AS OF corpus dateline and a
+  link to EVIDENCE for the live figures. Frozen there is honesty, not drift.
 - **Every page teaches itself** (operator directive 2026-08-17). A
   user-facing surface ships WITH its explanation, in the same PR: a GUIDE
   cheat-sheet line (contract-enforced — `tests/test_site_guide.py` fails a

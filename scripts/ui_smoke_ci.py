@@ -9,14 +9,14 @@ live API and (unless the checkout carries web/data/) no boot snapshot:
   beyond the expected-offline allowlist (failed fetches to the absent live
   API and the absent web/data/ snapshot),
 - every masthead tab renders its pane without throwing
-  (STREAM / MATRIX / EVIDENCE / TOOLING / WORKBENCH / SETTINGS),
+  (STREAM / MATRIX / EVIDENCE / TOOLING / RESEARCH / WORKBENCH / SETTINGS),
 - the GUIDE opens and dismisses — via the masthead button on desktop and the
   mobile tab row's GUIDE button on phone widths (the footer reopener is gone),
 - TOOLING renders its table — snapshot rows when web/data/tooling.json is
   present, else the honest "payload unreachable" teaching note,
-- hash deep links (#/tooling, #/technique/IF002, #/tools, #/about) don't
-  crash, legacy #/tools re-navigates to #/tooling, and #/about renders the
-  ABOUT pane with its byline,
+- hash deep links (#/tooling, #/technique/IF002, #/tools, #/about, #/research
+  and #/research/<slug>) don't crash, legacy #/tools re-navigates to
+  #/tooling, and #/about renders the ABOUT pane with its byline,
 - all of it at two viewports: 1280 desktop and 390 mobile.
 
 On failure each viewport screenshots into ui-smoke-artifacts/ for the CI
@@ -80,6 +80,7 @@ ALLOWED_CONSOLE = (
 PANE_PROOF_COMMON = {
     "evidence": ".pane-evidence-page",
     "tooling": "#tlt-table tr",
+    "research": ".pane-research-page",
     "workbench": ".pane-workbench",
     "settings": ".pane-settings",
     "articles": "#article-panel:not([hidden])",
@@ -88,7 +89,7 @@ PANE_PROOF_MATRIX = {
     "desktop": "#matrix-panel:not([hidden])",
     "mobile": "#matrix-panel",
 }
-PANE_ORDER = ("matrix", "evidence", "tooling", "workbench", "settings", "articles")
+PANE_ORDER = ("matrix", "evidence", "tooling", "research", "workbench", "settings", "articles")
 
 
 def _wire_error_capture(page, console_bad: list[str], page_errors: list[str]) -> None:
@@ -180,7 +181,14 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
 
         # Hash deep links via the in-page router: none may crash, and legacy
         # #/tools must re-navigate to the one TOOLING table.
-        for link in ("#/technique/IF002", "#/tools", "#/about", "#/"):
+        for link in (
+            "#/technique/IF002",
+            "#/tools",
+            "#/about",
+            "#/research",
+            "#/research/danger-profiles-2026-08",
+            "#/",
+        ):
             page.evaluate(f"() => {{ location.hash = '{link}'; }}")
             page.wait_for_timeout(400)
             checks.check(
@@ -208,7 +216,13 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
 
         # Cold-load deep links: a fresh boot straight onto each route (via
         # about:blank — a same-document hash hop would skip the reload).
-        for link in ("#/tooling", "#/technique/IF002", "#/about"):
+        for link in (
+            "#/tooling",
+            "#/technique/IF002",
+            "#/about",
+            "#/research",
+            "#/research/danger-profiles-2026-08",
+        ):
             page.goto("about:blank")
             page.goto(f"{base_url}/{link}")
             page.wait_for_selector(".app-shell", state="attached", timeout=15000)

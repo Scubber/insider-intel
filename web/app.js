@@ -275,10 +275,10 @@
   // Match styles.css desktop rail breakpoint (1024px) — tablet landscape keeps
   // the three-column layout and parks matrix takeover back to the stream.
   const WIDE_MQ = window.matchMedia("(min-width: 1024px)");
-  const PANES = new Set(["articles", "matrix", "evidence", "tooling", "workbench", "settings", "about"]);
+  const PANES = new Set(["articles", "matrix", "evidence", "tooling", "research", "workbench", "settings", "about"]);
   // Panes that take over the grid full-width on EVERY layout (design handoff:
   // the Workbench nav tab and Settings open full width).
-  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "tooling", "about"]);
+  const TAKEOVER_PANES = new Set(["workbench", "settings", "evidence", "tooling", "research", "about"]);
 
   function isMobileLayout() {
     return MOBILE_MQ.matches;
@@ -485,6 +485,14 @@
     if (path === "/tooling" || path === "/tooling/") {
       return { view: "tooling" };
     }
+    if (path === "/research" || path === "/research/") {
+      return { view: "research" };
+    }
+    if (path.startsWith("/research/")) {
+      // Briefing deep link: slugs are the <article data-briefing> ids.
+      const id = decodeURIComponent(path.slice("/research/".length)).trim();
+      if (id) return { view: "research-briefing", id: id.toLowerCase() };
+    }
     if (path === "/about" || path === "/about/") {
       // ABOUT absorbed the old METHODOLOGY & COLOPHON pane (footer removal,
       // 2026-08-17) — the pane itself keeps the "about" pane id it always had.
@@ -541,6 +549,14 @@
     }
     if (route.view === "about") {
       openAboutView();
+      return;
+    }
+    if (route.view === "research") {
+      openResearchView();
+      return;
+    }
+    if (route.view === "research-briefing" && route.id) {
+      openResearchView(route.id);
       return;
     }
     if (route.view === "tooling-category" && route.id) {
@@ -5487,6 +5503,34 @@
     setStatus("About this site");
   }
 
+  /* ── RESEARCH takeover page (#/research, #/research/<slug>): authored dated
+     briefings, static prose shipped in index.html — the one sanctioned home
+     for frozen numbers (always with an AS OF dateline; live numbers stay on
+     EVIDENCE). This opener only routes and shows/hides — no network. ────── */
+  function openResearchView(slug) {
+    setActivePane("research");
+    navigate(slug ? `/research/${slug}` : "/research");
+    const articles = document.querySelectorAll(".research-briefing[data-briefing]");
+    const index = document.querySelector(".research-index");
+    const missing = document.getElementById("research-missing");
+    let matched = false;
+    articles.forEach((article) => {
+      const hit = Boolean(slug) && article.dataset.briefing === slug;
+      article.hidden = !hit;
+      if (hit) matched = true;
+    });
+    // A briefing takes over; the index (plus a "no such briefing" note when
+    // the slug is unknown) shows otherwise.
+    if (index) index.hidden = matched;
+    if (missing) missing.hidden = !(slug && !matched);
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* ignore */
+    }
+    setStatus("Research briefings");
+  }
+
   /* ── TOOLING takeover page (#/tooling): ONE grouped table — category group
      rows (plain labels linking to the category dossier) over tool rows with
      bare counts. Pure read of the session-cached /tooling payload — the API
@@ -6891,6 +6935,10 @@
         openToolingView();
         return;
       }
+      if (pane === "research") {
+        openResearchView();
+        return;
+      }
       if (pane === "articles" && state.view !== "stream") setView("stream");
       setActivePane(pane);
       try {
@@ -7015,6 +7063,10 @@
       }
       if (btn.dataset.pane === "tooling") {
         openToolingView();
+        return;
+      }
+      if (btn.dataset.pane === "research") {
+        openResearchView();
         return;
       }
       // Insights: the rail used to BE this pane on phones. It now opens the
@@ -7367,6 +7419,11 @@
         } else if (early.view === "about") {
           // ABOUT is static prose — it must not wait out the API probe either.
           openAboutView();
+        } else if (early.view === "research") {
+          // RESEARCH is static prose too — same rule, same reason.
+          openResearchView();
+        } else if (early.view === "research-briefing" && early.id) {
+          openResearchView(early.id);
         }
       }
 
@@ -7414,6 +7471,11 @@
       } else if (route.view === "about") {
         // Re-run after the probe so the live corpus line fills in.
         openAboutView();
+      } else if (route.view === "research") {
+        // Idempotent re-run of the early dispatch above.
+        openResearchView();
+      } else if (route.view === "research-briefing" && route.id) {
+        openResearchView(route.id);
       } else if (route.view === "board") {
         await loadArticles();
         await importBoardFromRoute(route);
