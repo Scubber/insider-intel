@@ -23,7 +23,7 @@ on:
       max_age_hours:
         description: "fail when last_indexed_at is older than this many hours"
         required: false
-        default: "30"
+        default: "26"
 
 permissions:
   contents: read
@@ -37,9 +37,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      # 30h, not 24h: the cycle is daily and a heavy run takes a couple of
-      # hours, so a healthy corpus can legitimately be a day-and-a-bit old.
-      MAX_AGE_HOURS: ${{ github.event.inputs.max_age_hours || '30' }}
+      # 26h. The arithmetic, because a threshold nobody can re-derive rots:
+      # last_indexed_at is stamped ~55min into the pipeline, not at push time
+      # (measured: 51min on 2026-08-26, 55min on 2026-08-31), so a healthy
+      # 08:00Z cycle stamps ~09:05Z. Worst legitimate age at either check is
+      # then 17h (the 02:00 run). One missed cycle reads 29h at the 14:00 run.
+      # 26h sits in that gap: 9h of headroom over normal, and a dead tenant
+      # surfaces at the next check rather than 12h later. Raising this to 30h
+      # would let exactly one missed cycle through — that is the number this
+      # shipped with, and the 2026-08-31 recovery run is what corrected it.
+      MAX_AGE_HOURS: ${{ github.event.inputs.max_age_hours || '26' }}
       HEALTH_URL: https://api.intel.thederpweb.com/health
     steps:
       - name: Read /health

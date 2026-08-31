@@ -339,7 +339,7 @@ analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
 `corpus-freshness` runs itself twice a day on GitHub's runners — never on
 sparky, because a check that dies with the box it watches is not a check —
-and fails when the API's `last_indexed_at` ages past 30h. A failed run IS the
+and fails when the API's `last_indexed_at` ages past 26h. A failed run IS the
 alert; dispatch it with a custom `max_age_hours` to ask the same question by
 hand.
 **Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
