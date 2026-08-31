@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-08-29 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-08-31 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -24,7 +24,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 
 | Area | State |
 |---|---|
-| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
+| **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. **Outage 2026-08-27 → 08-31 RESOLVED (thread #15):** five consecutive cycles died at the GCS pull; the corpus served 2026-08-26 data for five days. Cause was a crash-looping vLLM taking the host's DNS down, not anything in the pipeline. Fixed in `spark_refresh.sh` (skip-swap + drain + stop-on-fail) and `~/sparky` (`restart: on-failure:3`); `corpus-freshness` now alarms on a stale `last_indexed_at` (26h). |
 | **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. **Incident 2026-08-23 RESOLVED (thread #14):** ~51 rows' enrichment projections were gutted overnight and restored at 11:52Z from the retained post-sweep generation (no articles were ever lost — the "row loss" was duplicate counting in a mid-append snapshot). Post-restore cycle (13:14Z): **7,494 rows / 2,146 enriched / 693 verdict-true**, pushed + reloaded. |
 | **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242). Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
@@ -93,6 +93,24 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 ---
 
 ## Open threads
+
+15. **Sparky crash-loop outage (2026-08-27 → 08-31) — FIXED, two follow-ups
+    open.** The daily cycle's model swap recreated `sparky-vllm` before the
+    outgoing 120B released its memory; the load died, `restart: unless-stopped`
+    retried every 12s for four days, and the veth churn cost the host its
+    default route and DNS. Every cycle then died at `gsutil` with `Temporary
+    failure in name resolution`. Nothing alarmed — the wrapper logged all five
+    failures to a file nobody reads. Shipped: recipe-fingerprint skip (the swap
+    is a no-op now that chat and enrichment are the same Nemotron),
+    stop → drain → start for swaps that must happen, `vllm_wait` failure stops
+    the container, bounded restart policy on the box, and the
+    `corpus-freshness` workflow. Still open: (a) set the standing chat model to
+    the enrich overlay (`sparky-ops` → `chat-default`, overlay
+    `model-enrich.yml`) so the hand-back stops reloading 90GB for nothing —
+    that is the last model load left in a cycle; (b) **rotate `VLLM_API_KEY`**
+    — it is passed as `--api-key` on the container's argv, so every `ps` and
+    `docker inspect` on the box discloses it, and it has been read aloud in at
+    least one agent session. Move it to an env var in the same change.
 
 0. **RESEARCH section — SHIPPED (2026-08-29, unmerged branch
    `claude/evidence-page-redesign-awjijy`).** New masthead tab at

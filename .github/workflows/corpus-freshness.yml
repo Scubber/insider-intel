@@ -1,0 +1,92 @@
+name: corpus-freshness
+
+# Staleness tripwire for the refresh tenant.
+#
+# The sparky cron writes the corpus once a day (08:00Z) and pokes /reload, so
+# `last_indexed_at` is the one number that proves the whole chain ran: pull,
+# pipeline, push, reload. When it stops moving, production is serving a frozen
+# corpus and nothing else says so — in August 2026 a crash-looping vLLM took
+# the box's DNS down and five consecutive cycles died at the corpus pull. The
+# wrapper logged every failure. Nobody was reading the log. Five days passed.
+#
+# This job runs on GitHub's own runners, NOT the self-hosted runner on sparky:
+# a check that dies with the box it watches is not a check. It reads the public
+# API and needs no credentials. A failed run is the alert.
+on:
+  schedule:
+    # ~4h after the 08:00Z cycle should have finished, and again 12h later so a
+    # box that dies right after a good cycle still surfaces within a day.
+    - cron: "0 14 * * *"
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      max_age_hours:
+        description: "fail when last_indexed_at is older than this many hours"
+        required: false
+        default: "26"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-freshness
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # 26h. The arithmetic, because a threshold nobody can re-derive rots:
+      # last_indexed_at is stamped ~55min into the pipeline, not at push time
+      # (measured: 51min on 2026-08-26, 55min on 2026-08-31), so a healthy
+      # 08:00Z cycle stamps ~09:05Z. Worst legitimate age at either check is
+      # then 17h (the 02:00 run). One missed cycle reads 29h at the 14:00 run.
+      # 26h sits in that gap: 9h of headroom over normal, and a dead tenant
+      # surfaces at the next check rather than 12h later. Raising this to 30h
+      # would let exactly one missed cycle through — that is the number this
+      # shipped with, and the 2026-08-31 recovery run is what corrected it.
+      MAX_AGE_HOURS: ${{ github.event.inputs.max_age_hours || '26' }}
+      HEALTH_URL: https://api.intel.thederpweb.com/health
+    steps:
+      - name: Read /health
+        run: |
+          # Retries absorb a Cloud Run cold start; they do not mask staleness.
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 15 \
+            --max-time 90 "$HEALTH_URL" -o health.json
+          cat health.json
+          echo ""
+
+      - name: Fail when the corpus has stopped moving
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          from datetime import datetime, timezone
+
+          health = json.load(open("health.json"))
+          stamp = health.get("last_indexed_at")
+          if not stamp:
+              sys.exit("[FAIL] /health carries no last_indexed_at — API up, index unknown")
+
+          indexed = datetime.fromisoformat(stamp)
+          if indexed.tzinfo is None:
+              indexed = indexed.replace(tzinfo=timezone.utc)
+          age_hours = (datetime.now(timezone.utc) - indexed).total_seconds() / 3600
+          limit = float(os.environ["MAX_AGE_HOURS"])
+
+          print(f"indexed_articles : {health.get('indexed_articles')}")
+          print(f"last_indexed_at  : {stamp}")
+          print(f"age              : {age_hours:.1f}h (limit {limit:.0f}h)")
+
+          if age_hours > limit:
+              sys.exit(
+                  f"\n[FAIL] corpus is {age_hours:.1f}h stale (limit {limit:.0f}h).\n"
+                  "The refresh chain has stopped. Check the tenant, newest first:\n"
+                  "  1. Actions -> sparky-ops -> op=tail-refresh-log\n"
+                  "  2. Actions -> sparky-ops -> op=diagnose (cron, checkout, identity)\n"
+                  "  3. A vLLM container stuck restarting takes the box's DNS down\n"
+                  "     with it and every cycle then dies at the corpus pull.\n"
+                  "  4. Rollback lane: resume Cloud Scheduler corpus-refresh-schedule.\n"
+              )
+          print("\n[OK] corpus is fresh")
+          PY

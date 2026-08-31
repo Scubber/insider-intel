@@ -175,7 +175,7 @@ and select-best over `enrichment_history` keeps the richer record either way.
 Residential-IP bonus: the Reddit lane, which 429s from cloud IPs, works from
 the Spark.
 
-### Operating state (cutover 2026-08-16; current as of 2026-08-22)
+### Operating state (cutover 2026-08-16; current as of 2026-08-31)
 
 The Spark is the production refresh tenant. What is running now:
 
@@ -189,9 +189,34 @@ The Spark is the production refresh tenant. What is running now:
   the enrichment model — Nemotron 3 Super 120B-A12B-NVFP4 at gpu-util 0.70,
   131k ctx, 1 seq — and an EXIT trap in `spark_refresh.sh` restores the chat
   stack (vllm + open-webui together) on any exit.
-- **Memory law** (two crashes taught it): the binding limit is the
+- **The swap is skipped when it would change nothing** (2026-08-31). Before
+  touching the container, `spark_refresh.sh` fingerprints the recipe it wants
+  (`docker compose config`, image + command, hashed — the rendered command
+  carries `--api-key`, so it is never printed raw) against the recipe the
+  running container actually has (`docker inspect`). Identical means no
+  recreate, no load, no trap, no restore. Since chat became the same Nemotron
+  as enrichment (2026-08-22) that is the normal path. Set the standing chat
+  model to the enrich overlay (`sparky-ops` → `chat-default`, overlay
+  `model-enrich.yml`) and a whole cycle costs **zero** model loads instead of
+  two.
+- **Memory law** (three crashes taught it): the binding limit is the
   LOAD-TIME peak, not steady state. Hard ceiling ≈ 75GB of weights; never
-  boot two big models side by side; no fastsafetensors.
+  boot two big models side by side; no fastsafetensors. The third crash was
+  the subtle one — a *recreate of the same model* is also two models briefly,
+  because `compose up` starts the incoming load the moment the outgoing
+  container is told to stop. So a swap that must happen now goes stop →
+  drain → start: `vllm_drain` polls `/proc/meminfo` (nvidia-smi reports N/A
+  for memory on GB10 unified memory) until `MemAvailable` clears
+  `SPARKY_DRAIN_MIN_AVAIL_GB` (80) or `SPARKY_DRAIN_SECONDS` (300) runs out.
+  On timeout the cycle refuses to load and leaves vLLM stopped — enrichment
+  no-ops, ingest and docket-follow still run.
+- **A model that never serves gets stopped, not retried.** `vllm_wait`
+  failing now stops the container. Leaving a failed load to docker's restart
+  policy is what froze the corpus for five days in August 2026 (see the
+  crash-loop gotcha in CLAUDE.md), so `~/sparky`'s vllm service is
+  `restart: on-failure:3`. The trade-off is that vLLM no longer auto-starts
+  after a host reboot; the next daily cycle brings it back, because a stopped
+  container fails the recipe check and takes the swap path.
 - **Chain**: `SUMMARIZER_LLM_PROVIDER=sparky` alone (`model: auto` probe,
   `OPENAI_COMPAT_TIMEOUT_SECONDS=900`), prompt contract v3
   (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` for Nemotron
