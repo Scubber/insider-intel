@@ -337,6 +337,11 @@ analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
+`corpus-freshness` runs itself twice a day on GitHub's runners — never on
+sparky, because a check that dies with the box it watches is not a check —
+and fails when the API's `last_indexed_at` ages past 30h. A failed run IS the
+alert; dispatch it with a custom `max_age_hours` to ask the same question by
+hand.
 **Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
 self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;
@@ -542,6 +547,22 @@ legacy fallback.
   at **8h** (`timeout 28800`) and holds
   `/tmp/insider-intel-spark-refresh.lock` — overlapping cycles skip loudly;
   a long-running sweep should hold the same flock so the cron skips it.
+- **A vLLM container stuck restarting takes the whole box off the network.**
+  On 2026-08-27 the refresh cycle's model swap recreated `sparky-vllm` into a
+  memory pool the outgoing 120B had not released yet. The load died, docker's
+  `unless-stopped` brought it back 12s later into the same too-small window,
+  and the loop sustained itself for **four days**. Each restart churned a veth
+  pair; the resulting storm cost the host its default route and DNS, so all
+  five cycles in between died at the GCS pull (`Temporary failure in name
+  resolution`) and the production corpus went five days stale. Three fixes,
+  all merged: `spark_refresh.sh` skips the swap when the running container
+  already serves the wanted recipe (it does — chat and enrichment are the same
+  Nemotron), drains memory before any load it must do, and STOPS a model that
+  never serves instead of leaving it to the restart policy; `~/sparky`'s vllm
+  service is `restart: on-failure:3`, not `unless-stopped`. Symptom to
+  recognise: `gsutil` name-resolution failures on a box whose network is
+  otherwise fine, plus `docker ps` showing a young vLLM uptime that keeps
+  resetting.
 - **Cloud Run domain-mapping certs propagate slowly**: the console can say
   provisioned while edges still fail TLS for a while. Verify with your own
   repeated curls before cutting anything over.

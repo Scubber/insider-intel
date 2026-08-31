@@ -57,6 +57,13 @@ PUSH_PREFIXES=(raw processed state)
 # design — two models of this size cannot co-reside on 128GB of unified memory
 # (two crashes on 2026-08-20 taught us the binding limit is the load-time peak).
 #
+# The cheapest swap is the one that does not happen. Before touching the
+# container the cycle fingerprints the recipe it wants against the recipe
+# already running; identical means skip — no recreate, no load, no window in
+# which a half-freed memory pool can kill the incoming process. Since the chat
+# model became the same Nemotron as the enrichment model (2026-08-22) that is
+# the normal path, and a cycle costs zero model loads instead of two.
+#
 # No override file present => this whole block is inert and the cycle enriches
 # with whatever is already loaded.
 SPARKY_COMPOSE_DIR="${SPARKY_COMPOSE_DIR:-$HOME/sparky}"
@@ -73,6 +80,21 @@ SPARKY_CHAT_SERVICES="${SPARKY_CHAT_SERVICES:-vllm open-webui}"
 # operator choice 2026-08-24: default is the Nemotron enrich overlay.
 SPARKY_CHAT_OVERRIDE="${SPARKY_CHAT_OVERRIDE:-}"
 
+# The container name compose gives vLLM — inspected to fingerprint what is
+# actually loaded right now.
+SPARKY_VLLM_CONTAINER="${SPARKY_VLLM_CONTAINER:-sparky-vllm}"
+# A 120B load claims ~90GB of the 128GB unified pool. A plain `compose up`
+# recreate starts the incoming load the moment the outgoing container is told
+# to stop, so the new process can allocate before the old one's memory is
+# reclaimed. It then dies at load, docker's restart policy brings it back 12s
+# later into the same too-small window, and the loop sustains itself. That is
+# not theory: it ran every 12 seconds from 2026-08-27 08:00Z until a reboot
+# four days later, and the veth churn it generated took the host's routing and
+# DNS down with it — so every cycle in between died at the corpus pull and the
+# production corpus went five days stale. Never load without draining first.
+SPARKY_DRAIN_MIN_AVAIL_GB="${SPARKY_DRAIN_MIN_AVAIL_GB:-80}"
+SPARKY_DRAIN_SECONDS="${SPARKY_DRAIN_SECONDS:-300}"
+
 vllm_up() { # $1: override file (empty for base) ; $2...: services
   local files=(-f compose.yml)
   [ -n "${1:-}" ] && files+=(-f "$1")
@@ -82,8 +104,78 @@ vllm_up() { # $1: override file (empty for base) ; $2...: services
   (cd "$SPARKY_COMPOSE_DIR" && docker compose "${files[@]}" up -d --no-deps "${services[@]}")
 }
 
-vllm_wait() { # 0 once /v1/models answers (prints the served id), 1 on timeout
-  local key deadline=$((SECONDS + SPARKY_MODEL_WAIT_SECONDS))
+# Fingerprint of a vLLM model recipe: rendered image + command, hashed. Hashed
+# rather than compared raw because the rendered command carries --api-key — the
+# hash is safe to log, the command it describes is not. A non-zero return means
+# "could not tell" (no jq, compose error, container gone). Callers must read
+# that as "not a match": guessing wrong here reloads a 120B model.
+vllm_recipe_desired() { # $1: override file (empty for base)
+  local files=(-f compose.yml) json
+  [ -n "${1:-}" ] && files+=(-f "$1")
+  json=$( (cd "$SPARKY_COMPOSE_DIR" && docker compose "${files[@]}" config --format json 2>/dev/null) |
+    jq -S -c '{image: .services.vllm.image, cmd: .services.vllm.command}' 2>/dev/null) || return 1
+  case "$json" in '' | *'"cmd":null'*) return 1 ;; esac
+  printf '%s' "$json" | sha256sum | cut -d' ' -f1
+}
+
+vllm_recipe_running() { # fingerprint of the container serving right now
+  local json
+  [ "$(docker inspect --format '{{.State.Running}}' \
+    "$SPARKY_VLLM_CONTAINER" 2>/dev/null)" = "true" ] || return 1
+  json=$(docker inspect --format '{{json .Config}}' "$SPARKY_VLLM_CONTAINER" 2>/dev/null |
+    jq -S -c '{image: .Image, cmd: .Cmd}' 2>/dev/null) || return 1
+  case "$json" in '' | *'"cmd":null'*) return 1 ;; esac
+  printf '%s' "$json" | sha256sum | cut -d' ' -f1
+}
+
+vllm_serves_recipe() { # 0 when the loaded model already IS $1's recipe
+  local want have
+  want=$(vllm_recipe_desired "${1:-}") || return 1
+  have=$(vllm_recipe_running) || return 1
+  [ -n "$want" ] && [ "$want" = "$have" ]
+}
+
+vllm_stop() { (cd "$SPARKY_COMPOSE_DIR" && docker compose -f compose.yml stop vllm) || true; }
+
+# Wait for the outgoing model's memory to come back before the next load.
+# nvidia-smi reports N/A for memory on this box (GB10 unified memory), so the
+# pool is read where it actually lives: /proc/meminfo.
+vllm_drain() {
+  local deadline=$((SECONDS + SPARKY_DRAIN_SECONDS)) avail=0
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    avail=$(awk '/^MemAvailable:/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+    if [ "${avail:-0}" -ge "$SPARKY_DRAIN_MIN_AVAIL_GB" ]; then
+      echo "spark_refresh: memory drained (${avail}GB available)"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "spark_refresh: [FAIL] memory never drained (${avail}GB available, \
+need ${SPARKY_DRAIN_MIN_AVAIL_GB}GB)" >&2
+  return 1
+}
+
+# Stop → drain → start. Skips the whole dance when the running container
+# already serves this exact recipe — the common case now that chat and
+# enrichment are the same Nemotron: no recreate, no load, no crash-loop window.
+vllm_swap() { # $1: override file (empty for base) ; $2...: services
+  local override="${1:-}"
+  shift || true
+  if vllm_serves_recipe "$override"; then
+    echo "spark_refresh: vLLM already serves this recipe — no swap"
+    return 0
+  fi
+  vllm_stop
+  vllm_drain || {
+    echo "spark_refresh: [FAIL] refusing to load into a full memory pool — \
+vLLM left stopped" >&2
+    return 1
+  }
+  vllm_up "$override" "$@"
+}
+
+vllm_wait() { # $1: budget (default SPARKY_MODEL_WAIT_SECONDS). Prints served id.
+  local key deadline=$((SECONDS + ${1:-$SPARKY_MODEL_WAIT_SECONDS}))
   key=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY_COMPOSE_DIR/.env" | head -1)
   while [ "$SECONDS" -lt "$deadline" ]; do
     if curl -fsS -H "Authorization: Bearer ${key}" "$SPARKY_MODEL_URL" 2>/dev/null |
@@ -104,18 +196,40 @@ restore_chat_model() {
   echo "spark_refresh: restoring chat model${override:+ ($override)}"
   # Deliberate word-split: SPARKY_CHAT_SERVICES is a service-name list.
   # shellcheck disable=SC2086
-  vllm_up "$override" $SPARKY_CHAT_SERVICES ||
+  if vllm_swap "$override" $SPARKY_CHAT_SERVICES; then
+    # Verify rather than fire-and-forget: walking away from a container that
+    # dies at load is exactly how the 2026-08-27 restart loop outlived the run
+    # that started it. Costs the chat model's load time on the way out.
+    vllm_wait >/dev/null || {
+      echo "spark_refresh: [FAIL] chat model never served — stopping vLLM so it \
+cannot restart-loop" >&2
+      vllm_stop
+    }
+  else
     echo "spark_refresh: [FAIL] chat stack not restored" >&2
+  fi
 }
 
-SWAPPED_MODEL=0
+CHECK_MODEL=0
 if [ -f "$SPARKY_COMPOSE_DIR/$SPARKY_ENRICH_OVERRIDE" ]; then
-  echo "spark_refresh: loading enrichment model ($SPARKY_ENRICH_OVERRIDE)"
-  # Arm the restore FIRST: a failed pull, a timed-out pipeline, or a kill must
-  # never leave the box parked on the enrichment model.
-  trap restore_chat_model EXIT
-  SWAPPED_MODEL=1
-  vllm_up "$SPARKY_ENRICH_OVERRIDE"
+  if vllm_serves_recipe "$SPARKY_ENRICH_OVERRIDE"; then
+    # Chat and enrichment have been the same Nemotron recipe since 2026-08-22.
+    # Nothing is borrowed, so nothing has to be handed back: no trap, no
+    # restore, and the cycle costs zero model loads instead of two.
+    echo "spark_refresh: vLLM already serves $SPARKY_ENRICH_OVERRIDE — no swap, no restore"
+    CHECK_MODEL=1
+  else
+    echo "spark_refresh: loading enrichment model ($SPARKY_ENRICH_OVERRIDE)"
+    # Arm the restore FIRST: a failed pull, a timed-out pipeline, or a kill must
+    # never leave the box parked on the enrichment model.
+    trap restore_chat_model EXIT
+    if vllm_swap "$SPARKY_ENRICH_OVERRIDE"; then
+      CHECK_MODEL=1
+    else
+      echo "spark_refresh: [FAIL] enrichment model not loaded — ingest and \
+docket-follow still run, enrichment will no-op" >&2
+    fi
+  fi
 else
   echo "spark_refresh: no $SPARKY_ENRICH_OVERRIDE — enriching with the loaded model"
 fi
@@ -132,10 +246,16 @@ mkdir -p data/raw/sweep_spool
 gsutil -m rsync "${SPARK_CORPUS_BUCKET}/raw/sweeps/indiacourts" data/raw/sweep_spool \
   2>/dev/null || true
 
-if [ "$SWAPPED_MODEL" = "1" ]; then
+if [ "$CHECK_MODEL" = "1" ]; then
   # Weights load while the corpus pulls; block only now, right before the run.
-  vllm_wait || echo "spark_refresh: [FAIL] enrichment model never served — \
-ingest and docket-follow still run, enrichment will no-op" >&2
+  # A load that never serves gets STOPPED, not left to docker's restart policy:
+  # an unattended crash loop is what froze the corpus for five days in August.
+  vllm_wait || {
+    echo "spark_refresh: [FAIL] enrichment model never served — stopping vLLM so \
+a failed load cannot restart-loop; ingest and docket-follow still run, \
+enrichment will no-op" >&2
+    vllm_stop
+  }
 fi
 
 echo "spark_refresh: pipeline $(date -u +%FT%TZ) code $(git rev-parse --short HEAD)"
