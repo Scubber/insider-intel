@@ -5,8 +5,15 @@ name: traffic-report
 # first-party, ad-block-proof, cookieless. Emits a summary report AND a
 # full per-request forensic CSV with offline GeoIP (source IP → country/city)
 # and offline ASN lookup (IP → network org + hosting/ISP/business class) —
-# no third-party callouts with visitor IPs. Both land as run artifacts and
-# in the bucket's export/ prefix. Read-only; no LLM spend.
+# no third-party callouts with visitor IPs. Both land ONLY in the private
+# bucket's export/ prefix (gs://insider-intel-502413-corpus/export/). This
+# repo is public: run logs are world-readable and run artifacts are
+# downloadable by any signed-in GitHub user, so nothing that identifies a
+# visitor — IP, city, network org, user-agent, referer — may be printed or
+# uploaded here (2026-09-02, after 4 weeks of forensic CSVs shipped as public
+# artifacts). The log carries counts only. Read it with
+#   gcloud storage cat gs://insider-intel-502413-corpus/export/traffic-report.md
+# Read-only; no LLM spend.
 #
 # Network class caveat: an IP reveals network TYPE (datacenter vs consumer ISP
 # vs registered business range), never "which employer". A corporate visitor on
@@ -331,23 +338,22 @@ jobs:
 
           report = "\n".join(L) + "\n"
           open("traffic-report.md", "w").write(report)
-          print(report)
+          # Counts only on the public job log — the report itself names IPs,
+          # cities, and network orgs and goes to the private bucket alone.
+          views = sum(d["views"] for d in days.values())
+          bots = sum(d["bot"] for d in days.values())
+          print(
+              f"report: {total} requests over {len(days)} day(s) · "
+              f"{views} human page views · {bots} bot/script · "
+              f"{len(ips)} distinct IPs · {len(countries)} countries"
+          )
           PY
 
-      - name: Upload run artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: traffic
-          path: |
-            traffic-report.md
-            traffic-log.csv
-          retention-days: 30
-
-      - name: Publish to bucket export/
+      - name: Publish to bucket export/ (the only output)
         run: |
+          set -euo pipefail
           gcloud storage cp traffic-report.md \
-            "gs://insider-intel-502413-corpus/export/traffic-report.md" || true
+            "gs://insider-intel-502413-corpus/export/traffic-report.md"
           gcloud storage cp traffic-log.csv \
-            "gs://insider-intel-502413-corpus/export/traffic-log.csv" \
-            && echo "report + forensic CSV exported" \
-            || echo "export copy failed (artifacts still attached to this run)"
+            "gs://insider-intel-502413-corpus/export/traffic-log.csv"
+          echo "report + forensic CSV exported to the private bucket"
