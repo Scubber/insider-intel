@@ -333,7 +333,10 @@ job; same two-writer race warning as above. `refresh-corpus` takes a
 retag of the corpus after an ITM/lexicon bump, no LLM re-billing), `corpus-status` (state + job env
 audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
 `corpus-noninsider` (spend-waste audit), `traffic-report` (daily DIY
-analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
+analytics: forensic request CSV + GeoIP — **private bucket export only**,
+`gs://…/export/traffic-{report.md,log.csv}`; this repo is public, so the
+job log carries counts and never IPs, cities, orgs, or UAs, and nothing is
+uploaded as a run artifact — 2026-09-02),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
 `--country` / `--industry` slices), `corpus-industry` (per-victim-industry
