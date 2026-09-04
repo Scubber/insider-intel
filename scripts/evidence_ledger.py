@@ -7,6 +7,12 @@ prints the markdown report (optional JSON sidecar). Pure stdlib; read-only;
 no LLM spend. See the core module for the counting rules.
 
 Usage: evidence_ledger.py CORPUS.jsonl [--json ledger.json] [--top 25]
+       [--country US] [--industry financial-services]
+
+The JSONL is read last-line-wins per link (the store is append-only mid-
+cycle), the same dedupe the API applies, so the numbers match the site.
+``--country`` / ``--industry`` slice the rows BEFORE the ledger builds —
+the same one-engine-many-views contract as the API's ``?country=`` facet.
 """
 
 from __future__ import annotations
@@ -28,18 +34,24 @@ _spec.loader.exec_module(_core)
 CHANNELS = _core.CHANNELS
 build_evidence_ledger = _core.build_evidence_ledger
 fill_technique_slot = _core.fill_technique_slot
+filter_rows_by_country = _core.filter_rows_by_country
+filter_rows_by_industry = _core.filter_rows_by_industry
 
 
 def _iter_rows(path: str):
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
+    """Current rows only: last line wins per link (see collapse_rows_by_link)."""
+    return _core.collapse_rows_by_link(_core.iter_jsonl_rows(path))
+
+
+def slice_rows(rows, *, country: str = "all", industry: str = "all"):
+    """Apply the facets the API applies (``all``/blank/``*`` = no filter)."""
+    country_mode = (country or "all").strip().upper()
+    if country_mode not in {"", "*", "ALL"}:
+        rows = filter_rows_by_country(rows, country_mode)
+    industry_mode = (industry or "all").strip().lower()
+    if industry_mode not in {"", "*", "all"}:
+        rows = filter_rows_by_industry(rows, industry_mode)
+    return rows
 
 
 def render_markdown(ledger: dict) -> str:
@@ -213,9 +225,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("corpus")
     ap.add_argument("--json", dest="json_out", default=None, help="Also write a JSON sidecar")
     ap.add_argument("--top", type=int, default=25, help="Rows per ranking table")
+    ap.add_argument("--country", default="all", help="Jurisdiction slice (US, IN, …); all = global")
+    ap.add_argument(
+        "--industry",
+        default="all",
+        help="Victim-sector slice (financial-services, …); all = global",
+    )
     args = ap.parse_args(argv)
 
-    ledger = build_evidence_ledger(_iter_rows(args.corpus), top=args.top)
+    rows = slice_rows(_iter_rows(args.corpus), country=args.country, industry=args.industry)
+    ledger = build_evidence_ledger(rows, top=args.top)
     # This report has no ITM catalog (that is the whole reason the core is
     # catalog-free) and nowhere to link to, so a technique renders as its bare
     # id. What it must never do is print the raw {technique} slot.

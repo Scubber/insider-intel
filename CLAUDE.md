@@ -338,8 +338,15 @@ analytics: forensic request CSV + GeoIP — **private bucket export only**,
 job log carries counts and never IPs, cities, orgs, or UAs, and nothing is
 uploaded as a run artifact — 2026-09-02),
 `evidence-ledger` (writes
-`export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
+`export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
+`--country` / `--industry` slices), `corpus-industry` (per-victim-industry
+actor-profile table — function × employment state, counts only — plus the
+industry-sliced ledger, to `export/industry-actor-profiles-<industry>.{md,json}`
+and `export/evidence-ledger-<industry>.json`), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
+Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
+(`evidence.py::collapse_rows_by_link`, the store's own `load_all` rule —
+`upsert` appends mid-cycle, so a raw read sees stale generations first).
 **Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
 self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;
