@@ -1,0 +1,66 @@
+name: corpus-industry
+
+# Read-only research report: download the live corpus and build the actor-
+# profile table for one victim industry (schema v3 forensics.industry) —
+# job function × employment state, case counts only, plus the sliced
+# evidence ledger for the same industry. Roles, never individuals: the
+# report is labels and counts, test-pinned to carry no name, title, link or
+# quote. No mutation, no LLM spend; scripts/industry_actor_profiles.py owns
+# the counting rules and the reading rules it prints.
+on:
+  workflow_dispatch:
+    inputs:
+      industry:
+        description: "Victim sector (INDUSTRY_LABELS in shared/utils/evidence.py)"
+        required: false
+        default: "financial-services"
+      top:
+        description: "Rows per table"
+        required: false
+        default: "15"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+  BUCKET: gs://insider-intel-502413-corpus
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build industry actor profiles and write to export/ prefix
+        env:
+          INDUSTRY: ${{ inputs.industry }}
+          TOP: ${{ inputs.top }}
+        run: |
+          set -euo pipefail
+          INDUSTRY="${INDUSTRY:-financial-services}"
+          TOP="${TOP:-15}"
+          gcloud storage cp "${OBJ}" corpus.jsonl
+          wc -l corpus.jsonl
+          python3 scripts/industry_actor_profiles.py corpus.jsonl \
+            --industry "$INDUSTRY" --top "$TOP" \
+            --json "industry-actor-profiles-$INDUSTRY.json" \
+            | tee "industry-actor-profiles-$INDUSTRY.md"
+          python3 scripts/evidence_ledger.py corpus.jsonl \
+            --industry "$INDUSTRY" --json "evidence-ledger-$INDUSTRY.json" > /dev/null
+          gcloud storage cp "industry-actor-profiles-$INDUSTRY.md" "${BUCKET}/export/industry-actor-profiles-$INDUSTRY.md"
+          gcloud storage cp "industry-actor-profiles-$INDUSTRY.json" "${BUCKET}/export/industry-actor-profiles-$INDUSTRY.json"
+          gcloud storage cp "evidence-ledger-$INDUSTRY.json" "${BUCKET}/export/evidence-ledger-$INDUSTRY.json"
+          echo
+          echo "Pull with:"
+          echo "  gcloud storage cp ${BUCKET}/export/industry-actor-profiles-$INDUSTRY.md ."
+          echo "  gcloud storage cp ${BUCKET}/export/industry-actor-profiles-$INDUSTRY.json ."
+          echo "  gcloud storage cp ${BUCKET}/export/evidence-ledger-$INDUSTRY.json ."
