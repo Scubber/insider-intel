@@ -283,42 +283,70 @@ def is_entity_term(term: str) -> bool:
 
 # WHO — roles, never individuals. Two independent axes normalized from the
 # free-text actor_role/actor_profile the enricher extracts per case.
+#
+# ORDER IS THE CONTRACT — first match wins, so the list runs from the most
+# specific relationship (outsider, temp) to the broadest title family. Every
+# alternative is word-bounded. Repaired 2026-09-04: the old unbounded patterns
+# sent "contractor" to executive/officer (substring `cto`), every "loan /
+# compliance / trust officer" to executive (bare `officer`), "onboarding
+# specialist" to executive (`board`), and "credit union employee" to technical
+# (`it ` inside "cred**it **"); the contractor branch was unreachable for any
+# string containing "contractor". Bare `officer` and bare `board` are gone
+# ("chief compliance officer" still lands via `chief`), and the old
+# `sales/finance` label is SPLIT into `front-office/sales` (client-facing,
+# trading, brokerage) and `finance/accounting/ops` (books, tellers, clerks,
+# compliance) — they carry different controls, so one bucket hid the signal.
 _ROLE_FUNCTIONS: list[tuple[str, str]] = [
     (
-        r"ceo|cfo|coo|cto|ciso|chief|president|founder|officer|director|board"
-        r"|executive|vp\b|vice.?president",
+        r"\b(contractor|consultant|vendor|third[- ]?party|supplier|outsourc\w*"
+        r"|freelanc\w*|subcontractor|staffing agency)\b",
+        "contractor/vendor",
+    ),
+    (r"\b(temp|temporary|intern|seasonal|part[- ]?time)\b", "temp/intern"),
+    (
+        r"\b(ceo|cfo|coo|cto|cio|ciso|cro|chief|president|founder|co-founder|vp"
+        r"|vice[- ]?president|managing (?:director|partner)|general counsel"
+        r"|board (?:member|chair\w*))\b"
+        r"|\bexecutive\b(?!\s+assistant)"
+        r"|(?<!loan )(?<!compliance )(?<!trust )\bdirector\b",
         "executive/officer",
     ),
-    (r"manager|supervisor|head of|lead\b", "manager"),
     (
-        r"engineer|developer|admin(istrator)?|analyst|scientist|technician"
-        r"|architect|programmer|it |sysadmin|dba\b",
+        r"(?<!account )(?<!relationship )\bmanager\b|\b(supervisor|head of|team lead)\b",
+        "manager",
+    ),
+    (
+        r"\b(engineer|developer|admin|administrator|sysadmin|dba|analyst|scientist"
+        r"|technician|architect|programmer|it)\b(?!\s+assistant)",
         "technical",
     ),
     (
-        r"sales|broker|trader|account (exec|manager|representative)"
-        r"|advisor|adviser|banker|finance|accountant",
-        "sales/finance",
+        r"\b(sales(?:man|woman|person)?|broker|trader|adviser|advisor"
+        r"|registered representative|banker|relationship manager|agent"
+        r"|account (?:executive|manager|representative)|wealth manager"
+        r"|portfolio manager|underwriter)\b",
+        "front-office/sales",
     ),
     (
-        r"contractor|consultant|vendor|third.?party|supplier|outsourc|freelanc|subcontract",
-        "contractor/vendor",
+        r"\b(accountant|bookkeeper|controller|comptroller|treasurer|teller|cashier"
+        r"|clerk|adjuster|auditor|loan officer|compliance(?: officer| analyst| director)?"
+        r"|trust officer|payroll|accounts payable|finance|billing)\b",
+        "finance/accounting/ops",
     ),
-    (r"temp\b|temporary|intern\b|seasonal|part.?time", "temp/intern"),
 ]
 _ROLE_STATES: list[tuple[str, str]] = [
     # Order matters: "former"/"fired" outranks "departing" outranks default.
     (
-        r"former|fired|terminated|ex-employee|ex employee|dismissed|laid off"
-        r"|after (his |her |their )?(termination|departure|resignation)",
+        r"\b(former(?:ly)?|fired|terminated|ex-employee|ex employee|dismissed|laid off)\b"
+        r"|after (?:his |her |their )?(?:termination|departure|resignation)",
         "former/fired",
     ),
     (
-        r"departing|resign|on notice|before (leaving|departure|joining a competitor)"
-        r"|outgoing|leaving",
+        r"\b(departing|resign\w*|on notice|outgoing|leaving)\b"
+        r"|before (?:leaving|departure|joining a competitor)",
         "departing",
     ),
-    (r"contractor|consultant|vendor|third.?party|supplier|partner", "third-party"),
+    (r"\b(contractor|consultant|vendor|third[- ]?party|supplier|partner)\b", "third-party"),
 ]
 _ROLE_FN_RX = [(re.compile(p, re.I), label) for p, label in _ROLE_FUNCTIONS]
 _ROLE_ST_RX = [(re.compile(p, re.I), label) for p, label in _ROLE_STATES]

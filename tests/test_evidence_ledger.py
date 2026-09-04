@@ -145,6 +145,60 @@ def test_role_normalizer_two_axes() -> None:
     assert normalize_role("Chief Financial Officer") == ("executive/officer", "current")
     assert normalize_role("third-party consultant") == ("contractor/vendor", "third-party")
     assert normalize_role("") == ("unknown", "unknown")
+    # 2026-09-04 repair: word-bounded patterns, first-match order is the contract.
+    cases = {
+        "police officer": ("unknown", "unknown"),
+        "executive assistant": ("unknown", "unknown"),
+        "administrative assistant": ("unknown", "unknown"),
+        "Chief Compliance Officer": ("executive/officer", "current"),
+        "compliance director": ("finance/accounting/ops", "current"),
+        "managing director": ("executive/officer", "current"),
+        "director of engineering": ("executive/officer", "current"),
+        "account manager": ("front-office/sales", "current"),
+        "IT contractor for the bank": ("contractor/vendor", "third-party"),
+        "former trader": ("front-office/sales", "former/fired"),
+        "credit union employee": ("unknown", "unknown"),
+        "bank teller": ("finance/accounting/ops", "current"),
+        "onboarding specialist": ("unknown", "unknown"),
+        "directory services admin": ("technical", "current"),
+        "IT administrator": ("technical", "current"),
+        # Accepted: "analyst" is a technical token; finance-flavoured analysts
+        # land here rather than in finance/accounting/ops.
+        "financial analyst": ("technical", "current"),
+    }
+    for text, expected in cases.items():
+        assert normalize_role(text) == expected, text
+
+
+def test_contractor_outranks_executive_tokens() -> None:
+    """The unbounded `cto` used to swallow "contractor" into executive/officer."""
+    from shared.utils.evidence import normalize_role
+
+    assert normalize_role("contractor") == ("contractor/vendor", "third-party")
+    assert normalize_role("IT contractor") == ("contractor/vendor", "third-party")
+
+
+def test_function_labels_are_the_documented_set() -> None:
+    from shared.utils.evidence import _ROLE_FUNCTIONS
+
+    assert {label for _, label in _ROLE_FUNCTIONS} == {
+        "contractor/vendor",
+        "temp/intern",
+        "executive/officer",
+        "manager",
+        "technical",
+        "front-office/sales",
+        "finance/accounting/ops",
+    }
+
+
+def test_officer_titles_are_not_executives() -> None:
+    """Bare `officer` is not an executive signal; only chief/C-suite titles are."""
+    from shared.utils.evidence import normalize_role
+
+    for text in ("loan officer", "compliance officer", "trust officer"):
+        assert normalize_role(text)[0] == "finance/accounting/ops", text
+    assert normalize_role("police officer") == ("unknown", "unknown")
 
 
 def test_ledger_themes_roles_and_small_n(tmp_path, monkeypatch) -> None:
