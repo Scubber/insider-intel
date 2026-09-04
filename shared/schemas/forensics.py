@@ -220,6 +220,23 @@ class PerCaseForensics(BaseModel):
     # only state citizenship (record "US (state pleaded)" for those).
     actor_citizenship: str | None = None
     industry: str = Field(default="unknown", description="Victim org sector (INDUSTRIES)")
+    # ADDITIVE at v3 (2026-09-04, docs/schema-freeze-v4.md): the sector of the
+    # organization that EMPLOYED the insider — diverges from ``industry`` for
+    # tippees, contractors, and law-firm/advisor insiders. Null-preserving on
+    # purpose: silence is not "unknown", so an older generation that never
+    # asked the question stays None and the overlay rule can fill it.
+    actor_employer_sector: str | None = Field(
+        default=None,
+        description=(
+            "Sector of the insider's own employer, explicit statements only "
+            "(INDUSTRIES enum); None when the text does not say — silence is "
+            "not 'unknown'"
+        ),
+    )
+    # Provenance of an overlaid additive value ({"model", "extracted_at"}) —
+    # set ONLY by project_additive_fields when the value came from a
+    # generation other than the selected one; never written by the LLM.
+    actor_employer_sector_source: dict | None = None
     tool_mentions: list[ToolMention] = Field(default_factory=list)
     timeframe: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -334,6 +351,59 @@ def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord 
     if len(best_by_verdict) == 1:
         return next(iter(best_by_verdict.values()))
     return max(best_by_verdict.values(), key=lambda r: (_confidence(r), _selection_key(r)))
+
+
+# Fields added to the contract WITHOUT a schema bump (docs/schema-freeze-v4.md
+# candidates ledger). A bump re-tiers every filing through the reenrich lane
+# and churns verdicts for weeks; an additive field instead rides the overlay
+# rule below: the selected projection fills a None additive value from the
+# newest same-tier generation that carries one. Additive fields are NEVER a
+# verdict or richness input — select-best is byte-identical with or without
+# the overlay.
+ADDITIVE_FIELDS: tuple[str, ...] = ("actor_employer_sector",)
+
+
+def project_additive_fields(
+    history: list[EnrichmentRecord], best: EnrichmentRecord | None
+) -> PerCaseForensics | None:
+    """Overlay ADDITIVE_FIELDS onto the selected projection's forensics.
+
+    For each additive field that is None on ``best``, take the value from the
+    NEWEST generation at the same top schema tier where it is non-null, and
+    stamp ``<field>_source = {"model", "extracted_at"}`` from that donor so the
+    provenance is visible. The overlay touches nothing else — not
+    ``is_insider_case``, ``confidence``, ``methods``, ``ai_summary`` or any
+    richness input — and is a no-op (returns ``best.forensics`` unchanged) when
+    no generation carries the field. ``best`` itself (and history) are never
+    mutated: the return value is a copy.
+    """
+    if best is None:
+        return None
+    forensics = best.forensics
+    top_tier = best.schema_version
+    update: dict[str, object] = {}
+    for field in ADDITIVE_FIELDS:
+        if getattr(forensics, field, None) is not None:
+            continue
+        donors = [
+            rec
+            for rec in history
+            if rec is not best
+            and rec.schema_version == top_tier
+            and getattr(rec.forensics, field, None) is not None
+        ]
+        if not donors:
+            continue
+        donor = max(donors, key=lambda r: _selection_key(r)[1])
+        update[field] = getattr(donor.forensics, field)
+        extracted = donor.forensics.extracted_at
+        update[f"{field}_source"] = {
+            "model": donor.model or None,
+            "extracted_at": extracted.isoformat() if extracted is not None else None,
+        }
+    if not update:
+        return forensics
+    return forensics.model_copy(update=update)
 
 
 _QUOTE_NORM_TABLE = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'", "–": "-", "—": "-"})
@@ -562,6 +632,11 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         actor_citizenship=_s(data.get("actor_citizenship"), 200) or None,
         industry=(lambda v: v if v in INDUSTRIES else "unknown")(
             str(data.get("industry") or "").strip().lower()
+        ),
+        # Null-preserving (unlike industry): off-enum or missing → None, so a
+        # reply that never answered the question can't masquerade as "unknown".
+        actor_employer_sector=(lambda v: v if v in INDUSTRIES else None)(
+            str(data.get("actor_employer_sector") or "").strip().lower()
         ),
         tool_mentions=parse_tool_mentions(data.get("tool_mentions")),
         timeframe=_s(data.get("timeframe"), 200) or None,

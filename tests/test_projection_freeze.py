@@ -13,6 +13,8 @@ from shared.schemas.forensics import (
     CaseMethod,
     EnrichmentRecord,
     PerCaseForensics,
+    enrichment_richness,
+    project_additive_fields,
     select_best_enrichment,
     stamp_quote_verbatim,
 )
@@ -135,3 +137,95 @@ def test_stamp_false_for_paraphrase_and_none_for_empty() -> None:
     empty = _forensics_with_quote("")
     stamp_quote_verbatim(empty, source)
     assert empty.methods[0].evidence_quote_verbatim is None
+
+
+# --- additive-field overlay (docs/schema-freeze-v4.md) --------------------------
+
+
+def _gen_sector(
+    *,
+    sector: str | None,
+    when: int,
+    insider: bool = True,
+    confidence: float = 0.8,
+    methods: int = 2,
+    schema: int = 3,
+    model: str = "m",
+) -> EnrichmentRecord:
+    rec = _gen(insider=insider, confidence=confidence, methods=methods, when=when, schema=schema)
+    rec.forensics.actor_employer_sector = sector
+    rec.forensics.model = model
+    return rec
+
+
+def test_overlay_never_flips_verdict_or_confidence() -> None:
+    """A low-confidence non-case that knows the sector cannot re-adjudicate."""
+    winner = _gen_sector(sector=None, when=1, insider=True, confidence=0.9, methods=3)
+    donor = _gen_sector(sector="financial-services", when=2, insider=False, confidence=0.2)
+    history = [winner, donor]
+    best = select_best_enrichment(history)
+    assert best is winner
+    out = project_additive_fields(history, best)
+    assert out.is_insider_case is True
+    assert out.confidence == 0.9
+    assert out.actor_employer_sector == "financial-services"
+    # The selected generation itself is untouched (copy, not mutation).
+    assert winner.forensics.actor_employer_sector is None
+
+
+def test_overlay_never_changes_methods_or_richness_inputs() -> None:
+    winner = _gen_sector(sector=None, when=1, methods=3)
+    donor = _gen_sector(sector="healthcare", when=2, methods=0, confidence=0.1)
+    donor.ai_summary = None
+    donor.forensics.outcome = "sentenced"
+    out = project_additive_fields([winner, donor], winner)
+    assert [m.action for m in out.methods] == [m.action for m in winner.forensics.methods]
+    assert out.outcome == winner.forensics.outcome
+    assert out.confidence == winner.forensics.confidence
+    assert enrichment_richness(EnrichmentRecord(ai_summary=winner.ai_summary, forensics=out)) == (
+        enrichment_richness(winner)
+    )
+
+
+def test_overlay_absent_when_no_generation_has_it() -> None:
+    a = _gen_sector(sector=None, when=1)
+    b = _gen_sector(sector=None, when=2, confidence=0.3)
+    out = project_additive_fields([a, b], a)
+    assert out is a.forensics  # no-op returns the same object
+    assert out.actor_employer_sector is None
+    assert out.actor_employer_sector_source is None
+
+
+def test_overlay_picks_newest_same_tier_carrier() -> None:
+    winner = _gen_sector(sector=None, when=5, confidence=0.95)
+    older = _gen_sector(sector="technology", when=1, confidence=0.5, model="old")
+    newer = _gen_sector(sector="professional-services", when=3, confidence=0.4, model="new")
+    stale_tier = _gen_sector(sector="defense", when=9, schema=2, model="v2")
+    out = project_additive_fields([older, stale_tier, winner, newer], winner)
+    assert out.actor_employer_sector == "professional-services"
+    assert out.actor_employer_sector_source == {
+        "model": "new",
+        "extracted_at": newer.forensics.extracted_at.isoformat(),
+    }
+
+
+def test_overlay_keeps_best_own_value_and_stamps_no_source() -> None:
+    winner = _gen_sector(sector="retail", when=1)
+    donor = _gen_sector(sector="energy", when=2, confidence=0.1)
+    out = project_additive_fields([winner, donor], winner)
+    assert out.actor_employer_sector == "retail"
+    assert out.actor_employer_sector_source is None
+
+
+def test_select_best_ordering_byte_identical_with_and_without_overlay() -> None:
+    """On a history where nobody carries the field, the overlay is invisible."""
+    history = [
+        _gen_sector(sector=None, when=1, insider=True, confidence=0.7, methods=1),
+        _gen_sector(sector=None, when=2, insider=False, confidence=0.6, methods=5),
+        _gen_sector(sector=None, when=3, insider=True, confidence=0.7, methods=4),
+    ]
+    best = select_best_enrichment(history)
+    plain = best.forensics.model_dump_json()
+    overlaid = project_additive_fields(history, best).model_dump_json()
+    assert plain == overlaid
+    assert project_additive_fields(history, None) is None

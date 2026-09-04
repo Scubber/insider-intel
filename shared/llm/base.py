@@ -140,6 +140,7 @@ def _enrich_reply_schema() -> dict:
             "outcome",
             "actor_citizenship",
             "industry",
+            "actor_employer_sector",
             "tool_mentions",
             "itm_refs",
             "hunt_terms",
@@ -197,6 +198,12 @@ def _enrich_reply_schema() -> dict:
             "outcome": s_or_null(),
             "actor_citizenship": s_or_null(),
             "industry": {"type": "string", "enum": list(INDUSTRIES)},
+            # Additive at v3 (docs/schema-freeze-v4.md): nullable enum, null
+            # when the text never says who employed the insider.
+            "actor_employer_sector": {
+                "type": ["string", "null"],
+                "enum": [*INDUSTRIES, None],
+            },
             "tool_mentions": arr(
                 {
                     "type": "object",
@@ -276,6 +283,7 @@ for anything the text does not establish):
   "outcome": null,
   "actor_citizenship": null,
   "industry": "unknown",
+  "actor_employer_sector": null,
   "tool_mentions": [
     {"name": "product the SOURCE names", "role": "caught", "evidence": "short phrase"}
   ],
@@ -307,6 +315,8 @@ Enum values (use exactly these strings):
 - industry: financial-services | healthcare | technology | defense |
   manufacturing | energy | retail | public-sector | professional-services |
   other | unknown — the VICTIM organization's sector.
+- actor_employer_sector: the same enum, or null — the sector of the
+  organization that EMPLOYED the insider (see the rule below).
 - tool_mentions[].role: caught (it detected or stopped the conduct) |
   bypassed (present but evaded) | misused (the insider's instrument) |
   traced (used after the fact to reconstruct events). Only products the
@@ -368,6 +378,12 @@ Rules:
     filings usually plead only state citizenship — record "US (state
     pleaded)" for those. null when the source is silent.
   * industry: the victim organization's sector, from the enum above.
+  * actor_employer_sector: ONLY when the text states who employed the
+    insider. The victim's sector goes in `industry`; this is the insider's
+    own employer, which differs for tippees, contractors, and law-firm or
+    advisor insiders. A staffing-firm contractor placed at a bank →
+    professional-services (the staffing firm), not financial-services.
+    When unstated: null — never "unknown".
   * detection: HOW the conduct came to light, one line close to the text's
     wording (internal audit, coworker report, DLP alert, forensic review on
     departure…).

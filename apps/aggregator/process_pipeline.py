@@ -21,7 +21,11 @@ from shared.agents.summarize import (
 from shared.llm import get_discoverer_provider, get_summarizer_provider
 from shared.schemas import ProcessedArticle, ProcessingRunResult, RawArticle
 from shared.schemas.articles import resolve_channel
-from shared.schemas.forensics import EnrichmentRecord, append_enrichment
+from shared.schemas.forensics import (
+    EnrichmentRecord,
+    append_enrichment,
+    project_additive_fields,
+)
 from shared.settings import get_settings
 from shared.utils.story_key import compute_story_key
 
@@ -390,6 +394,17 @@ def _backfill_summaries(
                 "candidate_technique_ids": [h.id.upper() for h in merged.itm_hits],
             }
         )
+        # Archive this generation too: the backfill writes the row directly
+        # (bypassing the graph node), so it must append to the same durable
+        # history the node maintains.
+        generation = EnrichmentRecord(ai_summary=summary, forensics=forensics)
+        history = append_enrichment(
+            list(getattr(row, "enrichment_history", None) or []), generation
+        )
+        # Additive-field overlay (ADDITIVE_FIELDS): a None additive value on
+        # the written record is filled from the newest same-tier generation in
+        # history that has one — never a verdict or richness input.
+        forensics = project_additive_fields(history, generation)
         updated.append(
             row.model_copy(
                 update={
@@ -397,13 +412,7 @@ def _backfill_summaries(
                     "case_record": record,
                     "forensics": forensics,
                     "entities": merged,
-                    # Archive this generation too: the backfill writes the row
-                    # directly (bypassing the graph node), so it must append to
-                    # the same durable history the node maintains.
-                    "enrichment_history": append_enrichment(
-                        list(getattr(row, "enrichment_history", None) or []),
-                        EnrichmentRecord(ai_summary=summary, forensics=forensics),
-                    ),
+                    "enrichment_history": history,
                 }
             )
         )

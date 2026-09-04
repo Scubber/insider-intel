@@ -26,7 +26,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 |---|---|
 | **Refresh tenant** | **DGX Spark ("sparky") since 2026-08-16** — cron `0 8 * * *` UTC (once daily since 2026-08-20) runs `scripts/spark_refresh.sh` (borrow enrichment model → **GCS** pull → pipeline → push → `/reload` → restore chat stack — it does NOT `git pull`; the box builds whatever is checked out, so deploys to sparky are a manual `git pull`), log `~/insider-intel/logs/spark_refresh.log`. Cloud Scheduler `corpus-refresh-schedule` **paused**, kept as rollback (`crontab -r` on sparky, resume scheduler, optionally execute `corpus-refresh` once). Operating state: `docs/dgx-spark.md` §4. |
 | **Corpus** | **~7,480 rows**, **~2,130 enriched**, **~714 verdict-true insider cases** (2026-08-22; live counts on the EVIDENCE page — this row is a snapshot, the site recomputes). Writes land once daily ~08:00Z on `processed/articles.jsonl`. A **v3 re-enrichment sweep** of all visible (verdict-true) cases ran 2026-08-22; the nightly reenrich lane (60 filings/run) converges the remainder. The 2026-08-22 gate replay (pre-v3-sweep) measured 7,283 filings-channel rows / 896 adjudicated-insider filings — thread #10's FN denominator. **Incident 2026-08-23 RESOLVED (thread #14):** ~51 rows' enrichment projections were gutted overnight and restored at 11:52Z from the retained post-sweep generation (no articles were ever lost — the "row loss" was duplicate counting in a mid-append snapshot). Post-restore cycle (13:14Z): **7,494 rows / 2,146 enriched / 693 verdict-true**, pushed + reloaded. |
-| **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242). Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
+| **Enrichment** | **ON, Spark-local**: the nightly cycle borrows the box for **Nemotron 3 Super 120B-A12B-NVFP4** (model-enrich.yml overlay, EXIT-trap restore of the operator's chat model), chain `SUMMARIZER_LLM_PROVIDER=sparky` only, prompt contract **v3** (docs/schema-freeze-v3.md), `OPENAI_COMPAT_GUIDED_JSON=0` (guided decoding cost 10 points of verdict accuracy in the 2026-08-22 control run) — **$0 LLM spend**. Caps `SUMMARIZER_MAX_ARTICLES_PER_RUN=160`, `RESERVE=60`, reenrich lane 60. Selection is schema-tier-first (#242); since 2026-09-04 the projection also overlays ADDITIVE fields (`actor_employer_sector`, insider's own employer sector; docs/schema-freeze-v4.md) from the newest same-tier generation — never a verdict input. Its backfill lane is a separate CLI/op (thread #15), OFF until the operator runs it. Qwen3.8 is retired; R3 (Qwen3.6-35B) is the parked rollback in the eval lane. Spend gates live (see CLAUDE.md); thread #10's filings gate matters for slot waste, not dollars. |
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Static-first boot** (#240, 2026-08-22): `pages.yml` builds `web/data/` as a **true twin of the boot render** (articles/sources/ledger/meta/tooling.json, never committed) daily at 08:40Z; UI paints instantly under a CACHED badge and silently adopts the live API result when it matches (projection-equivalence test guards drift). deploy-pages poll timeout 20min. |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
@@ -547,6 +547,34 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     pins byte-equality with `JsonlProcessedStore.load_all`). Next: dispatch
     `corpus-industry` on `main`, read the FS table against the unknown pool,
     then decide whether briefing #3 is warranted.
+16. **`actor_employer_sector` backfill — CODE MERGED 2026-09-04, NOT YET
+    RUN.** PR3 of the financial-services actor-profile plan: the insider's
+    own employer's sector landed as an ADDITIVE v3 field (no bump — a bump
+    would re-tier every filing and churn verdicts for weeks) with the
+    overlay projection rule (docs/schema-freeze-v4.md). New generations
+    fill it from the next cycle on; the existing verdict-true corpus needs
+    the field-absence backfill. **Operator runbook, on sparky via
+    sparky-ops:**
+    1. `pull-main confirm=RUN` so the operational checkout carries the
+       prompt + CLI.
+    2. In `.env.spark`, set `SUMMARIZER_REENRICH_MISSED_LIMIT=0` for the
+       backfill window — the two lanes both draw on
+       `SUMMARIZER_BACKFILL_RESERVE` (60), and the field backfill must not
+       compete with the tier reenrich for those slots.
+    3. `backfill-field-dryrun` (field=actor_employer_sector; prints COUNTS
+       by channel/industry only, never links) to size the run.
+    4. `backfill-field confirm=RUN` — clears the selected projection on the
+       targets (enrichment_history preserved, `_clear_llm_fields` path);
+       use `field_limit` to meter it. Default targets: verdict-true, v3,
+       field None, victim industry in {financial-services, unknown}, any
+       channel, newest first — ~≤860 rows at the 2026-08 counts; at the
+       60-slot reserve that is about one week of nightly cycles.
+    5. Verify fill via the `corpus-industry` lane (the industry/sector
+       audit dispatch from PR2 of this plan) — the field's None count
+       should fall night over night; a flat count means the sweep isn't
+       reaching the cleared rows (check `SUMMARIZER_BACKFILL_RESERVE`).
+    6. Restore `SUMMARIZER_REENRICH_MISSED_LIMIT=60` and note the dates
+       here (ops changes have no PR — document them anyway).
 
 ---
 

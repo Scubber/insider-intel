@@ -204,3 +204,101 @@ def clear_missed_filings(
             target_model,
         )
     return len(links)
+
+
+# --- Additive-field backfill (docs/schema-freeze-v4.md) -----------------------
+#
+# An ADDITIVE field lands at the current schema tier without a bump, so the
+# reenrich lane above (which keys on model/tier) never re-selects rows whose
+# stored record simply predates the field. This lane targets those rows by
+# the field's own absence — ANY channel, not filings-only — and reuses the
+# same _clear_llm_fields path (history preserved) so the nightly sweep
+# re-enriches them on the next cycle; the overlay rule then fills the value
+# from the new generation while select-best keeps whichever generation wins.
+
+DEFAULT_FIELD_BACKFILL_INDUSTRIES: tuple[str, ...] = ("financial-services", "unknown")
+
+
+def _row_channel(row: ProcessedArticle) -> str:
+    return resolve_channel(row.source_id, getattr(row, "channel", None)) or "unknown"
+
+
+def select_field_backfill_targets(
+    processed_path: str | Path,
+    *,
+    field: str,
+    industries: tuple[str, ...] | list[str] | None = DEFAULT_FIELD_BACKFILL_INDUSTRIES,
+    limit: int | None = None,
+) -> list[ProcessedArticle]:
+    """Rows whose stored projection lacks an additive ``field`` and should re-enrich.
+
+    Gates: verdict-true (``is_insider_case``), current schema tier
+    (``schema_version >= ENRICH_SCHEMA_VERSION``), ``forensics.<field>`` is
+    None, and the victim ``industry`` is in ``industries`` (None = any). ANY
+    channel qualifies — unlike :func:`select_missed_filings`. Newest first so a
+    capped run covers the freshest cases; ``limit`` truncates.
+    """
+    from apps.aggregator.process_pipeline import _as_utc
+
+    wanted = set(industries) if industries is not None else None
+    store = JsonlProcessedStore(processed_path)
+    targets: list[ProcessedArticle] = []
+    for row in store.load_all():
+        forensics = getattr(row, "forensics", None)
+        if forensics is None:
+            continue  # never enriched → the normal sweep handles it
+        if not bool(getattr(forensics, "is_insider_case", False)):
+            continue
+        if _schema_version(row) < ENRICH_SCHEMA_VERSION:
+            continue  # the reenrich lane owns stale tiers
+        if getattr(forensics, field, None) is not None:
+            continue
+        if wanted is not None and (getattr(forensics, "industry", None) or "unknown") not in wanted:
+            continue
+        targets.append(row)
+    targets.sort(key=lambda r: _as_utc(r.published or r.processed_at), reverse=True)
+    if limit is not None and limit >= 0:
+        targets = targets[:limit]
+    return targets
+
+
+def summarize_field_backfill_targets(rows: list[ProcessedArticle]) -> dict[str, dict[str, int]]:
+    """Counts by channel and by victim industry — never links or titles.
+
+    The dry-run output can land in CI logs (sparky-ops), so it must carry
+    nothing that identifies a case.
+    """
+    by_channel: dict[str, int] = {}
+    by_industry: dict[str, int] = {}
+    for row in rows:
+        ch = _row_channel(row)
+        by_channel[ch] = by_channel.get(ch, 0) + 1
+        ind = getattr(row.forensics, "industry", None) or "unknown"
+        by_industry[ind] = by_industry.get(ind, 0) + 1
+    return {"total": {"rows": len(rows)}, "by_channel": by_channel, "by_industry": by_industry}
+
+
+def clear_field_backfill_targets(
+    processed_path: str | Path,
+    *,
+    field: str,
+    industries: tuple[str, ...] | list[str] | None = DEFAULT_FIELD_BACKFILL_INDUSTRIES,
+    limit: int | None = None,
+) -> int:
+    """Clear the selected LLM view on the targets so the next sweep re-enriches.
+
+    Reuses ``_clear_llm_fields`` — only the projection pointer is cleared;
+    ``enrichment_history`` is preserved, so the re-enrichment appends a new
+    generation and select-best (plus the additive overlay) re-projects. Returns
+    the number of rows cleared.
+    """
+    from apps.aggregator.courtlistener_pipeline import _clear_llm_fields
+
+    rows = select_field_backfill_targets(
+        processed_path, field=field, industries=industries, limit=limit
+    )
+    if not rows:
+        return 0
+    _clear_llm_fields(str(processed_path), {r.link for r in rows})
+    logger.info("Field backfill: cleared %d row(s) lacking forensics.%s", len(rows), field)
+    return len(rows)
