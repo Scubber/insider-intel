@@ -33,7 +33,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | **Service memory** | **2Gi asserted in `deploy-api.yml`** after the 2026-07-26 OOM burst-503 outage at legacy 1Gi. Must grow with the corpus. |
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
 | **ITM** | **v2.11.0** (562 techniques; picked up with the description-clamp fix, 2026-08-08). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). Technique descriptions now clamp at 900 chars on sentence boundaries (was 320, mid-word). |
-| **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report; run artifacts (download on the run page) + `gs://…/export/traffic-{report.md,log.csv}`. ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
+| **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report, written ONLY to the private bucket — `gs://…/export/traffic-{report.md,log.csv}` (read via `gcloud storage cat`, or `gsutil cat` on sparky). Public repo ⇒ no run artifacts and a counts-only job log since 2026-09-02; the 29 GitHub-hosted artifacts migrate to `export/traffic-history/` in the bucket post-freeze, then get deleted from GitHub (thread #16d). ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
 | **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
@@ -93,6 +93,52 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 ---
 
 ## Open threads
+
+**LAUNCH-WEEK FREEZE (operator, 2026-09-02, week of 08-31):** the site is
+live and publicized (64 views on 09-01 vs ~20/day before). No behavior
+changes ship this week — bugs and hygiene items get NOTED here, fixed after.
+Verified 09-02: both domains 200 on `bdc2c54`, API all-200, browser smoke
+57/57 on `insider-intel.net` and `intel.thederpweb.com`, LIVE badge flips,
+RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
+
+16. **Deferred fixes — post-freeze queue (found 2026-09-02, all confirmed
+    live; none urgent, none touched):**
+    - (a) **Back button leaves takeovers open.** From EVIDENCE / TOOLING /
+      RESEARCH / ABOUT, browser Back sets the hash to `#/` but the pane
+      stays; the STREAM tab likewise leaves the hash on `#/evidence`.
+      `web/app.js::applyRoute` only resets for `state.view === "dossier"`
+      — the stream branch must also park a hash-routed takeover on
+      `articles`, and the STREAM tab must `navigate("/")`. Adjacent to
+      bug-hunt item 10 (`docs/bug-hunt-2026-08-19.md`). `web/**` change ⇒
+      smoke + screenshots per the PR checklist.
+    - (b) **`http://insider-intel.net` serves 200** — no HTTPS redirect,
+      no HSTS (the Worker/edge path; `intel.thederpweb.com` 301s via
+      Pages). Cloudflare "Always Use HTTPS" + HSTS on the zone, Cloudflare
+      side, no repo change (or a Worker redirect if the rule can't sit in
+      front of it).
+    - (c) **Three canonical duplicates**: apex, `www.insider-intel.net`,
+      and `intel.thederpweb.com` all serve identical content with no
+      `<link rel="canonical">`; Bingbot + Ahrefs are crawling all of them.
+      Fix: www→apex redirect rule (Cloudflare) + canonical tag in
+      `web/index.html` pointing at `https://insider-intel.net/`.
+    - (d) **Migrate the traffic history off GitHub** (PR #287 stops new
+      artifacts; this moves the old ones — nothing is thrown away). The 29
+      `traffic` run artifacts (2026-08-07 → 09-01, each a 7-day window)
+      are the only copy of August's per-request history: the bucket
+      `export/traffic-{report.md,log.csv}` is overwritten daily. Plan:
+      (1) `gh run download <run-id> -n traffic` each artifact →
+      `gs://insider-intel-502413-corpus/export/traffic-history/<run-date>/`
+      (private bucket, IAM-gated; sparky's SA or the deployer can write);
+      (2) verify byte counts landed; (3) only then delete the GitHub
+      copies (`gh api -X DELETE
+      /repos/Scubber/insider-intel/actions/artifacts/<id>`) and the run
+      logs that printed the report. (4) Make the daily job write a dated
+      copy under `export/traffic-history/` alongside the overwritten
+      latest, so history accrues in the bucket from now on (workflow
+      change — post-freeze).
+    - (e) Carry-overs from thread #15 (PR #286): merge, `sparky-ops
+      pull-main`, `VLLM_API_KEY` rotation; `sparky-ops chat-default` with
+      overlay `model-enrich.yml` so the daily hand-back is a no-op.
 
 0. **RESEARCH section — SHIPPED (2026-08-29, unmerged branch
    `claude/evidence-page-redesign-awjijy`).** New masthead tab at
