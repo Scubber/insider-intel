@@ -335,8 +335,15 @@ audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
 `corpus-noninsider` (spend-waste audit), `traffic-report` (daily DIY
 analytics: forensic request CSV + GeoIP, run artifacts + bucket export),
 `evidence-ledger` (writes
-`export/evidence-ledger.{md,json}` to the bucket), `probe-extract` (live API
+`export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
+`--country` / `--industry` slices), `corpus-industry` (per-victim-industry
+actor-profile table — function × employment state, counts only — plus the
+industry-sliced ledger, to `export/industry-actor-profiles-<industry>.{md,json}`
+and `export/evidence-ledger-<industry>.json`), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
+Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
+(`evidence.py::collapse_rows_by_link`, the store's own `load_all` rule —
+`upsert` appends mid-cycle, so a raw read sees stale generations first).
 **Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
 self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;

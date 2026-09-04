@@ -78,7 +78,9 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 - **Read-only diagnostic + export workflows** (Actions → Run workflow):
   `corpus-status` (state + env audit), `corpus-count`, `corpus-sample`,
   `corpus-noninsider` (spend-waste audit), `courtlistener-worklist`,
-  `evidence-ledger`, `export-llm`, `service-logs`, `probe-extract`,
+  `evidence-ledger`, `corpus-emailscan`, `corpus-industry` (2026-09-04:
+  per-industry actor profiles + sliced ledger), `export-llm`,
+  `service-logs`, `probe-extract`,
   `traffic-report`, `refresh-corpus`/`watch-refresh`, `reenrich-drain`,
   `corpus-recover`. A dispatch workflow must exist on `main`; it then runs
   the file from any ref (branch diagnostics without merging).
@@ -475,6 +477,30 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
     leave manual cycle/sweep runs unattended overnight, and the #242
     reconcile concern remains the suspected gutting mechanism (upstream,
     operator-aware). Recurrence watch stays armed for ~00:45Z 08-24.
+15. **Financial-services actor profiles — PR2 (2026-09-04, unmerged; PR1 =
+    the role-normalizer repair).** New read-only lane **`corpus-industry`**
+    (`scripts/industry_actor_profiles.py`, stdlib, loads the evidence core
+    by file spec): basis funnel (lines → deduped links → forensics → v3 tier
+    → verdict-true → method-bearing → story-merged cases), the (function ×
+    employment state) profile table for the requested industry AND for the
+    v3 `industry=unknown` pool (the contamination check), MT-motive and
+    posture mixes per profile, reading rules printed verbatim. Counts only —
+    `tests/test_industry_actor_profiles.py` seeds tokens in every free-text
+    field and asserts none survives. Pre-v3 verdict-true rows report as
+    NOT ASKED, never as unknown. `evidence_ledger.py` gained `--country` /
+    `--industry` (core: `INDUSTRY_LABELS` mirrors the pydantic enum, drift
+    test-pinned). **Dedupe direction bug fixed in the same PR:** the raw
+    JSONL holds every appended generation of an updated row (`upsert`
+    appends; `compact` folds at cycle end). `evidence_ledger.py` read every
+    line with no dedupe and `email_domain_scan.py` deduped FIRST-wins —
+    the opposite of the store's `load_all`/the API — so **the email-scan
+    run-3 numbers (2026-08-29, briefing #2) were computed on first-line
+    (stale) generations**; re-run `corpus-emailscan` before citing them
+    again. Both scripts now feed `collapse_rows_by_link(iter_jsonl_rows())`
+    from the core (last line wins, first-seen order; `tests/test_corpus_io.py`
+    pins byte-equality with `JsonlProcessedStore.load_all`). Next: dispatch
+    `corpus-industry` on `main`, read the FS table against the unknown pool,
+    then decide whether briefing #3 is warranted.
 
 ---
 
