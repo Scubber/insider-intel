@@ -354,7 +354,14 @@ uploaded as a run artifact — 2026-09-02),
 `--country` / `--industry` slices), `corpus-industry` (per-victim-industry
 actor-profile table — function × employment state, counts only — plus the
 industry-sliced ledger, to `export/industry-actor-profiles-<industry>.{md,json}`
-and `export/evidence-ledger-<industry>.json`), `probe-extract` (live API
+and `export/evidence-ledger-<industry>.json`), `corpus-peerset` (**private**
+peer-set study lane: cases whose stored text names a firm in an authored
+peer set — `shared/data/peer_sets.json`, the operator's competitive set —
+profiled as counts only: per-firm mentions [presence in the record, never
+fault], pooled function × employment state, motives, postures, sliced-ledger
+techniques + evidence classes, a Voya appendix carrying the
+`COURTLISTENER_COMPANY_WATCHLIST` collection caveat; to
+`export/peer-set-profiles-<set>.{md,json}`, never the RESEARCH tab), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
 Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
 (`evidence.py::collapse_rows_by_link`, the store's own `load_all` rule —
