@@ -413,3 +413,129 @@ def test_queue_survives_until_generation_lands(tmp_path, monkeypatch) -> None:
     assert dead.calls >= 1
     assert json.loads(_queue_path().read_text())["links"] == ["https://ex.com/case"]
     assert JsonlProcessedStore(processed).load_all()[0].forensics is not None
+
+
+# --- PR6: drainable queue (queue-first order, filled guard, per-row persistence)
+
+
+def _blank_row(processed: Path, link: str) -> None:
+    """Strip one row's enrichment so it counts as never-enriched (a FRESH sweep target)."""
+    store = JsonlProcessedStore(processed)
+    rows = store.load_all()
+    store.replace_all(
+        [
+            (
+                r.model_copy(
+                    update={
+                        "forensics": None,
+                        "case_record": None,
+                        "ai_summary": None,
+                        "enrichment_history": [],
+                    }
+                )
+                if r.link == link
+                else r
+            )
+            for r in rows
+        ]
+    )
+
+
+def _run_one_budget(tmp_path: Path, monkeypatch, processed: Path, *, queue_first: bool):
+    """One sweep with a total budget of 1: queued row vs fresh row, order decides."""
+    fake = FakeEnricher(reply=_reply(actor_employer_sector="retail"))
+    fake.model_name = TARGET
+    _install(monkeypatch, fake)
+    monkeypatch.setenv("SUMMARIZER_MAX_ARTICLES_PER_RUN", "1")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "1")
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_QUEUE_FIRST", "true" if queue_first else "false")
+    run_processing(raw_path=tmp_path / "raw.jsonl", processed_path=processed)
+    return fake, {r.link: r for r in JsonlProcessedStore(processed).load_all()}
+
+
+def test_queue_first_orders_queued_before_fresh(tmp_path, monkeypatch) -> None:
+    queued_link, fresh_link = "https://ex.com/queued", "https://ex.com/fresh"
+    processed = _seed_rows(tmp_path, monkeypatch, [{"link": queued_link}, {"link": fresh_link}])
+    _blank_row(processed, fresh_link)
+    queue_field_backfill_targets(processed, field="actor_employer_sector", queue_path=_queue_path())
+    assert json.loads(_queue_path().read_text())["links"] == [queued_link]
+
+    # Default order: new coverage first — the fresh row spends the single slot.
+    fake, rows = _run_one_budget(tmp_path, monkeypatch, processed, queue_first=False)
+    assert fake.calls == 1
+    assert rows[fresh_link].forensics is not None
+    assert rows[queued_link].forensics.actor_employer_sector is None
+    assert json.loads(_queue_path().read_text())["links"] == [queued_link]
+
+    # Queue-first: the queued row spends it; the fresh row waits.
+    _blank_row(processed, fresh_link)
+    fake, rows = _run_one_budget(tmp_path, monkeypatch, processed, queue_first=True)
+    assert fake.calls == 1
+    assert rows[fresh_link].forensics is None
+    assert rows[queued_link].forensics.actor_employer_sector == "retail"
+    assert json.loads(_queue_path().read_text())["links"] == []
+
+
+def test_already_filled_queued_link_is_dropped_without_spend(tmp_path, monkeypatch) -> None:
+    processed = _seed_rows(
+        tmp_path,
+        monkeypatch,
+        [{"link": "https://ex.com/filled", "sector": "professional-services"}],
+    )
+    from apps.aggregator.reenrich import write_field_backfill_queue
+
+    # Queued by hand (a stale dry-run): the CLI's own gate would skip it.
+    write_field_backfill_queue(
+        _queue_path(), field="actor_employer_sector", links=["https://ex.com/filled"]
+    )
+    before = JsonlProcessedStore(processed).load_all()[0]
+    fake = FakeEnricher(reply=_reply(actor_employer_sector="retail"))
+    fake.model_name = TARGET
+    _install(monkeypatch, fake)
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "5")
+    run_processing(raw_path=tmp_path / "raw.jsonl", processed_path=processed)
+    assert fake.calls == 0
+    assert json.loads(_queue_path().read_text())["links"] == []
+    after = JsonlProcessedStore(processed).load_all()[0]
+    assert after.forensics.model_dump(mode="json") == before.forensics.model_dump(mode="json")
+    assert len(after.enrichment_history) == len(before.enrichment_history)
+
+
+def test_queue_file_shrinks_per_landed_row(tmp_path, monkeypatch) -> None:
+    """Progress persists per landed row, not only at the end of the run."""
+    link1, link2 = "https://ex.com/one", "https://ex.com/two"
+    processed = _seed_rows(
+        tmp_path,
+        monkeypatch,
+        [
+            {"link": link1, "published": datetime(2026, 7, 9, tzinfo=UTC)},
+            {"link": link2, "published": datetime(2026, 7, 2, tzinfo=UTC)},
+        ],
+    )
+    queue_field_backfill_targets(processed, field="actor_employer_sector", queue_path=_queue_path())
+    assert json.loads(_queue_path().read_text())["links"] == [link1, link2]
+
+    class SecondCallDies(FakeEnricher):
+        """Succeeds once, then records the queue file as seen mid-run and dies."""
+
+        seen_mid_run: list[str] | None = None
+
+        def extract_case(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return self.reply
+            self.seen_mid_run = json.loads(_queue_path().read_text())["links"]
+            raise RuntimeError("provider down")
+
+    flaky = SecondCallDies(reply=_reply(actor_employer_sector="retail"))
+    flaky.model_name = TARGET
+    _install(monkeypatch, flaky)
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "5")
+    run_processing(raw_path=tmp_path / "raw.jsonl", processed_path=processed)
+    assert flaky.calls == 2
+    # Row 1 had left the file BEFORE row 2 was attempted, and its generation was on disk.
+    assert flaky.seen_mid_run == [link2]
+    assert json.loads(_queue_path().read_text())["links"] == [link2]
+    rows = {r.link: r for r in JsonlProcessedStore(processed).load_all()}
+    assert rows[link1].forensics.actor_employer_sector == "retail"
+    assert rows[link2].forensics.actor_employer_sector is None

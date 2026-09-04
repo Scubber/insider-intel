@@ -145,8 +145,11 @@ the append-only `enrichment_history` forward on reprocess, and the
 corpus-refresh backfill sweep converts the existing corpus gradually
 (newest-first, then legacy `case_record`-only rows when
 `SUMMARIZER_UPGRADE_LEGACY`), bounded by `SUMMARIZER_MAX_ARTICLES_PER_RUN`
-with `SUMMARIZER_BACKFILL_RESERVE` guaranteed to the sweep. The hunt report
-reads these stored records — no LLM at read time.
+with `SUMMARIZER_BACKFILL_RESERVE` guaranteed to the sweep;
+`SUMMARIZER_BACKFILL_QUEUE_FIRST` puts the additive-field backfill queue
+ahead of never-enriched rows for a drain window, and the sweep rewrites
+the queue file after every landed row (a killed run never re-bills). The
+hunt report reads these stored records — no LLM at read time.
 
 **Hunt synthesis** (`apps/aggregator/hunt_synthesis.py`, runs at the end of
 each processing pass): one LLM call per observed technique distills its case
@@ -370,7 +373,9 @@ Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
 self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;
 `pull-main` / `enable-india` / `smoke-india` / `run-refresh` mutate the box
-and require `confirm=RUN`; `run-replay` runs the spend-gate replay there.
+and require `confirm=RUN`; `run-replay` runs the spend-gate replay there;
+`set-enrich-knobs` rewrites the four `SUMMARIZER_*` caps / queue-first
+knobs in `.env.spark` for a backfill drain (HANDOFF #16).
 Chat-stack ops (the box is a chat host between cycles): `chat-status`
 (read-only), `chat-swap` (load an overlay's model now; refuses while the
 refresh flock is held), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in

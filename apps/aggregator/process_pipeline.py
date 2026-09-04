@@ -335,9 +335,21 @@ def _backfill_summaries(
         if row.forensics is not None and (row.story_key or "").strip():
             enriched_keys.add(row.story_key)
     queued_set = set(queued_links)
+    queue_field = queue["field"]
+    queue_filled: list[str] = []
     for row in processed_store.load_all():
         if row.link in queued_set and row.link not in exclude_links:
-            if article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
+            # Already-filled guard: a row whose projection already carries
+            # the queued field (an earlier pass landed it, or a fresh
+            # generation did) leaves the queue with no LLM call — a drain
+            # re-queued from a stale dry-run must never re-bill it.
+            if (
+                queue_field
+                and row.forensics is not None
+                and getattr(row.forensics, queue_field, None) is not None
+            ):
+                queue_filled.append(row.link)
+            elif article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
                 queued_rows.append(row)
             else:
                 queue_dropped.append(row.link)
@@ -356,13 +368,21 @@ def _backfill_summaries(
             fresh.append(row)
         elif upgrade_legacy:
             legacy.append(row)
+    if queue_filled:
+        logger.info(
+            "Field backfill: dropping %d queued link(s) whose %s is already filled (no spend)",
+            len(queue_filled),
+            queue_field,
+        )
     if queue_dropped:
         logger.warning(
             "Field backfill: dropping %d queued link(s) that no longer pass the spend gate",
             len(queue_dropped),
         )
-        queued_links = [link for link in queued_links if link not in set(queue_dropped)]
-        write_field_backfill_queue(queue_path, field=queue["field"], links=queued_links)
+    if queue_filled or queue_dropped:
+        gone = set(queue_dropped) | set(queue_filled)
+        queued_links = [link for link in queued_links if link not in gone]
+        write_field_backfill_queue(queue_path, field=queue_field, links=queued_links)
     if not fresh and not legacy and not queued_rows:
         return 0
 
@@ -376,10 +396,15 @@ def _backfill_summaries(
     fresh.sort(key=order, reverse=True)
     legacy.sort(key=order, reverse=True)
     queued_rows.sort(key=lambda a: queued_links.index(a.link))
-    # New coverage first (never-enriched rows), then the operator's queue —
-    # the queue is metered by the CLI's --limit against the reserve, so it
-    # cannot starve fresh conversion for more than the reserve it was sized to.
-    candidates = fresh + queued_rows + legacy
+    # Default: new coverage first (never-enriched rows), then the operator's
+    # queue — the queue is metered by the CLI's --limit against the reserve,
+    # so it cannot starve fresh conversion for more than the reserve it was
+    # sized to. SUMMARIZER_BACKFILL_QUEUE_FIRST flips it for a drain window,
+    # where the whole per-run budget is meant to empty the queue.
+    if settings.summarizer_backfill_queue_first:
+        candidates = queued_rows + fresh + legacy
+    else:
+        candidates = fresh + queued_rows + legacy
     queued_landed: set[str] = set()
 
     # Flush every few conversions: enrichment is paid-for work, and a task
@@ -449,10 +474,23 @@ def _backfill_summaries(
                 }
             )
         )
-        if row.link in queued_set:
-            queued_landed.add(row.link)
         if row_key:
             enriched_keys.add(row_key)
+        if row.link in queued_set:
+            # Persist queue progress per row: flush the row first (the queue
+            # must never drop a link whose generation isn't on disk), then
+            # rewrite the file minus it. An 8h `timeout --signal=INT` or a
+            # runner kill mid-sweep therefore cannot leave a landed row
+            # queued — and re-billed on the next pass.
+            processed_store.upsert(updated)
+            total_saved += len(updated)
+            updated = []
+            queued_landed.add(row.link)
+            write_field_backfill_queue(
+                queue_path,
+                field=queue_field,
+                links=[link for link in queued_links if link not in queued_landed],
+            )
         if len(updated) >= checkpoint_every:
             processed_store.upsert(updated)
             total_saved += len(updated)
@@ -467,8 +505,10 @@ def _backfill_summaries(
         processed_store.upsert(updated)
         total_saved += len(updated)
     if queued_landed:
+        # Idempotent end-of-run rewrite (the per-row writes above already
+        # carried every landed link out of the file).
         remaining = [link for link in queued_links if link not in queued_landed]
-        write_field_backfill_queue(queue_path, field=queue["field"], links=remaining)
+        write_field_backfill_queue(queue_path, field=queue_field, links=remaining)
         logger.info(
             "Field backfill: %d queued row(s) re-enriched this run, %d still queued",
             len(queued_landed),

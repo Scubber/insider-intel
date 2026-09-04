@@ -667,6 +667,16 @@ class Settings(BaseSettings):
             "forever. Clamped to the per-run budget."
         ),
     )
+    summarizer_backfill_queue_first: bool = Field(
+        default=False,
+        alias="SUMMARIZER_BACKFILL_QUEUE_FIRST",
+        description=(
+            "Sweep order: True puts the additive-field backfill queue "
+            "(FIELD_BACKFILL_TARGETS_PATH) ahead of never-enriched rows so a "
+            "drain window empties the queue first; False (default) converts new "
+            "coverage first. Set for the drain, restore afterwards."
+        ),
+    )
     summarizer_max_input_chars: int = Field(
         default=8000,
         alias="SUMMARIZER_MAX_INPUT_CHARS",
