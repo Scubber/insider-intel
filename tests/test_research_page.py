@@ -12,7 +12,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-SLUGS = ("danger-profiles-2026-08", "email-destinations-2026-08")
+SLUGS = (
+    "fs-insider-profiles-2026-09",
+    "danger-profiles-2026-08",
+    "email-destinations-2026-08",
+)
 
 
 def _index() -> str:
@@ -129,7 +133,8 @@ def test_briefings_carry_the_frozen_snapshot_contract() -> None:
 def test_briefing_slugs_are_smoke_deep_links() -> None:
     smoke = Path("scripts/ui_smoke_ci.py").read_text(encoding="utf-8")
     assert "#/research" in smoke
-    assert "#/research/danger-profiles-2026-08" in smoke
+    for slug in SLUGS:
+        assert f"#/research/{slug}" in smoke, f"{slug}: not a smoke deep link"
     assert '"research": ".pane-research-page"' in smoke
     order = re.search(r"PANE_ORDER = \((.*?)\)", smoke, re.DOTALL)
     assert order and '"research"' in order.group(1)

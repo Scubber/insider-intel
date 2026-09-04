@@ -152,6 +152,11 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
    Static prose in index.html (ABOUT-pane style, no fetch in the opener);
    contracts in `tests/test_research_page.py`; smoke deep links in
    `scripts/ui_smoke_ci.py`.
+   **Briefing #3 ed.1 shipped 2026-09-04** (`fs-insider-profiles-2026-09`,
+   who the insiders are in financial-services cases — victim-sector framing,
+   177 FS cases / 11 proven, 19 of 28 claims survived refutation). Ed.2
+   (actor-employer framing) is PENDING the `actor_employer_sector` backfill
+   (thread #16) and ships as a NEW dated briefing, never an in-place rewrite.
 1. **In-repo settings + lexicon config** — decided direction unchanged
    (checked-in `config/app_config.json`, fallback to defaults, secrets stay
    in Secret Manager). Not built.
