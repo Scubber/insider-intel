@@ -382,7 +382,8 @@ Rules:
     insider. The victim's sector goes in `industry`; this is the insider's
     own employer, which differs for tippees, contractors, and law-firm or
     advisor insiders. A staffing-firm contractor placed at a bank →
-    professional-services (the staffing firm), not financial-services.
+    professional-services (the staffing firm), not financial-services. When
+    the insider was the victim's own employee, repeat the victim's sector.
     When unstated: null — never "unknown".
   * detection: HOW the conduct came to light, one line close to the text's
     wording (internal audit, coworker report, DLP alert, forensic review on

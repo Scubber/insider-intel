@@ -24,7 +24,7 @@ from shared.schemas.articles import resolve_channel
 from shared.schemas.forensics import (
     EnrichmentRecord,
     append_enrichment,
-    project_additive_fields,
+    project_from_history,
 )
 from shared.settings import get_settings
 from shared.utils.story_key import compute_story_key
@@ -308,9 +308,22 @@ def _backfill_summaries(
     if get_summarizer_provider(settings) is None or budget.remaining <= 0:
         return 0
 
+    from apps.aggregator.reenrich import load_field_backfill_queue, write_field_backfill_queue
+
     upgrade_legacy = settings.summarizer_upgrade_legacy
     fresh: list[ProcessedArticle] = []
     legacy: list[ProcessedArticle] = []
+    # Additive-field backfill queue (docs/schema-freeze-v4.md): links the
+    # operator queued for RE-ENRICHMENT WITHOUT CLEARING. They keep their
+    # projection; the new generation appends to history and select-best +
+    # overlay re-project. A link leaves the queue only once its generation
+    # lands; one that no longer passes the gate is dropped with a log so the
+    # file can't hold a row the sweep will never touch.
+    queue_path = settings.field_backfill_targets_path
+    queue = load_field_backfill_queue(queue_path)
+    queued_links = list(queue["links"])
+    queued_rows: list[ProcessedArticle] = []
+    queue_dropped: list[str] = []
     filing_min_chars = settings.summarizer_filing_min_text_chars
     # Syndication dedupe: one enrichment per story. ISMG-style outlets publish
     # the identical article under several domains (distinct links, same
@@ -321,7 +334,14 @@ def _backfill_summaries(
     for row in processed_store.load_all():
         if row.forensics is not None and (row.story_key or "").strip():
             enriched_keys.add(row.story_key)
+    queued_set = set(queued_links)
     for row in processed_store.load_all():
+        if row.link in queued_set and row.link not in exclude_links:
+            if article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
+                queued_rows.append(row)
+            else:
+                queue_dropped.append(row.link)
+            continue
         if (
             row.link in exclude_links
             or row.forensics is not None
@@ -336,7 +356,14 @@ def _backfill_summaries(
             fresh.append(row)
         elif upgrade_legacy:
             legacy.append(row)
-    if not fresh and not legacy:
+    if queue_dropped:
+        logger.warning(
+            "Field backfill: dropping %d queued link(s) that no longer pass the spend gate",
+            len(queue_dropped),
+        )
+        queued_links = [link for link in queued_links if link not in set(queue_dropped)]
+        write_field_backfill_queue(queue_path, field=queue["field"], links=queued_links)
+    if not fresh and not legacy and not queued_rows:
         return 0
 
     # Court filings first, then newest: a filing's `published` is its filing
@@ -348,7 +375,12 @@ def _backfill_summaries(
 
     fresh.sort(key=order, reverse=True)
     legacy.sort(key=order, reverse=True)
-    candidates = fresh + legacy
+    queued_rows.sort(key=lambda a: queued_links.index(a.link))
+    # New coverage first (never-enriched rows), then the operator's queue —
+    # the queue is metered by the CLI's --limit against the reserve, so it
+    # cannot starve fresh conversion for more than the reserve it was sized to.
+    candidates = fresh + queued_rows + legacy
+    queued_landed: set[str] = set()
 
     # Flush every few conversions: enrichment is paid-for work, and a task
     # timeout (Cloud Run kills + retries the whole run) must never discard a
@@ -360,9 +392,11 @@ def _backfill_summaries(
         if budget.remaining <= 0:
             break
         # Same-run syndication dedupe: the sort put the best representative of
-        # each story first; its siblings are skipped once it enriches.
+        # each story first; its siblings are skipped once it enriches. A
+        # queued (already-enriched) row is its own story's representative —
+        # its key is in enriched_keys by construction, so the skip exempts it.
         row_key = (row.story_key or "").strip()
-        if row_key and row_key in enriched_keys:
+        if row_key and row_key in enriched_keys and row.link not in queued_set:
             continue
         summary, forensics, record, llm_hits = enrich_fields(
             title=row.title,
@@ -394,28 +428,29 @@ def _backfill_summaries(
                 "candidate_technique_ids": [h.id.upper() for h in merged.itm_hits],
             }
         )
-        # Archive this generation too: the backfill writes the row directly
-        # (bypassing the graph node), so it must append to the same durable
-        # history the node maintains.
+        # Archive this generation (the sweep bypasses the graph node, so it
+        # must append to the same durable history), then project EXACTLY as
+        # the node does — select-best + additive overlay over the whole
+        # history. Writing the new generation straight to the row (pre
+        # 2026-09-04) let a thin or verdict-flipped re-enrich gut a rich record.
         generation = EnrichmentRecord(ai_summary=summary, forensics=forensics)
         history = append_enrichment(
             list(getattr(row, "enrichment_history", None) or []), generation
         )
-        # Additive-field overlay (ADDITIVE_FIELDS): a None additive value on
-        # the written record is filled from the newest same-tier generation in
-        # history that has one — never a verdict or richness input.
-        forensics = project_additive_fields(history, generation)
+        proj = project_from_history(history)
         updated.append(
             row.model_copy(
                 update={
-                    "ai_summary": summary,
-                    "case_record": record,
-                    "forensics": forensics,
+                    "ai_summary": proj.ai_summary,
+                    "case_record": proj.case_record,
+                    "forensics": proj.forensics,
                     "entities": merged,
                     "enrichment_history": history,
                 }
             )
         )
+        if row.link in queued_set:
+            queued_landed.add(row.link)
         if row_key:
             enriched_keys.add(row_key)
         if len(updated) >= checkpoint_every:
@@ -431,6 +466,14 @@ def _backfill_summaries(
     if updated:
         processed_store.upsert(updated)
         total_saved += len(updated)
+    if queued_landed:
+        remaining = [link for link in queued_links if link not in queued_landed]
+        write_field_backfill_queue(queue_path, field=queue["field"], links=remaining)
+        logger.info(
+            "Field backfill: %d queued row(s) re-enriched this run, %d still queued",
+            len(queued_landed),
+            len(remaining),
+        )
     if total_saved:
         logger.info("Backfilled forensic records for %d article(s)", total_saved)
     return total_saved

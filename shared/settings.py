@@ -524,6 +524,15 @@ class Settings(BaseSettings):
         alias="LANE_HEALTH_PATH",
         description="Per-lane ingest health (job-written under state/, API reads it)",
     )
+    field_backfill_targets_path: str = Field(
+        default="data/state/field_backfill_targets.json",
+        alias="FIELD_BACKFILL_TARGETS_PATH",
+        description=(
+            "Additive-field backfill queue (docs/schema-freeze-v4.md): the "
+            "backfill_field CLI writes it, the sweep re-enriches queued links "
+            "without clearing and rewrites it minus the ones that landed"
+        ),
+    )
 
     # Use-case / insider-type classifier LLM refiner (heuristics always run)
     classifier_llm_provider: str = Field(

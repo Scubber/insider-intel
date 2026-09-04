@@ -127,6 +127,7 @@ def test_actor_employer_sector_is_a_nullable_enum_and_required() -> None:
         ({"actor_employer_sector": "professional-services"}, "professional-services"),
         ({"actor_employer_sector": "Financial-Services"}, "financial-services"),
         ({"actor_employer_sector": "staffing"}, None),  # off-enum → None, not "unknown"
+        ({"actor_employer_sector": "unknown"}, None),  # D2: "unknown" would block the field
         ({"actor_employer_sector": None}, None),
         ({}, None),  # missing → None (silence is not "unknown")
     ],

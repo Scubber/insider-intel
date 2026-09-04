@@ -7,14 +7,19 @@ claimed evidence quote must carry a deterministic grounding verdict.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+
+import pytest
 
 from shared.schemas.forensics import (
     CaseMethod,
     EnrichmentRecord,
     PerCaseForensics,
+    _enrichment_signature,
     enrichment_richness,
     project_additive_fields,
+    project_from_history,
     select_best_enrichment,
     stamp_quote_verbatim,
 )
@@ -229,3 +234,76 @@ def test_select_best_ordering_byte_identical_with_and_without_overlay() -> None:
     overlaid = project_additive_fields(history, best).model_dump_json()
     assert plain == overlaid
     assert project_additive_fields(history, None) is None
+
+
+def test_overlay_prefers_same_verdict_donor_then_falls_back() -> None:
+    """D4: donors sharing best's verdict win even when an opposite-verdict one is newer."""
+    winner = _gen_sector(sector=None, when=1, insider=True, confidence=0.9, methods=3)
+    same = _gen_sector(sector="healthcare", when=2, insider=True, confidence=0.5, model="same")
+    other = _gen_sector(sector="technology", when=3, insider=False, confidence=0.2, model="other")
+    out = project_additive_fields([winner, same, other], winner)
+    assert out.actor_employer_sector == "healthcare"
+    assert out.actor_employer_sector_source["model"] == "same"
+    # No same-verdict donor → any same-tier donor is acceptable.
+    out2 = project_additive_fields([winner, other], winner)
+    assert out2.actor_employer_sector == "technology"
+
+
+def test_overlay_rejects_best_below_history_top_tier() -> None:
+    """D5: the overlay tiers off HISTORY's top tier; a lower-tier best is a caller bug."""
+    v3 = _gen_sector(sector=None, when=5, schema=3)
+    v4 = _gen_sector(sector="retail", when=1, schema=4)
+    with pytest.raises(ValueError):
+        project_additive_fields([v4, v3], v3)
+    # project_from_history can never hit it: it selects at the top tier itself.
+    proj = project_from_history([v4, v3])
+    assert proj.best is v4 and proj.forensics.actor_employer_sector == "retail"
+
+
+def test_overlay_tie_and_none_extracted_at_are_deterministic() -> None:
+    a = _gen_sector(sector="energy", when=2, confidence=0.5, model="a")
+    b = _gen_sector(sector="defense", when=2, confidence=0.5, model="b")  # same stamp
+    winner = _gen_sector(sector=None, when=9, confidence=0.9)
+    first = project_additive_fields([winner, a, b], winner)
+    for _ in range(5):
+        assert project_additive_fields([winner, a, b], winner).model_dump_json() == (
+            first.model_dump_json()
+        )
+    assert first.actor_employer_sector == "defense"  # later history position on a tie
+    # None extracted_at: still deterministic, still stamped (with a null time).
+    n1 = _gen_sector(sector="retail", when=1, model="n1")
+    n1.forensics.extracted_at = None
+    n2 = _gen_sector(sector="other", when=1, model="n2")
+    n2.forensics.extracted_at = None
+    out = project_additive_fields([winner, n1, n2], winner)
+    assert out.actor_employer_sector == "other"
+    assert out.actor_employer_sector_source == {"model": "n2", "extracted_at": None}
+
+
+def test_projection_is_idempotent_and_survives_jsonl_round_trip() -> None:
+    winner = _gen_sector(sector=None, when=1, insider=True, confidence=0.9, methods=3)
+    donor = _gen_sector(sector="technology", when=2, insider=False, confidence=0.2)
+    history = [winner, donor]
+    p1 = project_from_history(history)
+    p2 = project_from_history(history)
+    assert p1.forensics.model_dump_json() == p2.forensics.model_dump_json()
+    assert p1.case_record == p2.case_record
+    # Neither call touched history or stamped anything into it.
+    assert all(r.forensics.actor_employer_sector_source is None for r in history)
+    assert winner.forensics.actor_employer_sector is None
+    # Round-trip the history through JSON (what the JSONL store does) and re-project.
+    reloaded = [EnrichmentRecord.model_validate(json.loads(r.model_dump_json())) for r in history]
+    p3 = project_from_history(reloaded)
+    assert p3.forensics.model_dump_json() == p1.forensics.model_dump_json()
+    # The projected forensics itself round-trips with the stamp intact.
+    back = PerCaseForensics.model_validate(json.loads(p1.forensics.model_dump_json()))
+    assert back.actor_employer_sector == "technology"
+    assert back.actor_employer_sector_source == p1.forensics.actor_employer_sector_source
+    # The dedup signature ignores additive fields and stamps.
+    assert _enrichment_signature(winner) == _enrichment_signature(
+        EnrichmentRecord(ai_summary=winner.ai_summary, forensics=p1.forensics)
+    )
+    # Absent keys (pre-field rows) validate to None.
+    d = json.loads(PerCaseForensics(link="x", title="t").model_dump_json())
+    del d["actor_employer_sector"], d["actor_employer_sector_source"]
+    assert PerCaseForensics.model_validate(d).actor_employer_sector is None

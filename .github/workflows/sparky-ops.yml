@@ -21,8 +21,8 @@ on:
           diagnose (identity/cron/log/checkout forensics) | tail-refresh-log |
           env-audit (key NAMES only) | git-status | pull-main | enable-india |
           smoke-india | run-replay | run-refresh | backfill-field-dryrun (counts
-          only) | backfill-field (clears an additive field's targets for the
-          nightly sweep; confirm=RUN)
+          only) | backfill-field (queues an additive field's targets for the
+          nightly sweep — re-enrich without clearing; confirm=RUN)
         required: true
         default: "diagnose"
         type: choice
@@ -79,7 +79,7 @@ on:
         required: false
         default: "actor_employer_sector"
       field_limit:
-        description: "backfill-field(-dryrun): clear at most N rows this dispatch (empty = all targets)"
+        description: "backfill-field(-dryrun): queue at most N rows (empty = SUMMARIZER_BACKFILL_RESERVE)"
         required: false
         default: ""
 
@@ -281,11 +281,14 @@ jobs:
 
       # Additive-field backfill (docs/schema-freeze-v4.md). The dry-run prints
       # COUNTS by channel/industry only — the CLI never prints links or titles,
-      # so nothing case-identifying lands in this log. The mutating op clears
-      # the selected projection on the targets (enrichment_history preserved);
-      # the next 08:00Z cycle re-enriches them. Field names are validated by
-      # the CLI against ADDITIVE_FIELDS; the shell guard below just keeps the
-      # input to a bare identifier.
+      # so nothing case-identifying lands in this log. The mutating op writes
+      # the queue file (data/state/field_backfill_targets.json) — NOTHING is
+      # cleared; the next 08:00Z cycle re-enriches queued rows and rewrites the
+      # file minus the ones that landed. It refuses while the refresh flock is
+      # held: the cycle rewrites that file at its end and would clobber a
+      # mid-cycle queue write. Field names are validated by the CLI against
+      # ADDITIVE_FIELDS; the shell guard below just keeps the input to a bare
+      # identifier.
       - name: backfill-field-dryrun
         if: ${{ github.event.inputs.op == 'backfill-field-dryrun' }}
         working-directory: ${{ env.WORKDIR }}
@@ -302,6 +305,8 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         run: |
           set -euo pipefail
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — queue after it finishes"; exit 1; }
           [[ "$FIELD" =~ ^[a-z_]+$ ]] || { echo "field must be a bare identifier"; exit 1; }
           [[ -z "$FIELD_LIMIT" || "$FIELD_LIMIT" =~ ^[0-9]+$ ]] || { echo "field_limit must be an integer"; exit 1; }
           LIMIT_ARGS=(); [ -n "$FIELD_LIMIT" ] && LIMIT_ARGS=(--limit "$FIELD_LIMIT")

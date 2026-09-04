@@ -190,9 +190,13 @@ rides on top of select-best, never inside it: an `ADDITIVE_FIELDS` value
 victim's stays in `industry`) that is None on the selected projection is
 filled from the newest same-tier generation that has it, stamped with a
 `<field>_source` provenance — never a verdict or richness input
-(`project_additive_fields`; ledger in
-[docs/schema-freeze-v4.md](docs/schema-freeze-v4.md); backfill by field
-absence via `backfill_field` / sparky-ops `backfill-field`). If a run's LLM
+(`project_from_history` is the ONE projection entry point — graph node and
+backfill sweep both call it; ledger in
+[docs/schema-freeze-v4.md](docs/schema-freeze-v4.md)). Backfilling an
+additive field re-enriches WITHOUT clearing: `backfill_field` / sparky-ops
+`backfill-field` queue gate-passing links in
+`data/state/field_backfill_targets.json` and the sweep drains the file as
+generations land — rows keep their projection throughout. If a run's LLM
 attempts all produce nothing, the job logs
 `[FAIL] enrichment: N LLM attempt(s), 0 records produced` — that tripwire
 firing means a dead provider (missing key or $0 balance), not a quiet day.

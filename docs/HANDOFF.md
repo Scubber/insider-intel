@@ -551,7 +551,11 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     RUN.** PR3 of the financial-services actor-profile plan: the insider's
     own employer's sector landed as an ADDITIVE v3 field (no bump — a bump
     would re-tier every filing and churn verdicts for weeks) with the
-    overlay projection rule (docs/schema-freeze-v4.md). New generations
+    overlay projection rule and ONE projection entry point,
+    `project_from_history`, now used by both the graph node and the
+    backfill sweep (the sweep used to write the new generation straight
+    to the row, bypassing select-best — docs/schema-freeze-v4.md). New
+    generations
     fill it from the next cycle on; the existing verdict-true corpus needs
     the field-absence backfill. **Operator runbook, on sparky via
     sparky-ops:**
@@ -562,17 +566,27 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
        `SUMMARIZER_BACKFILL_RESERVE` (60), and the field backfill must not
        compete with the tier reenrich for those slots.
     3. `backfill-field-dryrun` (field=actor_employer_sector; prints COUNTS
-       by channel/industry only, never links) to size the run.
-    4. `backfill-field confirm=RUN` — clears the selected projection on the
-       targets (enrichment_history preserved, `_clear_llm_fields` path);
-       use `field_limit` to meter it. Default targets: verdict-true, v3,
-       field None, victim industry in {financial-services, unknown}, any
-       channel, newest first — ~≤860 rows at the 2026-08 counts; at the
-       60-slot reserve that is about one week of nightly cycles.
+       — `queued` vs `skipped_by_gate`, by channel/industry — never links)
+       to size the run.
+    4. `backfill-field confirm=RUN` — writes the target links to
+       `data/state/field_backfill_targets.json` (`FIELD_BACKFILL_TARGETS_PATH`).
+       **Nothing is cleared: every row keeps its projection on EVIDENCE /
+       TOOLING / the stream for the whole window.** The nightly sweep
+       re-enriches queued rows (bills once each, appends the generation,
+       re-projects via select-best + overlay) and drops each from the file
+       once its generation lands. Refuses while the refresh flock is held.
+       `field_limit` defaults to the reserve (60) — the slice one cycle can
+       spend — so re-dispatch each morning after the cycle, or pass a
+       bigger limit once and let the file drain over the week. Default
+       targets: verdict-true, v3, field None, victim industry in
+       {financial-services, unknown}, any channel, gate-passing, newest
+       first — ~≤860 rows at the 2026-08 counts ≈ one week at 60/night.
     5. Verify fill via the `corpus-industry` lane (the industry/sector
        audit dispatch from PR2 of this plan) — the field's None count
-       should fall night over night; a flat count means the sweep isn't
-       reaching the cleared rows (check `SUMMARIZER_BACKFILL_RESERVE`).
+       should fall night over night — and `tail-refresh-log` for the
+       `Field backfill: N queued row(s) re-enriched this run` line; a flat
+       count with links still in the file means the sweep isn't reaching
+       them (check `SUMMARIZER_BACKFILL_RESERVE` and the provider).
     6. Restore `SUMMARIZER_REENRICH_MISSED_LIMIT=60` and note the dates
        here (ops changes have no PR — document them anyway).
 

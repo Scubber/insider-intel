@@ -500,9 +500,10 @@ def _build_parser() -> argparse.ArgumentParser:
     field_p = sub.add_parser(
         "backfill_field",
         help=(
-            "Clear LLM fields on verdict-true rows (any channel, current schema tier) "
-            "whose forensics lack an ADDITIVE field, so the next sweep re-enriches them "
-            "and the overlay fills it. --dry-run prints counts only (never links)."
+            "Queue verdict-true rows (any channel, current schema tier) whose forensics "
+            "lack an ADDITIVE field for RE-ENRICHMENT WITHOUT CLEARING: the sweep appends "
+            "a new generation and re-projects; nothing is nulled. --dry-run prints counts "
+            "only (never links)."
         ),
     )
     field_p.add_argument("--processed-path", type=str, default=DEFAULT_PROCESSED_PATH)
@@ -525,12 +526,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=None,
-        help="Clear at most this many rows (newest first).",
+        help=(
+            "Queue at most this many rows (newest first); default = "
+            "SUMMARIZER_BACKFILL_RESERVE, the slice one sweep can actually spend."
+        ),
     )
     field_p.add_argument(
         "--dry-run",
         action="store_true",
-        help="Count targets by channel/industry without clearing anything.",
+        help="Count targets (queued vs skipped-by-gate) by channel/industry; writes nothing.",
     )
     _add_verbose(field_p)
 
@@ -1004,38 +1008,48 @@ def _resolve_backfill_industries(values: list[str] | None) -> tuple[str, ...] | 
 
 def _cmd_backfill_field(args: argparse.Namespace) -> int:
     from apps.aggregator.reenrich import (
-        clear_field_backfill_targets,
+        queue_field_backfill_targets,
         select_field_backfill_targets,
         summarize_field_backfill_targets,
     )
     from shared.schemas.forensics import ADDITIVE_FIELDS
+    from shared.settings import get_settings
 
     field = (args.field or "").strip()
     if field not in ADDITIVE_FIELDS:
         print(f"Unknown additive field {field!r}; choose from {', '.join(ADDITIVE_FIELDS)}")
         return 2
+    settings = get_settings()
     industries = _resolve_backfill_industries(args.industry)
     scope = "any industry" if industries is None else ", ".join(industries)
+    limit = args.limit if args.limit is not None else settings.summarizer_backfill_reserve
+    common = {
+        "field": field,
+        "industries": industries,
+        "limit": limit,
+        "filing_min_chars": settings.summarizer_filing_min_text_chars,
+    }
     if args.dry_run:
-        rows = select_field_backfill_targets(
-            args.processed_path, field=field, industries=industries, limit=args.limit
-        )
+        sel = select_field_backfill_targets(args.processed_path, **common)
         # Counts only — this output lands in CI logs; no links, no titles.
-        summary = summarize_field_backfill_targets(rows)
-        print(f"Backfill targets for forensics.{field} ({scope}): {summary['total']['rows']}")
-        for label in ("by_channel", "by_industry"):
-            print(f"  {label}:")
-            for key, count in sorted(summary[label].items(), key=lambda kv: (-kv[1], kv[0])):
-                print(f"    {key}: {count}")
+        summary = summarize_field_backfill_targets(sel)
+        print(f"Backfill targets for forensics.{field} ({scope}, limit {limit}):")
+        for bucket in ("queued", "skipped_by_gate"):
+            counts = summary[bucket]
+            print(f"  {bucket}: {counts['rows']['total']}")
+            for label in ("by_channel", "by_industry"):
+                print(f"    {label}:")
+                for key, count in sorted(counts[label].items(), key=lambda kv: (-kv[1], kv[0])):
+                    print(f"      {key}: {count}")
         return 0
-    cleared = clear_field_backfill_targets(
-        args.processed_path, field=field, industries=industries, limit=args.limit
+    queued = queue_field_backfill_targets(
+        args.processed_path, queue_path=settings.field_backfill_targets_path, **common
     )
     print(
-        f"Cleared {cleared} row(s) lacking forensics.{field} ({scope}) — "
-        "next sweep re-enriches them."
+        f"Queued {queued} row(s) lacking forensics.{field} ({scope}) in "
+        f"{settings.field_backfill_targets_path} — next sweep re-enriches them "
+        "without clearing."
     )
-    _try_reload_api()
     return 0
 
 
