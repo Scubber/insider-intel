@@ -25,8 +25,10 @@ Counting rules (keep these honest):
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from datetime import UTC, datetime
 
 STRONG_STATUSES = {"adjudicated", "admitted"}
@@ -133,6 +135,93 @@ def filter_rows_by_country(rows, country: str):
         if got == want:
             out.append(row)
     return out
+
+
+# Victim organization's sector (schema v3). MIRRORS ``INDUSTRIES`` in
+# shared/schemas/forensics.py — this module cannot import pydantic, so the
+# two are kept in step by tests/test_evidence_ledger.py's drift test.
+# "unknown" is the enricher's own answer when the source is silent; rows
+# from schemas that never asked (pre-v3) carry no industry key at all and
+# must never be folded into it (see scripts/industry_actor_profiles.py).
+INDUSTRY_LABELS: tuple[str, ...] = (
+    "financial-services",
+    "healthcare",
+    "technology",
+    "defense",
+    "manufacturing",
+    "energy",
+    "retail",
+    "public-sector",
+    "professional-services",
+    "other",
+    "unknown",
+)
+
+
+def resolve_industry(forensics) -> str:
+    """Stored ``forensics.industry`` when it is a known label, else "unknown"."""
+    if not isinstance(forensics, dict):
+        return "unknown"
+    value = str(forensics.get("industry") or "").strip().lower()
+    return value if value in INDUSTRY_LABELS else "unknown"
+
+
+def filter_rows_by_industry(rows, industry: str):
+    """Rows whose stored victim-sector matches ``industry`` (case-insensitive).
+
+    Sibling of ``filter_rows_by_country``: one engine, many views. A row with
+    no forensics resolves to "unknown", so slicing on "unknown" deliberately
+    includes un-enriched rows — callers wanting the v3 "unknown pool" gate on
+    schema tier first (the industry script does).
+    """
+    want = (industry or "").strip().lower()
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if resolve_industry(row.get("forensics")) == want:
+            out.append(row)
+    return out
+
+
+def iter_jsonl_rows(path) -> Iterator[dict]:
+    """Yield the JSON objects in a JSONL file, skipping blank and corrupt lines.
+
+    Mirrors ``JsonlProcessedStore.load_all``'s warning-skip: a torn final line
+    (kill mid-append) or a non-object line is skipped, never fatal.
+    """
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                yield row
+
+
+def collapse_rows_by_link(rows) -> list[dict]:
+    """Last line wins per ``link``, returned in first-seen order.
+
+    The processed store is append-only mid-cycle (``upsert`` appends; only
+    the cycle-end ``compact`` folds), so a raw JSONL read sees every
+    generation of an updated row. This is the reader-side dedupe
+    ``JsonlProcessedStore.load_all`` applies — same key, same direction, same
+    order — so a stdlib script and the API agree on which row is current.
+    A first-wins read (the 2026-08 email scan) reports the STALE generation.
+    Rows without a link are kept, keyed by their position.
+    """
+    by_key: dict = {}
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        link = row.get("link")
+        key = link if link else ("__no_link__", idx)
+        by_key[key] = row  # later rows win; dict keeps the first-seen slot
+    return list(by_key.values())
 
 
 # Freeform artifact strings from the enricher vary ("EDR removable-media

@@ -220,11 +220,49 @@ def test_script_is_stdlib_only() -> None:
 
     src = _SCRIPT.read_text(encoding="utf-8")
     imports = _re.findall(r"^(?:from|import)\s+(\S+)", src, _re.M)
-    stdlib_only = {"__future__", "argparse", "json", "re", "sys", "collections"}
+    stdlib_only = {
+        "__future__",
+        "argparse",
+        "importlib.util",
+        "json",
+        "pathlib",
+        "re",
+        "sys",
+        "collections",
+    }
     assert set(imports) <= stdlib_only, f"non-stdlib import crept in: {set(imports) - stdlib_only}"
     # And it actually loaded above via spec_from_file_location with only stdlib
     # available on the path — reaching this line is the proof.
     assert hasattr(scan_mod, "redact")
+
+
+def _scan_file(tmp_path, lines):
+    path = tmp_path / "corpus.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in lines), encoding="utf-8")
+    return scan_mod.scan(scan_mod._iter_rows(str(path)))
+
+
+def test_email_scan_collapses_last_line_wins(tmp_path) -> None:
+    """The store is append-only mid-cycle, so one link can occupy two lines.
+
+    The API reads last-line-wins; the scan must agree. Run 3 (2026-08-29)
+    deduped FIRST-wins and so scanned the stale generation of every updated
+    row — the direction this test pins.
+    """
+    link = "https://ex.com/one"
+    stats, pairs = _scan_file(
+        tmp_path,
+        [_row(link, "no address here"), _row(link, "sent files to mule.acct@gmail.com")],
+    )
+    assert stats["cases"] == 1
+    assert len(pairs) == 1 and pairs[0]["domain"] == "gmail.com"
+
+    stats, pairs = _scan_file(
+        tmp_path,
+        [_row(link, "sent files to mule.acct@gmail.com"), _row(link, "no address here")],
+    )
+    assert stats["cases"] == 1
+    assert pairs == []
 
 
 def test_report_carries_the_reading_rules() -> None:

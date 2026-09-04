@@ -25,10 +25,20 @@ duplicates the selected forensics and would multi-count.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
 from collections import Counter, defaultdict
+from pathlib import Path
+
+# The evidence core is loaded as a bare FILE (same trick as evidence_ledger.py):
+# the shared.utils package __init__ pulls in pydantic, which the Actions
+# runner does not have. The core is pure stdlib by contract.
+_CORE_PATH = Path(__file__).resolve().parent.parent / "shared" / "utils" / "evidence.py"
+_spec = importlib.util.spec_from_file_location("evidence_core", _CORE_PATH)
+_core = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_core)
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}")
 
@@ -323,16 +333,17 @@ _CLASS_RANK = {"exfil_context": 2, "counsel_service": 1, "mention": 0}
 
 
 def scan(rows, *, context_chars: int = 160):
-    seen_links: set[str] = set()
+    """Scan CURRENT rows. Callers feed the raw JSONL through
+    ``collapse_rows_by_link`` (last line wins — the store is append-only
+    mid-cycle) so an updated row's latest generation is the one scanned. The
+    pre-2026-09-04 version deduped first-wins here and scanned the STALE copy.
+    """
     stats = Counter()
     # (link, address) -> best hit dict
     pairs: dict[tuple[str, str], dict] = {}
     for row in rows:
         stats["rows"] += 1
         link = row.get("link") or f"row-{stats['rows']}"
-        if link in seen_links:
-            continue
-        seen_links.add(link)
         stats["cases"] += 1
         if len(row.get("clean_text") or "") >= 1500:
             stats["full_body_filings"] += 1
@@ -522,14 +533,8 @@ def to_json(stats, pairs) -> dict:
 
 
 def _iter_rows(path: str):
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                try:
-                    yield json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+    """Current rows only: last line wins per link (core ``collapse_rows_by_link``)."""
+    return _core.collapse_rows_by_link(_core.iter_jsonl_rows(path))
 
 
 def main(argv=None) -> int:
