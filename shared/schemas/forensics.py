@@ -491,6 +491,11 @@ def _enrichment_signature(rec: EnrichmentRecord) -> tuple:
         (rec.ai_summary or "").strip(),
         len(rec.forensics.methods or []),
         round(float(rec.forensics.confidence or 0.0), 4),
+        # A generation that differs in an additive contract field is a
+        # different generation: without this, a field backfill that reproduces
+        # the stored generation on every other axis is deduped away and the
+        # row is marked landed with the field still null (spend loop).
+        tuple(getattr(rec.forensics, f, None) for f in ADDITIVE_FIELDS),
     )
 
 

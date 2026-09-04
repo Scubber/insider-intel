@@ -299,11 +299,39 @@ def test_projection_is_idempotent_and_survives_jsonl_round_trip() -> None:
     back = PerCaseForensics.model_validate(json.loads(p1.forensics.model_dump_json()))
     assert back.actor_employer_sector == "technology"
     assert back.actor_employer_sector_source == p1.forensics.actor_employer_sector_source
-    # The dedup signature ignores additive fields and stamps.
-    assert _enrichment_signature(winner) == _enrichment_signature(
+    # The dedup signature carries the additive FIELD (a backfill that only
+    # answers the field is a new generation) but never the provenance stamp.
+    sig_projected = _enrichment_signature(
         EnrichmentRecord(ai_summary=winner.ai_summary, forensics=p1.forensics)
     )
+    sig_unstamped = _enrichment_signature(
+        EnrichmentRecord(
+            ai_summary=winner.ai_summary,
+            forensics=p1.forensics.model_copy(update={"actor_employer_sector_source": None}),
+        )
+    )
+    assert sig_projected == sig_unstamped
+    assert sig_projected[:-1] == _enrichment_signature(winner)[:-1]
     # Absent keys (pre-field rows) validate to None.
     d = json.loads(PerCaseForensics(link="x", title="t").model_dump_json())
     del d["actor_employer_sector"], d["actor_employer_sector_source"]
     assert PerCaseForensics.model_validate(d).actor_employer_sector is None
+
+
+def test_dedupe_keeps_a_generation_that_differs_only_in_an_additive_field() -> None:
+    """A field backfill that reproduces the stored generation on every other
+    axis must still be appended — otherwise the row is marked landed with the
+    field still null and the next dispatch bills it again (re-review finding).
+    """
+    from shared.schemas.forensics import append_enrichment
+
+    base = _gen(insider=True, confidence=0.9, methods=4, when=1)
+    same_but_filled = _gen(insider=True, confidence=0.9, methods=4, when=2)
+    same_but_filled = EnrichmentRecord(
+        ai_summary=same_but_filled.ai_summary,
+        forensics=same_but_filled.forensics.model_copy(update={"actor_employer_sector": "retail"}),
+    )
+    history = append_enrichment([base], same_but_filled)
+    assert len(history) == 2, "the paid generation was deduped away"
+    # A true duplicate (field also equal) is still folded.
+    assert len(append_enrichment(history, same_but_filled)) == 2
