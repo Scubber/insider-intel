@@ -553,48 +553,62 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     pins byte-equality with `JsonlProcessedStore.load_all`). Next: dispatch
     `corpus-industry` on `main`, read the FS table against the unknown pool,
     then decide whether briefing #3 is warranted.
-16. **`actor_employer_sector` backfill — CODE MERGED 2026-09-04, NOT YET
-    RUN.** PR3 of the financial-services actor-profile plan: the insider's
-    own employer's sector landed as an ADDITIVE v3 field (no bump — a bump
-    would re-tier every filing and churn verdicts for weeks) with the
-    overlay projection rule and ONE projection entry point,
-    `project_from_history`, now used by both the graph node and the
-    backfill sweep (the sweep used to write the new generation straight
-    to the row, bypassing select-best — docs/schema-freeze-v4.md). New
-    generations
-    fill it from the next cycle on; the existing verdict-true corpus needs
-    the field-absence backfill. **Operator runbook, on sparky via
-    sparky-ops:**
+16. **`actor_employer_sector` backfill — CODE MERGED 2026-09-04 (PR3),
+    DRAIN TOOLING PR6 2026-09-04, NOT YET RUN.** PR3 of the
+    financial-services actor-profile plan: the insider's own employer's
+    sector landed as an ADDITIVE v3 field (no bump — a bump would re-tier
+    every filing and churn verdicts for weeks) with the overlay projection
+    rule and ONE projection entry point, `project_from_history`, now used
+    by both the graph node and the backfill sweep
+    (docs/schema-freeze-v4.md). New generations fill it from the next
+    cycle on; the existing verdict-true corpus needs the field-absence
+    backfill. PR6 made the queue drainable in back-to-back full runs:
+    `SUMMARIZER_BACKFILL_QUEUE_FIRST` (queued links ahead of never-enriched
+    rows), an already-filled guard (a queued row whose projection already
+    carries the field leaves the queue with no LLM call), and **per-row
+    queue persistence** — the sweep flushes each queued row and rewrites
+    `data/state/field_backfill_targets.json` minus that link immediately,
+    so the 8h `timeout --signal=INT` or a runner kill mid-sweep cannot
+    leave a landed row queued (and re-billed). `sparky-ops
+    set-enrich-knobs` rewrites the four `SUMMARIZER_*` knobs in
+    `.env.spark` (empty inputs untouched; prints only those four lines).
+    **Nothing is ever cleared: every row keeps its projection on EVIDENCE
+    / TOOLING / the stream for the whole window — no projection is ever
+    blanked.** **DRAIN sequence, on sparky via sparky-ops:**
     1. `pull-main confirm=RUN` so the operational checkout carries the
-       prompt + CLI.
-    2. In `.env.spark`, set `SUMMARIZER_REENRICH_MISSED_LIMIT=0` for the
-       backfill window — the two lanes both draw on
-       `SUMMARIZER_BACKFILL_RESERVE` (60), and the field backfill must not
-       compete with the tier reenrich for those slots.
-    3. `backfill-field-dryrun` (field=actor_employer_sector; prints COUNTS
-       — `queued` vs `skipped_by_gate`, by channel/industry — never links)
-       to size the run.
-    4. `backfill-field confirm=RUN` — writes the target links to
-       `data/state/field_backfill_targets.json` (`FIELD_BACKFILL_TARGETS_PATH`).
-       **Nothing is cleared: every row keeps its projection on EVIDENCE /
-       TOOLING / the stream for the whole window.** The nightly sweep
-       re-enriches queued rows (bills once each, appends the generation,
-       re-projects via select-best + overlay) and drops each from the file
-       once its generation lands. Refuses while the refresh flock is held.
-       `field_limit` defaults to the reserve (60) — the slice one cycle can
-       spend — so re-dispatch each morning after the cycle, or pass a
-       bigger limit once and let the file drain over the week. Default
-       targets: verdict-true, v3, field None, victim industry in
-       {financial-services, unknown}, any channel, gate-passing, newest
-       first — ~≤860 rows at the 2026-08 counts ≈ one week at 60/night.
-    5. Verify fill via the `corpus-industry` lane (the industry/sector
-       audit dispatch from PR2 of this plan) — the field's None count
-       should fall night over night — and `tail-refresh-log` for the
-       `Field backfill: N queued row(s) re-enriched this run` line; a flat
-       count with links still in the file means the sweep isn't reaching
-       them (check `SUMMARIZER_BACKFILL_RESERVE` and the provider).
-    6. Restore `SUMMARIZER_REENRICH_MISSED_LIMIT=60` and note the dates
-       here (ops changes have no PR — document them anyway).
+       prompt, CLI, and PR6 sweep.
+    2. `backfill-field-dryrun` (field=actor_employer_sector,
+       field_limit=5000) — prints COUNTS only (`queued` vs
+       `skipped_by_gate`, by channel/industry; never links) to size the
+       drain. Default targets: verdict-true, v3, field None, victim
+       industry in {financial-services, unknown}, any channel,
+       gate-passing, newest first — ~≤860 rows at the 2026-08 counts.
+    3. `backfill-field field_limit=5000 confirm=RUN` — writes the whole
+       target set to the queue file at once (union with anything
+       pending). Refuses while the refresh flock is held.
+    4. `set-enrich-knobs max_per_run=350 backfill_reserve=350
+       reenrich_limit=0 queue_first=true confirm=RUN`. Reserve == cap
+       hands the sweep the whole budget (fresh ingest gets zero for the
+       window — accepted); `reenrich_limit=0` stops the tier re-enrich
+       from competing for the same slots; queue-first puts the queue
+       ahead of never-enriched rows.
+    5. `run-refresh confirm=RUN`, repeated, until step 2 reports
+       `queued: 0`. Each pass ≈ 350 rows ≈ 5.9 h at the measured 61 s/case,
+       inside the 8 h pipeline bound / 510-min job timeout. The 08:00Z cron
+       runs a pass too, with the same knobs; a cron tick landing during a
+       dispatched pass skips loudly on the flock (and vice versa). Progress
+       is safe at any cut: landed rows are already out of the file.
+       `tail-refresh-log` shows `Field backfill: N queued row(s)
+       re-enriched this run, M still queued`; a flat N with links still
+       queued means the sweep isn't reaching them (provider dead → the
+       `[FAIL] enrichment` tripwire; or the knobs didn't take — re-run
+       `env-audit`).
+    6. Verify fill via `corpus-industry` (industry=financial-services):
+       the field's None count should be near zero.
+    7. Restore: `set-enrich-knobs max_per_run=160 backfill_reserve=60
+       reenrich_limit=60 queue_first=false confirm=RUN`.
+    8. Record the drain dates and the final counts here (ops changes have
+       no PR — document them anyway).
 17. **Peer-set study lane — PR5 (2026-09-04, unmerged).** `corpus-peerset`
     (`scripts/peer_set_profiles.py`, stdlib, loads the industry script and
     through it the evidence core by file spec) profiles the insiders in

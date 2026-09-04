@@ -10,9 +10,10 @@ name: sparky-ops
 #     targets the box's OPERATIONAL clone (default ~/insider-intel), the one
 #     the 08:00Z cron builds, never the runner's workdir.
 #   - Secrets never print: .env.spark is only ever shown as key NAMES.
-#   - Mutating ops (pull-main, enable-india, smoke-india, run-refresh) require
-#     confirm=RUN. run-refresh respects the wrapper's own flock — a cycle in
-#     progress makes it skip loudly, so it cannot double-write the bucket.
+#   - Mutating ops (pull-main, enable-india, smoke-india, run-refresh,
+#     backfill-field, set-enrich-knobs, ...) require confirm=RUN. run-refresh
+#     respects the wrapper's own flock — a cycle in progress makes it skip
+#     loudly, so it cannot double-write the bucket.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +23,9 @@ on:
           env-audit (key NAMES only) | git-status | pull-main | enable-india |
           smoke-india | run-replay | run-refresh | backfill-field-dryrun (counts
           only) | backfill-field (queues an additive field's targets for the
-          nightly sweep — re-enrich without clearing; confirm=RUN)
+          nightly sweep — re-enrich without clearing; confirm=RUN) |
+          set-enrich-knobs (rewrite SUMMARIZER_* caps / queue-first in
+          .env.spark for a drain window; empty inputs untouched; confirm=RUN)
         required: true
         default: "diagnose"
         type: choice
@@ -41,6 +44,7 @@ on:
           - run-refresh
           - backfill-field-dryrun
           - backfill-field
+          - set-enrich-knobs
           - sweep-start
           - sweep-status
           - sweep-stop
@@ -82,6 +86,22 @@ on:
         description: "backfill-field(-dryrun): queue at most N rows (empty = SUMMARIZER_BACKFILL_RESERVE)"
         required: false
         default: ""
+      max_per_run:
+        description: "set-enrich-knobs: SUMMARIZER_MAX_ARTICLES_PER_RUN (0-5000; empty = leave)"
+        required: false
+        default: ""
+      backfill_reserve:
+        description: "set-enrich-knobs: SUMMARIZER_BACKFILL_RESERVE (0-500; empty = leave)"
+        required: false
+        default: ""
+      reenrich_limit:
+        description: "set-enrich-knobs: SUMMARIZER_REENRICH_MISSED_LIMIT (0-50000; empty = leave)"
+        required: false
+        default: ""
+      queue_first:
+        description: "set-enrich-knobs: SUMMARIZER_BACKFILL_QUEUE_FIRST (true|false; empty = leave)"
+        required: false
+        default: ""
 
 concurrency:
   group: sparky-ops
@@ -104,6 +124,10 @@ jobs:
       OVERLAY: ${{ github.event.inputs.overlay }}
       FIELD: ${{ github.event.inputs.field }}
       FIELD_LIMIT: ${{ github.event.inputs.field_limit }}
+      MAX_PER_RUN: ${{ github.event.inputs.max_per_run }}
+      BACKFILL_RESERVE: ${{ github.event.inputs.backfill_reserve }}
+      REENRICH_LIMIT: ${{ github.event.inputs.reenrich_limit }}
+      QUEUE_FIRST: ${{ github.event.inputs.queue_first }}
     steps:
       - name: Resolve operational checkout
         run: |
@@ -112,7 +136,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -312,6 +336,42 @@ jobs:
           LIMIT_ARGS=(); [ -n "$FIELD_LIMIT" ] && LIMIT_ARGS=(--limit "$FIELD_LIMIT")
           docker compose -f docker-compose.spark.yml run --rm --build refresh \
             python -m apps.aggregator backfill_field --field "$FIELD" "${LIMIT_ARGS[@]}"
+
+      # Drain-window knobs (HANDOFF thread #16): each provided input rewrites
+      # its SUMMARIZER_* line in .env.spark (or appends it); empty inputs leave
+      # the key alone. Validated before the file is touched. Values are bare
+      # integers/booleans, so the two-parser quoting rule (chat-default,
+      # enable-ocr: `source` vs compose env_file — only STRINGS WITH SPACES
+      # need double quotes) does not apply; unquoted is safe for both readers.
+      - name: set-enrich-knobs
+        if: ${{ github.event.inputs.op == 'set-enrich-knobs' }}
+        run: |
+          set -euo pipefail
+          ENV_FILE="$WORKDIR/.env.spark"
+          [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE"; exit 1; }
+          check_int() { # name value max
+            [[ "$2" =~ ^[0-9]{1,5}$ ]] || { echo "$1 must be an integer 0-$3, got '$2'"; exit 1; }
+            [ "$2" -le "$3" ] || { echo "$1 must be <= $3, got '$2'"; exit 1; }
+          }
+          [ -z "$MAX_PER_RUN" ] || check_int max_per_run "$MAX_PER_RUN" 5000
+          [ -z "$BACKFILL_RESERVE" ] || check_int backfill_reserve "$BACKFILL_RESERVE" 500
+          [ -z "$REENRICH_LIMIT" ] || check_int reenrich_limit "$REENRICH_LIMIT" 50000
+          [[ -z "$QUEUE_FIRST" || "$QUEUE_FIRST" =~ ^(true|false)$ ]]             || { echo "queue_first must be true or false, got '$QUEUE_FIRST'"; exit 1; }
+          [ -n "$MAX_PER_RUN$BACKFILL_RESERVE$REENRICH_LIMIT$QUEUE_FIRST" ]             || { echo "nothing to set — every input is empty"; exit 1; }
+          set_knob() { # KEY VALUE (empty VALUE = leave untouched)
+            [ -n "$2" ] || return 0
+            if grep -q "^$1=" "$ENV_FILE"; then
+              sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+            else
+              printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+            fi
+          }
+          set_knob SUMMARIZER_MAX_ARTICLES_PER_RUN "$MAX_PER_RUN"
+          set_knob SUMMARIZER_BACKFILL_RESERVE "$BACKFILL_RESERVE"
+          set_knob SUMMARIZER_REENRICH_MISSED_LIMIT "$REENRICH_LIMIT"
+          set_knob SUMMARIZER_BACKFILL_QUEUE_FIRST "$QUEUE_FIRST"
+          echo "now set (these four lines only):"
+          grep -E '^SUMMARIZER_(MAX_ARTICLES_PER_RUN|BACKFILL_RESERVE|REENRICH_MISSED_LIMIT|BACKFILL_QUEUE_FIRST)=' "$ENV_FILE" || true
 
       - name: run-refresh
         if: ${{ github.event.inputs.op == 'run-refresh' }}
