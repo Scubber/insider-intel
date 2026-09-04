@@ -497,6 +497,47 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_verbose(reenrich_p)
 
+    field_p = sub.add_parser(
+        "backfill_field",
+        help=(
+            "Queue verdict-true rows (any channel, current schema tier) whose forensics "
+            "lack an ADDITIVE field for RE-ENRICHMENT WITHOUT CLEARING: the sweep appends "
+            "a new generation and re-projects; nothing is nulled. --dry-run prints counts "
+            "only (never links)."
+        ),
+    )
+    field_p.add_argument("--processed-path", type=str, default=DEFAULT_PROCESSED_PATH)
+    field_p.add_argument(
+        "--field",
+        type=str,
+        default="actor_employer_sector",
+        help="Additive forensics field to backfill (must be in ADDITIVE_FIELDS).",
+    )
+    field_p.add_argument(
+        "--industry",
+        action="append",
+        default=None,
+        help=(
+            "Victim industry to target (repeatable); default financial-services + unknown. "
+            "Pass 'any' to target every industry."
+        ),
+    )
+    field_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "Queue at most this many rows (newest first); default = "
+            "SUMMARIZER_BACKFILL_RESERVE, the slice one sweep can actually spend."
+        ),
+    )
+    field_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Count targets (queued vs skipped-by-gate) by channel/industry; writes nothing.",
+    )
+    _add_verbose(field_p)
+
     itm_p = sub.add_parser(
         "refresh_itm",
         help="Download Insider Threat Matrix™ JSON and write slim itm_index.json.",
@@ -818,9 +859,7 @@ def _cmd_ingest_social(args: argparse.Namespace) -> int:
 def _cmd_ingest_publications(args: argparse.Namespace) -> int:
     from apps.aggregator.publications_pipeline import run_publications_ingestion
 
-    source_ids = (
-        [s for s in args.source_ids.split(",") if s.strip()] if args.source_ids else None
-    )
+    source_ids = [s for s in args.source_ids.split(",") if s.strip()] if args.source_ids else None
     result = run_publications_ingestion(
         source_ids=source_ids,
         store_path=args.store_path,
@@ -944,9 +983,7 @@ def _cmd_reenrich_missed(args: argparse.Namespace) -> int:
     settings = get_settings()
     target = args.model or settings.summarizer_model or settings.anthropic_model
     if args.dry_run:
-        links = select_missed_filings(
-            args.processed_path, target_model=target, limit=args.limit
-        )
+        links = select_missed_filings(args.processed_path, target_model=target, limit=args.limit)
         print(f"Missed filings not on {target!r}: {len(links)}")
         for link in links[:20]:
             print(f"  {link}")
@@ -956,6 +993,63 @@ def _cmd_reenrich_missed(args: argparse.Namespace) -> int:
     cleared = clear_missed_filings(args.processed_path, target_model=target, limit=args.limit)
     print(f"Cleared {cleared} missed filing(s) not on {target!r} — next sweep re-enriches them.")
     _try_reload_api()
+    return 0
+
+
+def _resolve_backfill_industries(values: list[str] | None) -> tuple[str, ...] | None:
+    from apps.aggregator.reenrich import DEFAULT_FIELD_BACKFILL_INDUSTRIES
+
+    if not values:
+        return DEFAULT_FIELD_BACKFILL_INDUSTRIES
+    if any(v.strip().lower() == "any" for v in values):
+        return None
+    return tuple(v.strip().lower() for v in values)
+
+
+def _cmd_backfill_field(args: argparse.Namespace) -> int:
+    from apps.aggregator.reenrich import (
+        queue_field_backfill_targets,
+        select_field_backfill_targets,
+        summarize_field_backfill_targets,
+    )
+    from shared.schemas.forensics import ADDITIVE_FIELDS
+    from shared.settings import get_settings
+
+    field = (args.field or "").strip()
+    if field not in ADDITIVE_FIELDS:
+        print(f"Unknown additive field {field!r}; choose from {', '.join(ADDITIVE_FIELDS)}")
+        return 2
+    settings = get_settings()
+    industries = _resolve_backfill_industries(args.industry)
+    scope = "any industry" if industries is None else ", ".join(industries)
+    limit = args.limit if args.limit is not None else settings.summarizer_backfill_reserve
+    common = {
+        "field": field,
+        "industries": industries,
+        "limit": limit,
+        "filing_min_chars": settings.summarizer_filing_min_text_chars,
+    }
+    if args.dry_run:
+        sel = select_field_backfill_targets(args.processed_path, **common)
+        # Counts only — this output lands in CI logs; no links, no titles.
+        summary = summarize_field_backfill_targets(sel)
+        print(f"Backfill targets for forensics.{field} ({scope}, limit {limit}):")
+        for bucket in ("queued", "skipped_by_gate"):
+            counts = summary[bucket]
+            print(f"  {bucket}: {counts['rows']['total']}")
+            for label in ("by_channel", "by_industry"):
+                print(f"    {label}:")
+                for key, count in sorted(counts[label].items(), key=lambda kv: (-kv[1], kv[0])):
+                    print(f"      {key}: {count}")
+        return 0
+    queued = queue_field_backfill_targets(
+        args.processed_path, queue_path=settings.field_backfill_targets_path, **common
+    )
+    print(
+        f"Queued {queued} row(s) lacking forensics.{field} ({scope}) in "
+        f"{settings.field_backfill_targets_path} — next sweep re-enriches them "
+        "without clearing."
+    )
     return 0
 
 
@@ -1084,6 +1178,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_export(args)
     if args.command == "reenrich_missed":
         return _cmd_reenrich_missed(args)
+    if args.command == "backfill_field":
+        return _cmd_backfill_field(args)
     return _cmd_ingest(args)
 
 

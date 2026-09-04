@@ -184,7 +184,19 @@ write-time `evidence_quote_verbatim` grounding stamp (deterministic
 normalized-substring check against the text the model saw; backfill via
 `scripts/backfill_quote_verbatim.py`). A thin re-enrich can therefore never
 gut a rich record, and
-`_clear_llm_fields` intentionally does NOT clear history. If a run's LLM
+`_clear_llm_fields` intentionally does NOT clear history. One exception
+rides on top of select-best, never inside it: an `ADDITIVE_FIELDS` value
+(today `actor_employer_sector`, the insider's OWN employer's sector — the
+victim's stays in `industry`) that is None on the selected projection is
+filled from the newest same-tier generation that has it, stamped with a
+`<field>_source` provenance — never a verdict or richness input
+(`project_from_history` is the ONE projection entry point — graph node and
+backfill sweep both call it; ledger in
+[docs/schema-freeze-v4.md](docs/schema-freeze-v4.md)). Backfilling an
+additive field re-enriches WITHOUT clearing: `backfill_field` / sparky-ops
+`backfill-field` queue gate-passing links in
+`data/state/field_backfill_targets.json` and the sweep drains the file as
+generations land — rows keep their projection throughout. If a run's LLM
 attempts all produce nothing, the job logs
 `[FAIL] enrichment: N LLM attempt(s), 0 records produced` — that tripwire
 firing means a dead provider (missing key or $0 balance), not a quiet day.

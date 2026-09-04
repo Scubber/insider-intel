@@ -20,7 +20,9 @@ on:
         description: >-
           diagnose (identity/cron/log/checkout forensics) | tail-refresh-log |
           env-audit (key NAMES only) | git-status | pull-main | enable-india |
-          smoke-india | run-replay | run-refresh
+          smoke-india | run-replay | run-refresh | backfill-field-dryrun (counts
+          only) | backfill-field (queues an additive field's targets for the
+          nightly sweep — re-enrich without clearing; confirm=RUN)
         required: true
         default: "diagnose"
         type: choice
@@ -37,6 +39,8 @@ on:
           - extract-india
           - run-replay
           - run-refresh
+          - backfill-field-dryrun
+          - backfill-field
           - sweep-start
           - sweep-status
           - sweep-stop
@@ -70,6 +74,14 @@ on:
         description: "chat-swap/chat-default: overlay yml in ~/sparky (e.g. model-enrich.yml); empty = base compose.yml model"
         required: false
         default: ""
+      field:
+        description: "backfill-field(-dryrun): additive forensics field to backfill (ADDITIVE_FIELDS)"
+        required: false
+        default: "actor_employer_sector"
+      field_limit:
+        description: "backfill-field(-dryrun): queue at most N rows (empty = SUMMARIZER_BACKFILL_RESERVE)"
+        required: false
+        default: ""
 
 concurrency:
   group: sparky-ops
@@ -90,6 +102,8 @@ jobs:
       RESERVE: ${{ github.event.inputs.reserve }}
       RETRY_DAYS: ${{ github.event.inputs.retry_days }}
       OVERLAY: ${{ github.event.inputs.overlay }}
+      FIELD: ${{ github.event.inputs.field }}
+      FIELD_LIMIT: ${{ github.event.inputs.field_limit }}
     steps:
       - name: Resolve operational checkout
         run: |
@@ -98,7 +112,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -264,6 +278,40 @@ jobs:
           docker compose -f docker-compose.spark.yml run --rm --build \
             -v "$PWD/scripts:/app/scripts:ro" refresh \
             python scripts/replay_filings_gate.py
+
+      # Additive-field backfill (docs/schema-freeze-v4.md). The dry-run prints
+      # COUNTS by channel/industry only — the CLI never prints links or titles,
+      # so nothing case-identifying lands in this log. The mutating op writes
+      # the queue file (data/state/field_backfill_targets.json) — NOTHING is
+      # cleared; the next 08:00Z cycle re-enriches queued rows and rewrites the
+      # file minus the ones that landed. It refuses while the refresh flock is
+      # held: the cycle rewrites that file at its end and would clobber a
+      # mid-cycle queue write. Field names are validated by the CLI against
+      # ADDITIVE_FIELDS; the shell guard below just keeps the input to a bare
+      # identifier.
+      - name: backfill-field-dryrun
+        if: ${{ github.event.inputs.op == 'backfill-field-dryrun' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          [[ "$FIELD" =~ ^[a-z_]+$ ]] || { echo "field must be a bare identifier"; exit 1; }
+          [[ -z "$FIELD_LIMIT" || "$FIELD_LIMIT" =~ ^[0-9]+$ ]] || { echo "field_limit must be an integer"; exit 1; }
+          LIMIT_ARGS=(); [ -n "$FIELD_LIMIT" ] && LIMIT_ARGS=(--limit "$FIELD_LIMIT")
+          docker compose -f docker-compose.spark.yml run --rm --build refresh \
+            python -m apps.aggregator backfill_field --field "$FIELD" --dry-run "${LIMIT_ARGS[@]}"
+
+      - name: backfill-field
+        if: ${{ github.event.inputs.op == 'backfill-field' }}
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          set -euo pipefail
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — queue after it finishes"; exit 1; }
+          [[ "$FIELD" =~ ^[a-z_]+$ ]] || { echo "field must be a bare identifier"; exit 1; }
+          [[ -z "$FIELD_LIMIT" || "$FIELD_LIMIT" =~ ^[0-9]+$ ]] || { echo "field_limit must be an integer"; exit 1; }
+          LIMIT_ARGS=(); [ -n "$FIELD_LIMIT" ] && LIMIT_ARGS=(--limit "$FIELD_LIMIT")
+          docker compose -f docker-compose.spark.yml run --rm --build refresh \
+            python -m apps.aggregator backfill_field --field "$FIELD" "${LIMIT_ARGS[@]}"
 
       - name: run-refresh
         if: ${{ github.event.inputs.op == 'run-refresh' }}

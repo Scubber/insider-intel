@@ -22,8 +22,11 @@ nothing.
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from shared.schemas import ProcessedArticle
@@ -203,4 +206,171 @@ def clear_missed_filings(
             len(links),
             target_model,
         )
+    return len(links)
+
+
+# --- Additive-field backfill (docs/schema-freeze-v4.md) -----------------------
+#
+# An ADDITIVE field lands at the current schema tier without a bump, so the
+# reenrich lane above (which keys on model/tier) never re-selects rows whose
+# stored record simply predates the field. This lane targets those rows by
+# the field's own absence — ANY channel, not filings-only — and queues them in
+# a state/ file the sweep consumes: the row is RE-ENRICHED WITHOUT CLEARING
+# (its projection stays live on EVIDENCE/TOOLING/the stream throughout), the
+# new generation appends to history, and project_from_history re-projects —
+# select-best keeps whichever generation wins, the overlay fills the field.
+# Clearing (the reenrich lane's mechanism) is deliberately NOT used here: it
+# nulls forensics for the whole backfill window and strands any row the sweep
+# then refuses (gate/sibling), with no projection at all.
+
+DEFAULT_FIELD_BACKFILL_INDUSTRIES: tuple[str, ...] = ("financial-services", "unknown")
+
+
+def _row_channel(row: ProcessedArticle) -> str:
+    return resolve_channel(row.source_id, getattr(row, "channel", None)) or "unknown"
+
+
+class FieldBackfillSelection(NamedTuple):
+    """Targets that the sweep WILL enrich vs rows it would refuse."""
+
+    queued: list[ProcessedArticle]
+    skipped_by_gate: list[ProcessedArticle]
+
+
+def select_field_backfill_targets(
+    processed_path: str | Path,
+    *,
+    field: str,
+    industries: tuple[str, ...] | list[str] | None = DEFAULT_FIELD_BACKFILL_INDUSTRIES,
+    limit: int | None = None,
+    filing_min_chars: int = 1_500,
+) -> FieldBackfillSelection:
+    """Rows whose stored projection lacks an additive ``field``.
+
+    Gates: verdict-true (``is_insider_case``), current schema tier
+    (``schema_version >= ENRICH_SCHEMA_VERSION``), ``forensics.<field>`` is
+    None, and the victim ``industry`` is in ``industries`` (None = any). ANY
+    channel qualifies — unlike :func:`select_missed_filings`. Rows that fail
+    ``article_qualifies`` (the spend policy the sweep applies) land in
+    ``skipped_by_gate`` instead of being queued — nothing is queued that the
+    sweep would refuse. Newest first; ``limit`` truncates the queued list.
+    """
+    from apps.aggregator.process_pipeline import _as_utc
+    from shared.agents.summarize import article_qualifies
+
+    wanted = set(industries) if industries is not None else None
+    store = JsonlProcessedStore(processed_path)
+    queued: list[ProcessedArticle] = []
+    skipped: list[ProcessedArticle] = []
+    for row in store.load_all():
+        forensics = getattr(row, "forensics", None)
+        if forensics is None:
+            continue  # never enriched → the normal sweep handles it
+        if not bool(getattr(forensics, "is_insider_case", False)):
+            continue
+        if _schema_version(row) < ENRICH_SCHEMA_VERSION:
+            continue  # the reenrich lane owns stale tiers
+        if getattr(forensics, field, None) is not None:
+            continue
+        if wanted is not None and (getattr(forensics, "industry", None) or "unknown") not in wanted:
+            continue
+        if article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
+            queued.append(row)
+        else:
+            skipped.append(row)
+    order = lambda r: _as_utc(r.published or r.processed_at)  # noqa: E731
+    queued.sort(key=order, reverse=True)
+    skipped.sort(key=order, reverse=True)
+    if limit is not None and limit >= 0:
+        queued = queued[:limit]
+    return FieldBackfillSelection(queued=queued, skipped_by_gate=skipped)
+
+
+def _count_by(rows: list[ProcessedArticle]) -> dict[str, dict[str, int]]:
+    by_channel: dict[str, int] = {}
+    by_industry: dict[str, int] = {}
+    for row in rows:
+        ch = _row_channel(row)
+        by_channel[ch] = by_channel.get(ch, 0) + 1
+        ind = getattr(row.forensics, "industry", None) or "unknown"
+        by_industry[ind] = by_industry.get(ind, 0) + 1
+    return {"rows": {"total": len(rows)}, "by_channel": by_channel, "by_industry": by_industry}
+
+
+def summarize_field_backfill_targets(sel: FieldBackfillSelection) -> dict[str, dict]:
+    """Counts by channel and by victim industry — never links or titles.
+
+    The dry-run output can land in CI logs (sparky-ops), so it must carry
+    nothing that identifies a case.
+    """
+    return {"queued": _count_by(sel.queued), "skipped_by_gate": _count_by(sel.skipped_by_gate)}
+
+
+# --- the queue: data/state/field_backfill_targets.json (settings-resolved) ----
+#
+# Shape: {"field": str, "links": [str, ...], "written_at": iso}. The CLI writes
+# it; the sweep consumes it and rewrites it minus the links whose generation
+# landed — a per-cycle state/ file, never checked in (CLAUDE.md dynamic-data
+# rule). A link stays queued until a generation actually lands for it.
+
+
+def load_field_backfill_queue(path: str | Path) -> dict:
+    file_path = Path(path)
+    if not file_path.exists():
+        return {"field": "", "links": []}
+    try:
+        data = json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("Unreadable field-backfill queue at %s — treating as empty", file_path)
+        return {"field": "", "links": []}
+    links = [str(link) for link in (data.get("links") or []) if link]
+    return {"field": str(data.get("field") or ""), "links": links}
+
+
+def write_field_backfill_queue(path: str | Path, *, field: str, links: list[str]) -> None:
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "field": field,
+        "links": list(dict.fromkeys(links)),
+        "written_at": datetime.now(UTC).isoformat(),
+    }
+    tmp = file_path.with_suffix(file_path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(file_path)
+
+
+def queue_field_backfill_targets(
+    processed_path: str | Path,
+    *,
+    field: str,
+    queue_path: str | Path,
+    industries: tuple[str, ...] | list[str] | None = DEFAULT_FIELD_BACKFILL_INDUSTRIES,
+    limit: int | None = None,
+    filing_min_chars: int = 1_500,
+) -> int:
+    """Write the selected targets to the queue file (union with what's pending).
+
+    No LLM spend and NO clearing — the rows keep their projection. The next
+    sweep re-enriches queued links first-come within the reserve and drops
+    each from the file once its generation lands. Returns the queue length.
+    """
+    sel = select_field_backfill_targets(
+        processed_path,
+        field=field,
+        industries=industries,
+        limit=limit,
+        filing_min_chars=filing_min_chars,
+    )
+    pending = load_field_backfill_queue(queue_path)
+    carried = pending["links"] if pending["field"] == field else []
+    links = [*carried, *(r.link for r in sel.queued)]
+    write_field_backfill_queue(queue_path, field=field, links=links)
+    logger.info(
+        "Field backfill: queued %d row(s) lacking forensics.%s (%d carried, %d gate-skipped)",
+        len(links),
+        field,
+        len(carried),
+        len(sel.skipped_by_gate),
+    )
     return len(links)

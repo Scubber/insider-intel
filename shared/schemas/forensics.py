@@ -12,7 +12,7 @@ a malformed LLM reply degrades gracefully rather than sinking an article.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -220,6 +220,23 @@ class PerCaseForensics(BaseModel):
     # only state citizenship (record "US (state pleaded)" for those).
     actor_citizenship: str | None = None
     industry: str = Field(default="unknown", description="Victim org sector (INDUSTRIES)")
+    # ADDITIVE at v3 (2026-09-04, docs/schema-freeze-v4.md): the sector of the
+    # organization that EMPLOYED the insider — diverges from ``industry`` for
+    # tippees, contractors, and law-firm/advisor insiders. Null-preserving on
+    # purpose: silence is not "unknown", so an older generation that never
+    # asked the question stays None and the overlay rule can fill it.
+    actor_employer_sector: str | None = Field(
+        default=None,
+        description=(
+            "Sector of the insider's own employer, explicit statements only "
+            "(INDUSTRIES enum); None when the text does not say — silence is "
+            "not 'unknown'"
+        ),
+    )
+    # Provenance of an overlaid additive value ({"model", "extracted_at"}) —
+    # set ONLY by project_additive_fields when the value came from a
+    # generation other than the selected one; never written by the LLM.
+    actor_employer_sector_source: dict | None = None
     tool_mentions: list[ToolMention] = Field(default_factory=list)
     timeframe: str | None = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -336,6 +353,110 @@ def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord 
     return max(best_by_verdict.values(), key=lambda r: (_confidence(r), _selection_key(r)))
 
 
+# Fields added to the contract WITHOUT a schema bump (docs/schema-freeze-v4.md
+# candidates ledger). A bump re-tiers every filing through the reenrich lane
+# and churns verdicts for weeks; an additive field instead rides the overlay
+# rule below: the selected projection fills a None additive value from the
+# newest same-tier generation that carries one. Additive fields are NEVER a
+# verdict or richness input — select-best is byte-identical with or without
+# the overlay.
+ADDITIVE_FIELDS: tuple[str, ...] = ("actor_employer_sector",)
+
+
+def _donor_recency_key(indexed: tuple[int, EnrichmentRecord]) -> tuple[float, int]:
+    """Newest extracted_at wins; ties (or None stamps) resolve to the LATER
+    history position, so the pick is deterministic across calls and files."""
+    idx, rec = indexed
+    return (_selection_key(rec)[1], idx)
+
+
+def project_additive_fields(
+    history: list[EnrichmentRecord], best: EnrichmentRecord | None
+) -> PerCaseForensics | None:
+    """Overlay ADDITIVE_FIELDS onto the selected projection's forensics.
+
+    For each additive field that is None on ``best``, take the value from the
+    NEWEST generation at the top schema tier where it is non-null — preferring
+    donors that share ``best``'s ``is_insider_case`` verdict, falling back to
+    any same-tier donor — and stamp ``<field>_source = {"model",
+    "extracted_at"}`` from that donor so the provenance is visible. The overlay
+    touches nothing else — not ``is_insider_case``, ``confidence``,
+    ``methods``, ``ai_summary`` or any richness input — and is a no-op
+    (returns ``best.forensics`` itself) when no generation carries the field.
+    ``best`` and history are never mutated: the return value is a copy.
+
+    ``best`` must sit at history's top tier (it always does when it came from
+    :func:`select_best_enrichment`; :func:`project_from_history` guarantees
+    it). Anything else is a caller bug, not a data condition — raise.
+    """
+    if best is None:
+        return None
+    top_tier = max((rec.schema_version for rec in history), default=best.schema_version)
+    if best.schema_version != top_tier:
+        raise ValueError(
+            f"project_additive_fields: best is at schema tier {best.schema_version} "
+            f"but history's top tier is {top_tier} — project via project_from_history"
+        )
+    forensics = best.forensics
+    verdict = bool(forensics.is_insider_case)
+    update: dict[str, object] = {}
+    for field in ADDITIVE_FIELDS:
+        if getattr(forensics, field, None) is not None:
+            continue
+        donors = [
+            (idx, rec)
+            for idx, rec in enumerate(history)
+            if rec is not best
+            and rec.schema_version == top_tier
+            and getattr(rec.forensics, field, None) is not None
+        ]
+        if not donors:
+            continue
+        same_verdict = [d for d in donors if bool(d[1].forensics.is_insider_case) == verdict]
+        _idx, donor = max(same_verdict or donors, key=_donor_recency_key)
+        update[field] = getattr(donor.forensics, field)
+        extracted = donor.forensics.extracted_at
+        update[f"{field}_source"] = {
+            "model": donor.model or None,
+            "extracted_at": extracted.isoformat() if extracted is not None else None,
+        }
+    if not update:
+        return forensics
+    return forensics.model_copy(update=update)
+
+
+class Projection(NamedTuple):
+    """The stored top-level view of an article's enrichment history."""
+
+    best: EnrichmentRecord | None
+    forensics: PerCaseForensics | None
+    ai_summary: str | None
+    case_record: CaseRecord | None
+
+
+def project_from_history(history: list[EnrichmentRecord]) -> Projection:
+    """THE one projection: select-best, then the additive-field overlay.
+
+    Every site that writes ``ProcessedArticle.forensics`` / ``ai_summary`` /
+    ``case_record`` from a history must go through here — the graph node's
+    ``_emit_selected`` and the backfill sweep both do. Writing a freshly
+    produced generation straight to the row (what the sweep did before
+    2026-09-04) bypasses select-best, so a thin or verdict-flipped re-enrich
+    gutted a rich record until the next graph pass re-selected it. The
+    ``case_record`` is derived from the overlaid forensics exactly as the
+    enricher derives it — one source of truth.
+    """
+    best = select_best_enrichment(history)
+    forensics = project_additive_fields(history, best)
+    record = case_record_from_forensics(forensics) if forensics is not None else None
+    return Projection(
+        best=best,
+        forensics=forensics,
+        ai_summary=best.ai_summary if best is not None else None,
+        case_record=record,
+    )
+
+
 _QUOTE_NORM_TABLE = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'", "–": "-", "—": "-"})
 
 
@@ -370,6 +491,11 @@ def _enrichment_signature(rec: EnrichmentRecord) -> tuple:
         (rec.ai_summary or "").strip(),
         len(rec.forensics.methods or []),
         round(float(rec.forensics.confidence or 0.0), 4),
+        # A generation that differs in an additive contract field is a
+        # different generation: without this, a field backfill that reproduces
+        # the stored generation on every other axis is deduped away and the
+        # row is marked landed with the field still null (spend loop).
+        tuple(getattr(rec.forensics, f, None) for f in ADDITIVE_FIELDS),
     )
 
 
@@ -519,6 +645,12 @@ def parse_tool_mentions(raw: object) -> list[ToolMention]:
     return out
 
 
+def coerce_additive_enum(value: object) -> str | None:
+    """INDUSTRIES member or None — never "unknown" (silence is not an answer)."""
+    v = str(value or "").strip().lower()
+    return v if v in INDUSTRIES and v != "unknown" else None
+
+
 def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensics:
     """Lenient coercion of unified-enricher JSON — bad fields drop, never raise.
 
@@ -563,6 +695,11 @@ def parse_forensics_json(data: dict, *, link: str, title: str) -> PerCaseForensi
         industry=(lambda v: v if v in INDUSTRIES else "unknown")(
             str(data.get("industry") or "").strip().lower()
         ),
+        # Null-preserving (unlike industry): off-enum, missing, OR "unknown" →
+        # None. "unknown" is in INDUSTRIES for the victim sector's clamp, but
+        # stored non-null here it would block the field forever (the backfill
+        # skips non-null rows and the overlay would treat it as a real answer).
+        actor_employer_sector=coerce_additive_enum(data.get("actor_employer_sector")),
         tool_mentions=parse_tool_mentions(data.get("tool_mentions")),
         timeframe=_s(data.get("timeframe"), 200) or None,
         confidence=max(0.0, min(1.0, confidence)),

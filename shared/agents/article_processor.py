@@ -22,8 +22,7 @@ from shared.schemas.forensics import (
     EnrichmentRecord,
     PerCaseForensics,
     append_enrichment,
-    case_record_from_forensics,
-    select_best_enrichment,
+    project_from_history,
 )
 from shared.settings import get_settings
 from shared.utils.classify import classify_insider_type, classify_use_cases
@@ -182,16 +181,16 @@ def _emit_selected(
     """Project the append-only history to the selected-best view the row stores.
 
     ``forensics`` / ``ai_summary`` / ``case_record`` are the richest generation
-    (:func:`select_best_enrichment`); the full history rides alongside so no
+    (:func:`project_from_history` — select-best + the additive overlay); the
+    full history rides alongside so no
     generation is ever lost. case_record is re-derived from the selected
     forensics exactly as the enricher derived it — keeping one source of truth.
     """
-    best = select_best_enrichment(history)
-    record = case_record_from_forensics(best.forensics) if best is not None else None
+    proj = project_from_history(history)
     return {
-        "ai_summary": best.ai_summary if best is not None else None,
-        "case_record": record.model_dump(mode="json") if record is not None else None,
-        "forensics": best.forensics.model_dump(mode="json") if best is not None else None,
+        "ai_summary": proj.ai_summary,
+        "case_record": proj.case_record.model_dump(mode="json") if proj.case_record else None,
+        "forensics": proj.forensics.model_dump(mode="json") if proj.forensics else None,
         "enrichment_history": [rec.model_dump(mode="json") for rec in history],
         "entities": merged.model_dump(),
     }

@@ -14,6 +14,7 @@ from shared.schemas.forensics import (
     LEGAL_POSTURES,
     SOURCE_TYPES,
     TOOL_MENTION_ROLES,
+    parse_forensics_json,
 )
 
 
@@ -109,3 +110,31 @@ def test_server_rejecting_schema_downgrades_then_succeeds(
     out = _summarizer().extract_case(title="t", source="s", text="body", itm_candidates="")
     assert out == {"ai_summary": "x"}
     assert [p["response_format"]["type"] for p in seen] == ["json_schema", "json_object"]
+
+
+def test_actor_employer_sector_is_a_nullable_enum_and_required() -> None:
+    """Additive at v3 (docs/schema-freeze-v4.md): same enum as industry, null allowed."""
+    props = ENRICH_REPLY_SCHEMA["properties"]
+    assert props["actor_employer_sector"]["type"] == ["string", "null"]
+    assert props["actor_employer_sector"]["enum"] == [*INDUSTRIES, None]
+    assert "actor_employer_sector" in ENRICH_REPLY_SCHEMA["required"]
+    assert "actor_employer_sector" in ENRICH_SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ({"actor_employer_sector": "professional-services"}, "professional-services"),
+        ({"actor_employer_sector": "Financial-Services"}, "financial-services"),
+        ({"actor_employer_sector": "staffing"}, None),  # off-enum → None, not "unknown"
+        ({"actor_employer_sector": "unknown"}, None),  # D2: "unknown" would block the field
+        ({"actor_employer_sector": None}, None),
+        ({}, None),  # missing → None (silence is not "unknown")
+    ],
+)
+def test_actor_employer_sector_coercion_is_null_preserving(raw: dict, expected) -> None:
+    out = parse_forensics_json(raw, link="https://x", title="t")
+    assert out.actor_employer_sector == expected
+    assert out.actor_employer_sector_source is None
+    # Contrast: the victim sector clamps to "unknown".
+    assert out.industry == "unknown"
