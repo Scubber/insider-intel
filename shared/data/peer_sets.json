@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "notes": [
+    "Authored peer sets for the PRIVATE peer-set study lane",
+    "(scripts/peer_set_profiles.py, dispatched by",
+    ".github/workflows/corpus-peerset.yml). Output is counts only — roles,",
+    "techniques, evidence-record classes, legal postures — written to the",
+    "private bucket export prefix. It is NEVER a public RESEARCH surface.",
+    "",
+    "A firm MATCH means the firm's name appears in the stored record",
+    "(title + clean_text + summary + ai_summary; enrichment_history is never",
+    "scanned). Presence in the record, never fault: the firm may be the",
+    "victim, the plaintiff, the defendant's former employer, or a bystander",
+    "named in passing. The report's reading rules say so verbatim.",
+    "",
+    "MATCHING SEMANTICS mirror shared/data/vendor_aliases.json: case-",
+    "insensitive, word-boundary (an alias matches only when not butted",
+    "against another letter/digit on either side), multi-word aliases",
+    "tolerate any whitespace run, longest alias first.",
+    "",
+    "Fidelity: NEVER bare 'Fidelity' — a common English word ('fidelity to",
+    "the contract') and a bond-insurance term (fidelity bond, fidelity",
+    "coverage) that appears in exactly the embezzlement cases this corpus",
+    "collects. Only the qualified names count.",
+    "",
+    "Voya: COURTLISTENER_COMPANY_WATCHLIST defaults to 'Voya, Voya India'",
+    "(shared/settings.py), so Voya-named US filings are collected BY",
+    "CONSTRUCTION. The Voya count is a collection artifact, not a base rate;",
+    "the report carries the caveat in its appendix."
+  ],
+  "rules": [
+    "1. An alias must be specific enough that a match in a court filing",
+    "   almost certainly names the firm. Single common English words are",
+    "   FORBIDDEN as bare aliases: 'Fidelity', 'Principal' ('principal",
+    "   amount', 'principal place of business'), 'Lincoln' (the city, the",
+    "   president, the car), 'Nationwide' (the adverb), 'Equitable' (equitable",
+    "   relief, equitable tolling), 'Empower', 'Vanguard' (the noun). Those",
+    "   firms use compound aliases only ('Fidelity Investments', 'Principal",
+    "   Financial', 'Lincoln Financial', 'Nationwide Mutual', 'Equitable",
+    "   Holdings', 'Empower Retirement', 'Vanguard Group').",
+    "2. Single-token aliases are allowed ONLY from single_token_ok below:",
+    "   coined names with no common-English collision (Voya, TIAA, MetLife,",
+    "   Manulife, Transamerica, Aegon, PGIM). Every other alias must be at",
+    "   least two whitespace-separated tokens.",
+    "3. Word-boundary matching is load-bearing: 'Voyager' must never credit",
+    "   Voya, 'principal amount' must never credit Principal.",
+    "   tests/test_peer_set_profiles.py pins both.",
+    "4. Former names count (ING U.S. -> Voya; Great-West Life -> Empower; AXA",
+    "   Equitable -> Equitable; Teachers Insurance and Annuity -> TIAA) —",
+    "   old court records name firms by the name of their era.",
+    "5. A parent named on its own (Manulife, Aegon) credits the peer firm it",
+    "   owns (John Hancock, Transamerica): the study is about the group."
+  ],
+  "single_token_ok": [
+    "Aegon",
+    "Manulife",
+    "MetLife",
+    "PGIM",
+    "TIAA",
+    "TIAA-CREF",
+    "Transamerica",
+    "Voya"
+  ],
+  "peer_sets": {
+    "retirement-insurance-asset-mgmt": {
+      "label": "Retirement, insurance and asset-management peer set",
+      "firms": {
+        "voya": {
+          "display": "Voya",
+          "aliases": [
+            "Voya",
+            "Voya Financial",
+            "Voya Retirement",
+            "Voya Investment Management",
+            "ING U.S."
+          ]
+        },
+        "fidelity": {
+          "display": "Fidelity",
+          "aliases": [
+            "Fidelity Investments",
+            "Fidelity Brokerage",
+            "Fidelity Management",
+            "FMR LLC"
+          ]
+        },
+        "vanguard": {
+          "display": "Vanguard",
+          "aliases": [
+            "Vanguard Group",
+            "The Vanguard Group",
+            "Vanguard Fiduciary",
+            "Vanguard Marketing"
+          ]
+        },
+        "empower": {
+          "display": "Empower",
+          "aliases": [
+            "Empower Retirement",
+            "Empower Annuity",
+            "Great-West Life"
+          ]
+        },
+        "tiaa": {
+          "display": "TIAA",
+          "aliases": [
+            "TIAA",
+            "TIAA-CREF",
+            "Teachers Insurance and Annuity"
+          ]
+        },
+        "principal": {
+          "display": "Principal",
+          "aliases": [
+            "Principal Financial",
+            "Principal Life",
+            "Principal Global Investors"
+          ]
+        },
+        "prudential": {
+          "display": "Prudential",
+          "aliases": [
+            "Prudential Financial",
+            "Prudential Insurance",
+            "PGIM"
+          ]
+        },
+        "metlife": {
+          "display": "MetLife",
+          "aliases": [
+            "MetLife",
+            "Metropolitan Life"
+          ]
+        },
+        "lincoln": {
+          "display": "Lincoln",
+          "aliases": [
+            "Lincoln Financial",
+            "Lincoln National"
+          ]
+        },
+        "nationwide": {
+          "display": "Nationwide",
+          "aliases": [
+            "Nationwide Mutual",
+            "Nationwide Life",
+            "Nationwide Financial"
+          ]
+        },
+        "john-hancock": {
+          "display": "John Hancock",
+          "aliases": [
+            "John Hancock",
+            "Manulife"
+          ]
+        },
+        "transamerica": {
+          "display": "Transamerica",
+          "aliases": [
+            "Transamerica",
+            "Aegon"
+          ]
+        },
+        "equitable": {
+          "display": "Equitable",
+          "aliases": [
+            "Equitable Financial",
+            "Equitable Holdings",
+            "AXA Equitable"
+          ]
+        }
+      }
+    }
+  }
+}

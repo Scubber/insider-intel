@@ -79,7 +79,8 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
   `corpus-status` (state + env audit), `corpus-count`, `corpus-sample`,
   `corpus-noninsider` (spend-waste audit), `courtlistener-worklist`,
   `evidence-ledger`, `corpus-emailscan`, `corpus-industry` (2026-09-04:
-  per-industry actor profiles + sliced ledger), `export-llm`,
+  per-industry actor profiles + sliced ledger), `corpus-peerset` (2026-09-04:
+  private peer-set study, counts only), `export-llm`,
   `service-logs`, `probe-extract`,
   `traffic-report`, `refresh-corpus`/`watch-refresh`, `reenrich-drain`,
   `corpus-recover`. A dispatch workflow must exist on `main`; it then runs
@@ -594,6 +595,37 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
        them (check `SUMMARIZER_BACKFILL_RESERVE` and the provider).
     6. Restore `SUMMARIZER_REENRICH_MISSED_LIMIT=60` and note the dates
        here (ops changes have no PR — document them anyway).
+17. **Peer-set study lane — PR5 (2026-09-04, unmerged).** `corpus-peerset`
+    (`scripts/peer_set_profiles.py`, stdlib, loads the industry script and
+    through it the evidence core by file spec) profiles the insiders in
+    cases whose stored text NAMES a firm from an authored peer set —
+    `shared/data/peer_sets.json`, `retirement-insurance-asset-mgmt`: the
+    operator's competitive set (Voya, Fidelity, Vanguard, Empower, TIAA,
+    Principal, Prudential, MetLife, Lincoln, Nationwide, John Hancock,
+    Transamerica, Equitable). **Private export only**
+    (`export/peer-set-profiles-<set>.{md,json}`) — it is NEVER a RESEARCH
+    briefing or any public surface; the job log prints counts only. Output:
+    basis funnel + peer-set matched stage, per-firm mention table (cases ·
+    of which victim industry = financial-services · of which proven — a
+    mention is presence in the record, never fault: plaintiff, defendant's
+    ex-employer or bystander all count), the pooled (function × employment
+    state) profile table, motives, postures, and the sliced ledger's
+    techniques / evidence-record classes / channels with every exemplar,
+    example string, hunt seed and quote stripped. Alias safety mirrors
+    `vendor_aliases.json`: word-bounded, case-insensitive, never bare
+    Fidelity / Principal / Lincoln / Nationwide / Equitable / Empower /
+    Vanguard (common English + bond-insurance collisions), single tokens
+    only from `single_token_ok`; matching reads title + clean_text +
+    summary + ai_summary, never `enrichment_history`
+    (`tests/test_peer_set_profiles.py` pins all of it plus the no-PII seed
+    sweep and the auth-block identity with `corpus-industry.yml`). **Voya
+    caveat, printed in the report's appendix:** `COURTLISTENER_COMPANY_WATCHLIST`
+    defaults to `Voya, Voya India`, so Voya-named US filings are collected
+    by construction — its count is a collection artifact and is not
+    comparable with the other firms' lexicon-only counts. Next: dispatch
+    `corpus-peerset` on `main` after merge, read the firm table against the
+    Voya appendix, and decide whether any pooled finding is worth a
+    (frozen, dated) RESEARCH note — counts only, never firm-vs-firm blame.
 
 ---
 
