@@ -32,8 +32,9 @@ The **EVIDENCE page**
 a continuously recomputed forensic aggregation across every method-bearing
 case in the corpus:
 
-- **Who?** Actor profile on two axes — function (executive/officer, manager,
-  technical, sales/finance…) × employment state (current, departing, former) —
+- **Who?** Actor profile on two axes — function (contractor/vendor, temp/intern,
+  executive/officer, manager, technical, front-office/sales,
+  finance/accounting/ops) × employment state (current, departing, former) —
   as **roles, never individuals**.
 - **How?** Technique prevalence by ITM theme, with the artifact families each
   technique leaves behind (device forensics, central audit trails,

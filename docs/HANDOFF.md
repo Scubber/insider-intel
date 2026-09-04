@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-09-02 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-09-04 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -384,6 +384,13 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
    crosswalk (P2), dwell-time from forensics.timeline + static crawlable
    export + OG meta (P3), "departing" employment-state extractor-prompt
    nudge (known under-capture: 7 of 320).
+   **2026-09-04 normalizer repair** — contractor→executive (`cto` substring)
+   and officer-title bugs fixed in `normalize_role` (word-bounded patterns,
+   contractor tested first); `sales/finance` split into front-office/sales +
+   finance/accounting/ops; EVIDENCE role numbers shift at next
+   deploy+refresh (contractor/vendor was 9 vs third-party 46 in the 08-28
+   ledger); briefing #1's frozen executive figures are now knowingly stale
+   by RESEARCH doctrine.
    **OPERATOR FINDINGS SEED (verbatim thesis, captured 2026-07-25):**
    "We analyzed insider threats across many court cases. We found
    executives to be the largest insider threat. So why are we so afraid of
