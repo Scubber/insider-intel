@@ -189,6 +189,7 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
             "#/research/danger-profiles-2026-08",
             "#/research/email-destinations-2026-08",
             "#/research/fs-insider-profiles-2026-09",
+            "#/research/fs-insider-profiles-2026-10",
             "#/",
         ):
             page.evaluate(f"() => {{ location.hash = '{link}'; }}")
@@ -226,6 +227,7 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
             "#/research/danger-profiles-2026-08",
             "#/research/email-destinations-2026-08",
             "#/research/fs-insider-profiles-2026-09",
+            "#/research/fs-insider-profiles-2026-10",
         ):
             page.goto("about:blank")
             page.goto(f"{base_url}/{link}")

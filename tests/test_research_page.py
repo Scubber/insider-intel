@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 SLUGS = (
+    "fs-insider-profiles-2026-10",
     "fs-insider-profiles-2026-09",
     "danger-profiles-2026-08",
     "email-destinations-2026-08",
