@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-09-04 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-09-05 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -64,6 +64,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | #190 | `spark_refresh.sh` wrapper hardening (post-incident: flock, cycle bound, `--build`, reload skip when `SPARK_RELOAD_URL` empty) |
 | #196–#197 | **octoDNS: thederpweb.com zone live on Cloudflare** (zone reconciled; null MX + SPF `-all` + DMARC reject added; `insider-intel.net` apex/www stay Worker-owned behind a `NameRejectlistFilter`) — see thread #13 |
 | #247 | **IndiaCourts lane + jurisdiction plumbing + spend-gate tune** (landed by fast-forward, PR closed-not-merged by GitHub semantics): $0 eCourts lexicon-scan lane (dark), `legal_metadata`/`country` facet, EVIDENCE nation tabs + TACTICS BY REGION, Indian legal postures, export schema v6, `FILINGS_SOURCE_PREFIXES` channel fix, two-part body signal + `STRONG_INSIDER_OFFENSES` ≥3-mention rule — threads #8 and #10 |
+| #293 | **Field-backfill drain tooling**: `SUMMARIZER_BACKFILL_QUEUE_FIRST`, already-filled guard, per-row queue persistence, sparky-ops `set-enrich-knobs`. Drain RUN 2026-09-04/05 — thread #16. |
 
 ---
 
@@ -553,8 +554,8 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     pins byte-equality with `JsonlProcessedStore.load_all`). Next: dispatch
     `corpus-industry` on `main`, read the FS table against the unknown pool,
     then decide whether briefing #3 is warranted.
-16. **`actor_employer_sector` backfill — CODE MERGED 2026-09-04 (PR3),
-    DRAIN TOOLING PR6 2026-09-04, NOT YET RUN.** PR3 of the
+16. **`actor_employer_sector` backfill — DRAINED 2026-09-05 (PR3 field,
+    PR #293 drain tooling, one pass).** PR3 of the
     financial-services actor-profile plan: the insider's own employer's
     sector landed as an ADDITIVE v3 field (no bump — a bump would re-tier
     every filing and churn verdicts for weeks) with the overlay projection
@@ -609,6 +610,50 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
        reenrich_limit=60 queue_first=false confirm=RUN`.
     8. Record the drain dates and the final counts here (ops changes have
        no PR — document them anyway).
+
+    **Drain record (all times UTC, sparky-ops runs 106-114):**
+    - 2026-09-04 21:05 `pull-main`; 21:07 dry-run: **queued 229**
+      (filings 226 / news 3; financial-services 176 / unknown 53),
+      skipped_by_gate 2 — far below the ~860 upper bound because most of
+      the sector's verdict-true rows were re-enriched into v3 after the
+      field shipped. 21:09 `backfill-field` wrote 229 links.
+    - 21:11 `set-enrich-knobs` 350/350/0/queue_first=true (confirmed
+      lines). 21:12 `run-refresh` pass 1: pipeline 21:25 → sweep done
+      03:16, `Field backfill: 229 queued row(s) re-enriched this run, 0
+      still queued` (≈5.9 h, ≈92 s/row wall-clock incl. ingestion). The
+      job then FAILED on the trailing `POST /reload` (curl 503, exit 22)
+      AFTER the bucket push completed — enrichment and state were already
+      in GCS; `probe-extract` at 13:28 showed the API serving the new
+      generations (a fresh instance boots from the bucket). The 08:00Z
+      cron pass ran normally with the drain knobs (queue empty, filled
+      guard, 5 fresh enrichments) and hit the same reload 503 — see the
+      open reload thread below.
+    - 2026-09-05 13:27 dry-run after the drain: **queued 45** (33 unknown
+      / 12 financial-services). These are rows the model was asked and
+      answered "unknown" on (coerced to None), i.e. 184 of 229 filled
+      (80%). The selector had no "already asked" guard, so a re-dispatch
+      would have re-billed them for the same answer — closed by the
+      already-asked guard PR (this branch, after #293): rows with a
+      current-tier generation newer than the field's contract stamp are
+      reported as `already_asked`, never queued, and dropped from the
+      queue file by the sweep. **Do not re-queue the 45; there is nothing
+      left to drain.**
+    - 13:27 `corpus-industry financial-services` (victim-sector lane,
+      175 cases) re-exported; 13:27 `set-enrich-knobs` restored
+      160/60/60/queue_first=false (confirmed lines).
+    - **Open: `POST /reload` returned 503 on both post-drain cycles**
+      (03:30Z and ~08:35Z). Per CLAUDE.md this is the index-swap spike
+      (old + new index resident) on a corpus that just grew 229 richer
+      records; the service recovers because Cloud Run replaces the
+      instance from the bucket, so the site is current, but `/reload` is
+      currently a no-op in the nightly log and `spark_refresh.sh` exits
+      22 every night until it is fixed. Next: `service-logs` right after
+      an 08:00Z cycle (the 2h window misses it from later in the day),
+      then raise `--memory` in `deploy-api.yml` (2Gi → 4Gi) by merge.
+    - Ed.2 of briefing #3 (actor-employer framing, thread #0) is now
+      unblocked on data; `scripts/industry_actor_profiles.py` still slices
+      by victim `industry` only, so the lane needs an
+      `--by actor_employer_sector` mode before ed.2 can be written.
 17. **Peer-set study lane — PR5 (2026-09-04, unmerged).** `corpus-peerset`
     (`scripts/peer_set_profiles.py`, stdlib, loads the industry script and
     through it the evidence core by file spec) profiles the insiders in

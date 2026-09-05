@@ -31,7 +31,7 @@ from typing import NamedTuple
 from apps.aggregator.processed_storage import JsonlProcessedStore
 from shared.schemas import ProcessedArticle
 from shared.schemas.articles import resolve_channel
-from shared.schemas.forensics import ENRICH_SCHEMA_VERSION
+from shared.schemas.forensics import ENRICH_SCHEMA_VERSION, additive_field_asked
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,10 @@ class FieldBackfillSelection(NamedTuple):
 
     queued: list[ProcessedArticle]
     skipped_by_gate: list[ProcessedArticle]
+    # Rows a current-tier generation already ASKED for the field (stamped at
+    # or after ADDITIVE_FIELD_CONTRACT_SINCE) and got "unknown" → None. Never
+    # queued: re-enriching them is the same bill for the same answer.
+    already_asked: list[ProcessedArticle] = []
 
 
 def select_field_backfill_targets(
@@ -253,7 +257,12 @@ def select_field_backfill_targets(
     channel qualifies — unlike :func:`select_missed_filings`. Rows that fail
     ``article_qualifies`` (the spend policy the sweep applies) land in
     ``skipped_by_gate`` instead of being queued — nothing is queued that the
-    sweep would refuse. Newest first; ``limit`` truncates the queued list.
+    sweep would refuse. Rows whose history already carries a generation made
+    under a prompt that asked for the field (:func:`additive_field_asked`)
+    land in ``already_asked`` — the None IS the model's answer, and queuing
+    them again is a spend loop (2026-09-04 drain: 45 of 229 re-billed rows
+    came back "unknown" and were listed again the next morning). Newest
+    first; ``limit`` truncates the queued list.
     """
     from apps.aggregator.process_pipeline import _as_utc
     from shared.agents.summarize import article_qualifies
@@ -262,6 +271,7 @@ def select_field_backfill_targets(
     store = JsonlProcessedStore(processed_path)
     queued: list[ProcessedArticle] = []
     skipped: list[ProcessedArticle] = []
+    asked: list[ProcessedArticle] = []
     for row in store.load_all():
         forensics = getattr(row, "forensics", None)
         if forensics is None:
@@ -274,6 +284,9 @@ def select_field_backfill_targets(
             continue
         if wanted is not None and (getattr(forensics, "industry", None) or "unknown") not in wanted:
             continue
+        if additive_field_asked(list(getattr(row, "enrichment_history", None) or []), field):
+            asked.append(row)
+            continue
         if article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
             queued.append(row)
         else:
@@ -281,9 +294,10 @@ def select_field_backfill_targets(
     order = lambda r: _as_utc(r.published or r.processed_at)  # noqa: E731
     queued.sort(key=order, reverse=True)
     skipped.sort(key=order, reverse=True)
+    asked.sort(key=order, reverse=True)
     if limit is not None and limit >= 0:
         queued = queued[:limit]
-    return FieldBackfillSelection(queued=queued, skipped_by_gate=skipped)
+    return FieldBackfillSelection(queued=queued, skipped_by_gate=skipped, already_asked=asked)
 
 
 def _count_by(rows: list[ProcessedArticle]) -> dict[str, dict[str, int]]:
@@ -303,7 +317,11 @@ def summarize_field_backfill_targets(sel: FieldBackfillSelection) -> dict[str, d
     The dry-run output can land in CI logs (sparky-ops), so it must carry
     nothing that identifies a case.
     """
-    return {"queued": _count_by(sel.queued), "skipped_by_gate": _count_by(sel.skipped_by_gate)}
+    return {
+        "queued": _count_by(sel.queued),
+        "skipped_by_gate": _count_by(sel.skipped_by_gate),
+        "already_asked": _count_by(sel.already_asked),
+    }
 
 
 # --- the queue: data/state/field_backfill_targets.json (settings-resolved) ----
@@ -367,10 +385,12 @@ def queue_field_backfill_targets(
     links = [*carried, *(r.link for r in sel.queued)]
     write_field_backfill_queue(queue_path, field=field, links=links)
     logger.info(
-        "Field backfill: queued %d row(s) lacking forensics.%s (%d carried, %d gate-skipped)",
+        "Field backfill: queued %d row(s) lacking forensics.%s "
+        "(%d carried, %d gate-skipped, %d already asked — not re-billed)",
         len(links),
         field,
         len(carried),
         len(sel.skipped_by_gate),
+        len(sel.already_asked),
     )
     return len(links)

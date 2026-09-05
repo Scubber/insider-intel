@@ -1034,7 +1034,7 @@ def _cmd_backfill_field(args: argparse.Namespace) -> int:
         # Counts only — this output lands in CI logs; no links, no titles.
         summary = summarize_field_backfill_targets(sel)
         print(f"Backfill targets for forensics.{field} ({scope}, limit {limit}):")
-        for bucket in ("queued", "skipped_by_gate"):
+        for bucket in ("queued", "skipped_by_gate", "already_asked"):
             counts = summary[bucket]
             print(f"  {bucket}: {counts['rows']['total']}")
             for label in ("by_channel", "by_industry"):

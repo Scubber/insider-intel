@@ -11,7 +11,7 @@ a malformed LLM reply degrades gracefully rather than sinking an article.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
@@ -361,6 +361,60 @@ def select_best_enrichment(history: list[EnrichmentRecord]) -> EnrichmentRecord 
 # verdict or richness input — select-best is byte-identical with or without
 # the overlay.
 ADDITIVE_FIELDS: tuple[str, ...] = ("actor_employer_sector",)
+
+# When each additive field entered the PROMPT contract (`shared/llm/base.py`),
+# as the UTC merge time of the PR that put it on main — the earliest moment a
+# production generation could have been asked for it. A generation stamped
+# at or after this whose field is None means the model answered "unknown"
+# (coerced to None by :func:`coerce_additive_enum`): asking again is the same
+# bill for the same answer, so the backfill lane treats it as final
+# (:func:`additive_field_asked`). Before the stamp the field simply wasn't in
+# the prompt, and None means "never asked" — a legitimate backfill target.
+ADDITIVE_FIELD_CONTRACT_SINCE: dict[str, str] = {
+    # PR #290 (08f0e5a) merged 2026-09-04T15:33:30-04:00 — the commit that
+    # added the field to the enrichment prompt.
+    "actor_employer_sector": "2026-09-04T19:33:30+00:00",
+}
+
+
+def _as_utc_datetime(value: object) -> datetime | None:
+    """Robust datetime coercion: naive → UTC, ISO strings parsed, junk → None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def additive_field_asked(history: list[EnrichmentRecord], field: str) -> bool:
+    """True when some current-tier generation was produced under a prompt that
+    asked for ``field`` — i.e. its ``extracted_at`` is at or after the field's
+    contract stamp. A None on such a generation is the model's answer
+    ("unknown"), not a gap; re-enriching for it is a spend loop.
+
+    Unknown fields (no stamp) are never "asked". Generations below
+    ``ENRICH_SCHEMA_VERSION`` don't count: the reenrich lane re-tiers those.
+    """
+    since = _as_utc_datetime(ADDITIVE_FIELD_CONTRACT_SINCE.get(field))
+    if since is None:
+        return False
+    for rec in history or []:
+        if rec.schema_version < ENRICH_SCHEMA_VERSION:
+            continue
+        extracted = _as_utc_datetime(rec.forensics.extracted_at)
+        if extracted is not None and extracted >= since:
+            return True
+    return False
 
 
 def _donor_recency_key(indexed: tuple[int, EnrichmentRecord]) -> tuple[float, int]:
