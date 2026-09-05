@@ -6,7 +6,7 @@ manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
 **Last updated:** 2026-09-05 · **Repo:** `Scubber/insider-intel` · **Prod:**
-API on Cloud Run (`insider-intel-api`, 2Gi), UI on GitHub Pages
+API on Cloud Run (`insider-intel-api`, 4Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
 **Rollback checkpoints:** `checkpoint/v1.2-pre-india-2026-08-22` (main as
@@ -30,7 +30,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | **Write/ops auth** | **`ADMIN_API_TOKEN` gate LIVE** on `/reload`, subscription writes, both `ingest_url` endpoints. Secret mapped to service (verify) + job (call); per-secret IAM granted to `api-runtime` and `ingest-job`. UI sends it via Settings → OPERATOR TOKEN (localStorage). Deploy smoke ASSERTS unauthenticated writes 401. |
 | **Cold-start UX** | **Static-first boot** (#240, 2026-08-22): `pages.yml` builds `web/data/` as a **true twin of the boot render** (articles/sources/ledger/meta/tooling.json, never committed) daily at 08:40Z; UI paints instantly under a CACHED badge and silently adopts the live API result when it matches (projection-equivalence test guards drift). deploy-pages poll timeout 20min. |
 | **Job memory** | **4Gi asserted in `deploy-api.yml`** (2026-08-10): the first `force_reprocess` run was OOM-killed (exit 137) mid full-corpus pass — a forced retag holds the whole corpus + graph at once, unlike incremental runs. |
-| **Service memory** | **2Gi asserted in `deploy-api.yml`** after the 2026-07-26 OOM burst-503 outage at legacy 1Gi. Must grow with the corpus. |
+| **Service memory** | **4Gi asserted in `deploy-api.yml`** (2026-09-05, after `/reload` 503'd twice post-drain; 2Gi since the 2026-07-26 OOM burst-503 outage at legacy 1Gi). Must grow with the corpus. |
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
 | **ITM** | **v2.11.0** (562 techniques; picked up with the description-clamp fix, 2026-08-08). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). Technique descriptions now clamp at 900 chars on sentence boundaries (was 320, mid-word). |
 | **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report, written ONLY to the private bucket — `gs://…/export/traffic-{report.md,log.csv}` (read via `gcloud storage cat`, or `gsutil cat` on sparky). Public repo ⇒ no run artifacts and a counts-only job log since 2026-09-02; the 29 GitHub-hosted artifacts migrate to `export/traffic-history/` in the bucket post-freeze, then get deleted from GitHub (thread #16d). ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. |
@@ -641,15 +641,16 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     - 13:27 `corpus-industry financial-services` (victim-sector lane,
       175 cases) re-exported; 13:27 `set-enrich-knobs` restored
       160/60/60/queue_first=false (confirmed lines).
-    - **Open: `POST /reload` returned 503 on both post-drain cycles**
-      (03:30Z and ~08:35Z). Per CLAUDE.md this is the index-swap spike
-      (old + new index resident) on a corpus that just grew 229 richer
-      records; the service recovers because Cloud Run replaces the
-      instance from the bucket, so the site is current, but `/reload` is
-      currently a no-op in the nightly log and `spark_refresh.sh` exits
-      22 every night until it is fixed. Next: `service-logs` right after
-      an 08:00Z cycle (the 2h window misses it from later in the day),
-      then raise `--memory` in `deploy-api.yml` (2Gi → 4Gi) by merge.
+    - **`POST /reload` returned 503 on both post-drain cycles** (03:30Z
+      and ~08:35Z): the index-swap spike (old + new index resident) on a
+      corpus that just grew 229 richer records. The site stayed current
+      (Cloud Run replaced the instance from the bucket) but the wrapper
+      exited 22 nightly. FIXED by the reload-hardening PR (2026-09-05):
+      service `--memory` 2Gi → 4Gi in `deploy-api.yml`, `gc.collect()`
+      between the swap and the vendor warm-scan, and `spark_refresh.sh`
+      now bounds the call (300 s, 2 retries) and logs a `[WARN]` instead
+      of failing a cycle whose push already landed. Confirm on the next
+      `tail-refresh-log`: `spark_refresh: done` must print again.
     - Ed.2 of briefing #3 (actor-employer framing, thread #0) is now
       unblocked on data; `scripts/industry_actor_profiles.py` still slices
       by victim `industry` only, so the lane needs an

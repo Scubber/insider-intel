@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import secrets
 from contextlib import asynccontextmanager
@@ -815,6 +816,9 @@ def reload_index(_auth: None = Depends(_require_admin_token)) -> dict[str, objec
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     response: dict[str, object] = {"status": "reloaded", "indexed_articles": index.size}
+    # The swap held the old and new index at once; hand the old one back
+    # before the vendor scan adds its own peak (the reload OOM is the sum).
+    gc.collect()
     # Eagerly warm the vendor-mention scan for the swapped-in index so the
     # next /tooling answers hot instead of paying the full aliases × corpus
     # scan. Inline by design: the 6h refresh job is the only caller and can
