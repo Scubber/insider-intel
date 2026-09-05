@@ -13,6 +13,7 @@ from apps.aggregator.reenrich import (
     queue_field_backfill_targets,
     select_field_backfill_targets,
     select_missed_filings,
+    summarize_field_backfill_targets,
 )
 from apps.aggregator.storage import JsonlArticleStore
 from shared.schemas import RawArticle
@@ -161,6 +162,11 @@ def test_env_gated_hook_clears_then_reenriches_in_one_run(tmp_path, monkeypatch)
 # --- additive-field backfill lane (docs/schema-freeze-v4.md) ----------------------
 
 
+# Either side of ADDITIVE_FIELD_CONTRACT_SINCE["actor_employer_sector"].
+PRE_STAMP = datetime(2026, 8, 1, tzinfo=UTC)
+POST_STAMP = datetime(2026, 9, 5, tzinfo=UTC)
+
+
 def _rich_reply(**overrides):
     methods = [
         {"action": f"m{i}", "tools": [], "claim_status": "alleged", "evidence_quote": ""}
@@ -173,7 +179,14 @@ def _seed_rows(tmp_path: Path, monkeypatch, rows: list[dict]) -> Path:
     """Seed N enriched rows (verdict-true, v3, 4 methods) then patch each per ``rows``.
 
     Each dict: link, channel, source_id, published, plus optional overrides
-    applied to the stored row (industry, sector, verdict, schema, alignment).
+    applied to the stored row (industry, sector, verdict, schema, alignment,
+    extracted_at).
+
+    ``extracted_at`` defaults to PRE_STAMP: run_processing stamps every
+    generation "now", which is after ADDITIVE_FIELD_CONTRACT_SINCE, so an
+    unpatched seed would count as already-asked and never queue. The
+    fixture models the real backfill target — a row enriched BEFORE the
+    field entered the prompt — unless a spec sets ``extracted_at`` itself.
     """
     raw_path = tmp_path / "raw.jsonl"
     processed_path = tmp_path / "processed.jsonl"
@@ -209,6 +222,11 @@ def _seed_rows(tmp_path: Path, monkeypatch, rows: list[dict]) -> Path:
         row.forensics.actor_employer_sector = spec.get("sector")
         row.forensics.is_insider_case = spec.get("verdict", True)
         row.forensics.schema_version = spec.get("schema", 3)
+        stamp = spec.get("extracted_at", PRE_STAMP)
+        row.forensics.extracted_at = stamp
+        for rec in row.enrichment_history:
+            rec.forensics.extracted_at = stamp
+            rec.forensics.actor_employer_sector = spec.get("sector")
         patched.append(row.model_copy(update={"itm_alignment": spec.get("alignment", "insider")}))
     store.replace_all(patched)
     return processed_path
@@ -539,3 +557,113 @@ def test_queue_file_shrinks_per_landed_row(tmp_path, monkeypatch) -> None:
     rows = {r.link: r for r in JsonlProcessedStore(processed).load_all()}
     assert rows[link1].forensics.actor_employer_sector == "retail"
     assert rows[link2].forensics.actor_employer_sector is None
+
+
+def test_contract_stamp_covers_every_additive_field() -> None:
+    from shared.schemas.forensics import ADDITIVE_FIELD_CONTRACT_SINCE, ADDITIVE_FIELDS
+
+    for field in ADDITIVE_FIELDS:
+        stamp = datetime.fromisoformat(ADDITIVE_FIELD_CONTRACT_SINCE[field])
+        assert stamp.tzinfo is not None
+    assert (
+        PRE_STAMP
+        < datetime.fromisoformat(ADDITIVE_FIELD_CONTRACT_SINCE["actor_employer_sector"])
+        < POST_STAMP
+    )
+
+
+def test_additive_field_asked_parses_naive_and_string_stamps() -> None:
+    from shared.schemas.forensics import EnrichmentRecord, PerCaseForensics, additive_field_asked
+
+    def rec(extracted, schema=3):
+        f = PerCaseForensics(link="https://ex.com/x", title="x", schema_version=schema)
+        f.extracted_at = extracted
+        return EnrichmentRecord(forensics=f)
+
+    field = "actor_employer_sector"
+    assert additive_field_asked([rec(POST_STAMP)], field)
+    assert additive_field_asked([rec(POST_STAMP.replace(tzinfo=None))], field)  # naive → UTC
+    assert not additive_field_asked([rec(PRE_STAMP)], field)
+    assert not additive_field_asked([rec(None)], field)
+    assert not additive_field_asked([rec(POST_STAMP, schema=2)], field)  # stale tier
+    assert not additive_field_asked([], field)
+    assert not additive_field_asked([rec(POST_STAMP)], "no-such-field")
+
+
+def test_already_asked_row_is_reported_not_queued(tmp_path, monkeypatch) -> None:
+    """(a) a post-stamp None is the model's answer; (b) a pre-stamp None is a target."""
+    processed = _seed_rows(
+        tmp_path,
+        monkeypatch,
+        [
+            {"link": "https://ex.com/asked", "extracted_at": POST_STAMP},
+            {"link": "https://ex.com/never-asked", "extracted_at": PRE_STAMP},
+        ],
+    )
+    sel = select_field_backfill_targets(processed, field="actor_employer_sector")
+    assert [r.link for r in sel.queued] == ["https://ex.com/never-asked"]
+    assert [r.link for r in sel.already_asked] == ["https://ex.com/asked"]
+    assert sel.skipped_by_gate == []
+    # (d) the summary carries the bucket with the same breakdown.
+    summary = summarize_field_backfill_targets(sel)
+    assert summary["already_asked"] == {
+        "rows": {"total": 1},
+        "by_channel": {"filings": 1},
+        "by_industry": {"financial-services": 1},
+    }
+    # The mutating run never writes the asked link.
+    queue_field_backfill_targets(processed, field="actor_employer_sector", queue_path=_queue_path())
+    assert json.loads(_queue_path().read_text())["links"] == ["https://ex.com/never-asked"]
+
+
+def test_field_backfill_dry_run_prints_already_asked(tmp_path, monkeypatch, capsys) -> None:
+    from apps.aggregator.__main__ import main
+
+    processed = _seed_rows(
+        tmp_path,
+        monkeypatch,
+        [
+            {"link": "https://ex.com/secret-asked", "extracted_at": POST_STAMP},
+            {"link": "https://ex.com/secret-target"},
+        ],
+    )
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "60")  # --limit defaults to the reserve
+    rc = main(["backfill_field", "--dry-run", "--processed-path", str(processed)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "queued: 1" in out and "already_asked: 1" in out
+    assert "secret-" not in out
+
+
+def test_already_asked_queued_link_is_dropped_without_spend(tmp_path, monkeypatch) -> None:
+    """(c) a hand-queued row the prompt already asked leaves the file with 0 LLM calls."""
+    from apps.aggregator.reenrich import write_field_backfill_queue
+
+    asked, target = "https://ex.com/asked", "https://ex.com/target"
+    processed = _seed_rows(
+        tmp_path, monkeypatch, [{"link": asked, "extracted_at": POST_STAMP}, {"link": target}]
+    )
+    # A stale queue (written before last night's drain answered "unknown").
+    write_field_backfill_queue(_queue_path(), field="actor_employer_sector", links=[asked])
+    before = {r.link: r for r in JsonlProcessedStore(processed).load_all()}
+    fake = FakeEnricher(reply=_reply(actor_employer_sector="retail"))
+    fake.model_name = TARGET
+    _install(monkeypatch, fake)
+    monkeypatch.setenv("SUMMARIZER_BACKFILL_RESERVE", "5")
+    run_processing(raw_path=tmp_path / "raw.jsonl", processed_path=processed)
+    assert fake.calls == 0
+    assert json.loads(_queue_path().read_text())["links"] == []
+    after = {r.link: r for r in JsonlProcessedStore(processed).load_all()}
+    assert after[asked].forensics.model_dump(mode="json") == before[asked].forensics.model_dump(
+        mode="json"
+    )
+    assert len(after[asked].enrichment_history) == len(before[asked].enrichment_history)
+
+    # The same row queued with a never-asked one: only the target is billed.
+    write_field_backfill_queue(_queue_path(), field="actor_employer_sector", links=[asked, target])
+    run_processing(raw_path=tmp_path / "raw.jsonl", processed_path=processed)
+    assert fake.calls == 1
+    assert json.loads(_queue_path().read_text())["links"] == []
+    rows = {r.link: r for r in JsonlProcessedStore(processed).load_all()}
+    assert rows[target].forensics.actor_employer_sector == "retail"
+    assert rows[asked].forensics.actor_employer_sector is None

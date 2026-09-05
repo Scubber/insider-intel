@@ -309,6 +309,7 @@ def _backfill_summaries(
         return 0
 
     from apps.aggregator.reenrich import load_field_backfill_queue, write_field_backfill_queue
+    from shared.schemas.forensics import additive_field_asked
 
     upgrade_legacy = settings.summarizer_upgrade_legacy
     fresh: list[ProcessedArticle] = []
@@ -337,6 +338,7 @@ def _backfill_summaries(
     queued_set = set(queued_links)
     queue_field = queue["field"]
     queue_filled: list[str] = []
+    queue_asked: list[str] = []
     for row in processed_store.load_all():
         if row.link in queued_set and row.link not in exclude_links:
             # Already-filled guard: a row whose projection already carries
@@ -349,6 +351,13 @@ def _backfill_summaries(
                 and getattr(row.forensics, queue_field, None) is not None
             ):
                 queue_filled.append(row.link)
+            elif queue_field and additive_field_asked(
+                list(getattr(row, "enrichment_history", None) or []), queue_field
+            ):
+                # Already-asked guard: a current-tier generation made under a
+                # prompt that asked for the field came back "unknown" (None).
+                # The next answer would be the same one — drop, no spend.
+                queue_asked.append(row.link)
             elif article_qualifies(row, filing_min_chars=filing_min_chars, use_itm_alignment=True):
                 queued_rows.append(row)
             else:
@@ -374,13 +383,20 @@ def _backfill_summaries(
             len(queue_filled),
             queue_field,
         )
+    if queue_asked:
+        logger.info(
+            "Field backfill: dropping %d queued link(s) already asked for %s "
+            "(model answered unknown; no spend)",
+            len(queue_asked),
+            queue_field,
+        )
     if queue_dropped:
         logger.warning(
             "Field backfill: dropping %d queued link(s) that no longer pass the spend gate",
             len(queue_dropped),
         )
-    if queue_filled or queue_dropped:
-        gone = set(queue_dropped) | set(queue_filled)
+    if queue_filled or queue_dropped or queue_asked:
+        gone = set(queue_dropped) | set(queue_filled) | set(queue_asked)
         queued_links = [link for link in queued_links if link not in gone]
         write_field_backfill_queue(queue_path, field=queue_field, links=queued_links)
     if not fresh and not legacy and not queued_rows:

@@ -94,6 +94,21 @@ what lets the overlay fill it from one that did.
   a log line — it keeps its record and is never stranded.
 - The lane's clearing mechanism (`_clear_llm_fields`) is NOT used here; it
   stays as-is for its existing callers (full-text backfill, tier reenrich).
+- **Already-asked guard (2026-09-05).** "Asked" means: some current-tier
+  generation in `enrichment_history` has `extracted_at` at or after the
+  field's contract stamp in `ADDITIVE_FIELD_CONTRACT_SINCE`
+  (`shared/schemas/forensics.py`; for `actor_employer_sector` that is
+  `2026-09-04T19:33:30Z`, the merge of PR #290 — the commit that put the
+  field in the prompt). Such a generation was produced by a prompt that
+  demanded the field, so a None there is the model's answer ("unknown",
+  coerced to None by `coerce_additive_enum`), not a gap — a second ask is
+  the same bill for the same answer (the 2026-09-04 drain re-enriched 229
+  rows; 45 answered unknown and were listed again the next morning).
+  `select_field_backfill_targets` reports them as `already_asked` (dry-run
+  counts by channel/industry, never queued); the sweep drops an
+  already-asked queued link from the file with a log count and no LLM
+  call. The row keeps its projection and history throughout. Only a
+  contract change (a new stamp, or the v4 bump) makes them askable again.
 
 ## Landed additive at v3
 
