@@ -21,6 +21,7 @@ from shared.utils.evidence import (
     collapse_rows_by_link,
     filter_rows_by_industry,
     iter_jsonl_rows,
+    resolve_actor_employer_sector,
     resolve_industry,
 )
 
@@ -84,6 +85,20 @@ def test_collapse_keeps_linkless_rows() -> None:
 def test_industry_labels_mirror_pydantic_enum() -> None:
     """The stdlib core cannot import the schema; this is the drift tripwire."""
     assert set(INDUSTRY_LABELS) == set(INDUSTRIES)
+
+
+def test_resolve_actor_employer_sector_reads_the_additive_field_only() -> None:
+    """The insider's OWN employer's sector; the victim's stays in ``industry``."""
+    assert resolve_actor_employer_sector({"actor_employer_sector": "Healthcare"}) == "healthcare"
+    assert resolve_actor_employer_sector({"actor_employer_sector": None}) == "unknown"
+    assert resolve_actor_employer_sector({"actor_employer_sector": "crypto"}) == "unknown"
+    # Never falls back to the victim's sector.
+    assert resolve_actor_employer_sector({"industry": "healthcare"}) == "unknown"
+    assert resolve_actor_employer_sector({}) == "unknown"
+    assert resolve_actor_employer_sector(None) == "unknown"
+    assert resolve_actor_employer_sector({"actor_employer_sector": ["x"]}) == "unknown"
+    for label in INDUSTRIES:
+        assert resolve_actor_employer_sector({"actor_employer_sector": label}) == label
 
 
 def test_resolve_industry_falls_back_to_unknown() -> None:

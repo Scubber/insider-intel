@@ -1,9 +1,12 @@
 name: corpus-industry
 
 # Read-only research report: download the live corpus and build the actor-
-# profile table for one victim industry (schema v3 forensics.industry) —
-# job function × employment state, case counts only, plus the sliced
-# evidence ledger for the same industry. Roles, never individuals: the
+# profile table for one industry — job function × employment state, case
+# counts only — sliced by the VICTIM's sector (schema v3 forensics.industry,
+# default) or by the INSIDER'S OWN EMPLOYER's sector (`by: employer`, the v3
+# additive field forensics.actor_employer_sector), plus a VICTIM × EMPLOYER
+# cross-tab in both modes and the sliced evidence ledger for the same
+# industry (always victim-based). Roles, never individuals: the
 # report is labels and counts, test-pinned to carry no name, title, link or
 # quote. No mutation, no LLM spend; scripts/industry_actor_profiles.py owns
 # the counting rules and the reading rules it prints.
@@ -11,9 +14,15 @@ on:
   workflow_dispatch:
     inputs:
       industry:
-        description: "Victim sector (INDUSTRY_LABELS in shared/utils/evidence.py)"
+        description: "Sector label (INDUSTRY_LABELS in shared/utils/evidence.py) — the victim's or the insider's employer's, per `by`"
         required: false
         default: "financial-services"
+      by:
+        description: "Slice on the victim's sector or the insider's own employer's sector"
+        required: false
+        type: choice
+        options: [victim, employer]
+        default: victim
       top:
         description: "Rows per table"
         required: false
@@ -43,24 +52,32 @@ jobs:
       - name: Build industry actor profiles and write to export/ prefix
         env:
           INDUSTRY: ${{ inputs.industry }}
+          BY: ${{ inputs.by }}
           TOP: ${{ inputs.top }}
         run: |
           set -euo pipefail
           INDUSTRY="${INDUSTRY:-financial-services}"
+          BY="${BY:-victim}"
           TOP="${TOP:-15}"
+          # Victim mode keeps the historical export names; employer mode
+          # carries the mode so the two never overwrite each other.
+          SUFFIX=""
+          if [ "$BY" = "employer" ]; then SUFFIX="-by-employer"; fi
+          NAME="industry-actor-profiles-$INDUSTRY$SUFFIX"
           gcloud storage cp "${OBJ}" corpus.jsonl
           wc -l corpus.jsonl
           python3 scripts/industry_actor_profiles.py corpus.jsonl \
-            --industry "$INDUSTRY" --top "$TOP" \
-            --json "industry-actor-profiles-$INDUSTRY.json" \
-            | tee "industry-actor-profiles-$INDUSTRY.md"
+            --industry "$INDUSTRY" --by "$BY" --top "$TOP" \
+            --json "$NAME.json" \
+            | tee "$NAME.md"
+          echo "NOTE: evidence-ledger-$INDUSTRY.json is sliced on the VICTIM's sector in both modes (--by=$BY affects only the actor-profile report)."
           python3 scripts/evidence_ledger.py corpus.jsonl \
             --industry "$INDUSTRY" --json "evidence-ledger-$INDUSTRY.json" > /dev/null
-          gcloud storage cp "industry-actor-profiles-$INDUSTRY.md" "${BUCKET}/export/industry-actor-profiles-$INDUSTRY.md"
-          gcloud storage cp "industry-actor-profiles-$INDUSTRY.json" "${BUCKET}/export/industry-actor-profiles-$INDUSTRY.json"
+          gcloud storage cp "$NAME.md" "${BUCKET}/export/$NAME.md"
+          gcloud storage cp "$NAME.json" "${BUCKET}/export/$NAME.json"
           gcloud storage cp "evidence-ledger-$INDUSTRY.json" "${BUCKET}/export/evidence-ledger-$INDUSTRY.json"
           echo
           echo "Pull with:"
-          echo "  gcloud storage cp ${BUCKET}/export/industry-actor-profiles-$INDUSTRY.md ."
-          echo "  gcloud storage cp ${BUCKET}/export/industry-actor-profiles-$INDUSTRY.json ."
+          echo "  gcloud storage cp ${BUCKET}/export/$NAME.md ."
+          echo "  gcloud storage cp ${BUCKET}/export/$NAME.json ."
           echo "  gcloud storage cp ${BUCKET}/export/evidence-ledger-$INDUSTRY.json ."

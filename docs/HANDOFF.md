@@ -651,10 +651,17 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
       now bounds the call (300 s, 2 retries) and logs a `[WARN]` instead
       of failing a cycle whose push already landed. Confirm on the next
       `tail-refresh-log`: `spark_refresh: done` must print again.
-    - Ed.2 of briefing #3 (actor-employer framing, thread #0) is now
-      unblocked on data; `scripts/industry_actor_profiles.py` still slices
-      by victim `industry` only, so the lane needs an
-      `--by actor_employer_sector` mode before ed.2 can be written.
+    - Ed.2 of briefing #3 (actor-employer framing, thread #0) is unblocked:
+      the employer-mode lane PR (2026-09-05) gave
+      `scripts/industry_actor_profiles.py` `--by employer` (slices on the
+      insider's own `actor_employer_sector` via
+      `evidence.py::resolve_actor_employer_sector`), a VICTIM × EMPLOYER
+      cross-tab in both modes, and the `corpus-industry` `by` input
+      (exports `…-by-employer.{md,json}`). Victim-mode markdown is a
+      byte-identical prefix of the old output (golden fixture pinned).
+      Next: dispatch `corpus-industry industry=financial-services
+      by=employer` (+ the victim re-export), then write ed.2 as the new
+      slug `fs-insider-profiles-2026-10`.
 17. **Peer-set study lane — PR5 (2026-09-04, unmerged).** `corpus-peerset`
     (`scripts/peer_set_profiles.py`, stdlib, loads the industry script and
     through it the evidence core by file spec) profiles the insiders in

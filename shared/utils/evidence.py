@@ -166,6 +166,23 @@ def resolve_industry(forensics) -> str:
     return value if value in INDUSTRY_LABELS else "unknown"
 
 
+def resolve_actor_employer_sector(forensics) -> str:
+    """Sector of the insider's OWN employer (schema v3 additive field).
+
+    Reads ``forensics.actor_employer_sector`` — the victim's sector stays in
+    ``industry``. Returns the stored value when it is a known
+    ``INDUSTRY_LABELS`` entry, else "unknown". A None collapses to "unknown"
+    here too: the field is additive and null-preserving (None = never asked
+    OR the model answered unknown), and this stdlib reader cannot tell the
+    two apart — callers that need the distinction check the prompt-contract
+    date in shared/schemas/forensics.py. Never raises.
+    """
+    if not isinstance(forensics, dict):
+        return "unknown"
+    value = str(forensics.get("actor_employer_sector") or "").strip().lower()
+    return value if value in INDUSTRY_LABELS else "unknown"
+
+
 def filter_rows_by_industry(rows, industry: str):
     """Rows whose stored victim-sector matches ``industry`` (case-insensitive).
 
