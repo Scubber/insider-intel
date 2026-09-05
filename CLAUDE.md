@@ -354,10 +354,13 @@ job log carries counts and never IPs, cities, orgs, or UAs, and nothing is
 uploaded as a run artifact — 2026-09-02),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
-`--country` / `--industry` slices), `corpus-industry` (per-victim-industry
-actor-profile table — function × employment state, counts only — plus the
-industry-sliced ledger, to `export/industry-actor-profiles-<industry>.{md,json}`
-and `export/evidence-ledger-<industry>.json`), `corpus-peerset` (**private**
+`--country` / `--industry` slices), `corpus-industry` (per-industry
+actor-profile table — function × employment state, counts only — sliced
+`by=victim` [default, the harmed organisation's `industry`] or
+`by=employer` [the insider's OWN `actor_employer_sector`, 2026-09-05], each
+with a VICTIM × EMPLOYER cross-tab, plus the victim-sliced ledger, to
+`export/industry-actor-profiles-<industry>[-by-employer].{md,json}` and
+`export/evidence-ledger-<industry>.json`), `corpus-peerset` (**private**
 peer-set study lane: cases whose stored text names a firm in an authored
 peer set — `shared/data/peer_sets.json`, the operator's competitive set —
 profiled as counts only: per-firm mentions [presence in the record, never

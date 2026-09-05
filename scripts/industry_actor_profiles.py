@@ -16,11 +16,19 @@ Industry is only counted on the v3 tier: earlier schemas never asked, so a
 pre-v3 verdict-true row is reported as "not asked", NEVER folded into
 "unknown" (which is the v3 enricher's own answer for a silent source).
 
+Two framings (``--by``): ``victim`` (default) slices on the victim
+organization's sector; ``employer`` slices on the insider's OWN employer's
+sector (the additive v3 field ``forensics.actor_employer_sector``), whoever
+the victim was. Both modes end with a VICTIM × EMPLOYER cross-tab: did the
+insider work for the victim, for a firm in another sector, or is that not
+on record. Victim-mode output is byte-identical to the pre-``--by`` report
+up to that trailing section (test-pinned).
+
 Stdlib only — the bare Actions runner has no pydantic. The aggregation core
 (shared/utils/evidence.py) is loaded as a bare file, same as evidence_ledger.py.
 
 Usage: industry_actor_profiles.py CORPUS.jsonl [--industry financial-services]
-       [--json out.json] [--top 15]
+       [--by victim|employer] [--json out.json] [--top 15]
 """
 
 from __future__ import annotations
@@ -72,6 +80,40 @@ READING_RULES = (
     "Case strength is the strongest method claim, capped by the document's legal posture:"
     " a complaint can never mint an adjudicated case.",
 )
+
+# Employer mode swaps the two sector rules and adds the None caveat; every
+# other rule is shared. Victim mode prints READING_RULES unchanged.
+EMPLOYER_READING_RULES = (
+    "INDUSTRY here is the INSIDER'S OWN EMPLOYER'S sector (v3 additive field"
+    " actor_employer_sector), whoever the victim was: a bank employee who hit a hospital"
+    " is a financial-services case in this report. The victim's sector is the VICTIM ×"
+    " EMPLOYER table.",
+    READING_RULES[1],
+    "The UNKNOWN POOL table (employer unknown / not asked at v3) is the contamination"
+    " check: the enricher could not read the insider's employer from the source, or was"
+    " never asked. If its profile mix mirrors the requested sector, the sector table is"
+    " undercounting; if it differs, it is not.",
+    "A None employer sector after the field's prompt-contract date (ADDITIVE_FIELD_"
+    "CONTRACT_SINCE in shared/schemas/forensics.py) means the model answered unknown;"
+    " before it, the question was never asked. This script does not distinguish the two"
+    " (stdlib, no stamp read): both land in the unknown pool.",
+    *READING_RULES[3:],
+)
+
+MODES = ("victim", "employer")
+RELATIONS = ("same", "other", "unknown")
+RELATION_LABELS = {
+    "victim": {
+        "same": "same as victim",
+        "other": "other sector",
+        "unknown": "employer unknown / not asked",
+    },
+    "employer": {
+        "same": "same as employer",
+        "other": "other sector",
+        "unknown": "victim unknown",
+    },
+}
 
 
 def _forensics(row: dict) -> dict:
@@ -141,8 +183,10 @@ def funnel(rows) -> dict:
     method_bearing = [r for r in verdict_true if _methods(_forensics(r))]
     cases = merge_cases(method_bearing)
     industry_counts = {label: 0 for label in INDUSTRY_LABELS}
+    employer_counts = {label: 0 for label in INDUSTRY_LABELS}
     for r in verdict_true:
         industry_counts[_core.resolve_industry(_forensics(r))] += 1
+        employer_counts[_sector(_forensics(r), "employer")] += 1
     not_asked = sum(
         1
         for r in with_forensics
@@ -158,21 +202,75 @@ def funnel(rows) -> dict:
         "method_bearing": len(method_bearing),
         "cases_after_story_merge": len(cases),
         "industry_counts_v3": industry_counts,
+        "employer_counts_v3": employer_counts,
         "not_asked_pre_v3": not_asked,
     }
 
 
-def industry_rows(rows, industry: str) -> list[dict]:
-    """Deduped, v3-tier, verdict-true, method-bearing rows for one industry."""
+def _sector(f: dict, by: str) -> str:
+    """The slicing sector for ``by``: victim's ``industry`` or the insider's employer."""
+    if by == "employer":
+        return _core.resolve_actor_employer_sector(f)
+    return _core.resolve_industry(f)
+
+
+def _other_axis(by: str) -> str:
+    return "employer" if by == "victim" else "victim"
+
+
+def industry_rows(rows, industry: str, *, by: str = "victim") -> list[dict]:
+    """Deduped, v3-tier, verdict-true, method-bearing rows for one sector.
+
+    ``by="victim"`` matches the victim organization's ``industry``;
+    ``by="employer"`` matches the insider's own ``actor_employer_sector``.
+    """
     want = (industry or "").strip().lower()
     out = []
     for r in _core.collapse_rows_by_link(rows):
         f = _forensics(r)
         if not _is_v3_verdict_true(f) or not _methods(f):
             continue
-        if _core.resolve_industry(f) == want:
+        if _sector(f, by) == want:
             out.append(r)
     return out
+
+
+def cross_tab(cases: list[dict], industry: str, *, by: str, floor: int = SMALL_N_FLOOR) -> dict:
+    """VICTIM × EMPLOYER for one slice: did the insider work for the victim?
+
+    Rows are the OTHER axis's sector (employer sector in victim mode, victim
+    industry in employer mode); columns are the relation to the slice
+    sector: same / other / unknown. Counts of cases only; shares suppressed
+    below ``floor``.
+    """
+    want = (industry or "").strip().lower()
+    other = _other_axis(by)
+    rows: dict[str, dict[str, int]] = {}
+    totals = dict.fromkeys(RELATIONS, 0)
+    for case in cases:
+        label = _sector(_forensics(case), other)
+        if label == "unknown":
+            relation = "unknown"
+        elif label == want:
+            relation = "same"
+        else:
+            relation = "other"
+        cell = rows.setdefault(label, dict.fromkeys(RELATIONS, 0))
+        cell[relation] += 1
+        totals[relation] += 1
+    n = len(cases)
+    table = []
+    for label, cell in rows.items():
+        table.append({"sector": label, **cell, "cases": sum(cell.values())})
+    table.sort(key=lambda c: (c["sector"] == "unknown", -c["cases"], c["sector"]))
+    return {
+        "by": by,
+        "row_axis": other,
+        "cases": n,
+        "rows": table,
+        "totals": totals,
+        "shares_pct": {k: (round(100 * v / n) if n >= floor else None) for k, v in totals.items()},
+    }
 
 
 def _profile_key(profile: tuple[str, str]) -> str:
@@ -261,18 +359,25 @@ def _table_bundle(rows: list[dict], floor: int) -> dict:
     }
 
 
-def build_report(rows, *, industry: str, floor: int = SMALL_N_FLOOR, top: int = 15) -> dict:
+def build_report(
+    rows, *, industry: str, by: str = "victim", floor: int = SMALL_N_FLOOR, top: int = 15
+) -> dict:
     """The whole report as a JSON-safe dict of labels and counts only."""
+    if by not in MODES:
+        raise ValueError(f"by must be one of {MODES}, got {by!r}")
     rows = list(rows)
     industry = (industry or "").strip().lower()
+    sliced = industry_rows(rows, industry, by=by)
     report = {
         "industry": industry,
+        "by": by,
         "floor": floor,
         "top": top,
         "funnel": funnel(rows),
-        "industry_table": _table_bundle(industry_rows(rows, industry), floor),
-        "unknown_pool_table": _table_bundle(industry_rows(rows, "unknown"), floor),
-        "reading_rules": list(READING_RULES),
+        "industry_table": _table_bundle(sliced, floor),
+        "unknown_pool_table": _table_bundle(industry_rows(rows, "unknown", by=by), floor),
+        "cross_tab": cross_tab(merge_cases(sliced), industry, by=by, floor=floor),
+        "reading_rules": list(EMPLOYER_READING_RULES if by == "employer" else READING_RULES),
     }
     return report
 
@@ -329,15 +434,72 @@ def _render_counter_block(
     out.append("")
 
 
+def _render_cross_tab(report: dict, out: list[str]) -> None:
+    ct = report["cross_tab"]
+    by = ct["by"]
+    ind = report["industry"]
+    labels = RELATION_LABELS[by]
+    out.append("## Victim × employer")
+    out.append("")
+    if by == "victim":
+        out.append(
+            f"Where the insiders in the **{ind}** victim cases worked. Rows are the insider's"
+            " own employer's sector (v3 additive field actor_employer_sector); columns say"
+            " whether that employer was the victim itself, a firm in another sector, or not"
+            " on record (never asked, or the model answered unknown — this script does not"
+            " tell those apart)."
+        )
+    else:
+        out.append(
+            f"Who the insiders employed in **{ind}** hit. Rows are the victim organization's"
+            " sector; columns say whether the victim was the insider's own employer, a firm"
+            " in another sector, or unknown to the enricher."
+        )
+    out.append("")
+    out.append(f"Cases: **{ct['cases']}** (after story merge).")
+    out.append("")
+    if not ct["rows"]:
+        out.append(
+            "_No cases yet. Rows appear here once the enricher has adjudicated a v3 insider"
+            " case in this slice with at least one extracted method._"
+        )
+        return
+    axis = "Employer sector" if ct["row_axis"] == "employer" else "Victim sector"
+    out.append(f"| {axis} | {labels['same']} | {labels['other']} | {labels['unknown']} | Cases |")
+    out.append("|---|---:|---:|---:|---:|")
+    for cell in ct["rows"]:
+        out.append(
+            f"| {cell['sector']} | {cell['same']} | {cell['other']} | {cell['unknown']} |"
+            f" {cell['cases']} |"
+        )
+    out.append("")
+    parts = []
+    for key in RELATIONS:
+        pct = ct["shares_pct"][key]
+        share = "n/a" if pct is None else f"{pct}%"
+        parts.append(f"{labels[key].upper()} ×{ct['totals'][key]} ({share})")
+    out.append(" · ".join(parts))
+
+
 def render(report: dict) -> str:
     fn = report["funnel"]
     ind = report["industry"]
     top = report["top"]
-    out = [f"# Actor profiles — industry: {ind}", ""]
-    out.append(
-        "Who the insiders were, by job function and employment state, in cases where"
-        f" the victim organization was in **{ind}**. Roles, never individuals."
-    )
+    by = report.get("by", "victim")
+    employer = by == "employer"
+    if employer:
+        out = [f"# Actor profiles — insider's employer: {ind}", ""]
+        out.append(
+            "Who the insiders were, by job function and employment state, in cases where"
+            f" the insider's OWN employer was in **{ind}**, whoever the victim was."
+            " Roles, never individuals."
+        )
+    else:
+        out = [f"# Actor profiles — industry: {ind}", ""]
+        out.append(
+            "Who the insiders were, by job function and employment state, in cases where"
+            f" the victim organization was in **{ind}**. Roles, never individuals."
+        )
     out.append("")
     out.append("## Basis funnel")
     out.append("")
@@ -359,30 +521,42 @@ def render(report: dict) -> str:
         f" industry count): **{fn['not_asked_pre_v3']}**"
     )
     out.append("")
-    out.append(f"Industry of verdict-true v{V3_SCHEMA} rows:")
-    out.append("")
-    out.append("| Industry | Rows |")
-    out.append("|---|---:|")
-    for label, n in sorted(fn["industry_counts_v3"].items(), key=lambda kv: (-kv[1], kv[0])):
+    if employer:
+        out.append(f"Insider's employer sector of verdict-true v{V3_SCHEMA} rows:")
+        out.append("")
+        out.append("| Employer sector | Rows |")
+        out.append("|---|---:|")
+        counts = fn["employer_counts_v3"]
+    else:
+        out.append(f"Industry of verdict-true v{V3_SCHEMA} rows:")
+        out.append("")
+        out.append("| Industry | Rows |")
+        out.append("|---|---:|")
+        counts = fn["industry_counts_v3"]
+    for label, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
         out.append(f"| {label} | {n} |")
     out.append("")
-    out.append(f"## Profiles — {ind}")
+    slice_label = f"insider's employer: {ind}" if employer else ind
+    out.append(f"## Profiles — {slice_label}")
     out.append("")
     _render_table(report["industry_table"], top, out)
     out.append("")
-    out.append("## Unknown pool — industry: unknown (v3 contamination check)")
+    if employer:
+        out.append("## Unknown pool — employer unknown / not asked (v3) (contamination check)")
+    else:
+        out.append("## Unknown pool — industry: unknown (v3 contamination check)")
     out.append("")
     _render_table(report["unknown_pool_table"], top, out)
     out.append("")
     _render_counter_block(
-        f"Motives by profile — {ind}",
+        f"Motives by profile — {slice_label}",
         report["industry_table"]["motives"],
         top,
         out,
         "No motive (MT-*) technique on any case yet.",
     )
     _render_counter_block(
-        f"Legal posture by profile — {ind}",
+        f"Legal posture by profile — {slice_label}",
         report["industry_table"]["postures"],
         top,
         out,
@@ -392,6 +566,10 @@ def render(report: dict) -> str:
     out.append("")
     for rule in report["reading_rules"]:
         out.append(f"- {rule}")
+    # Appended AFTER the reading rules on purpose: victim-mode output stays a
+    # byte-identical prefix of the pre-cross-tab report (test-pinned).
+    out.append("")
+    _render_cross_tab(report, out)
     return "\n".join(out)
 
 
@@ -400,6 +578,12 @@ def main(argv=None) -> int:
     ap.add_argument("corpus", help="path to processed articles.jsonl")
     ap.add_argument(
         "--industry", default="financial-services", help="victim sector (INDUSTRY_LABELS)"
+    )
+    ap.add_argument(
+        "--by",
+        choices=MODES,
+        default="victim",
+        help="slice on the victim's sector (default) or the insider's own employer's sector",
     )
     ap.add_argument("--top", type=int, default=15, help="rows per table")
     ap.add_argument("--json", dest="json_out", default=None, help="also write the report as JSON")
@@ -410,7 +594,9 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
         return 2
-    report = build_report(_core.iter_jsonl_rows(args.corpus), industry=args.industry, top=args.top)
+    report = build_report(
+        _core.iter_jsonl_rows(args.corpus), industry=args.industry, by=args.by, top=args.top
+    )
     print(render(report))
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as fh:
