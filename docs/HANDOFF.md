@@ -156,9 +156,14 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
    `scripts/ui_smoke_ci.py`.
    **Briefing #3 ed.1 shipped 2026-09-04** (`fs-insider-profiles-2026-09`,
    who the insiders are in financial-services cases — victim-sector framing,
-   177 FS cases / 11 proven, 19 of 28 claims survived refutation). Ed.2
-   (actor-employer framing) is PENDING the `actor_employer_sector` backfill
-   (thread #16) and ships as a NEW dated briefing, never an in-place rewrite.
+   177 FS cases / 11 proven, 19 of 28 claims survived refutation).
+   **Ed.2 shipped 2026-09-05** (`fs-insider-profiles-2026-10`, actor-employer
+   framing off the drained `actor_employer_sector` field: 155 cases with a
+   financial-services employer / 13 proven; 153 rows shared with the victim
+   slice, so the ranking barely moves; 8 outsiders hit FS victims; two
+   independent refuters, amended sentences only). Ed.1 untouched. Ed.3
+   (corpus-wide comparator) needs a full-corpus employer drain (~892 unasked
+   verdict-true rows, ~15 h of Nemotron, $0) — operator decision, thread #16.
 1. **In-repo settings + lexicon config** — decided direction unchanged
    (checked-in `config/app_config.json`, fallback to defaults, secrets stay
    in Secret Manager). Not built.
@@ -659,9 +664,18 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
       cross-tab in both modes, and the `corpus-industry` `by` input
       (exports `…-by-employer.{md,json}`). Victim-mode markdown is a
       byte-identical prefix of the old output (golden fixture pinned).
-      Next: dispatch `corpus-industry industry=financial-services
-      by=employer` (+ the victim re-export), then write ed.2 as the new
-      slug `fs-insider-profiles-2026-10`.
+      Dispatched 2026-09-05 16:07Z (FS by employer, FS by victim, tech by
+      employer — runs 33976855522 / 33976857011 / 33976858334): employer
+      coverage of verdict-true v3 rows is 155 FS / 17 prof-services / ≤3
+      each elsewhere / 937 unknown-or-not-asked (only the 229-row FS+unknown
+      drain ever asked it). Ed.2 published off those exports (thread #0).
+      **Open decision:** drain the remaining ~892 unasked rows corpus-wide
+      (the CLI already takes `--industry any`; sparky-ops `backfill-field`
+      has no industry input yet, so add a `field_industry` input that
+      threads `--industry` before dispatching; then the same drain runbook
+      above with `field_limit=5000`, 350/350/0/queue_first=true, ~3 passes
+      of ~5.9 h, $0) so the TOOLING / EVIDENCE surfaces and ed.3 can
+      compare sectors on the employer axis.
 17. **Peer-set study lane — PR5 (2026-09-04, unmerged).** `corpus-peerset`
     (`scripts/peer_set_profiles.py`, stdlib, loads the industry script and
     through it the evidence core by file spec) profiles the insiders in
