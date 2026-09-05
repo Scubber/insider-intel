@@ -560,8 +560,11 @@ legacy fallback.
   OOM-kill, not an app bug** ("connection to the instance had an error" in
   Cloud Run logs; `/health` keeps working because it's tiny). `/reload` is
   the fatal spike — it holds old + new index simultaneously. Memory is
-  asserted in `deploy-api.yml` (2Gi as of 2026-07); it must grow with the
-  corpus. Diagnose with the `service-logs` dispatch workflow.
+  asserted in `deploy-api.yml` (2Gi 2026-07 → 4Gi 2026-09-05, after the
+  field-backfill drain made `/reload` 503 twice); it must grow with the
+  corpus. `spark_refresh.sh` treats a reload failure as a WARN, never a
+  failed cycle — the bucket push before it is the deliverable. Diagnose
+  with the `service-logs` dispatch workflow.
 - **Never run manual `--set-secrets` on the job** — it REPLACES the whole
   mapping set and silently dropped the ANTHROPIC/OPENAI/COURTLISTENER keys
   once, killing enrichment for two days (the provider chain skips keyless

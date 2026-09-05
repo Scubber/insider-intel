@@ -53,7 +53,8 @@ jobs:
           # 2026-07-26) once the corpus reached ~6.6k enriched rows — /reload
           # holds the old and new index simultaneously, which is the spike
           # that kills it. Scale-to-zero means the bump costs only while
-          # serving.
+          # serving. 2Gi → 4Gi on 2026-09-05: /reload 503'd on two cycles
+          # after the field-backfill drain grew the record set.
           # ADMIN_API_TOKEN gates the write/ops endpoints (/reload,
           # subscription writes, ingest_url) — create the secret BEFORE this
           # mapping first deploys:
@@ -62,7 +63,7 @@ jobs:
             --image "${IMAGE}:${GITHUB_SHA::7}" \
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
-            --memory=2Gi \
+            --memory=4Gi \
             --update-env-vars '^##^CORS_ORIGINS=https://intel.thederpweb.com,https://insider-intel.net,https://www.insider-intel.net,https://td3.dev,https://scubber.github.io' \
             --update-secrets 'ADMIN_API_TOKEN=ADMIN_API_TOKEN:latest'
       - name: Roll refresh job to same image

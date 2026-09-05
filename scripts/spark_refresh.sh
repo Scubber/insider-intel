@@ -163,8 +163,18 @@ fi
 
 if [ -n "${SPARK_RELOAD_URL:-}" ]; then
   echo "spark_refresh: reload"
-  curl -fsS -X POST -H "Authorization: Bearer ${ADMIN_API_TOKEN}" "${SPARK_RELOAD_URL}"
-  echo ""
+  # The bucket push above is the deliverable; /reload only shortens the wait
+  # until a running instance serves it (a replaced instance boots from the
+  # bucket anyway). So: bounded, retried, and NEVER fatal — a 503 here (the
+  # index-swap memory spike, CLAUDE.md gotchas) must not fail a cycle whose
+  # enrichment already landed (2026-09-05: two false-red cycles after the
+  # field-backfill drain).
+  if curl -fsS --max-time 300 --retry 2 --retry-delay 45 --retry-all-errors \
+      -X POST -H "Authorization: Bearer ${ADMIN_API_TOKEN}" "${SPARK_RELOAD_URL}"; then
+    echo ""
+  else
+    echo "[WARN] spark_refresh: reload returned non-2xx (curl exit $?) — bucket push already complete; the service serves it from its next instance start"
+  fi
 else
   echo "spark_refresh: reload skipped (SPARK_RELOAD_URL empty)"
 fi
