@@ -9,14 +9,15 @@ live API and (unless the checkout carries web/data/) no boot snapshot:
   beyond the expected-offline allowlist (failed fetches to the absent live
   API and the absent web/data/ snapshot),
 - every masthead tab renders its pane without throwing
-  (STREAM / MATRIX / EVIDENCE / TOOLING / RESEARCH / WORKBENCH / SETTINGS),
+  (STREAM / MATRIX / EVIDENCE / TOOLING / WORKBENCH / SETTINGS),
 - the GUIDE opens and dismisses — via the masthead button on desktop and the
   mobile tab row's GUIDE button on phone widths (the footer reopener is gone),
 - TOOLING renders its table — snapshot rows when web/data/tooling.json is
   present, else the honest "payload unreachable" teaching note,
-- hash deep links (#/tooling, #/technique/IF002, #/tools, #/about, #/research
-  and #/research/<slug>) don't crash, legacy #/tools re-navigates to
-  #/tooling, and #/about renders the ABOUT pane with its byline,
+- hash deep links (#/tooling, #/technique/IF002, #/tools, #/about) don't
+  crash, legacy #/tools re-navigates to #/tooling, a legacy
+  #/research/<slug> link (RESEARCH parked 2026-09-05) lands on the stream at
+  #/, and #/about renders the ABOUT pane with its byline,
 - all of it at two viewports: 1280 desktop and 390 mobile.
 
 On failure each viewport screenshots into ui-smoke-artifacts/ for the CI
@@ -80,7 +81,6 @@ ALLOWED_CONSOLE = (
 PANE_PROOF_COMMON = {
     "evidence": ".pane-evidence-page",
     "tooling": "#tlt-table tr",
-    "research": ".pane-research-page",
     "workbench": ".pane-workbench",
     "settings": ".pane-settings",
     "articles": "#article-panel:not([hidden])",
@@ -89,7 +89,11 @@ PANE_PROOF_MATRIX = {
     "desktop": "#matrix-panel:not([hidden])",
     "mobile": "#matrix-panel",
 }
-PANE_ORDER = ("matrix", "evidence", "tooling", "research", "workbench", "settings", "articles")
+# RESEARCH parked 2026-09-05 (drafts in docs/research/drafts/): one legacy
+# briefing link stays in the deep-link sets to prove old links land on the
+# stream at #/ without errors.
+LEGACY_RESEARCH_LINK = "#/research/fs-insider-profiles-2026-09"
+PANE_ORDER = ("matrix", "evidence", "tooling", "workbench", "settings", "articles")
 
 
 def _wire_error_capture(page, console_bad: list[str], page_errors: list[str]) -> None:
@@ -185,11 +189,7 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
             "#/technique/IF002",
             "#/tools",
             "#/about",
-            "#/research",
-            "#/research/danger-profiles-2026-08",
-            "#/research/email-destinations-2026-08",
-            "#/research/fs-insider-profiles-2026-09",
-            "#/research/fs-insider-profiles-2026-10",
+            LEGACY_RESEARCH_LINK,
             "#/",
         ):
             page.evaluate(f"() => {{ location.hash = '{link}'; }}")
@@ -203,6 +203,16 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
                 checks.check(
                     f"{tag}: legacy #/tools lands on #/tooling",
                     page.evaluate("() => location.hash") == "#/tooling",
+                )
+            if link == LEGACY_RESEARCH_LINK:
+                # RESEARCH parked 2026-09-05: an old briefing link must land
+                # on the stream route with the hash rewritten to the root
+                # (hash-only, like the #/tools check — a same-document hop
+                # from #/about leaves that takeover open, HANDOFF #16a).
+                checks.check(
+                    f"{tag}: legacy {link} lands on the stream at #/",
+                    page.evaluate("() => location.hash") == "#/",
+                    f"hash={page.evaluate('() => location.hash')!r}",
                 )
             if link == "#/about":
                 # ABOUT is static prose: the pane must render offline with the
@@ -223,11 +233,7 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
             "#/tooling",
             "#/technique/IF002",
             "#/about",
-            "#/research",
-            "#/research/danger-profiles-2026-08",
-            "#/research/email-destinations-2026-08",
-            "#/research/fs-insider-profiles-2026-09",
-            "#/research/fs-insider-profiles-2026-10",
+            LEGACY_RESEARCH_LINK,
         ):
             page.goto("about:blank")
             page.goto(f"{base_url}/{link}")
@@ -238,6 +244,12 @@ def _drive_viewport(browser, base_url: str, checks: Checks, width: int, height: 
                 not page_errors,
                 "; ".join(page_errors[:2]),
             )
+            if link == LEGACY_RESEARCH_LINK:
+                checks.check(
+                    f"{tag}: cold boot on legacy {link} lands at #/",
+                    page.evaluate("() => location.hash") == "#/",
+                    f"hash={page.evaluate('() => location.hash')!r}",
+                )
 
         checks.check(
             f"{tag}: no uncaught page errors",

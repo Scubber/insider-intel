@@ -1,0 +1,78 @@
+<!--
+  slug: email-destinations-2026-08
+  dateline: PUBLISHED 2026-08-29 · AS OF 2026-08-28 CORPUS SNAPSHOT (8,939 DOCUMENTS)
+  index card dateline: PUBLISHED 2026-08-29 · AS OF 2026-08-28 CORPUS
+  PARKED 2026-09-05 — operator: rewrite before republishing
+  index card title: Where insider email actually goes
+  index card summary: A hand-reviewed scan of every email address quoted in the corpus: true exfil destinations are personal in character, the robotic inboxes are never the employee, and personal webmail is more often the office of the scheme than the warehouse.
+-->
+<article class="research-briefing" data-briefing="email-destinations-2026-08">
+              <p class="research-back"><a href="#/research">← ALL BRIEFINGS</a></p>
+              <h3>Where insider email actually goes</h3>
+              <p class="research-meta">PUBLISHED 2026-08-29 · AS OF 2026-08-28 CORPUS SNAPSHOT (8,939 DOCUMENTS)</p>
+              <p class="research-note">Numbers below are frozen at publication. The live, recomputed
+              figures are on <a href="#/evidence">EVIDENCE</a>.</p>
+
+              <p class="research-bottomline"><strong>The email addresses insiders send company data
+              to are personal, not professional.</strong> Of the 44 true exfil destinations found
+              in the whole corpus, half are ordinary name-like webmail accounts, the machine-named
+              inboxes are never the employee, and the "corporate" destinations are the insider's
+              own side venture — not the new employer. The biggest pattern is not a destination at
+              all: personal webmail as the office the scheme runs from.</p>
+
+              <h4>Findings</h4>
+              <ol class="research-findings">
+                <li><strong>F1 — The funnel: 8,939 documents narrow to 44 true destinations.</strong>
+                828 cases quote at least one email address, yielding 2,969 case-address pairs. 68%
+                of those are counsel and e-filing plumbing (ECF — the courts' electronic service
+                lists). 428 pairs matched exfil keywords; every one was hand-reviewed; 44 are real
+                destinations for company data. Consequence: raw address counts in filings measure
+                the litigation process, not the crime.</li>
+                <li><strong>F2 — Personal webmail exfil is personal in character (22 of 44).</strong>
+                Name-like account names, one-off self-forwards in the pre-resignation window — and
+                zero auto-forward rules among employee cases. Consequence: the detection target is
+                a manual forward to a name-like webmail address during the notice period, not a
+                mailbox rule.</li>
+                <li><strong>F3 — Robotic destinations are never the employee (4 of 44).</strong>
+                One is a nation-state exfil account; the other three belong to one gift-card fraud
+                ring bulk-routing to disposable yopmail inboxes. Consequence: a machine-named
+                inbox in your mail logs points at external crime, not a departing employee.</li>
+                <li><strong>F4 — Corporate destinations are the insider's own side venture
+                (18 of 44).</strong> Dominated by the insider's own company domain — including
+                lookalike and typosquat domains of the employer — not the new employer's domain.
+                Consequence: watch for lookalikes of your own domain in outbound mail; the new
+                employer's mail server is the wrong place to look.</li>
+                <li><strong>F5 — Encrypted mail shows zero employee exfil.</strong> All five
+                proton-domain pairs in the corpus are attacker ransom contacts, an account
+                takeover, an anonymous board complaint, and a pro se litigant. Consequence: do not
+                build the insider program around the encrypted-mail scare — this corpus records no
+                employee ever using it to move company data.</li>
+                <li><strong>F6 — Personal webmail is the office of the scheme more often than the
+                warehouse.</strong> 65 pairs show personal webmail as the communications channel
+                the scheme runs on — running a competitor from a personal account for months,
+                invoicing from a lookalike domain — outnumbering true exfil destinations about
+                1.5 to 1. Consequence: monitor the channel, not just attachments leaving; the
+                fraud's paper trail is in the mail body.</li>
+              </ol>
+
+              <h4>How this was built</h4>
+              <p>A read-only, redacted scan of the stored corpus: domains only, local parts never
+              printed — the site's roles-never-individuals rule applies to the analysis pipeline
+              too. A context classifier separated counsel-service plumbing from mentions and
+              keyword-exfil candidates; four reviewers then hand-read all 428 keyword-exfil pairs.
+              Two independent redaction audits found zero unredacted addresses in report content.</p>
+
+              <h4>Limits</h4>
+              <ul class="research-limits">
+                <li>Keyword classification leaked counsel-service traffic into the exfil bucket at
+                a measured 38% before the 2026-08-29 precision fixes; the hand review corrected
+                for it, but the automated counts alone are not trustworthy.</li>
+                <li>The corpus is collection-shaped: only litigated cases whose filings quote
+                addresses appear, so absence of a pattern here is weak evidence of absence in the
+                world.</li>
+                <li>Review worked from snippets of public filings, not full mailbox evidence — a
+                destination's character is read from how the filing describes it.</li>
+              </ul>
+              <p class="research-foot">DERIVED FROM THE INSIDER-INTEL CORPUS · ROLES, NEVER
+              INDIVIDUALS · LIVE NUMBERS: <a href="#/evidence">EVIDENCE</a></p>
+            </article>
