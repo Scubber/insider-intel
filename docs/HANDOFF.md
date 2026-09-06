@@ -108,7 +108,7 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
 16. **Deferred fixes — post-freeze queue (found 2026-09-02, all confirmed
     live; none urgent, none touched):**
     - (a) **Back button leaves takeovers open.** From EVIDENCE / TOOLING /
-      RESEARCH / ABOUT, browser Back sets the hash to `#/` but the pane
+      ABOUT (RESEARCH, since parked), browser Back sets the hash to `#/` but the pane
       stays; the STREAM tab likewise leaves the hash on `#/evidence`.
       `web/app.js::applyRoute` only resets for `state.view === "dossier"`
       — the stream branch must also park a hash-routed takeover on
@@ -144,7 +144,20 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
       pull-main`, `VLLM_API_KEY` rotation; `sparky-ops chat-default` with
       overlay `model-enrich.yml` so the daily hand-back is a no-op.
 
-0. **RESEARCH section — SHIPPED (2026-08-29, unmerged branch
+0. **RESEARCH section — PARKED 2026-09-05 (operator decision: "keep the
+   research pages but not make them public — they need to be rewritten").**
+   The repo is public, so "not public" means not served: the masthead tab,
+   mobile tab, GUIDE line, `pane-research-page`, `openResearchView`, the
+   `/research` routes, and the `.research-*` styles are removed from `web/`.
+   Old `#/research…` links map to the stream and the hash rewrites to `#/`
+   (smoke-pinned). The four briefings live verbatim as drafts in
+   `docs/research/drafts/<slug>.html` (PARKED header + original dateline +
+   index-card copy) with `docs/research/README.md` as the republish
+   runbook; `tests/test_research_page.py` is now the parking contract.
+   What republishes one: a rewrite that passes the voice bar, then restore
+   the pane per the README (article + index card into `index.html`, slug
+   into `SLUGS` and both smoke deep-link lists). Shipped history follows.
+   **RESEARCH section — SHIPPED (2026-08-29, unmerged branch
    `claude/evidence-page-redesign-awjijy`).** New masthead tab at
    `#/research` with per-briefing routes `#/research/<slug>`; two briefings
    ship: `danger-profiles-2026-08` (who the most dangerous insiders are) and

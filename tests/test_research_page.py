@@ -1,16 +1,19 @@
-"""RESEARCH page (#/research) contracts.
+"""RESEARCH briefings are PARKED (operator decision 2026-09-05).
 
-RESEARCH is the one sanctioned home for frozen, corpus-derived numbers on the
-site: authored, dated briefings published by merge, each stamped with an
-AS OF corpus dateline and pointing at EVIDENCE for the live figures. Static
-prose in the ABOUT-pane style — app.js only routes and shows/hides, no
-network. These are static-file regex checks in the test_about_page style.
+The site has no RESEARCH tab, pane, or route. The four briefings live as
+drafts in docs/research/drafts/ — still the single sanctioned home for
+frozen numbers, each with an AS OF dateline — until they are rewritten and
+republished per docs/research/README.md. This file pins the parking:
+nothing in web/ renders a briefing, old #/research links stay harmless,
+and every draft keeps its dateline + Limits contract while it waits.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+
+DRAFTS = Path("docs/research/drafts")
 
 SLUGS = (
     "fs-insider-profiles-2026-10",
@@ -28,126 +31,77 @@ def _app() -> str:
     return Path("web/app.js").read_text(encoding="utf-8")
 
 
-def _fn_body(source: str, name: str) -> str:
-    match = re.search(
-        rf"\n  (?:async )?function {re.escape(name)}\(.*?\n  \}}",
-        source,
-        re.DOTALL,
-    )
-    assert match, f"{name}() not found in web/app.js — update this contract test"
-    return match.group(0)
+# ── Nothing ships in web/ ───────────────────────────────────────────────────
 
 
-def _research_pane() -> str:
-    match = re.search(
-        r'<section class="pane pane-research-page".*?</section>', _index(), re.DOTALL
-    )
-    assert match, "RESEARCH pane markup not found in web/index.html"
-    return match.group(0)
+def test_index_has_no_research_surface() -> None:
+    html = _index()
+    for needle in ('data-pane="research"', "pane-research-page", "research-briefing", "#/research"):
+        assert needle not in html, f"web/index.html still carries {needle!r} — RESEARCH is parked"
+    cheat = re.search(r'id="guide-cheat".*?</dl>', html, re.DOTALL)
+    assert cheat and "<dt>RESEARCH</dt>" not in cheat.group(0), "GUIDE still teaches a parked tab"
 
 
-def _briefing(slug: str) -> str:
-    match = re.search(
-        rf'<article class="research-briefing" data-briefing="{slug}".*?</article>',
-        _index(),
-        re.DOTALL,
-    )
-    assert match, f"briefing article {slug!r} not found in web/index.html"
-    return match.group(0)
-
-
-# ── Route wiring ────────────────────────────────────────────────────────────
-
-
-def test_research_route_wiring() -> None:
+def test_app_has_no_research_opener_or_pane() -> None:
     app = _app()
-    parse = _fn_body(app, "parseRoute")
-    assert '"/research"' in parse and '{ view: "research" }' in parse
-    assert '"/research/"' in parse
-    assert '"research-briefing"' in parse
-    apply_ = _fn_body(app, "applyRoute")
-    assert re.search(r'route\.view === "research"[\s\S]{0,80}openResearchView\(\)', apply_)
-    assert re.search(
-        r'route\.view === "research-briefing"[\s\S]{0,120}openResearchView\(route\.id\)', apply_
-    )
-    # Boot dispatch: the early (pre-probe) pass AND the post-probe pass — a
-    # static-prose pane must never wait out the API probe (the EVIDENCE lesson).
-    boot = _fn_body(app, "boot")
-    assert boot.count("openResearchView(") >= 2, (
-        "boot() must dispatch #/research in the early (pre-probe) and post-probe passes"
-    )
-
-
-def test_research_opener_is_static() -> None:
-    opener = _fn_body(_app(), "openResearchView")
-    assert 'setActivePane("research")' in opener
-    assert "navigate(" in opener and "/research" in opener
-    assert "fetch(" not in opener, "RESEARCH is static prose — no network in the opener"
-
-
-def test_research_is_a_registered_takeover_pane() -> None:
-    app = _app()
+    assert "openResearchView" not in app
     panes = re.search(r"const PANES = new Set\(\[(.*?)\]\)", app)
     takeover = re.search(r"const TAKEOVER_PANES = new Set\(\[(.*?)\]\)", app)
-    assert panes and '"research"' in panes.group(1)
-    assert takeover and '"research"' in takeover.group(1)
+    assert panes and '"research"' not in panes.group(1)
+    assert takeover and '"research"' not in takeover.group(1)
+    for css in ("web/styles.css", "web/themes.css"):
+        text = Path(css).read_text(encoding="utf-8")
+        assert ".research-" not in text and 'data-pane="research"' not in text, css
 
 
-# ── Markup ──────────────────────────────────────────────────────────────────
-
-
-def test_research_entry_points() -> None:
-    html = _index()
-    nav = re.search(r'<nav class="masthead-nav".*?</nav>', html, re.DOTALL)
-    assert nav and 'data-pane="research"' in nav.group(0), "masthead RESEARCH tab missing"
-    mobile = re.search(r'<nav class="mobile-tabs".*?</nav>', html, re.DOTALL)
-    assert mobile and 'data-pane="research"' in mobile.group(0), "mobile RESEARCH tab missing"
-    cheat = re.search(r'id="guide-cheat".*?</dl>', html, re.DOTALL)
-    assert cheat and "<dt>RESEARCH</dt>" in cheat.group(0), "guide cheat-sheet line missing"
-
-
-def test_research_pane_structure() -> None:
-    pane = _research_pane()
-    assert 'data-pane-panel="research"' in pane
-    assert "<h2>RESEARCH</h2>" in pane
-    assert 'class="research-index"' in pane
-    for slug in SLUGS:
-        assert f'href="#/research/{slug}"' in pane, f"index card link for {slug} missing"
-        _briefing(slug)
-
-
-def test_briefings_carry_the_frozen_snapshot_contract() -> None:
-    """Every briefing states its AS OF corpus dateline, admits its limits, and
-    links to EVIDENCE for the live numbers — frozen-snapshot honesty."""
-    for slug in SLUGS:
-        art = _briefing(slug)
-        meta = re.search(r'<p class="research-meta">(.*?)</p>', art, re.DOTALL)
-        assert meta, f"{slug}: mono dateline missing"
-        dateline = " ".join(meta.group(1).split())
-        assert "AS OF" in dateline, f"{slug}: dateline lacks AS OF"
-        assert "corpus" in dateline.lower(), f"{slug}: dateline lacks the corpus basis"
-        assert "PUBLISHED" in dateline, f"{slug}: dateline lacks PUBLISHED"
-        assert re.search(r"(?i)<h4>\s*limits\s*</h4>", art), f"{slug}: LIMITS section missing"
-        assert '#/evidence' in art, f"{slug}: no link to the live EVIDENCE page"
-
-
-def test_briefing_slugs_are_smoke_deep_links() -> None:
-    smoke = Path("scripts/ui_smoke_ci.py").read_text(encoding="utf-8")
-    assert "#/research" in smoke
-    for slug in SLUGS:
-        assert f"#/research/{slug}" in smoke, f"{slug}: not a smoke deep link"
-    assert '"research": ".pane-research-page"' in smoke
-    order = re.search(r"PANE_ORDER = \((.*?)\)", smoke, re.DOTALL)
-    assert order and '"research"' in order.group(1)
-
-
-# ── Styles ──────────────────────────────────────────────────────────────────
-
-
-def test_research_pane_visibility_css() -> None:
-    css = Path("web/styles.css").read_text(encoding="utf-8")
-    assert '.app-shell[data-pane="research"] .pane-research-page' in css
-    assert '.app-shell[data-pane="research"] .pane-grid' in css
-    assert re.search(r"\.pane-research-page \{\s*display: none;", css), (
-        "RESEARCH pane must be hidden outside its own pane state"
+def test_legacy_research_links_land_on_the_stream() -> None:
+    """Old #/research and #/research/<slug> links must never crash: the
+    router maps them to the stream and rewrites the hash to the root."""
+    app = _app()
+    parse = re.search(r"\n  function parseRoute\(.*?\n  \}", app, re.DOTALL)
+    assert parse, "parseRoute() not found — update this contract test"
+    body = parse.group(0)
+    assert re.search(
+        r'path === "/research" \|\| path\.startsWith\("/research/"\)[\s\S]{0,300}'
+        r'return \{ view: "stream", legacy: "/" \}',
+        body,
     )
+    assert "research-briefing" not in body
+    assert "if (route.legacy) navigate(route.legacy);" in app
+    assert "if (early.legacy) navigate(early.legacy);" in app
+
+
+def test_smoke_keeps_one_legacy_research_link() -> None:
+    smoke = Path("scripts/ui_smoke_ci.py").read_text(encoding="utf-8")
+    assert 'LEGACY_RESEARCH_LINK = "#/research/fs-insider-profiles-2026-09"' in smoke
+    assert smoke.count("LEGACY_RESEARCH_LINK,") == 2, "both deep-link lists carry the legacy link"
+    assert '"research"' not in smoke
+    assert "pane-research-page" not in smoke
+
+
+# ── Drafts keep their contract while parked ────────────────────────────────
+
+
+def test_expected_drafts_exist() -> None:
+    found = sorted(p.stem for p in DRAFTS.glob("*.html"))
+    assert found == sorted(SLUGS), f"drafts on disk {found} != expected {sorted(SLUGS)}"
+    assert (DRAFTS.parent / "README.md").exists()
+
+
+def test_drafts_carry_parked_header_and_frozen_snapshot_contract() -> None:
+    for slug in SLUGS:
+        text = (DRAFTS / f"{slug}.html").read_text(encoding="utf-8")
+        header = re.match(r"<!--(.*?)-->", text, re.DOTALL)
+        assert header, f"{slug}: PARKED header comment missing"
+        head = header.group(1)
+        assert f"slug: {slug}" in head
+        assert "PARKED 2026-09-05" in head and "rewrite before republishing" in head
+        assert "PUBLISHED" in head and "AS OF" in head, f"{slug}: header dateline incomplete"
+        assert "index card title:" in head and "index card summary:" in head
+        assert f'<article class="research-briefing" data-briefing="{slug}">' in text
+        meta = re.search(r'<p class="research-meta">(.*?)</p>', text, re.DOTALL)
+        assert meta, f"{slug}: dateline missing"
+        dateline = " ".join(meta.group(1).split())
+        assert "PUBLISHED" in dateline and "AS OF" in dateline and "corpus" in dateline.lower()
+        assert re.search(r"(?i)<h4>\s*limits\s*</h4>", text), f"{slug}: Limits section missing"
+        assert text.rstrip().endswith("</article>")

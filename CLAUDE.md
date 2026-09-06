@@ -367,7 +367,7 @@ profiled as counts only: per-firm mentions [presence in the record, never
 fault], pooled function × employment state, motives, postures, sliced-ledger
 techniques + evidence classes, a Voya appendix carrying the
 `COURTLISTENER_COMPANY_WATCHLIST` collection caveat; to
-`export/peer-set-profiles-<set>.{md,json}`, never the RESEARCH tab), `probe-extract` (live API
+`export/peer-set-profiles-<set>.{md,json}`, never a public page), `probe-extract` (live API
 round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
 Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
 (`evidence.py::collapse_rows_by_link`, the store's own `load_all` rule —
@@ -406,10 +406,12 @@ legacy fallback.
   vendor aliases); a checked-in file holding corpus-derived numbers is a
   bug. Pin each new surface with contract tests in the style of
   `tests/test_matrix_data_sources.py`.
-- **RESEARCH briefings (`#/research`) are the one exception by design**:
-  AUTHORED, dated publications in `web/index.html` — the single sanctioned
-  home for frozen numbers, always carrying an AS OF corpus dateline and a
-  link to EVIDENCE for the live figures. Frozen there is honesty, not drift.
+- **RESEARCH briefings are PARKED (operator decision 2026-09-05)**: the
+  site has no RESEARCH tab or route (old `#/research…` links land on the
+  stream); the drafts live in `docs/research/drafts/` and remain the
+  single sanctioned home for frozen numbers, each with an AS OF corpus
+  dateline and a link to EVIDENCE for the live figures. Frozen there is
+  honesty, not drift. Republishing follows docs/research/README.md.
 - **Every page teaches itself** (operator directive 2026-08-17). A
   user-facing surface ships WITH its explanation, in the same PR: a GUIDE
   cheat-sheet line (contract-enforced — `tests/test_site_guide.py` fails a
