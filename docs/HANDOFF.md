@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-09-05 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-09-07 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 4Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -518,6 +518,32 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     mapping, wait out cert propagation (see gotchas — verify with repeated
     curls), update `web/config.js` + API `CORS_ORIGINS`, keep the old
     hostname serving as an alias until cutover confidence.
+    **Status 2026-09-07 — the domain-age filters bit, on the operator's own
+    NextDNS.** With NextDNS "Block Newly Registered Domains" on, Chrome
+    fails `https://insider-intel.net` with `NET::ERR_CERT_AUTHORITY_INVALID`.
+    That is NextDNS, not the site: a blocked query is answered with the
+    NextDNS block-page host, whose certificate chains to the NextDNS root
+    CA, so a browser without that CA shows a certificate error instead of
+    a block page (Block Page on; off would give a connection-refused style
+    error). The site is healthy — `intel.thederpweb.com` served the boot
+    snapshot at 14:27Z today (pages run #186) and the .net edge certificate
+    validated cleanly from a GitHub runner (dns-redirect run #12,
+    08-12). Registered 2026-08-11 → NextDNS's 30-day window lapses about
+    **2026-09-10**. The audience's corporate filters use the same or longer
+    windows (Zscaler "Newly Registered and Observed" 30d, Palo Alto
+    `newly-registered-domain` 32d, Cloudflare Gateway "New Domains" ~30d,
+    Microsoft Defender web content filtering has a "Newly Registered
+    Domains" category with no published window; Cisco Umbrella "Newly Seen"
+    is ~24h then reputation-driven), and "newly observed / uncategorized"
+    can outlast "newly registered". What to do: (1) per device, allowlist
+    `insider-intel.net` in NextDNS (Allowlist tab) or wait for 09-10; the
+    Logs tab names the blocking reason. (2) Launch comms keep
+    `intel.thederpweb.com` (a subdomain of an aged zone) as the fallback
+    link until the .net is ~90 days old — dns/README.md's 3–6-month note
+    stands. (3) Submit categorization requests to the vendors the audience
+    runs (Palo Alto, Zscaler, Cisco Talos, Fortinet, Symantec/Broadcom,
+    Forcepoint, Microsoft) so the domain lands in a real category. No repo
+    change fixes this; noted per the launch-week rule.
 14. **Corpus projection-gutting incident — RESOLVED 2026-08-23 (found by
     the 09:30Z bug-test, restored 11:52Z).** What it first looked like: a
     stale overwrite at 00:04:05Z (123.4MB) replacing the post-sweep
