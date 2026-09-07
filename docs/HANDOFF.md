@@ -521,29 +521,52 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     **Status 2026-09-07 — the domain-age filters bit, on the operator's own
     NextDNS.** With NextDNS "Block Newly Registered Domains" on, Chrome
     fails `https://insider-intel.net` with `NET::ERR_CERT_AUTHORITY_INVALID`.
-    That is NextDNS, not the site: a blocked query is answered with the
-    NextDNS block-page host, whose certificate chains to the NextDNS root
-    CA, so a browser without that CA shows a certificate error instead of
-    a block page (Block Page on; off would give a connection-refused style
-    error). The site is healthy — `intel.thederpweb.com` served the boot
-    snapshot at 14:27Z today (pages run #186) and the .net edge certificate
-    validated cleanly from a GitHub runner (dns-redirect run #12,
-    08-12). Registered 2026-08-11 → NextDNS's 30-day window lapses about
-    **2026-09-10**. The audience's corporate filters use the same or longer
-    windows (Zscaler "Newly Registered and Observed" 30d, Palo Alto
-    `newly-registered-domain` 32d, Cloudflare Gateway "New Domains" ~30d,
-    Microsoft Defender web content filtering has a "Newly Registered
-    Domains" category with no published window; Cisco Umbrella "Newly Seen"
-    is ~24h then reputation-driven), and "newly observed / uncategorized"
-    can outlast "newly registered". What to do: (1) per device, allowlist
-    `insider-intel.net` in NextDNS (Allowlist tab) or wait for 09-10; the
-    Logs tab names the blocking reason. (2) Launch comms keep
-    `intel.thederpweb.com` (a subdomain of an aged zone) as the fallback
-    link until the .net is ~90 days old — dns/README.md's 3–6-month note
-    stands. (3) Submit categorization requests to the vendors the audience
-    runs (Palo Alto, Zscaler, Cisco Talos, Fortinet, Symantec/Broadcom,
-    Forcepoint, Microsoft) so the domain lands in a real category. No repo
-    change fixes this; noted per the launch-week rule.
+    That is the resolver, not the site: NextDNS answers a blocked name with
+    its block-page host, whose certificate chains to the NextDNS root CA,
+    so a browser that does not trust that CA shows a certificate error
+    instead of a block notice. The error code implies the profile's Block
+    Page is ON and the CA is untrusted (Block Page OFF answers 0.0.0.0 and
+    gives a connection-refused style error) — inferred, not observed; the
+    NextDNS Logs tab names the filter that fired. Installing the NextDNS
+    root CA is NOT a remedy (it only makes the block page readable);
+    turning Block Page off is the safer equivalent. The site is healthy:
+    the .net certificate validated in headless Chromium on 09-02 (smoke
+    57/57 above; `ui_smoke.py` does not ignore HTTPS errors) and from a
+    GitHub runner on 08-12 (dns-redirect run #12), and the origin served
+    the boot snapshot at 14:27Z today (pages run #186); no sandbox could
+    reach the domain directly today. Registered 2026-08-11, so the 30-day
+    registration-age cohort — NextDNS, Zscaler "Newly Registered",
+    Cloudflare Gateway "New Domains", Microsoft Defender "Newly registered
+    domains", Netskope — lapses about **2026-09-10**, Palo Alto
+    `newly-registered-domain` (32d) about **09-12**. That is the floor, not
+    the all-clear: first-seen categories (Cloudflare Gateway "Newly Seen
+    Domains", Zscaler "Newly Observed") start their 30 days when that
+    vendor first saw a lookup — launch week or later — and reputation
+    engines (Symantec, Talos, Forcepoint, Skyhigh) clear on categorization,
+    not age. Email gateways' handling of links to a sub-30-day domain was
+    not researched. What to do: (1) per device, allowlist
+    `insider-intel.net` in NextDNS (the apex entry covers www; the
+    Allowlist does not override a TLD block, so confirm `.net` is not in
+    Block TLDs) or wait for 09-10; a block that persists past 09-12 is a
+    different filter — read the Logs reason. Local Playwright runs from a
+    NextDNS-filtered machine fail on the .net until it is allowlisted;
+    GitHub runners are unaffected. (2) Launch comms keep
+    `intel.thederpweb.com` (a subdomain of an aged zone) as the linked
+    host and the .net as the alias, with a one-line "if your filter blocks
+    the new domain, use …" footer — judgment call: through 09-12 and the
+    first re-check, aiming for ~90 days of domain age. (3) Hygiene BEFORE
+    categorization requests, because crawlers rate what they can read:
+    16(b) HTTPS redirect + HSTS, 16(c) canonical, plus a meta description,
+    `robots.txt` and `sitemap.xml` (all absent today; the GUIDE lede is
+    already static copy). (4) Then submit categorization requests where
+    public forms exist (Cloudflare Radar, FortiGuard, Symantec, Forcepoint,
+    Trellix/Skyhigh, Talos, Check Point, Netskope, Sophos); Palo Alto
+    refuses changes while a URL is newly-registered / insufficient-content,
+    so submit on or after 09-12. (5) Re-check 09-10/11 on one device
+    without the allowlist entry, 09-12 for the Palo Alto lookup, ~09-30 for
+    the first-seen categories. No repo change fixes the block itself; noted
+    per the launch-week rule. The `http://` block-page and Advanced →
+    Proceed diagnostics stop working once HSTS ships.
 14. **Corpus projection-gutting incident — RESOLVED 2026-08-23 (found by
     the 09:30Z bug-test, restored 11:52Z).** What it first looked like: a
     stale overwrite at 00:04:05Z (123.4MB) replacing the post-sweep
