@@ -1,7 +1,7 @@
 {
-  "itm_version": "2.12.0",
+  "itm_version": "2.13.0",
   "mitre_version": "19.2",
-  "refreshed_at": "2026-08-10T14:56:31.380473+00:00",
+  "refreshed_at": "2026-09-21T15:55:16.703643+00:00",
   "source_url": "https://raw.githubusercontent.com/forscie/insider-threat-matrix/main/insider-threat-matrix.json",
   "articles": [
     {
@@ -820,6 +820,32 @@
         {
           "id": "PV050",
           "title": "Social Media Screening"
+        }
+      ]
+    },
+    {
+      "id": "MT025",
+      "title": "Entitlement",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": null,
+      "description_text": "A subject believes they have a personal right to organizational information, intellectual property, systems, resources, access, or work product that exceeds the rights granted to them by the organization. The belief may arise because the subject created, developed, maintained, managed, discovered, or materially contributed to the asset, or because prolonged access has caused the subject to regard it as personally theirs to retain or use. Entitlement may cause a subject to disregard ownership, confidentiality, access, or retention requirements because they do not perceive their actions as taking something to which they have no legitimate claim.",
+      "aliases": [
+        "entitlement"
+      ],
+      "detections": [],
+      "preventions": [
+        {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
+          "id": "PV082",
+          "title": "Intellectual Property Agreement"
+        },
+        {
+          "id": "PV097",
+          "title": "Intellectual Property Ownership Clause"
         }
       ]
     },
@@ -1820,6 +1846,37 @@
       ]
     },
     {
+      "id": "MT005.006",
+      "title": "Career or Business Advantage",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": "MT005",
+      "description_text": "A subject seeks to use organizational information, intellectual property, relationships, access, or other resources to improve their professional or commercial position. This may include obtaining employment, increasing their perceived value to a prospective or new employer, accelerating performance in a new role, establishing a competing business, or providing an advantage to a business the subject intends to join or create. The anticipated benefit does not need to involve an immediate payment or direct financial transaction. The subject's primary objective is the professional or commercial advantage obtained from the infringement.",
+      "aliases": [
+        "career or business advantage"
+      ],
+      "detections": [
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV096",
+          "title": "Conflict of Interest Disclosure Policy"
+        },
+        {
+          "id": "PV082",
+          "title": "Intellectual Property Agreement"
+        },
+        {
+          "id": "PV097",
+          "title": "Intellectual Property Ownership Clause"
+        }
+      ]
+    },
+    {
       "id": "MT005.002",
       "title": "Corporate Espionage",
       "article_id": "AR1",
@@ -2207,6 +2264,19 @@
           "title": "Social Media Screening"
         }
       ]
+    },
+    {
+      "id": "MT015.002",
+      "title": "Conformity",
+      "article_id": "AR1",
+      "theme": "motive",
+      "parent_id": "MT015",
+      "description_text": "A subject knowingly engages in behavior that contravenes organizational policy, security requirements, or expected practice because the behavior is routinely performed, accepted, encouraged, or left unchallenged within their immediate working environment. The subject does not necessarily intend to harm the organization and may understand that the behavior is formally prohibited. However, repeated observation of peers, managers, or other members of the population engaging in the same behavior without correction causes the local norm to take precedence over the formal organizational standard. The subject may therefore regard the infringement as normal, harmless, necessary, or informally permitted. Conformity may be indicative of wider Behavioral Drift where repeated Deviation has progressed into Normalization across a team or population.",
+      "aliases": [
+        "conformity"
+      ],
+      "detections": [],
+      "preventions": []
     },
     {
       "id": "MT015.001",
@@ -23275,6 +23345,373 @@
       "preventions": []
     },
     {
+      "id": "IF045",
+      "title": "Unauthorized Data Access",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": null,
+      "description_text": "A subject accesses, views, searches, queries, retrieves, or otherwise examines organizational data without a legitimate business purpose or authorization to do so. The subject may use their own valid account and may possess the technical permissions required to access the data; however, the access falls outside their approved role, assigned duties, operational need, or other authorized purpose. Unauthorized Data Access may involve customer records, employee information, commercially sensitive material, security information, investigative records, financial data, intellectual property, or other restricted organizational information.",
+      "aliases": [
+        "unauthorized data access"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT037",
+          "title": "auditd File Access"
+        },
+        {
+          "id": "DT009",
+          "title": "Cyber Deception, File Canary"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT110",
+          "title": "MIP Label Activity Monitoring"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        },
+        {
+          "id": "PV048",
+          "title": "Privileged Access Management (PAM)"
+        },
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        }
+      ]
+    },
+    {
+      "id": "IF045.001",
+      "title": "Unauthorized Access to Customer Data",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF045",
+      "description_text": "A subject accesses, views, searches, queries, or retrieves customer data without a legitimate business purpose or authorization to do so. The subject may possess valid technical access to the relevant system or dataset but uses that access outside the requirements of their role, assigned duties, customer relationships, cases, transactions, or other approved activity. Customer data may include personally identifiable information, account details, transactional records, financial information, support interactions, communications, location information, or other information relating to customers, clients, patients, subscribers, or account holders. The infringement occurs through the unauthorized access itself and does not require the information to be subsequently disclosed, modified, copied, or exfiltrated.",
+      "aliases": [
+        "unauthorized access to customer data"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT009",
+          "title": "Cyber Deception, File Canary"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT110",
+          "title": "MIP Label Activity Monitoring"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        }
+      ]
+    },
+    {
+      "id": "IF045.003",
+      "title": "Unauthorized Access to Sensitive Organizational Data",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF045",
+      "description_text": "A subject accesses, views, searches, queries, or retrieves sensitive organizational data without a legitimate business purpose or authorization to do so. The subject may possess valid technical access to the relevant system, repository, or dataset but uses that access outside the requirements of their role, assigned responsibilities, project involvement, or other approved activity. Sensitive organizational data may include intellectual property, financial information, strategic plans, merger and acquisition material, legal information, internal investigations, security documentation, detection logic, source code, research data, executive communications, or other information whose confidentiality is important to the organization.",
+      "aliases": [
+        "unauthorized access to sensitive organizational data"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT009",
+          "title": "Cyber Deception, File Canary"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT110",
+          "title": "MIP Label Activity Monitoring"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        }
+      ]
+    },
+    {
+      "id": "IF045.004",
+      "title": "Unauthorized Access to Third-Party Data",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF045",
+      "description_text": "A subject accesses, views, searches, queries, or retrieves data belonging to, supplied by, or maintained on behalf of a third party without a legitimate business purpose or authorization to do so. The subject may possess valid technical access to the relevant system or dataset but uses that access outside the requirements of their role, assigned duties, contractual responsibilities, or other approved activity. Third-party data may include information relating to suppliers, vendors, business partners, applicants, professional advisers, counterparties, acquisition targets, or other external parties. The infringement occurs through the unauthorized access itself, regardless of whether the information is subsequently disclosed, altered, copied, or exfiltrated.",
+      "aliases": [
+        "unauthorized access to third-party data"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT009",
+          "title": "Cyber Deception, File Canary"
+        },
+        {
+          "id": "DT110",
+          "title": "MIP Label Activity Monitoring"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        }
+      ]
+    },
+    {
+      "id": "IF045.002",
+      "title": "Unauthorized Access to Workforce Data",
+      "article_id": "AR4",
+      "theme": "infringement",
+      "parent_id": "IF045",
+      "description_text": "A subject accesses, views, searches, queries, or retrieves information relating to members of the organization’s workforce without a legitimate business purpose or authorization to do so. The subject may possess valid technical access to the relevant system or dataset but uses that access outside the requirements of their role, assigned duties, casework, management responsibilities, or other approved activity. Workforce data may relate to employees, contractors, consultants, temporary workers, secondees, or other individuals working for or on behalf of the organization. This may include personnel records, payroll and compensation data, performance or disciplinary records, absence or medical information, internal communications, security records, investigation material, or other information relating to an identifiable member of the workforce.",
+      "aliases": [
+        "unauthorized access to workforce data"
+      ],
+      "detections": [
+        {
+          "id": "DT046",
+          "title": "Agent Capable of Endpoint Detection and Response"
+        },
+        {
+          "id": "DT045",
+          "title": "Agent Capable of User Activity Monitoring"
+        },
+        {
+          "id": "DT047",
+          "title": "Agent Capable of User Behaviour Analytics"
+        },
+        {
+          "id": "DT052",
+          "title": "Audit Logging"
+        },
+        {
+          "id": "DT009",
+          "title": "Cyber Deception, File Canary"
+        },
+        {
+          "id": "DT151",
+          "title": "Internal Whistleblowing"
+        },
+        {
+          "id": "DT094",
+          "title": "Microsoft Unified Audit Log"
+        },
+        {
+          "id": "DT102",
+          "title": "User and Entity Behavior Analytics (UEBA)"
+        },
+        {
+          "id": "DT101",
+          "title": "User Behavior Analytics (UBA)"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV023",
+          "title": "Access Reviews"
+        },
+        {
+          "id": "PV079",
+          "title": "Data Inventory"
+        },
+        {
+          "id": "PV016",
+          "title": "Enforce a Data Classification Policy"
+        },
+        {
+          "id": "PV003",
+          "title": "Enforce an Acceptable Use Policy"
+        },
+        {
+          "id": "PV008",
+          "title": "Enforce File Permissions"
+        }
+      ]
+    },
+    {
       "id": "IF041",
       "title": "Unauthorized Organizational Representation",
       "article_id": "AR4",
@@ -26866,8 +27303,22 @@
         "registry edit",
         "regedit"
       ],
-      "detections": [],
-      "preventions": []
+      "detections": [
+        {
+          "id": "DT164",
+          "title": "Deleted Windows Registry Record Recovery"
+        }
+      ],
+      "preventions": [
+        {
+          "id": "PV002",
+          "title": "Restrict Access to Administrative Privileges"
+        },
+        {
+          "id": "PV007",
+          "title": "Restrict Access to Registry Editor"
+        }
+      ]
     },
     {
       "id": "AF007.001",
@@ -26879,7 +27330,12 @@
       "aliases": [
         "delete or modify registry key"
       ],
-      "detections": [],
+      "detections": [
+        {
+          "id": "DT164",
+          "title": "Deleted Windows Registry Record Recovery"
+        }
+      ],
       "preventions": [
         {
           "id": "PV002",
@@ -26897,7 +27353,12 @@
       "aliases": [
         "delete or modify registry key value"
       ],
-      "detections": [],
+      "detections": [
+        {
+          "id": "DT164",
+          "title": "Deleted Windows Registry Record Recovery"
+        }
+      ],
       "preventions": [
         {
           "id": "PV002",
