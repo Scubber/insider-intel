@@ -13,6 +13,14 @@ on:
         description: "Rows per ranking table"
         required: false
         default: "25"
+      country:
+        description: "Jurisdiction slice passed to --country (US, IN, ...; all = global)"
+        required: false
+        default: "all"
+      industry:
+        description: "Victim-sector slice passed to --industry (financial-services, ...; all = global)"
+        required: false
+        default: "all"
 
 permissions:
   contents: read
@@ -38,11 +46,14 @@ jobs:
       - name: Build ledger and write to export/ prefix
         env:
           TOP: ${{ github.event.inputs.top }}
+          COUNTRY: ${{ github.event.inputs.country }}
+          INDUSTRY: ${{ github.event.inputs.industry }}
         run: |
           set -euo pipefail
           gcloud storage cp "${OBJ}" corpus.jsonl
           python3 scripts/evidence_ledger.py corpus.jsonl \
-            --top "${TOP:-25}" --json evidence-ledger.json \
+            --top "${TOP:-25}" --country "${COUNTRY:-all}" --industry "${INDUSTRY:-all}" \
+            --json evidence-ledger.json \
             | tee evidence-ledger.md
           gcloud storage cp evidence-ledger.md "${BUCKET}/export/evidence-ledger.md"
           gcloud storage cp evidence-ledger.json "${BUCKET}/export/evidence-ledger.json"
