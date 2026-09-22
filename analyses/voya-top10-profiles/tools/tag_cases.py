@@ -142,16 +142,14 @@ ATTACK_HINTS: list[tuple[str, str]] = [
     ),
 ]
 DETECTED_BY_HINTS: list[tuple[str, str]] = [
+    # A named agency is the most specific signal, so it is checked first;
+    # "surveillance" alone would otherwise read SEC trade surveillance as internal.
     (
-        r"\b(dlp|data loss prevention|siem|alert\w*|monitoring (tool|system)|surveillance"
-        r"|flagged by)",
-        "internal-alert",
+        r"\b(sec|finra|fbi|law enforcement|regulator|department of justice|doj|subpoena"
+        r"|grand jury)\b",
+        "external-regulator/law-enforcement",
     ),
-    (
-        r"\b(audit\w*|reconcil\w*|forensic (review|examination|analysis)"
-        r"|internal (review|investigation))",
-        "internal-audit/review",
-    ),
+    (r"\b(self[- ]report|confess|turned (him|her|them)self)", "self-disclosure"),
     (
         r"\b(co-?worker|colleague|manager (noticed|reported)|supervisor"
         r"|employee (reported|noticed)|whistleblow)",
@@ -167,11 +165,15 @@ DETECTED_BY_HINTS: list[tuple[str, str]] = [
         "competitor/new-employer",
     ),
     (
-        r"\b(sec|finra|fbi|law enforcement|regulator|department of justice|doj|subpoena"
-        r"|grand jury)\b",
-        "external-regulator/law-enforcement",
+        r"\b(audit\w*|reconcil\w*|forensic (review|examination|analysis)"
+        r"|internal (review|investigation))",
+        "internal-audit/review",
     ),
-    (r"\b(self[- ]report|confess|turned (him|her|them)self)", "self-disclosure"),
+    (
+        r"\b(dlp|data loss prevention|siem|alert\w*|monitoring (tool|system)|surveillance"
+        r"|flagged by)",
+        "internal-alert",
+    ),
     (r"\b(discovery|deposition|litigation revealed)", "litigation-discovery"),
 ]
 MONEY_RX = re.compile(
