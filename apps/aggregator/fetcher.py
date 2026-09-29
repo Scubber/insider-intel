@@ -10,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_USER_AGENT = "insider-intel/0.1 (+https://thederpweb.com; RSS aggregator)"
+# WAF fallback: some feed hosts (Security Boulevard's 403 streak, 2026-09) reject
+# any non-browser User-Agent outright. The polite bot UA stays the first attempt
+# so hosts that log or rate-limit by agent see who we are; a 403 earns exactly one
+# retry with a browser-style UA before the lane reports the failure.
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
 
 
 class FeedFetchError(Exception):
@@ -42,17 +50,19 @@ def fetch_feed(
     Raises:
         FeedFetchError: On network, HTTP, or empty-body failures.
     """
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
-    }
+    accept = "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
 
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout, follow_redirects=True)
 
     try:
         logger.debug("Fetching feed: %s", url)
+        headers = {"User-Agent": user_agent, "Accept": accept}
         response = http_client.get(url, headers=headers)
+        if response.status_code == 403 and user_agent != BROWSER_USER_AGENT:
+            logger.info("Feed %s returned 403 to %r; retrying with browser UA", url, user_agent)
+            headers["User-Agent"] = BROWSER_USER_AGENT
+            response = http_client.get(url, headers=headers)
         response.raise_for_status()
         body = response.text
         if not body or not body.strip():
