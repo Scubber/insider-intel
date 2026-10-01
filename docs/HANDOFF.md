@@ -342,6 +342,33 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
    tool-enabled probe that must return HTTP 200.
    Ops: `chat-status` / `chat-swap` (live swap, flock-guarded) /
    `chat-huihui` / `chat-default`.
+   **Tool calling on the base chat model (2026-10-01, ops change, no
+   code path).** A second user (Sam) hit vLLM's 400 `"auto" tool choice
+   requires --enable-auto-tool-choice and --tool-call-parser` in Open
+   WebUI: the 08-24 fix only touched the Huihui overlay, never the base
+   `compose.yml` Nemotron command that every nightly hand-back restores.
+   New sparky-ops `chat-tools-enable` (confirm=RUN) patches `compose.yml`
+   in place (timestamped `compose.yml.bak-*` kept), recreates vllm only,
+   and fails unless a `tool_choice=auto` probe returns 200. **First run
+   21:07Z took chat DOWN for ~70 min**: `--served-model-name` on the box
+   carries an alias list (`default nemo nemotron`) and the op inserted the
+   flags after the first alias → vLLM exit 2 "unrecognized arguments". Fixed
+   op inserts the block immediately BEFORE `--served-model-name`, asserts
+   placement, prints the final command, and self-restores the backup if
+   vllm exits during startup; run 22:06Z → serving 22:18Z, probe HTTP 200.
+   Live vllm command now: `--enable-auto-tool-choice --tool-call-parser
+   qwen3_coder` (Nemotron 3 **Super** recipe; `nano_v3` is the Nano
+   recipe). The enrich overlay replaces `command:` wholesale, so nightly
+   enrichment is unaffected. NOT yet applied: the `super_v3` reasoning
+   parser (`--reasoning-parser-plugin` + plugin file from the model's HF
+   repo) that would stop a raw `</think>` leaking into chat replies —
+   needs the plugin file placed on the box by the operator (sandbox policy
+   blocks an agent op that downloads code onto the box). New read-only
+   ops: `cycle-timeline` (per-cycle borrow windows: cycles hold the box
+   102–135 min from 08:00Z; chat back by ~10:30Z), `chat-logs` (vllm
+   state + redacted log tail); `chat-restore` is the rollback button.
+   `Scubber/sparky` `compose.yml`/README/AGENTS were stale (still said
+   Huihui); sync PR opened the same day.
    **Sweep NETWORK-BOUND — prefetch fix (2026-08-24 ~12:30Z).** OCR-off
    relaunch still ran at a flat ~20k pdfs/h (~38-day projection). New
    read-only `gcp-sweep-perf` op (top / docker stats / per-proc CPU /
