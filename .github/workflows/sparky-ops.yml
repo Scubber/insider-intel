@@ -62,6 +62,7 @@ on:
           - chat-huihui
           - chat-default
           - chat-tools-enable
+          - chat-restore
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -140,7 +141,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default|chat-tools-enable)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default|chat-tools-enable|chat-restore)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -653,10 +654,17 @@ jobs:
       # function calling or a tool enabled gets vLLM's 400: '"auto" tool
       # choice requires --enable-auto-tool-choice and --tool-call-parser'
       # (a second user hit it 2026-10-01). Patch compose.yml in place
-      # (backup kept, idempotent), recreate vllm only, then prove a
-      # tool_choice=auto request returns 200. Parser per NVIDIA's model card
-      # for Nemotron 3 Super: qwen3_coder. Survives nightly hand-backs because
-      # the restore serves compose.yml itself.
+      # (backup kept, idempotent, compose-config validated, restored on a
+      # bad patch), recreate vllm only, then prove a tool_choice=auto request
+      # returns 200. Parser per NVIDIA's model card for Nemotron 3 Super:
+      # qwen3_coder. Survives nightly hand-backs because the restore serves
+      # compose.yml itself; the enrich overlay replaces `command:` wholesale.
+      # PLACEMENT LAW (2026-10-01 outage): `--served-model-name` takes a LIST
+      # of aliases (model id, default, nemo, nemotron). The first version of
+      # this op inserted the flags after the first alias, which split the
+      # list and vLLM exited 2 on "unrecognized arguments". The flags now go
+      # immediately BEFORE `- --served-model-name`, and any earlier copy of
+      # the three-line block is removed first, wherever it sits.
       - name: chat-tools-enable
         if: ${{ github.event.inputs.op == 'chat-tools-enable' }}
         run: |
@@ -667,50 +675,97 @@ jobs:
           flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
             || { echo "refresh cycle holds the flock — retry after it finishes"; exit 1; }
           [ -f "$COMPOSE" ] || { echo "no $COMPOSE"; exit 1; }
-          if grep -q -- '--enable-auto-tool-choice' "$COMPOSE"; then
-            echo "compose.yml already carries --enable-auto-tool-choice; no edit"
-          else
-            BAK="$COMPOSE.bak-$(date -u +%Y%m%dT%H%M%SZ)"
-            cp "$COMPOSE" "$BAK"; echo "backup: $BAK"
-            # Insert right after the `- --served-model-name` item and its value,
-            # matching that item's indentation (the vllm command is a YAML list).
-            awk -v parser="$PARSER" '
-              { print }
-              pending && !/^[[:space:]]*#/ {
-                match($0, /^[[:space:]]*/); ind=substr($0, 1, RLENGTH)
-                print ind "- --enable-auto-tool-choice"
-                print ind "- --tool-call-parser"
-                print ind "- " parser
-                pending=0; next }
-              /^[[:space:]]*- --served-model-name[[:space:]]*$/ { pending=1 }
-            ' "$BAK" > "$COMPOSE"
-            if ! grep -q -- '--enable-auto-tool-choice' "$COMPOSE" \
-               || ! (cd "$SPARKY" && docker compose -f compose.yml config -q); then
-              echo "patch did not apply cleanly — restoring backup; vllm command block (redacted):"
-              cp "$BAK" "$COMPOSE"
-              sed -n '/^  vllm:/,/^  [a-z]/p' "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/'
-              exit 1
-            fi
-            echo "== diff (redacted) =="
-            diff "$BAK" "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' || true
+          grep -q -- '^[[:space:]]*- --served-model-name[[:space:]]*$' "$COMPOSE" \
+            || { echo "no '- --served-model-name' list item in compose.yml — fix the op, not the file"; exit 1; }
+          BAK="$COMPOSE.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+          cp "$COMPOSE" "$BAK"; echo "backup: $BAK"
+          # Pass 1: drop any existing copy of the block (3 consecutive items).
+          # Pass 2: insert it right before `- --served-model-name`.
+          awk -v parser="$PARSER" '
+            function flush() { for (i = 1; i <= n; i++) print buf[i]; n = 0 }
+            {
+              line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line)
+              if (n == 0 && line == "- --enable-auto-tool-choice") { buf[++n] = $0; next }
+              if (n == 1 && line == "- --tool-call-parser") { buf[++n] = $0; next }
+              if (n == 2 && line == "- " parser) { n = 0; next }   # block complete: dropped
+              if (n > 0) { flush() }                               # partial match: keep
+              print
+            }
+            END { flush() }
+          ' "$BAK" | awk -v parser="$PARSER" '
+            /^[[:space:]]*- --served-model-name[[:space:]]*$/ {
+              match($0, /^[[:space:]]*/); ind = substr($0, 1, RLENGTH)
+              print ind "- --enable-auto-tool-choice"
+              print ind "- --tool-call-parser"
+              print ind "- " parser
+            }
+            { print }
+          ' > "$COMPOSE"
+          # The block must sit directly above --served-model-name, exactly once.
+          PLACED=$(grep -c -- '^[[:space:]]*- --enable-auto-tool-choice[[:space:]]*$' "$COMPOSE" || true)
+          NEXT=$(grep -A3 -- '^[[:space:]]*- --enable-auto-tool-choice[[:space:]]*$' "$COMPOSE" | sed -n '4p' | sed 's/^[[:space:]]*//')
+          if [ "$PLACED" != 1 ] || [ "$NEXT" != "- --served-model-name" ] \
+             || ! (cd "$SPARKY" && docker compose -f compose.yml config -q); then
+            echo "patch did not apply cleanly (copies=$PLACED, next=$NEXT) — restoring backup; vllm block (redacted):"
+            cp "$BAK" "$COMPOSE"
+            sed -n '/^  vllm:/,/^  [a-z]/p' "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/'
+            exit 1
           fi
-          echo "recreating vllm (same model, sequential — chat is down ~15 min while weights reload)"
+          echo "== diff vs backup (redacted) =="
+          diff "$BAK" "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' || true
+          echo "== vllm command as it will run (redacted) =="
+          sed -n '/^  vllm:/,/^  [a-z]/p' "$COMPOSE" | sed -n '/command:/,/healthcheck:/p' | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/'
+          echo "recreating vllm (same model, sequential — chat is down while weights reload)"
           (cd "$SPARKY" && docker compose -f compose.yml up -d --no-deps vllm)
           KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
           MODEL=""
-          for _ in $(seq 1 80); do
+          for _ in $(seq 1 120); do
+            ST=$(docker inspect sparky-vllm --format '{{.State.Status}}' 2>/dev/null || echo missing)
+            if [ "$ST" = "exited" ]; then
+              echo "vllm exited during startup — last log lines (redacted):"
+              docker logs --tail 40 sparky-vllm 2>&1 | sed -E 's/Bearer [^ ]+/Bearer [REDACTED]/g' | grep -vi 'api.key' || true
+              echo "restoring backup and bringing the previous config back up"
+              cp "$BAK" "$COMPOSE"; (cd "$SPARKY" && docker compose -f compose.yml up -d --no-deps vllm)
+              exit 1
+            fi
             MODEL=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
               | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
             [ -n "$MODEL" ] && { echo "serving: $MODEL"; break; }
             sleep 15
           done
-          [ -n "$MODEL" ] || { echo "model did not answer within 20min — check docker logs sparky-vllm on the box"; exit 1; }
+          [ -n "$MODEL" ] || { echo "model did not answer within 30min — run chat-logs"; exit 1; }
           CODE=$(curl -s -o /tmp/tools-probe.json -w '%{http_code}' -m 120 \
             -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' \
             -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8,"tools":[{"type":"function","function":{"name":"noop","description":"no-op","parameters":{"type":"object","properties":{}}}}],"tool_choice":"auto"}' \
             http://127.0.0.1:8001/v1/chat/completions)
           echo "tool_choice=auto probe: HTTP $CODE"
           [ "$CODE" = "200" ] || { echo "tool-enabled request still failing:"; head -c 400 /tmp/tools-probe.json; echo; exit 1; }
+
+      # Rollback button: put the newest compose.yml.bak-* back and recreate
+      # vllm. Mutating (confirm=RUN), flock-guarded like every chat op.
+      - name: chat-restore
+        if: ${{ github.event.inputs.op == 'chat-restore' }}
+        run: |
+          set -euo pipefail
+          SPARKY="$HOME/sparky"
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — retry after it finishes"; exit 1; }
+          BAK=$(ls -1t "$SPARKY"/compose.yml.bak-* 2>/dev/null | head -1)
+          [ -n "$BAK" ] || { echo "no compose.yml.bak-* to restore"; exit 1; }
+          echo "restoring $BAK"
+          diff "$SPARKY/compose.yml" "$BAK" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' || true
+          cp "$BAK" "$SPARKY/compose.yml"
+          (cd "$SPARKY" && docker compose -f compose.yml config -q && docker compose -f compose.yml up -d --no-deps vllm)
+          KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          for _ in $(seq 1 120); do
+            ID=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
+              | grep -o '"id":"[^"]*"' | head -1 || true)
+            [ -n "$ID" ] && { echo "serving: $ID"; exit 0; }
+            [ "$(docker inspect sparky-vllm --format '{{.State.Status}}' 2>/dev/null)" = "exited" ] \
+              && { echo "vllm exited — run chat-logs"; exit 1; }
+            sleep 15
+          done
+          echo "model did not answer within 30min — run chat-logs"; exit 1
 
       # Purpose-built for the operator's huihui chat model: derive a chat
       # overlay from the enrich overlay by model-string substitution (any

@@ -396,7 +396,9 @@ Chat-stack ops (the box is a chat host between cycles): `chat-status`
 refresh flock is held), `chat-tools-enable` (adds vLLM's
 `--enable-auto-tool-choice`/`--tool-call-parser` to the base chat model —
 open-webui sends `tool_choice: auto`, so without them every tool-enabled
-chat 400s; 2026-10-01), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
+chat 400s; 2026-10-01), `chat-logs` (read-only: vllm container state + redacted log tail),
+`chat-restore` (puts the newest `compose.yml.bak-*` back and recreates
+vllm — the rollback button), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
 `.env.spark` — the model every nightly hand-back restores; the Nemotron
 enrich overlay since 2026-08-24, operator choice).
 A dispatch workflow must exist on `main` to be invokable; it then runs the
