@@ -20,6 +20,7 @@ on:
       op:
         description: >-
           diagnose (identity/cron/log/checkout forensics) | tail-refresh-log |
+          cycle-timeline (per-cycle borrow windows + chat-stack outages, read-only) |
           env-audit (key NAMES only) | git-status | pull-main | enable-india |
           smoke-india | run-replay | run-refresh | backfill-field-dryrun (counts
           only) | backfill-field (queues an additive field's targets for the
@@ -33,6 +34,7 @@ on:
           - diagnose
           - hunt-writer
           - tail-refresh-log
+          - cycle-timeline
           - env-audit
           - git-status
           - pull-main
@@ -209,6 +211,36 @@ jobs:
         run: |
           set -euo pipefail
           tail -n "${LINES:-150}" "$WORKDIR/logs/spark_refresh.log"
+
+      - name: cycle-timeline
+        if: ${{ github.event.inputs.op == 'cycle-timeline' }}
+        run: |
+          set -uo pipefail
+          LOG="$WORKDIR/logs/spark_refresh.log"
+          echo "== now: $(date -u +%FT%TZ); log: $(wc -l < "$LOG") lines, first stamp: $(grep -m1 -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:]+Z' "$LOG") =="
+          echo; echo "== per cycle (UTC): pull -> pipeline -> done, enrich calls, outcome =="
+          awk '
+            /^spark_refresh: .*skipping/ { print "SKIP  " $0; next }
+            /^spark_refresh: pull / { pull=$3; pipe=""; done=""; enr=0; fail=0; warn=0; next }
+            /^spark_refresh: pipeline / { pipe=$3; next }
+            /Case enriched for/ { enr++; next }
+            /^\[FAIL\]|\[FAIL\] / { fail++; next }
+            /^\[WARN\]/ { warn++; next }
+            /^spark_refresh: done / {
+              done=$3; cmd="date -u -d " pull " +%s"; cmd | getline a; close(cmd)
+              cmd="date -u -d " done " +%s"; cmd | getline b; close(cmd)
+              printf "%s  pipeline@%s  done %s  = %3d min  enriched=%d fail=%d warn=%d\n", pull, substr(pipe,12,5), substr(done,12,5), (b-a)/60, enr, fail, warn
+              pull=""; next }
+          ' "$LOG"
+          if [ -n "$(awk '/^spark_refresh: pull /{p=$3} /^spark_refresh: done /{p=""} END{print p}' "$LOG")" ]; then
+            echo "(last cycle has no done marker yet — in progress or killed)"
+          fi
+          echo; echo "== chat vllm container start/die events, last 30 days (chat-stack outage windows) =="
+          docker events --since 720h --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --filter type=container \
+            --filter container=sparky-vllm --format '{{.Time}} {{.Action}}' 2>/dev/null | grep -E ' (start|die)$' | tail -80 \
+            || echo "(docker events unavailable)"
+          echo; echo "== crontab =="; crontab -l 2>/dev/null | grep -v '^#' || true
+          echo; echo "== uptime/load =="; uptime
 
       - name: env-audit
         if: ${{ github.event.inputs.op == 'env-audit' }}

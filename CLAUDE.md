@@ -384,7 +384,9 @@ Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
 `upsert` appends mid-cycle, so a raw read sees stale generations first).
 **Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
 self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
-/ `env-audit` (key names only, never values) / `git-status` are read-only;
+/ `cycle-timeline` (per-cycle borrow windows + chat-stack outage events,
+the usage read for scheduling other users) / `env-audit` (key names only,
+never values) / `git-status` are read-only;
 `pull-main` / `enable-india` / `smoke-india` / `run-refresh` mutate the box
 and require `confirm=RUN`; `run-replay` runs the spend-gate replay there;
 `set-enrich-knobs` rewrites the four `SUMMARIZER_*` caps / queue-first
