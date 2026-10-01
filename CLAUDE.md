@@ -351,7 +351,17 @@ audit: secret/env *names*, never values), `corpus-count`, `corpus-sample`,
 analytics: forensic request CSV + GeoIP — **private bucket export only**,
 `gs://…/export/traffic-{report.md,log.csv}`; this repo is public, so the
 job log carries counts and never IPs, cities, orgs, or UAs, and nothing is
-uploaded as a run artifact — 2026-09-02),
+uploaded as a run artifact — 2026-09-02), `traffic-digest` (**emailed**
+weekly [Mon 14:00Z, the 7 days ending Sunday] + monthly [1st 14:30Z, the
+month just ended] analysis, period vs prior with deltas, visitors by
+country / network type / product surface, scanner + 5xx section;
+`scripts/traffic_digest.py` builds it, `scripts/send_digest_email.py`
+sends it over SMTP; recipient + SMTP login live ONLY in the
+`TRAFFIC_DIGEST_*` repository secrets — never in a file or the log, and a
+missing secret fails the run instead of skipping the email. It also folds
+a counts-only per-day history into `export/traffic-history.json` so
+month-over-month survives Cloud Logging's 30-day retention; dispatch with
+`period` / `as_of` / `send=false` to build without mailing — 2026-10-01),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
 `--country` / `--industry` slices), `corpus-industry` (per-industry

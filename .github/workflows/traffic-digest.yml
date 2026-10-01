@@ -1,0 +1,162 @@
+name: traffic-digest
+
+# Weekly + monthly traffic analysis, EMAILED to the operator. Same measurement
+# model as traffic-report.yml (human-UA GET /health ≈ page view; offline DB-IP
+# geo/ASN; no client-side code, no third-party callouts), plus what a daily
+# snapshot can't give: a complete period compared with the one before it, and
+# a counts-only per-day history in the bucket so month-over-month survives
+# Cloud Logging's 30-day retention. scripts/traffic_digest.py builds it;
+# scripts/send_digest_email.py sends it.
+#
+# Where the operator's details live: ONLY in repository secrets, never in
+# this file, the job log, or any committed file (this repo is public).
+#   TRAFFIC_DIGEST_TO             recipient address (comma-separated for several)
+#   TRAFFIC_DIGEST_SMTP_USER      SMTP login (a Gmail address works)
+#   TRAFFIC_DIGEST_SMTP_PASSWORD  Gmail App Password (2-step verification →
+#                                 App passwords), or any SMTP password
+#   TRAFFIC_DIGEST_SMTP_HOST      optional, default smtp.gmail.com
+#   TRAFFIC_DIGEST_SMTP_PORT      optional, default 465 (587 = STARTTLS)
+# GitHub masks secret values in logs, and the scripts print counts only. A
+# missing secret FAILS the run (GitHub then notifies the repo owner) rather
+# than silently skipping the email.
+#
+# Outputs: the email (HTML body + Markdown attachment), and in the private
+# bucket export/traffic-digest-{weekly,monthly}.{md,json} plus
+# export/traffic-history.json (counts only). Read-only against GCP logs;
+# writes nothing but those export/ objects. No LLM spend.
+on:
+  schedule:
+    - cron: "0 14 * * 1" # weekly: Mondays 14:00 UTC, the 7 days ending Sunday
+    - cron: "30 14 1 * *" # monthly: 1st of the month 14:30 UTC, the month just ended
+  workflow_dispatch:
+    inputs:
+      period:
+        description: "Which digest to build"
+        required: false
+        default: "weekly"
+        type: choice
+        options: [weekly, monthly]
+      as_of:
+        description: "Anchor date YYYY-MM-DD (default today; the period ends the day before)"
+        required: false
+        default: ""
+      send:
+        description: "Send the email (false = build + bucket only)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  BUCKET: gs://insider-intel-502413-corpus
+  LOG_DAYS: "32"
+
+concurrency:
+  group: traffic-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Resolve period
+        id: period
+        env:
+          INPUT_PERIOD: ${{ inputs.period }}
+          INPUT_AS_OF: ${{ inputs.as_of }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          PERIOD="${INPUT_PERIOD:-}"
+          if [ -z "${PERIOD}" ]; then
+            case "${SCHEDULE}" in
+              "30 14 1 * *") PERIOD=monthly ;;
+              *) PERIOD=weekly ;;
+            esac
+          fi
+          AS_OF="${INPUT_AS_OF:-$(date -u +%Y-%m-%d)}"
+          echo "period=${PERIOD}" >> "$GITHUB_OUTPUT"
+          echo "as_of=${AS_OF}" >> "$GITHUB_OUTPUT"
+          echo "building the ${PERIOD} digest anchored at ${AS_OF}"
+
+      - name: Install GeoIP + ASN databases (DB-IP lite, CC-BY-4.0, offline)
+        run: |
+          set -euo pipefail
+          MONTH=$(date -u +%Y-%m)
+          LAST=$(date -u -d 'last month' +%Y-%m)
+          for kind in city asn; do
+            curl -fsSL "https://download.db-ip.com/free/dbip-${kind}-lite-${MONTH}.csv.gz" -o "${kind}.csv.gz" \
+              || curl -fsSL "https://download.db-ip.com/free/dbip-${kind}-lite-${LAST}.csv.gz" -o "${kind}.csv.gz" \
+              || true
+            if [ -f "${kind}.csv.gz" ]; then gunzip -f "${kind}.csv.gz" && echo "${kind} db ready"; \
+            else echo "${kind} db unavailable — those columns will be blank"; fi
+          done
+
+      - name: Pull request logs
+        run: |
+          set -euo pipefail
+          gcloud logging read \
+            'resource.type=cloud_run_revision AND resource.labels.service_name=insider-intel-api AND httpRequest.requestUrl:*' \
+            --project "${PROJECT_ID}" \
+            --freshness "${LOG_DAYS}d" \
+            --limit 250000 \
+            --format json > requests.json
+          python3 -c "import json; print(len(json.load(open('requests.json'))), 'log entries')"
+
+      - name: Fetch counts-only history from the bucket
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${BUCKET}/export/traffic-history.json" traffic-history.json \
+            && echo "history loaded" \
+            || { echo "no history yet — starting one"; rm -f traffic-history.json; }
+
+      - name: Build digest
+        env:
+          PERIOD: ${{ steps.period.outputs.period }}
+          AS_OF: ${{ steps.period.outputs.as_of }}
+        run: |
+          set -euo pipefail
+          python3 scripts/traffic_digest.py requests.json \
+            --period "${PERIOD}" --as-of "${AS_OF}" --log-days "${LOG_DAYS}" \
+            $( [ -f city.csv ] && echo "--geoip city.csv" ) \
+            $( [ -f asn.csv ] && echo "--asn asn.csv" ) \
+            --history traffic-history.json \
+            --out-md digest.md --out-html digest.html --out-json digest.json \
+            --out-subject subject.txt
+
+      - name: Publish to bucket export/ (private)
+        env:
+          PERIOD: ${{ steps.period.outputs.period }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp digest.md "${BUCKET}/export/traffic-digest-${PERIOD}.md"
+          gcloud storage cp digest.json "${BUCKET}/export/traffic-digest-${PERIOD}.json"
+          gcloud storage cp traffic-history.json "${BUCKET}/export/traffic-history.json"
+          echo "digest + history exported to the private bucket"
+
+      - name: Email the digest
+        if: ${{ inputs.send != 'false' }}
+        env:
+          MAIL_TO: ${{ secrets.TRAFFIC_DIGEST_TO }}
+          SMTP_USER: ${{ secrets.TRAFFIC_DIGEST_SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.TRAFFIC_DIGEST_SMTP_PASSWORD }}
+          SMTP_HOST: ${{ secrets.TRAFFIC_DIGEST_SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.TRAFFIC_DIGEST_SMTP_PORT }}
+        run: |
+          set -euo pipefail
+          python3 scripts/send_digest_email.py \
+            --html digest.html --text digest.md --subject-file subject.txt \
+            --attach digest.md:text/markdown
