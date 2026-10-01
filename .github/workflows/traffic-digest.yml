@@ -16,6 +16,9 @@ name: traffic-digest
 #                                 App passwords), or any SMTP password
 #   TRAFFIC_DIGEST_SMTP_HOST      optional, default smtp.gmail.com
 #   TRAFFIC_DIGEST_SMTP_PORT      optional, default 465 (587 = STARTTLS)
+#   TRAFFIC_DIGEST_MAIL_FROM      optional From address, default the SMTP user
+#                                 (transactional relays such as Resend or Brevo
+#                                 log in with a key, not an address, so set it)
 # GitHub masks secret values in logs, and the scripts print counts only. A
 # missing secret FAILS the run (GitHub then notifies the repo owner) rather
 # than silently skipping the email.
@@ -155,6 +158,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.TRAFFIC_DIGEST_SMTP_PASSWORD }}
           SMTP_HOST: ${{ secrets.TRAFFIC_DIGEST_SMTP_HOST }}
           SMTP_PORT: ${{ secrets.TRAFFIC_DIGEST_SMTP_PORT }}
+          MAIL_FROM: ${{ secrets.TRAFFIC_DIGEST_MAIL_FROM }}
         run: |
           set -euo pipefail
           python3 scripts/send_digest_email.py \
