@@ -1,0 +1,113 @@
+name: research-pack
+
+# Read-only research lane: download the live corpus and print the material a
+# briefing is written from — the basis funnel, counts by posture / year /
+# jurisdiction / industry / role / channel / technique / detection family /
+# tool role, and up to N case cards — for ONE topic spec (regex + ITM ids +
+# facets). scripts/research_pack.py owns the counting rules and the redaction
+# choke point (email local parts never print).
+#
+# The pack is printed to the job log between BEGIN/END markers on purpose:
+# the scheduled research briefing (a Claude Routine, docs/research/
+# routine-prompt.md) cannot reach GCP or the API from its sandbox, but it can
+# dispatch this workflow and read the log. Everything printed is already
+# public product (the API serves the same rows), so the public log is not a
+# disclosure — unlike traffic data, which stays in the bucket. No mutation,
+# no LLM spend. A copy also lands in the private bucket's export/ prefix.
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: "Regex over case text ('.' = all verdict-true cases)"
+        required: false
+        default: "."
+      techniques:
+        description: "ITM ids, comma-separated (e.g. IF016,IF038); empty = any"
+        required: false
+        default: ""
+      country:
+        description: "Jurisdiction slice: all | US | IN | CA"
+        required: false
+        default: "all"
+      industry:
+        description: "Victim-sector slice (schema v3 label) or all"
+        required: false
+        default: "all"
+      posture:
+        description: "any | adjudicated | alleged"
+        required: false
+        default: "any"
+        type: choice
+        options: [any, adjudicated, alleged]
+      year_from:
+        description: "Earliest filing/publication year to keep (empty = all)"
+        required: false
+        default: ""
+      cases:
+        description: "How many case cards to print"
+        required: false
+        default: "15"
+      scope:
+        description: "full = regex over the document text too; meta = title/notes/forensics only"
+        required: false
+        default: "full"
+        type: choice
+        options: [full, meta]
+      slug:
+        description: "Name for the bucket copy: export/research-pack-<slug>.md"
+        required: false
+        default: "adhoc"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: insider-intel-502413
+  OBJ: gs://insider-intel-502413-corpus/processed/articles.jsonl
+  BUCKET: gs://insider-intel-502413-corpus
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: projects/698664056335/locations/global/workloadIdentityPools/github/providers/github-oidc # pragma: allowlist secret
+          service_account: github-deployer@insider-intel-502413.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+
+      - name: Build the research pack
+        env:
+          QUERY: ${{ inputs.query }}
+          TECHNIQUES: ${{ inputs.techniques }}
+          COUNTRY: ${{ inputs.country }}
+          INDUSTRY: ${{ inputs.industry }}
+          POSTURE: ${{ inputs.posture }}
+          YEAR_FROM: ${{ inputs.year_from }}
+          CASES: ${{ inputs.cases }}
+          SCOPE: ${{ inputs.scope }}
+          SLUG: ${{ inputs.slug }}
+        run: |
+          set -euo pipefail
+          gcloud storage cp "${OBJ}" corpus.jsonl
+          wc -l corpus.jsonl
+          args=(corpus.jsonl --query "${QUERY:-.}" --country "${COUNTRY:-all}" \
+                --industry "${INDUSTRY:-all}" --posture "${POSTURE:-any}" \
+                --cases "${CASES:-15}" --scope "${SCOPE:-full}" --json pack.json)
+          IFS=',' read -ra TECH <<< "${TECHNIQUES:-}"
+          for t in "${TECH[@]}"; do
+            t="$(echo "$t" | tr -d '[:space:]')"
+            [ -n "$t" ] && args+=(--technique "$t")
+          done
+          [ -n "${YEAR_FROM:-}" ] && args+=(--year-from "${YEAR_FROM}")
+          python3 scripts/research_pack.py "${args[@]}" > pack.md
+          echo "=== RESEARCH PACK BEGIN ==="
+          cat pack.md
+          echo "=== RESEARCH PACK END ==="
+          SAFE_SLUG="$(echo "${SLUG:-adhoc}" | tr -c 'A-Za-z0-9._-' '-' | tr -d '\n')"
+          gcloud storage cp pack.md "${BUCKET}/export/research-pack-${SAFE_SLUG}.md"
+          gcloud storage cp pack.json "${BUCKET}/export/research-pack-${SAFE_SLUG}.json"
+          echo "bucket copy: ${BUCKET}/export/research-pack-${SAFE_SLUG}.{md,json}"

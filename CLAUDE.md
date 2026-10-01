@@ -362,6 +362,18 @@ missing secret fails the run instead of skipping the email. It also folds
 a counts-only per-day history into `export/traffic-history.json` so
 month-over-month survives Cloud Logging's 30-day retention; dispatch with
 `period` / `as_of` / `send=false` to build without mailing — 2026-10-01),
+`research-pack` (**the briefing author's corpus pull**, 2026-10-01:
+`scripts/research_pack.py` slices verdict-true cases by regex / ITM ids /
+country / industry / posture / year and prints the basis funnel, posture
+split, year, jurisdiction, industry, role × state, access, motive, exfil
+channel, technique, detection family, tools-by-role, quantities, and N
+case cards — email local parts redacted, roles never individuals. It
+prints to the job log between `=== RESEARCH PACK BEGIN/END ===` markers
+ON PURPOSE: the monthly research-briefing Claude Routine
+(docs/research/routine-prompt.md, topic queue docs/research/topics.md)
+cannot reach GCP or the API from its sandbox, so it dispatches this and
+reads the log; everything printed is public product the API already
+serves. Copy to `export/research-pack-<slug>.{md,json}`),
 `evidence-ledger` (writes
 `export/evidence-ledger.{md,json}` to the bucket; the CLI also takes
 `--country` / `--industry` slices), `corpus-industry` (per-industry
@@ -422,6 +434,16 @@ legacy fallback.
   single sanctioned home for frozen numbers, each with an AS OF corpus
   dateline and a link to EVIDENCE for the live figures. Frozen there is
   honesty, not drift. Republishing follows docs/research/README.md.
+  **Emailed briefings** (2026-10-01) are the one live research lane: a
+  monthly Claude Routine follows `docs/research/routine-prompt.md` (pick
+  the first `queued` row of `docs/research/topics.md` → dispatch
+  `research-pack` → outside sources → write in house voice → push the Markdown to
+  `research/<slug>` as `docs/research/briefings/<slug>.md` with the row
+  flipped to `drafted` → dispatch `research-mail.yml` against that branch,
+  which emails it over SMTP with the `TRAFFIC_DIGEST_*` secrets → PR).
+  The operator's address never enters the repo; numbers live only in the
+  dated briefing (`tests/test_research_briefings.py`). The routine never
+  merges and never touches the API.
 - **Every page teaches itself** (operator directive 2026-08-17). A
   user-facing surface ships WITH its explanation, in the same PR: a GUIDE
   cheat-sheet line (contract-enforced — `tests/test_site_guide.py` fails a
