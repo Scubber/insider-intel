@@ -27,7 +27,7 @@ Rules that still apply to a draft:
 research routine emailed to the operator. [`topics.md`](topics.md) is the
 authored queue it draws from; [`routine-prompt.md`](routine-prompt.md) is
 the playbook each run follows (pick a topic → dispatch `research-pack` →
-outside sources → write → email → PR). Same frozen-numbers contract as the
+outside sources → write → branch → `research-mail` → PR). Same frozen-numbers contract as the
 drafts: PUBLISHED + AS OF dateline naming the corpus pull, a Limits
 section, roles never individuals, postures never mixed
 (`tests/test_research_briefings.py`). These are not site pages; parking

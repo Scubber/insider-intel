@@ -1,13 +1,13 @@
 # Research briefing routine — the playbook
 
 This file is the full instruction set for the scheduled research briefing.
-A Claude Routine fires it (monthly, fresh session, this repo checked out,
-Gmail connector attached). The Routine's stored prompt says "follow
+A Claude Routine fires it (monthly, fresh session, this repo checked out). The Routine's stored prompt says "follow
 docs/research/routine-prompt.md on main", so editing this file changes the
 next run with no trigger update. Humans can run the same steps by hand.
 
-The deliverable each run: ONE briefing, emailed to the operator, archived
-as a dated Markdown file in `docs/research/briefings/` via a pull request.
+The deliverable each run: ONE briefing, archived as a dated Markdown file
+in `docs/research/briefings/` on a branch, emailed to the operator by the
+`research-mail` workflow, and offered as a pull request.
 
 ## Ground rules (these override everything below)
 
@@ -119,33 +119,37 @@ filing-year lag. Three to six bullets.>
 Re-read the draft against the ground rules before sending. Check every
 number against the pack. Remove any banned word.
 
-## Step 5 — email it
-
-Send ONE email with the Gmail connector:
-
-- `to`: the user's own address from your session context.
-- `subject`: `insider-intel research · <title>`
-- `htmlBody`: the briefing rendered as simple HTML (headings, paragraphs,
-  lists, links; inline styles only, no scripts). `body`: the plain text.
-
-If the Gmail connector is unavailable, stop and report it in the session;
-do not try another route.
-
-## Step 6 — archive by pull request
+## Step 5 — archive on a branch (so the mail step can read it)
 
 1. Branch `research/<slug>` from `main`.
-2. Write the briefing to `docs/research/briefings/<slug>.md` exactly as
-   emailed.
+2. Write the briefing to `docs/research/briefings/<slug>.md`.
 3. In `docs/research/topics.md`, change the row's Status from `queued` to
    `drafted <YYYY-MM-DD>`. Change nothing else in that file.
-4. Commit with a message that explains why (what the briefing found, one
-   line), push, open a PR titled `Research briefing: <title>`. The PR body
-   has: the question, the bottom line, the pack run URL, the verification
-   line "pytest tests/test_research_briefings.py", and the standard Claude
-   Code footer. Run that test before pushing; it checks the dateline and the
-   Limits section.
-5. Do not merge. Do not request reviewers. Finish by stating in the session
-   what was sent and the PR link.
+4. Run `pytest tests/test_research_briefings.py` (dateline, Limits,
+   Sources, no address, no banned words). Fix and re-run until green.
+5. Commit with a message that explains why (what the briefing found, one
+   line) and push the branch.
+
+## Step 6 — email it
+
+Dispatch the `research-mail.yml` workflow with `ref` = `research/<slug>`
+and input `path` = `docs/research/briefings/<slug>.md`. It renders the
+Markdown and sends it over SMTP with the repository's `TRAFFIC_DIGEST_*`
+secrets — the recipient is never in your hands. Poll the run as in Step 2
+until it completes. If it fails, read its log (the "Email the briefing"
+step names any missing secret), retry once, then stop and report.
+
+If a Gmail connector is available in the session, you may ALSO send the
+same briefing with it to the user's own address from your session
+context; never write that address anywhere.
+
+## Step 7 — open the pull request
+
+Open a PR from `research/<slug>` titled `Research briefing: <title>`. The
+body has: the question, the bottom line, the pack run URL, the mail run
+URL, the verification line "pytest tests/test_research_briefings.py", and
+the standard Claude Code footer. Do not merge. Do not request reviewers.
+Finish by stating in the session what was sent and the PR link.
 
 ## Cadence and edits
 

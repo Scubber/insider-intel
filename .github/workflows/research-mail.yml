@@ -1,0 +1,64 @@
+name: research-mail
+
+# Email ONE research briefing (a Markdown file in the repo at the dispatched
+# ref) to the operator over SMTP — the same secrets-only path as
+# traffic-digest.yml, so the scheduled research run (docs/research/
+# routine-prompt.md) never depends on a connector grant. Dispatch it against
+# the research/<slug> branch so the file is read from there; the workflow
+# must exist on main to be invokable at all.
+#
+# Recipient and SMTP login come ONLY from repository secrets
+# (TRAFFIC_DIGEST_TO / _SMTP_USER / _SMTP_PASSWORD, optional _SMTP_HOST /
+# _SMTP_PORT / _MAIL_FROM). This repo is public: nothing here, in the job
+# log, or in the briefing file may name the address. No GCP, no LLM spend.
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "Repo path of the Markdown briefing to send"
+        required: true
+      subject:
+        description: "Subject override (default: 'insider-intel research · <H1 title>')"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Render Markdown to email HTML
+        env:
+          BRIEFING: ${{ inputs.path }}
+          SUBJECT_IN: ${{ inputs.subject }}
+        run: |
+          set -euo pipefail
+          case "${BRIEFING}" in
+            docs/research/briefings/*.md) ;;
+            *) echo "refusing: path must be under docs/research/briefings/ and end in .md"; exit 1 ;;
+          esac
+          [ -f "${BRIEFING}" ] || { echo "no such file at this ref: ${BRIEFING}"; exit 1; }
+          python3 scripts/markdown_mail.py "${BRIEFING}" --out body.html --subject-out subject.txt
+          if [ -n "${SUBJECT_IN}" ]; then printf '%s\n' "${SUBJECT_IN}" > subject.txt; fi
+          # Counts only on the public log.
+          echo "subject length: $(wc -c < subject.txt) chars · html bytes: $(wc -c < body.html)"
+
+      - name: Email the briefing
+        env:
+          MAIL_TO: ${{ secrets.TRAFFIC_DIGEST_TO }}
+          SMTP_USER: ${{ secrets.TRAFFIC_DIGEST_SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.TRAFFIC_DIGEST_SMTP_PASSWORD }}
+          SMTP_HOST: ${{ secrets.TRAFFIC_DIGEST_SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.TRAFFIC_DIGEST_SMTP_PORT }}
+          MAIL_FROM: ${{ secrets.TRAFFIC_DIGEST_MAIL_FROM }}
+          BRIEFING: ${{ inputs.path }}
+        run: |
+          set -euo pipefail
+          python3 scripts/send_digest_email.py \
+            --html body.html --text "${BRIEFING}" --subject-file subject.txt \
+            --attach "${BRIEFING}:text/markdown"

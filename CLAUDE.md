@@ -437,9 +437,10 @@ legacy fallback.
   **Emailed briefings** (2026-10-01) are the one live research lane: a
   monthly Claude Routine follows `docs/research/routine-prompt.md` (pick
   the first `queued` row of `docs/research/topics.md` → dispatch
-  `research-pack` → outside sources → write in house voice → email the
-  operator via their Gmail connector → PR the Markdown into
-  `docs/research/briefings/<slug>.md` with the row flipped to `drafted`).
+  `research-pack` → outside sources → write in house voice → push the Markdown to
+  `research/<slug>` as `docs/research/briefings/<slug>.md` with the row
+  flipped to `drafted` → dispatch `research-mail.yml` against that branch,
+  which emails it over SMTP with the `TRAFFIC_DIGEST_*` secrets → PR).
   The operator's address never enters the repo; numbers live only in the
   dated briefing (`tests/test_research_briefings.py`). The routine never
   merges and never touches the API.
