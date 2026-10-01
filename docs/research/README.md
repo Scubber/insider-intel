@@ -21,6 +21,18 @@ Rules that still apply to a draft:
   mixed.
 - Voice: short plain sentences, a briefing memo, no marketing adjectives.
 
+## Emailed briefings (2026-10-01)
+
+`briefings/<slug>.md` — one Markdown file per briefing the scheduled
+research routine emailed to the operator. [`topics.md`](topics.md) is the
+authored queue it draws from; [`routine-prompt.md`](routine-prompt.md) is
+the playbook each run follows (pick a topic → dispatch `research-pack` →
+outside sources → write → email → PR). Same frozen-numbers contract as the
+drafts: PUBLISHED + AS OF dateline naming the corpus pull, a Limits
+section, roles never individuals, postures never mixed
+(`tests/test_research_briefings.py`). These are not site pages; parking
+still holds.
+
 ## Files
 
 `drafts/<slug>.html` — one file per briefing. Each starts with an HTML
