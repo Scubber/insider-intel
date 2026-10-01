@@ -57,6 +57,7 @@ on:
           - gcp-sweep-delete
           - sweep-audit
           - chat-status
+          - chat-logs
           - chat-swap
           - chat-huihui
           - chat-default
@@ -590,6 +591,20 @@ jobs:
           echo; echo "== local model dirs (names + sizes only) =="
           du -sh "$SPARKY"/models/* 2>/dev/null || true
           du -sh "$HOME"/.cache/huggingface/hub/models--* 2>/dev/null | head -20 || true
+
+      - name: chat-logs
+        if: ${{ github.event.inputs.op == 'chat-logs' }}
+        run: |
+          set -uo pipefail
+          # Read-only: vllm container state + log tail, key values redacted.
+          echo "== containers =="
+          docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -Ei 'vllm|webui' || true
+          echo; echo "== sparky-vllm restart count / exit code =="
+          docker inspect sparky-vllm --format 'restarts={{.RestartCount}} state={{.State.Status}} exit={{.State.ExitCode}} started={{.State.StartedAt}}' 2>/dev/null || true
+          echo; echo "== sparky-vllm log tail (${LINES:-150}, redacted) =="
+          docker logs --tail "${LINES:-150}" sparky-vllm 2>&1 \
+            | sed -E 's/(api[-_]?key[^ ]*[ =:]+)[^ ]+/\1[REDACTED]/Ig; s/Bearer [^ ]+/Bearer [REDACTED]/g' \
+            | grep -vi 'VLLM_API_KEY=' || true
 
       - name: chat-swap
         if: ${{ github.event.inputs.op == 'chat-swap' }}
