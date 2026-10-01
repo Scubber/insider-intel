@@ -393,7 +393,10 @@ and require `confirm=RUN`; `run-replay` runs the spend-gate replay there;
 knobs in `.env.spark` for a backfill drain (HANDOFF #16).
 Chat-stack ops (the box is a chat host between cycles): `chat-status`
 (read-only), `chat-swap` (load an overlay's model now; refuses while the
-refresh flock is held), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
+refresh flock is held), `chat-tools-enable` (adds vLLM's
+`--enable-auto-tool-choice`/`--tool-call-parser` to the base chat model —
+open-webui sends `tool_choice: auto`, so without them every tool-enabled
+chat 400s; 2026-10-01), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
 `.env.spark` — the model every nightly hand-back restores; the Nemotron
 enrich overlay since 2026-08-24, operator choice).
 A dispatch workflow must exist on `main` to be invokable; it then runs the

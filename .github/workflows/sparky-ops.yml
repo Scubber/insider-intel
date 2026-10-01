@@ -60,6 +60,7 @@ on:
           - chat-swap
           - chat-huihui
           - chat-default
+          - chat-tools-enable
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -138,7 +139,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default|chat-tools-enable)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -631,6 +632,70 @@ jobs:
             printf 'SPARKY_CHAT_OVERRIDE="%s"\n' "$OVERLAY" >> "$ENV_FILE"
           fi
           echo "now set:"; grep -E '^SPARKY_CHAT_OVERRIDE=' "$ENV_FILE" || true
+
+      # The base chat model (compose.yml, Nemotron 3 Super) was started
+      # without tool-calling flags, so any open-webui chat with native
+      # function calling or a tool enabled gets vLLM's 400: '"auto" tool
+      # choice requires --enable-auto-tool-choice and --tool-call-parser'
+      # (a second user hit it 2026-10-01). Patch compose.yml in place
+      # (backup kept, idempotent), recreate vllm only, then prove a
+      # tool_choice=auto request returns 200. Parser per NVIDIA's model card
+      # for Nemotron 3 Super: qwen3_coder. Survives nightly hand-backs because
+      # the restore serves compose.yml itself.
+      - name: chat-tools-enable
+        if: ${{ github.event.inputs.op == 'chat-tools-enable' }}
+        run: |
+          set -euo pipefail
+          SPARKY="$HOME/sparky"
+          COMPOSE="$SPARKY/compose.yml"
+          PARSER="qwen3_coder"
+          flock -ns /tmp/insider-intel-spark-refresh.lock -c true 2>/dev/null \
+            || { echo "refresh cycle holds the flock — retry after it finishes"; exit 1; }
+          [ -f "$COMPOSE" ] || { echo "no $COMPOSE"; exit 1; }
+          if grep -q -- '--enable-auto-tool-choice' "$COMPOSE"; then
+            echo "compose.yml already carries --enable-auto-tool-choice; no edit"
+          else
+            BAK="$COMPOSE.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+            cp "$COMPOSE" "$BAK"; echo "backup: $BAK"
+            # Insert right after the `- --served-model-name` item and its value,
+            # matching that item's indentation (the vllm command is a YAML list).
+            awk -v parser="$PARSER" '
+              { print }
+              pending && !/^[[:space:]]*#/ {
+                match($0, /^[[:space:]]*/); ind=substr($0, 1, RLENGTH)
+                print ind "- --enable-auto-tool-choice"
+                print ind "- --tool-call-parser"
+                print ind "- " parser
+                pending=0; next }
+              /^[[:space:]]*- --served-model-name[[:space:]]*$/ { pending=1 }
+            ' "$BAK" > "$COMPOSE"
+            if ! grep -q -- '--enable-auto-tool-choice' "$COMPOSE" \
+               || ! (cd "$SPARKY" && docker compose -f compose.yml config -q); then
+              echo "patch did not apply cleanly — restoring backup; vllm command block (redacted):"
+              cp "$BAK" "$COMPOSE"
+              sed -n '/^  vllm:/,/^  [a-z]/p' "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/'
+              exit 1
+            fi
+            echo "== diff (redacted) =="
+            diff "$BAK" "$COMPOSE" | sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' || true
+          fi
+          echo "recreating vllm (same model, sequential — chat is down ~15 min while weights reload)"
+          (cd "$SPARKY" && docker compose -f compose.yml up -d --no-deps vllm)
+          KEY=$(sed -n 's/^VLLM_API_KEY=//p' "$SPARKY/.env" | head -1)
+          MODEL=""
+          for _ in $(seq 1 80); do
+            MODEL=$(curl -fsS -m 5 -H "Authorization: Bearer ${KEY}" http://127.0.0.1:8001/v1/models 2>/dev/null \
+              | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+            [ -n "$MODEL" ] && { echo "serving: $MODEL"; break; }
+            sleep 15
+          done
+          [ -n "$MODEL" ] || { echo "model did not answer within 20min — check docker logs sparky-vllm on the box"; exit 1; }
+          CODE=$(curl -s -o /tmp/tools-probe.json -w '%{http_code}' -m 120 \
+            -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' \
+            -d '{"model":"'"$MODEL"'","messages":[{"role":"user","content":"ping"}],"max_tokens":8,"tools":[{"type":"function","function":{"name":"noop","description":"no-op","parameters":{"type":"object","properties":{}}}}],"tool_choice":"auto"}' \
+            http://127.0.0.1:8001/v1/chat/completions)
+          echo "tool_choice=auto probe: HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "tool-enabled request still failing:"; head -c 400 /tmp/tools-probe.json; echo; exit 1; }
 
       # Purpose-built for the operator's huihui chat model: derive a chat
       # overlay from the enrich overlay by model-string substitution (any
