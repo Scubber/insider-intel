@@ -183,6 +183,16 @@ The Spark is the production refresh tenant. What is running now:
   `PATH=$HOME/google-cloud-sdk/bin:$PATH` prefix, logging to
   `~/insider-intel/logs/spark_refresh.log`. The Pages boot snapshot rebuilds
   at 08:40Z (`pages.yml`).
+- **Borrow window (measured 2026-09-06 → 2026-10-01, 26 cycles via
+  sparky-ops `cycle-timeline`)**: the cycle holds the box 102–135 min
+  (median ≈120), i.e. `done` lands 09:43–10:15Z, then the chat stack
+  needs ~15 min to reload its model. Treat **08:00–10:30Z as sparky's
+  own time**; the chat stack and ad-hoc work are safe from 10:30Z until
+  ~07:45Z. Anything that holds the refresh flock past 08:00Z makes the
+  cron SKIP that day's cycle (not queue it), so don't start a borrow or
+  `chat-swap` late in the window. The 2026-08-25 → 09-02 cycles ran
+  2–4 h because they carried the v3 sweep / backfill drain, not steady
+  state.
 - **Model borrow/restore**: the box is a chat host between cycles
   (`~/sparky/compose.yml` serves whatever the operator talks to — chat only,
   never enrichment). The cycle layers `~/sparky/model-enrich.yml` to load
