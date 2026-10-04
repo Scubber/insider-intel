@@ -1,166 +1,104 @@
 # insider-intel
 
-**Evidence-based insider-threat research, built from what actually reaches
-court.**
+**Insider-threat guidance built from real court cases.**
 
-insider-intel is a guidance product for insider-threat programs, built from
-litigated court cases. It serves four jobs: **build a program, detect,
-prevent, hunt** — and backs every claim with receipts from real filings.
+Most insider-threat advice is vendor opinion. insider-intel is built from
+what actually reached a courtroom: employees and contractors who stole data,
+took secrets to a competitor, ran a second job on company time, or sabotaged
+systems on the way out. For each case we break down what the insider did,
+the trail they left, and what finally caught them. Every claim links back to
+the filing it came from.
 
-The pipeline ingests litigated insider cases (US federal dockets and
-opinions, international prosecutor and regulator feeds), insider-relevant
-news, and long-form publications. Each case is forensically enriched by an
-LLM once, at ingest. The corpus then answers questions a single case report
-can't: how insider incidents happen, who commits them, which records detect
-and convict them — and which methods don't yet map to anything in the
-matrix (novel-technique discovery is a standing pass, not the mission).
+**Live site:** [insider-intel.net](https://insider-intel.net) · the ABOUT
+page carries the feed link for following new cases.
 
-**Live:** [insider-intel.net](https://insider-intel.net) (also
-[intel.thederpweb.com](https://intel.thederpweb.com)) · API:
-[api.intel.thederpweb.com](https://api.intel.thederpweb.com)
-
-Everything is mapped to the
-[Insider Threat Matrix™](https://insiderthreatmatrix.org/) (Motive · Means ·
-Preparation · Infringement · Anti-Forensics).
+Built for security, HR, legal, and investigations teams. Readable by anyone.
 
 ---
 
-## The EVIDENCE ledger
+## Four jobs
 
-The **EVIDENCE page**
-([insider-intel.net → EVIDENCE](https://insider-intel.net/#/evidence)) is
-a continuously recomputed forensic aggregation across every method-bearing
-case in the corpus:
+The site is organised around the four things an insider-threat program has
+to do.
 
-- **Who?** Actor profile on two axes — function (contractor/vendor, temp/intern,
-  executive/officer, manager, technical, front-office/sales,
-  finance/accounting/ops) × employment state (current, departing, former) —
-  as **roles, never individuals**.
-- **How?** Technique prevalence by ITM theme, with the artifact families each
-  technique leaves behind (device forensics, central audit trails,
-  server/application logs, financial and public records).
-- **How was it proven?** Every count is split by **case strength** —
-  adjudicated/admitted vs alleged vs reported — and the two are never
-  conflated. Percentages are suppressed below a small-n floor.
-- **What detects it?** An evidence→ITM detection crosswalk ties observed
-  record classes back to matrix detections, marking which are corroborated by
-  real cases.
+| Job | Question it answers | Where to look |
+|---|---|---|
+| **Build a program** | Which controls actually caught insiders in real cases? | EVIDENCE |
+| **Detect** | What warning signs revealed each tactic, and in which cases? | MATRIX › Detections |
+| **Prevent** | Which safeguards would have stopped the tactics insiders really used? | MATRIX › Preventions |
+| **Hunt** | It may already have happened. What should I look for in my own logs? | STREAM → WORKBENCH |
 
-Findings are **derived from the ledger at read time** — nothing is stored, so
-no number can go stale. Each rule in `derive_findings()`
-([`shared/utils/evidence.py`](shared/utils/evidence.py)) reads the finished
-ledger and returns one card: the claim, the data behind it, the honest caveat,
-and program recommendations. The prose is authored; the numbers are whatever
-the corpus says now, recomputed for the jurisdiction you are viewing. Cards are
-grouped by the question each answers, and a rule that cannot clear the small-n
-floor says nothing at all.
+## What's on the site
 
-### Methodology and limitations
+- **STREAM** — the live feed of insider court cases and news, newest first.
+  Each case carries a plain-language analyst note, a signal score, and a
+  provenance stamp saying where it came from.
+- **MATRIX** — the [Insider Threat Matrix™](https://insiderthreatmatrix.org/)
+  browsed stage by stage (Motive · Means · Preparation · Infringement ·
+  Anti-Forensics). Every tactic opens a dossier with the real cases where it
+  was used, what caught it, and plain-language "how to spot it / how to
+  counter it" guidance distilled from those cases.
+- **EVIDENCE** — the corpus-wide research view. Who commits insider cases
+  (by role and employment stage, never by name), which tactics show up most,
+  what records and witnesses proved them, and which detections the case
+  record actually corroborates. A FINDINGS report reads like a short brief:
+  bottom line first, then numbered findings. Jurisdiction tabs give each
+  court system its own report.
+- **TOOLING** — security-product categories ranked by how much of the
+  observed case record their controls cover, plus each named product's
+  court-filing record: which caught insiders, which got bypassed.
+- **WORKBENCH** — save cases from STREAM and compare them side by side as a
+  MODUS OPERANDI case study: per-case methods, observables, and legal posture.
 
-Court data is a biased sample: it over-represents what gets litigated. The
-ledger treats that bias as measurable signal (selection bias is stated first
-in the page's limitations), separates proof standards everywhere, refuses
-persona/entity resolution by design, and keeps every number reproducible from
-stored forensic records — **no LLM runs at read time**.
+## What's in the corpus
 
-## What the platform does
+- **Court records** from the United States (federal dockets and opinions),
+  Canada, and India, scanned daily for insider cases.
+- **Prosecutor and regulator feeds** from the US, UK, Canada, and Australia.
+- **Insider-relevant news** from curated security, legal, and HR sources.
+- **Reference publications** — the standard program-building guides.
+- **First-person accounts** flagged one at a time from social platforms
+  (overemployment and data-theft confessions).
 
-| | |
-|---|---|
-| **Case stream** | Chronological insider-case reader with signal scoring, use-case + insider-type classification, and analyst notes. Cases the enricher itself adjudicates as *not* insider render as muted CONTEXT, hidden by default. |
-| **Filings lane** | CourtListener RECAP dockets + opinions flagged by a hand-authored insider query lexicon; full-document bodies backfilled; targeted PACER purchasing (budget-capped) for high-signal stubs; CanLII and international prosecutor/regulator feeds. |
-| **Forensic enrichment** | One LLM call per qualifying case at ingest produces the analyst note, a structured forensic record (actions, tools, quantities, typed observables, actor citizenship, victim industry, named-product roles), and an ITM adjudication — schema v3, with machine-verified evidence quotes. Every generation is stored append-only; the visible record is a select-best projection. |
-| **Novel-technique discovery** | A second LLM pass over each filing's forensic record flags methods that don't map cleanly to existing ITM techniques — candidate tradecraft the frameworks haven't named yet. |
-| **ITM matrix** | Five-theme technique browser; per-technique dossiers with related cases, detections/preventions, and corpus evidence tie-ins. |
-| **Workbench** | Flag cases, extract a MODUS OPERANDI forensic case study assembled from stored forensics (no LLM spend) — per-case methods, observables, legal posture — with links into each technique dossier for hunting guidance. |
-| **Tooling** | Security-product categories ranked by how much observed case volume their controls cover, with a per-product court-filing record — which products caught insiders, which were bypassed. |
-| **Social + tips** | One-off URL flagging surfaces first-person confessions (overemployment, data theft). Scheduled social pulls are parked pending OAuth credentials. |
-| **Syndication** | Atom feed (`/feed.xml`), one-way corporate export (`GET /export/articles`, NDJSON + bearer token). |
+Each case is analysed once, at ingest, into a structured forensic record:
+actions taken, tools involved, quantities, observables, legal outcome, and
+its mapping to the Matrix. The site reads those stored records. No analysis
+runs while you browse, so the numbers are reproducible and never stale.
 
-## Architecture
+## Trust rules
 
-```
-RSS / CourtListener / social / publications
-   → ingest lanes → raw corpus (JSONL in GCS)
-   → LangGraph processing: ITM alias match → score → classify → LLM enrich → embed
-   → FastAPI (Cloud Run) : /articles /search /itm /evidence/ledger /tooling /extract/ttps
-   → static UI (GitHub Pages) : STREAM | MATRIX | EVIDENCE | TOOLING | WORKBENCH
-```
+These hold on every page.
 
-Production is fully automated: the corpus refreshes once daily from a local
-DGX Spark that runs the enrichment model itself ($0 LLM spend), the site
-boots from a static snapshot and swaps to live data, and every merge to
-`main` deploys (keyless OIDC — no stored credentials). LLM spend is gated
-by insider-signal checks; enrichment history is append-only, and records
-re-enrich only when the analysis contract itself is upgraded.
+- **Adjudicated vs alleged are never conflated.** Every count is split by
+  case strength. What a court confirmed is marked differently from what a
+  filing merely alleged, with an explicit legend.
+- **Roles, never individuals.** The research surfaces describe actors by
+  function and employment stage. There are no persona graphs and no entity
+  resolution across cases.
+- **Small numbers stay honest.** Percentages are suppressed below a minimum
+  sample size, and a finding that cannot clear the floor says nothing.
+- **Selection bias is stated first.** Court data over-represents what gets
+  litigated. The methodology notes say so before any number does.
+- **Receipts, always.** Every claim links to the filing or article behind it.
 
-For contributors and agents: [`CLAUDE.md`](CLAUDE.md) is the operating manual
-(architecture, invariants, gotchas); [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
-covers the dev environment, [`docs/hosting.md`](docs/hosting.md) production,
-and [`docs/HANDOFF.md`](docs/HANDOFF.md) the current live state.
+## Attribution and licensing
 
-## Run it locally
+Insider Threat Matrix™ is owned by Forscie Limited. This project maps cases
+to the Matrix and is not affiliated with or endorsed by Forscie. See
+[`NOTICE`](NOTICE).
 
-```bash
-make up     # API :8000 + UI :5500 + Postgres sidecar
-make test   # same targets CI runs — green local == green CI
-```
+US court records come from [CourtListener](https://www.courtlistener.com/)
+(Free Law Project). Indian judgments come from the
+[Indian High Court Judgments](https://registry.opendata.aws/indian-high-court-judgments/)
+open dataset (CC BY). Canadian decisions come from CanLII court feeds.
 
-Or bare-metal (Python 3.12+):
+## For developers
 
 ```bash
-pip install -e ".[dev]"
-python -m apps.aggregator all        # ingest → process → embed
-python -m apps.search serve          # API → http://127.0.0.1:8000/docs
-python -m http.server 5500 --directory web
+make up      # local stack
+make test    # same checks CI runs
 ```
 
-Useful commands:
+Setup, conventions, and contributor notes live in [`docs/`](docs/).
 
-```bash
-python -m apps.aggregator ingest_courtlistener        # pull flagged filings
-python -m apps.aggregator backfill_courtlistener_text # fetch full document bodies
-python -m apps.aggregator social suggest              # curated subreddit/X catalog
-python -m apps.aggregator ingest_social_url <url>     # flag one post
-python -m apps.aggregator process --force             # reprocess after config changes
-python scripts/evidence_ledger.py data/processed/articles.jsonl  # ledger, offline
-```
-
-Copy `.env.example` → `.env` for configuration; everything flows through
-`shared/settings.py`. No paid APIs are required to run the pipeline — LLM
-enrichment, PACER purchasing, and social API auth are all optional and
-key-gated.
-
-## Adding sources
-
-Edit `apps/aggregator/config.py` (80+ curated feeds across security, legal,
-HR, and regulator domains) or pass a feeds JSON like
-`apps/aggregator/feeds.example.json`. CourtListener queries live in
-`courtlistener.py::DEFAULT_QUERIES` — a hand-authored insider lexicon
-projected from ITM techniques.
-
-## Tests
-
-```bash
-pytest
-ruff check apps shared tests
-python scripts/ui_smoke.py   # headless UX smoke over the real UI (Playwright)
-```
-
-## Design principles
-
-- **Evidence over narrative** — every claim traces to stored forensic records
-  and separates adjudicated from alleged.
-- **Roles, never individuals** — no persona graphs, no entity resolution
-  across cases.
-- **Spend discipline** — LLM calls only where forensic extraction is
-  plausible; each article billed once; all read paths are LLM-free.
-- **One-way corporate boundary** — corporate tools pull OSINT out; this
-  system never reads Graph/Teams/email/SIEM.
-- **GitOps everything** — merge to `main` is the only deploy, approval, and
-  publish mechanism.
-
-## Attribution
-
-Insider Threat Matrix™ is owned by Forscie Limited — see [`NOTICE`](NOTICE).
-This project is not affiliated with or endorsed by Forscie.
+Built and run by [Tim Carreira](https://github.com/Scubber).
