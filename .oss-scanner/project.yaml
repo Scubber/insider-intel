@@ -1,0 +1,31 @@
+# Enrolment file for https://github.com/anthropics/oss-scanner — a DRAFT.
+#
+# The scanner reads the copy that lives in THAT repository at
+# projects/insider-intel/project.yaml; this one is the source of truth we
+# keep next to the Dockerfile and threat model it points at, so the three
+# are reviewed together. To enrol or change the enrolment, copy this file
+# there in a PR (one project per PR; their tools/validate.py and
+# tools/check must pass first — see README.md in this directory).
+#
+# Every address here is public once merged over there, which is why the
+# operator's own address is never written into this repository: fill in a
+# security alias at enrolment time. tests/test_oss_scanner.py pins that.
+
+# REQUIRED. The ONE git repository to scan. #main pins the deployed branch.
+repo: https://github.com/Scubber/insider-intel#main
+
+# REQUIRED. Where reports and build failures go. PUBLIC once merged.
+primary_contact: security@example.invalid
+
+# Optional. The project's home page.
+homepage: https://insider-intel.net
+
+# Optional. true pauses reports without removing the enrolment.
+disabled: false
+
+# REQUIRED unless a Dockerfile sits next to the yaml in their repo.
+# Kept here so a build change ships in the same PR as the code it builds.
+dockerfile: .oss-scanner/Dockerfile
+
+# Optional, strongly recommended. Same reasoning: it lives with the code.
+threat_model: .oss-scanner/threat_model.md

@@ -101,4 +101,10 @@ make test    # same checks CI runs
 
 Setup, conventions, and contributor notes live in [`docs/`](docs/).
 
+Security review: the repo ships an audit image and threat model for
+Anthropic's [OSS Scanner](https://github.com/anthropics/oss-scanner) in
+[`.oss-scanner/`](.oss-scanner/README.md). To report a vulnerability
+yourself, contact the maintainer privately rather than opening a public
+issue.
+
 Built and run by [Tim Carreira](https://github.com/Scubber).

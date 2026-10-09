@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-10-01 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-10-09 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 4Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -34,6 +34,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | **Secrets** | Six mappings **re-asserted with `--update-secrets` on every deploy** (self-healing). **NEVER run manual `--set-secrets`** — it replaces the whole set (caused the 2-day July outage). Audit with `corpus-status`. |
 | **ITM** | **v2.11.0** (562 techniques; picked up with the description-clamp fix, 2026-08-08). `itm-refresh.yml` re-pulls weekly and opens a PR when upstream changed (merge = approval; crosswalk guard test catches renumberings — DT067→DT152 already handled). Technique descriptions now clamp at 900 chars on sentence boundaries (was 320, mid-word). |
 | **Analytics** | **DIY, daily** (`traffic-report.yml`, 13:00 UTC): forensic per-request CSV with DB-IP geolocation + summary report, written ONLY to the private bucket — `gs://…/export/traffic-{report.md,log.csv}` (read via `gcloud storage cat`, or `gsutil cat` on sparky). Public repo ⇒ no run artifacts and a counts-only job log since 2026-09-02; the 29 GitHub-hosted artifacts migrate to `export/traffic-history/` in the bucket post-freeze, then get deleted from GitHub (thread #16d). ~13 visits/day; `/evidence/ledger` loads on nearly every visit; scanner probes (`/.env` etc.) all 404/gated. **Emailed digest (2026-10-01, `traffic-digest.yml`)**: weekly (Mon 14:00Z) + monthly (1st 14:30Z) analysis mailed to the operator over SMTP — period vs prior, visitors by country / network type / surface, security section — with the recipient and SMTP login ONLY in the `TRAFFIC_DIGEST_TO` / `TRAFFIC_DIGEST_SMTP_USER` / `TRAFFIC_DIGEST_SMTP_PASSWORD` repository secrets (optional `_SMTP_HOST` / `_SMTP_PORT`); the lane is INERT until those three are set (a scheduled run then fails loudly, by design). Also accrues a counts-only per-day `export/traffic-history.json` (fresh log days overwrite; no IPs/UAs), which is the (4) history step of thread #16d landing as counts rather than per-request CSVs. Copies: `export/traffic-digest-{weekly,monthly}.{md,json}`. Contracts: `tests/test_traffic_digest.py` (public-log lines are counts-only; no address in any lane file). |
+| **OSS Scanner (security audit)** | **READY TO ENROL, not yet enrolled (2026-10-09)**: `.oss-scanner/` carries the audit Dockerfile, threat model, synthetic seed corpus and a draft `project.yaml` for [anthropics/oss-scanner](https://github.com/anthropics/oss-scanner) (Anthropic builds the repo in an isolated VM, audits it offline with Claude Code, emails findings + proposed patches to the contact; reports are model-generated and never published). Enrolment is a PR over THERE adding `projects/insider-intel/project.yaml` with a real `primary_contact` (public once merged — a security alias, never the operator's address, which never enters this repo). Gates here: `tests/test_oss_scanner.py` + ci.yml `oss-scanner-image` (builds the image, runs the suite / API / browser smoke with `--network none`). Thread #18. |
 | **Research briefings (emailed)** | **LIVE 2026-10-01**: a monthly Claude Routine ("insider-intel research briefing", 3rd of the month 14:46Z, fresh session) follows `docs/research/routine-prompt.md`: takes the first `queued` topic in `docs/research/topics.md` (14 authored topics; #1 is the court-funnel question seeded by the operator's trade-secret-litigation post), dispatches the new `research-pack.yml` workflow for the corpus material (printed to the job log between markers — public product only), adds outside sources, writes an 800–1,400-word briefing in house voice, pushes it to `research/<slug>` as `docs/research/briefings/<slug>.md` (topic row flipped to `drafted`), dispatches `research-mail.yml` against that branch (SMTP via the `TRAFFIC_DIGEST_*` secrets — the Routine holds no connector grant, by platform limitation), and opens a PR. Routine never merges. Site parking of RESEARCH is unchanged. Change cadence on the Routine; change behaviour in the playbook file; add topics as table rows. |
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
@@ -723,6 +724,53 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     `corpus-peerset` on `main` after merge, read the firm table against the
     Voya appendix, and decide whether any pooled finding is worth a
     (frozen, dated) RESEARCH note — counts only, never firm-vs-firm blame.
+
+18. **OSS Scanner enrolment — IN FLIGHT, two clicks from done (2026-10-09).**
+    `.oss-scanner/` is this repo's side of the
+    [anthropics/oss-scanner](https://github.com/anthropics/oss-scanner)
+    contract: `Dockerfile` (python:3.12-slim-bookworm, `COPY . /src`,
+    `pip install -e .[dev]`, shellcheck, poppler + tesseract for the OCR
+    path, Playwright Chromium best-effort, `seed_corpus.py` writes eight
+    FICTIONAL cases through the real graph so the API/UI serve rows
+    offline, pytest at build time — the scanner removes the root
+    `.dockerignore` before building, so docs/ and scripts/ are in the
+    image), `threat_model.md` (four untrusted-input classes: the anonymous
+    API, collected documents, LLM output, the UI's innerHTML sites;
+    scope in/out; Critical/High/Medium/Low tiers; leave-alone list — rate
+    limiter is a CPU guard, open-when-unset gates are local-dev design,
+    privacy invariants are design), and a draft `project.yaml` (homepage
+    `insider-intel.net`, contact placeholder) that their `tools/validate.py`
+    accepts. **State:** the operator forked their repo to
+    `Scubber/oss-scanner`; branch `insider-intel` there carries
+    `projects/insider-intel/project.yaml` with the REAL contact (the
+    operator's choice; it lives only in that fork and the public enrolment,
+    never here — `tests/test_oss_scanner.py` pins the placeholder). The
+    enrolment PR against `anthropics/oss-scanner` is NOT open yet: the
+    sandbox session could not create it (repo out of scope; `gh pr create`
+    denied as a public surface) and could not run their `tools/check`
+    (egress policy blocks Debian mirrors, so the Dockerfile's apt step
+    never ran — the suite [777, network-less namespace], seed script, API
+    smoke on the seeded corpus and ui_smoke_ci [55/55] all pass natively).
+    **Order of the remaining steps — the ordering is load-bearing:**
+    (1) merge this repo's `claude/brave-wright-4kh8fk` into `main` — the
+    enrolment pins `Scubber/insider-intel#main` and their reviewers'
+    `tools/check` clones `main`, which has no `.oss-scanner/` until then;
+    watch the new `oss-scanner-image` CI job on that PR — it is the first
+    real build of the Dockerfile, and a failure there is a Dockerfile fix
+    here, not an enrolment problem; (2) open the PR from the fork's
+    `insider-intel` branch to `anthropics/oss-scanner` `main` as a DRAFT,
+    body = their PR template with the context paragraph (a prefilled
+    compare link was handed to the operator; the body text is
+    reproducible from `.github/PULL_REQUEST_TEMPLATE.md` in their repo);
+    (3) on a machine with Docker and network: `git clone
+    https://github.com/Scubber/oss-scanner && git checkout insider-intel &&
+    pip install pyyaml && tools/validate.py && tools/check insider-intel`,
+    then `pytest -q` and `python scripts/ui_smoke_ci.py` in the offline
+    shell it opens (`--qemu` keeps it in a VM); tick that box; (4) the
+    operator reads and ticks the terms box, replies to the CLA bot, marks
+    the PR ready. After their merge: build failures and findings email the
+    contact on their cadence; `disabled: true` over there pauses. Keep the
+    draft here in step for PATHS only. Runbook: `.oss-scanner/README.md`.
 
 ---
 

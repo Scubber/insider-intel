@@ -547,6 +547,26 @@ legacy fallback.
   `ps` on sparky leak it (it rides the process argv), so treat any paste as
   a disclosure and rotate — recreating vllm AND open-webui together.
 - Actions in workflows are **SHA-pinned**; keep it that way.
+- **OSS Scanner enrolment lives in `.oss-scanner/`** (2026-10-09;
+  [anthropics/oss-scanner](https://github.com/anthropics/oss-scanner) —
+  Anthropic builds an enrolled repo in an isolated VM, audits it with
+  Claude Code OFFLINE, and emails findings + patches to the project
+  contact; model-generated, never published). The scanner reads
+  `.oss-scanner/Dockerfile` (audit image: repo at `/src`, all deps, Chromium,
+  a synthetic seed corpus, suite run at build time — NEVER a production
+  image; the root Dockerfile stays Cloud Run's) and
+  `.oss-scanner/threat_model.md` (entry points, scope, severity tiers) from
+  `main` at every build, so both change by ordinary PR here. The enrolment
+  record itself (`projects/insider-intel/project.yaml`) lives in THEIR repo;
+  `.oss-scanner/project.yaml` is the reviewed draft — its contact stays
+  `@example.invalid` (the operator's address never enters this repo;
+  addresses over there are public, use a security alias). Gates:
+  `tests/test_oss_scanner.py` (their validator's rules, paths resolve, no
+  address, house voice) and ci.yml's `oss-scanner-image` job (builds the
+  image with the root `.dockerignore` removed, as the scanner does, then
+  runs pytest, the API and the browser smoke with `--network none`). A
+  scanner build failure only emails the operator after the fact; CI is
+  where it breaks first. Runbook: `.oss-scanner/README.md`.
 
 ## Verification habits
 
