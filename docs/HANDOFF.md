@@ -725,7 +725,7 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     Voya appendix, and decide whether any pooled finding is worth a
     (frozen, dated) RESEARCH note — counts only, never firm-vs-firm blame.
 
-18. **OSS Scanner enrolment — READY, operator step pending (2026-10-09).**
+18. **OSS Scanner enrolment — IN FLIGHT, two clicks from done (2026-10-09).**
     `.oss-scanner/` is this repo's side of the
     [anthropics/oss-scanner](https://github.com/anthropics/oss-scanner)
     contract: `Dockerfile` (python:3.12-slim-bookworm, `COPY . /src`,
@@ -738,19 +738,39 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     API, collected documents, LLM output, the UI's innerHTML sites;
     scope in/out; Critical/High/Medium/Low tiers; leave-alone list — rate
     limiter is a CPU guard, open-when-unset gates are local-dev design,
-    privacy invariants are design), and a draft `project.yaml` that their
-    `tools/validate.py` accepts (verified 2026-10-09). **Next (operator,
-    not an agent):** pick a security alias (addresses in their repo are
-    public), fork `anthropics/oss-scanner`, add
-    `projects/insider-intel/project.yaml` from the draft with the real
-    contact, run their `tools/validate.py` + `tools/check insider-intel`,
-    open the PR (one project per PR), sign their CLA when the bot asks.
-    After merge, build failures and findings arrive by email on their
-    cadence; `disabled: true` over there pauses. Runbook:
-    `.oss-scanner/README.md`. Every later Dockerfile / threat-model change
-    is an ordinary PR here (read from `main` at each build) — CI's
-    `oss-scanner-image` job is the gate, since a scanner build failure only
-    emails after the fact.
+    privacy invariants are design), and a draft `project.yaml` (homepage
+    `insider-intel.net`, contact placeholder) that their `tools/validate.py`
+    accepts. **State:** the operator forked their repo to
+    `Scubber/oss-scanner`; branch `insider-intel` there carries
+    `projects/insider-intel/project.yaml` with the REAL contact (the
+    operator's choice; it lives only in that fork and the public enrolment,
+    never here — `tests/test_oss_scanner.py` pins the placeholder). The
+    enrolment PR against `anthropics/oss-scanner` is NOT open yet: the
+    sandbox session could not create it (repo out of scope; `gh pr create`
+    denied as a public surface) and could not run their `tools/check`
+    (egress policy blocks Debian mirrors, so the Dockerfile's apt step
+    never ran — the suite [777, network-less namespace], seed script, API
+    smoke on the seeded corpus and ui_smoke_ci [55/55] all pass natively).
+    **Order of the remaining steps — the ordering is load-bearing:**
+    (1) merge this repo's `claude/brave-wright-4kh8fk` into `main` — the
+    enrolment pins `Scubber/insider-intel#main` and their reviewers'
+    `tools/check` clones `main`, which has no `.oss-scanner/` until then;
+    watch the new `oss-scanner-image` CI job on that PR — it is the first
+    real build of the Dockerfile, and a failure there is a Dockerfile fix
+    here, not an enrolment problem; (2) open the PR from the fork's
+    `insider-intel` branch to `anthropics/oss-scanner` `main` as a DRAFT,
+    body = their PR template with the context paragraph (a prefilled
+    compare link was handed to the operator; the body text is
+    reproducible from `.github/PULL_REQUEST_TEMPLATE.md` in their repo);
+    (3) on a machine with Docker and network: `git clone
+    https://github.com/Scubber/oss-scanner && git checkout insider-intel &&
+    pip install pyyaml && tools/validate.py && tools/check insider-intel`,
+    then `pytest -q` and `python scripts/ui_smoke_ci.py` in the offline
+    shell it opens (`--qemu` keeps it in a VM); tick that box; (4) the
+    operator reads and ticks the terms box, replies to the CLA bot, marks
+    the PR ready. After their merge: build failures and findings email the
+    contact on their cadence; `disabled: true` over there pauses. Keep the
+    draft here in step for PATHS only. Runbook: `.oss-scanner/README.md`.
 
 ---
 
