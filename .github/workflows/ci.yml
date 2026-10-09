@@ -16,6 +16,7 @@ on:
       - "Makefile"
       - ".dockerignore"
       - ".github/workflows/ci.yml"
+      - ".oss-scanner/**"
   pull_request:
     paths:
       - "apps/**"
@@ -29,6 +30,7 @@ on:
       - "Makefile"
       - ".dockerignore"
       - ".github/workflows/ci.yml"
+      - ".oss-scanner/**"
 
 jobs:
   build-test:
@@ -83,3 +85,33 @@ jobs:
           name: ui-smoke-failures
           path: ui-smoke-artifacts/
           if-no-files-found: ignore
+
+  # OSS Scanner enrolment gate (anthropics/oss-scanner, 2026-10-09): the
+  # scanner builds .oss-scanner/Dockerfile with this repo as the context and
+  # audits the result with NO network. A build that breaks only emails the
+  # operator after the fact, so prove it here first: build the image the way
+  # the scanner does (root .dockerignore removed), then run the suite, the
+  # API and the browser floor with --network none.
+  oss-scanner-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Build the audit image (checkout as context, no .dockerignore)
+        run: |
+          rm -f .dockerignore
+          docker build -f .oss-scanner/Dockerfile -t insider-intel-scan .
+      - name: Test suite offline
+        run: docker run --rm --network none insider-intel-scan pytest -q -p no:cacheprovider
+      - name: API serves the seeded corpus offline
+        run: |
+          docker run --rm --network none insider-intel-scan bash -ec '
+            uvicorn apps.search.api:app --host 127.0.0.1 --port 8000 >/tmp/api.log 2>&1 &
+            for i in $(seq 1 30); do curl -sf localhost:8000/health >/dev/null && break; sleep 1; done
+            curl -sf localhost:8000/health
+            test "$(curl -sf "localhost:8000/articles?limit=50" | python3 -c "import json,sys; print(len(json.load(sys.stdin)[\"results\"]))")" -gt 0
+            curl -sf localhost:8000/evidence/ledger >/dev/null
+            curl -sf localhost:8000/tooling >/dev/null
+          '
+      - name: Browser smoke offline (static web/, Chromium in the image)
+        run: docker run --rm --network none insider-intel-scan python scripts/ui_smoke_ci.py
