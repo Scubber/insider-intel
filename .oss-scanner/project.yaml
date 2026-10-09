@@ -18,7 +18,7 @@ repo: https://github.com/Scubber/insider-intel#main
 primary_contact: security@example.invalid
 
 # Optional. The project's home page.
-homepage: https://intel.thederpweb.com
+homepage: https://insider-intel.net
 
 # Optional. true pauses reports without removing the enrolment.
 disabled: false
