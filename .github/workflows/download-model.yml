@@ -2,7 +2,8 @@ name: download-model
 
 # Download a Hugging Face model onto the DGX Spark via the self-hosted runner.
 # Queues naturally via concurrency group if multiple dispatches.
-# Targets HF cache used by sparky vLLM.
+# Targets the HF cache (~/.cache/huggingface/hub) used by sparky vLLM.
+# Download-only: never touches the running vllm/open-webui containers.
 on:
   workflow_dispatch:
     inputs:
@@ -26,32 +27,55 @@ jobs:
   download:
     runs-on: self-hosted
     timeout-minutes: 180
+    env:
+      MODEL: ${{ github.event.inputs.model_id }}
+      CONFIRM: ${{ github.event.inputs.confirm }}
     steps:
       - name: Download model
         run: |
           set -euo pipefail
-          if [ "${{ github.event.inputs.confirm }}" != "RUN" ]; then
-            echo "confirm must be RUN"; exit 1
-          fi
-          MODEL="${{ github.event.inputs.model_id }}"
+          [ "$CONFIRM" = "RUN" ] || { echo "confirm must be RUN"; exit 1; }
+          case "$MODEL" in
+            */*) ;;
+            *) echo "model_id must look like owner/name"; exit 1 ;;
+          esac
           SPARKY="$HOME/sparky"
-          TOKEN=$(sed -n 's/^HF_TOKEN=//p' "$SPARKY/.env" | head -1)
-          if [ -z "$TOKEN" ]; then
-            echo "No HF_TOKEN in $SPARKY/.env"; exit 1
+          HF_TOKEN=$(sed -n 's/^HF_TOKEN=//p' "$SPARKY/.env" | head -1)
+          [ -n "$HF_TOKEN" ] || { echo "No HF_TOKEN in $SPARKY/.env"; exit 1; }
+          export HF_TOKEN
+          HUB="$HOME/.cache/huggingface/hub"
+          mkdir -p "$HUB"
+
+          echo "== disk before =="
+          df -h "$HUB"
+          NEED=$(python3 - "$MODEL" <<'PY'
+          import json, os, sys, urllib.request
+          req = urllib.request.Request(
+              "https://huggingface.co/api/models/%s?blobs=true" % sys.argv[1],
+              headers={"Authorization": "Bearer " + os.environ["HF_TOKEN"]})
+          d = json.load(urllib.request.urlopen(req, timeout=30))
+          print(sum((f.get("size") or 0) for f in d.get("siblings", [])))
+          PY
+          )
+          FREE=$(df -B1 --output=avail "$HUB" | tail -1 | tr -d ' ')
+          echo "repo size: $((NEED / 1000000000)) GB, free: $((FREE / 1000000000)) GB"
+          if [ "$FREE" -lt $((NEED + 20000000000)) ]; then
+            echo "Not enough disk (need repo size + 20 GB headroom)"; exit 1
           fi
+
           echo "Downloading $MODEL ..."
-          # Prefer huggingface-cli if available, else python
-          if command -v huggingface-cli >/dev/null 2>&1; then
-            huggingface-cli download "$MODEL" --token "$TOKEN"
+          if command -v hf >/dev/null 2>&1; then
+            hf download "$MODEL"
+          elif command -v huggingface-cli >/dev/null 2>&1; then
+            huggingface-cli download "$MODEL"
           else
-            python3 -m pip install --quiet huggingface_hub
-            python3 -c "
-from huggingface_hub import snapshot_download
-import os
-os.environ['HF_TOKEN'] = '$TOKEN'
-snapshot_download(repo_id='$MODEL')
-print('Done')
-"
+            VENV="$HOME/.cache/hf-dl-venv"
+            [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
+            "$VENV/bin/pip" install --quiet --upgrade huggingface_hub
+            "$VENV/bin/python" -c 'import os, sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"
           fi
           echo "Download complete for $MODEL"
-          du -sh "$HOME/.cache/huggingface/hub/models--*" 2>/dev/null | tail -5 || true
+          echo "== disk after =="
+          df -h "$HUB"
+          echo "== HF cache =="
+          du -sh "$HUB"/models--* 2>/dev/null || true
