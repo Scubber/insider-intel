@@ -26,7 +26,7 @@ permissions:
 jobs:
   download:
     runs-on: self-hosted
-    timeout-minutes: 180
+    timeout-minutes: 480
     env:
       MODEL: ${{ github.event.inputs.model_id }}
       CONFIRM: ${{ github.event.inputs.confirm }}
@@ -84,10 +84,21 @@ jobs:
             # in-container mount path does not matter.
             IMG=$(docker inspect sparky-vllm --format '{{.Config.Image}}')
             echo "$HUB not writable by $(whoami); downloading via throwaway container ($IMG)"
-            docker run --rm --entrypoint python3 \
-              -e HF_TOKEN -e HF_HUB_CACHE=/hfhub \
-              -v "$HUB":/hfhub \
-              "$IMG" -c 'import sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"
+            # Retry: big pulls hit transient Xet/CDN errors (run #6 died at
+            # ~24 min on "CAS Client Error"); finished blobs are kept, so each
+            # retry resumes where the last one stopped.
+            ok=""
+            for attempt in 1 2 3 4; do
+              echo "== attempt $attempt =="
+              if docker run --rm --entrypoint python3 \
+                -e HF_TOKEN -e HF_HUB_CACHE=/hfhub \
+                -v "$HUB":/hfhub \
+                "$IMG" -c 'import sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"; then
+                ok=1; break
+              fi
+              sleep 30
+            done
+            [ -n "$ok" ] || { echo "download failed after 4 attempts"; exit 1; }
           fi
           echo "Download complete for $MODEL"
           echo "== disk after =="
