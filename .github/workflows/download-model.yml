@@ -64,15 +64,30 @@ jobs:
           fi
 
           echo "Downloading $MODEL ..."
-          if command -v hf >/dev/null 2>&1; then
-            hf download "$MODEL"
-          elif command -v huggingface-cli >/dev/null 2>&1; then
-            huggingface-cli download "$MODEL"
+          if [ -w "$HUB" ]; then
+            if command -v hf >/dev/null 2>&1; then
+              hf download "$MODEL"
+            elif command -v huggingface-cli >/dev/null 2>&1; then
+              huggingface-cli download "$MODEL"
+            else
+              VENV="$HOME/.cache/hf-dl-venv"
+              [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
+              "$VENV/bin/pip" install --quiet --upgrade huggingface_hub
+              "$VENV/bin/python" -c 'import sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"
+            fi
           else
-            VENV="$HOME/.cache/hf-dl-venv"
-            [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
-            "$VENV/bin/pip" install --quiet --upgrade huggingface_hub
-            "$VENV/bin/python" -c 'import os, sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"
+            # The hub dir is owned by root (created by the sparky-vllm
+            # container), so the runner user cannot write it. Download with
+            # a throwaway container from the same vLLM image (it ships
+            # huggingface_hub), as root, into the same cache. The serving
+            # container is not touched. Cache symlinks are relative, so the
+            # in-container mount path does not matter.
+            IMG=$(docker inspect sparky-vllm --format '{{.Config.Image}}')
+            echo "$HUB not writable by $(whoami); downloading via throwaway container ($IMG)"
+            docker run --rm --entrypoint python3 \
+              -e HF_TOKEN -e HF_HUB_CACHE=/hfhub \
+              -v "$HUB":/hfhub \
+              "$IMG" -c 'import sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1]))' "$MODEL"
           fi
           echo "Download complete for $MODEL"
           echo "== disk after =="
