@@ -1,0 +1,57 @@
+name: download-model
+
+# Download a Hugging Face model onto the DGX Spark via the self-hosted runner.
+# Queues naturally via concurrency group if multiple dispatches.
+# Targets HF cache used by sparky vLLM.
+on:
+  workflow_dispatch:
+    inputs:
+      model_id:
+        description: "HF model ID to download (e.g. coolthor/Huihui-Qwen3.6-35B-A3B-abliterated-NVFP4-W4A4)"
+        required: true
+        type: string
+      confirm:
+        description: "must be the literal word RUN"
+        required: true
+        default: ""
+
+concurrency:
+  group: sparky-ops
+  cancel-in-progress: false
+
+permissions:
+  contents: none
+
+jobs:
+  download:
+    runs-on: self-hosted
+    timeout-minutes: 180
+    steps:
+      - name: Download model
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.confirm }}" != "RUN" ]; then
+            echo "confirm must be RUN"; exit 1
+          fi
+          MODEL="${{ github.event.inputs.model_id }}"
+          SPARKY="$HOME/sparky"
+          TOKEN=$(sed -n 's/^HF_TOKEN=//p' "$SPARKY/.env" | head -1)
+          if [ -z "$TOKEN" ]; then
+            echo "No HF_TOKEN in $SPARKY/.env"; exit 1
+          fi
+          echo "Downloading $MODEL ..."
+          # Prefer huggingface-cli if available, else python
+          if command -v huggingface-cli >/dev/null 2>&1; then
+            huggingface-cli download "$MODEL" --token "$TOKEN"
+          else
+            python3 -m pip install --quiet huggingface_hub
+            python3 -c "
+from huggingface_hub import snapshot_download
+import os
+os.environ['HF_TOKEN'] = '$TOKEN'
+snapshot_download(repo_id='$MODEL')
+print('Done')
+"
+          fi
+          echo "Download complete for $MODEL"
+          du -sh "$HOME/.cache/huggingface/hub/models--*" 2>/dev/null | tail -5 || true
