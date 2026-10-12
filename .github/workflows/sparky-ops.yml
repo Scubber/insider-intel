@@ -58,6 +58,7 @@ on:
           - chat-swap
           - chat-huihui
           - chat-default
+          - chat-overlays
       confirm:
         description: "mutating ops only: must be the literal word RUN"
         required: false
@@ -136,7 +137,7 @@ jobs:
           echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           [ -d "$WORKDIR/.git" ] || { echo "No git checkout at $WORKDIR"; exit 1; }
           case "$OP" in
-            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default)
+            pull-main|enable-india|enable-ocr|smoke-india|extract-india|run-refresh|backfill-field|set-enrich-knobs|sweep-start|sweep-stop|gcp-sweep-launch|gcp-sweep-delete|chat-swap|chat-huihui|chat-default|chat-overlays)
               [ "$CONFIRM" = "RUN" ] || { echo "op '$OP' mutates the box — re-dispatch with confirm=RUN"; exit 1; } ;;
           esac
 
@@ -647,3 +648,53 @@ jobs:
             http://127.0.0.1:8001/v1/chat/completions)
           echo "tool_choice=auto probe: HTTP $CODE"
           [ "$CODE" = "200" ] || { echo "tool-enabled request still failing:"; head -c 400 /tmp/huihui-tooltest.json; echo; exit 1; }
+
+      # Writes the three NVFP4 abliterated Qwen3.6-35B test overlays into
+      # ~/sparky, derived from model-enrich.yml exactly the way chat-huihui
+      # derives model-huihui.yml (model-string substitution, --quantization
+      # pin dropped, tool-calling flags added), plus per-model-card flags.
+      # FILES ONLY: no compose up, nothing restarts, serving is untouched.
+      # Test each afterwards with: chat-swap overlay=<file> confirm=RUN,
+      # and swap back with chat-swap overlay=<previous> (or empty) confirm=RUN.
+      # See docs/sparky-model-tests.md for flag sources.
+      - name: chat-overlays
+        if: ${{ github.event.inputs.op == 'chat-overlays' }}
+        run: |
+          set -euo pipefail
+          SPARKY="$HOME/sparky"
+          TEMPLATE="$SPARKY/model-enrich.yml"
+          [ -f "$TEMPLATE" ] || { echo "no $TEMPLATE to derive from"; exit 1; }
+          NEMO="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+          grep -q "$NEMO" "$TEMPLATE" || { echo "template does not mention $NEMO, structure (redacted):"; sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$TEMPLATE"; exit 1; }
+          gen() { # gen <out file> <hf model id> <extra arg>...
+            local name="$1" out="$SPARKY/$1" model="$2"; shift 2
+            local tmp; tmp=$(mktemp)
+            printf '%s\n' "$@" > "$tmp"
+            sed -e "s|${NEMO}|${model}|g" -e '/--quantization/,+1d' "$TEMPLATE" \
+              | awk -v m="$model" -v f="$tmp" '
+                  { print }
+                  !done && index($0, m) && $0 ~ /^[[:space:]]*-/ {
+                    match($0, /^[[:space:]]*/); ind = substr($0, 1, RLENGTH)
+                    while ((getline a < f) > 0) print ind "- \x27" a "\x27"
+                    done = 1
+                  }' > "$out"
+            rm -f "$tmp"
+            echo "== $name (key lines redacted) =="
+            sed 's/.*[Kk][Ee][Yy].*/[REDACTED]/' "$out"; echo
+          }
+          gen model-coolthor-w4a4.yml coolthor/Huihui-Qwen3.6-35B-A3B-abliterated-NVFP4-W4A4 \
+            --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 \
+            --trust-remote-code --max-num-batched-tokens 8192
+          gen model-theplague-mtp.yml THe-Plague/Qwen3.6-35B-A3B-abliterated-NVFP4-MTP \
+            --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 \
+            --trust-remote-code \
+            --speculative-config '{"method": "mtp", "num_speculative_tokens": 3}'
+          gen model-joshebbs-modelopt.yml joshebbs/qwen3.6-35b-abliterated-nvfp4-modelopt \
+            --quantization modelopt_fp4 \
+            --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3 \
+            --trust-remote-code
+          for f in model-coolthor-w4a4.yml model-theplague-mtp.yml model-joshebbs-modelopt.yml; do
+            (cd "$SPARKY" && docker compose -f compose.yml -f "$f" config -q) \
+              && echo "$f: compose config OK" || { echo "$f: compose config INVALID"; exit 1; }
+          done
+          echo "overlays written; serving model untouched"
