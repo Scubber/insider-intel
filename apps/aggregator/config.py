@@ -71,7 +71,9 @@ DEFAULT_FEEDS: list[FeedSource] = [
     FeedSource(
         id="securityboulevard",
         name="Security Boulevard",
-        url="https://securityboulevard.com/feed/",
+        # securityboulevard.com/feed returns a Cloudflare 403;
+        # FeedBurner is the live RSS (verified 2026-10-16).
+        url="https://feeds.feedburner.com/SecurityBoulevard",
         category="insider-osint",
     ),
     FeedSource(
