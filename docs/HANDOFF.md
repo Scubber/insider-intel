@@ -795,9 +795,15 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     ~/sparky/scripts/setup-actions-runner.sh` (stops the user service,
     removes the insider-intel registration, registers to sparky, restarts);
     (3) dispatch `sparky-ops` → `diagnose` from sparky's Actions tab — the
-    live check; (4) merge this PR; (5) delete the old public runs here
-    (`DELETE /repos/Scubber/insider-intel/actions/runs/{id}` per run, or
-    the Actions UI — deleting the workflow file does NOT delete its runs);
+    live check; (4) merge this PR; (5) archive, then delete, the 148 old
+    runs here — deleting the workflow file does NOT delete its runs, and
+    GitHub cannot move a run between repos, so sparky carries the full
+    inventory (`docs/ops-archive/insider-intel-actions/INDEX.md` +
+    `runs.json`, captured 2026-10-25) and
+    `~/sparky/scripts/archive-insider-intel-runs.sh` pulls every run's log
+    text into that tree, then `DELETE=RUN` deletes each verified run
+    (from a laptop or the box — the sandbox cannot reach GitHub's log
+    storage); commit the archive in sparky;
     (6) if the August 4h sweep-watch Routine still exists in the operator's
     Claude account, retarget or delete it — it dispatched `sparky-ops` here.
     Until (2) completes, no `sparky-ops` dispatch works from either repo.
