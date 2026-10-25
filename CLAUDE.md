@@ -394,8 +394,15 @@ round-trip), `service-logs` (Cloud Run API service errors + request 5xx).
 Every stdlib corpus reader dedupes the JSONL **last-line-wins per link**
 (`evidence.py::collapse_rows_by_link`, the store's own `load_all` rule —
 `upsert` appends mid-cycle, so a raw read sees stale generations first).
-**Sparky is reachable too**: `sparky-ops` (2026-08-23) runs on a
-self-hosted Actions runner ON the DGX Spark — `diagnose` / `tail-refresh-log`
+**Sparky is reachable too — from the private `Scubber/sparky` repo, not
+this one** (moved 2026-10-25: this repo is public, so every `sparky-ops` run
+log — hostname, crontab, `docker ps`, refresh-log tails — was world-readable,
+and a scraper quoted them back at the operator). The self-hosted Actions
+runner ON the DGX Spark is registered to `Scubber/sparky` and serves
+`sparky-ops` and `download-model` from that repo's `.github/workflows/`
+(`~/sparky/scripts/setup-actions-runner.sh` registers or moves the runner).
+The ops are unchanged and still target the box's operational clone of THIS
+repo (`~/insider-intel`): `diagnose` / `tail-refresh-log`
 / `env-audit` (key names only, never values) / `git-status` are read-only;
 `pull-main` / `enable-india` / `smoke-india` / `run-refresh` mutate the box
 and require `confirm=RUN`; `run-replay` runs the spend-gate replay there;
@@ -405,7 +412,9 @@ Chat-stack ops (the box is a chat host between cycles): `chat-status`
 (read-only), `chat-swap` (load an overlay's model now; refuses while the
 refresh flock is held), `chat-default` (sets `SPARKY_CHAT_OVERRIDE` in
 `.env.spark` — the model every nightly hand-back restores; the Nemotron
-enrich overlay since 2026-08-24, operator choice).
+enrich overlay since 2026-08-24, operator choice). **Never add a
+`runs-on: self-hosted` workflow to this repo again** — anything that
+executes on the box belongs in `Scubber/sparky`, where the logs are private.
 A dispatch workflow must exist on `main` to be invokable; it then runs the
 file from whatever ref you pass, so branch diagnostics work without merging.
 
