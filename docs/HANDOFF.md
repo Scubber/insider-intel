@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-10-09 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-10-25 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 4Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -66,7 +66,8 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | #190 | `spark_refresh.sh` wrapper hardening (post-incident: flock, cycle bound, `--build`, reload skip when `SPARK_RELOAD_URL` empty) |
 | #196–#197 | **octoDNS: thederpweb.com zone live on Cloudflare** (zone reconciled; null MX + SPF `-all` + DMARC reject added; `insider-intel.net` apex/www stay Worker-owned behind a `NameRejectlistFilter`) — see thread #13 |
 | #247 | **IndiaCourts lane + jurisdiction plumbing + spend-gate tune** (landed by fast-forward, PR closed-not-merged by GitHub semantics): $0 eCourts lexicon-scan lane (dark), `legal_metadata`/`country` facet, EVIDENCE nation tabs + TACTICS BY REGION, Indian legal postures, export schema v6, `FILINGS_SOURCE_PREFIXES` channel fix, two-part body signal + `STRONG_INSIDER_OFFENSES` ≥3-mention rule — threads #8 and #10 |
-| (this PR) | **Emailed research briefings**: `research-pack.yml` + `scripts/research_pack.py` (corpus pull for one topic, to the job log), `research-mail.yml` + `scripts/markdown_mail.py` (SMTP delivery of a briefing file), `docs/research/topics.md` (queue), `docs/research/routine-prompt.md` (playbook), `docs/research/briefings/` (archive), `tests/test_research_pack.py` + `tests/test_research_briefings.py`. The monthly Routine itself lives in the operator's Claude account, not the repo. |
+| (this PR) | **`sparky-ops` + `download-model` moved OUT to the private `Scubber/sparky` repo.** Both ran on the self-hosted runner on the Spark and their run logs are box forensics (hostname, crontab, systemd timers, `docker ps`, home-dir paths, refresh-log tails) — all 137 `sparky-ops` runs here were world-readable, and on 2026-10-25 a cold email quoted the `diagnose` op and thread #14 back at the operator. Workflows deleted here, byte-identical copies + `scripts/setup-actions-runner.sh` in sparky (PR #7 there). The ops still target `~/insider-intel` on the box. Thread #19 carries the box-side runner swap and the public-run cleanup. |
+| #301 | **Emailed research briefings**: `research-pack.yml` + `scripts/research_pack.py` (corpus pull for one topic, to the job log), `research-mail.yml` + `scripts/markdown_mail.py` (SMTP delivery of a briefing file), `docs/research/topics.md` (queue), `docs/research/routine-prompt.md` (playbook), `docs/research/briefings/` (archive), `tests/test_research_pack.py` + `tests/test_research_briefings.py`. The monthly Routine itself lives in the operator's Claude account, not the repo. |
 | #300 | **Emailed traffic digest** (`traffic-digest.yml` + `scripts/traffic_digest.py` + `scripts/send_digest_email.py`): weekly/monthly period-vs-prior analysis mailed via SMTP, secrets-only recipient, counts-only bucket history. Needs the three `TRAFFIC_DIGEST_*` secrets set after merge, then a `workflow_dispatch` to prove the mail path. |
 | #293 | **Field-backfill drain tooling**: `SUMMARIZER_BACKFILL_QUEUE_FIRST`, already-filled guard, per-row queue persistence, sparky-ops `set-enrich-knobs`. Drain RUN 2026-09-04/05 — thread #16. |
 
@@ -90,13 +91,18 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
   `traffic-report`, `refresh-corpus`/`watch-refresh`, `reenrich-drain`,
   `corpus-recover`. A dispatch workflow must exist on `main`; it then runs
   the file from any ref (branch diagnostics without merging).
-- **Sparky ops from anywhere** (2026-08-23): a **self-hosted Actions runner
-  on the DGX Spark** serves the `sparky-ops` dispatch workflow — box
-  forensics (`diagnose`), refresh-log tails, `.env.spark` audits (key names
-  only), git state, plus confirm-gated mutations (`pull-main`,
-  `enable-india`, `smoke-india`, `run-refresh`) and the spend-gate
-  `run-replay`. Ends the operator-terminal relay for routine sparky work;
-  the runner user's permissions bound everything it can do.
+- **Sparky ops from anywhere — dispatched from the private `Scubber/sparky`
+  repo since 2026-10-25** (2026-08-23 → 2026-10-25 the workflow lived here,
+  and its public run logs got scraped; see thread #19): a **self-hosted
+  Actions runner on the DGX Spark**, registered to `Scubber/sparky`, serves
+  the `sparky-ops` dispatch workflow — box forensics (`diagnose`),
+  refresh-log tails, `.env.spark` audits (key names only), git state, plus
+  confirm-gated mutations (`pull-main`, `enable-india`, `smoke-india`,
+  `run-refresh`) and the spend-gate `run-replay` — and `download-model`.
+  The ops target this repo's operational clone on the box
+  (`~/insider-intel`). Ends the operator-terminal relay for routine sparky
+  work; the runner user's permissions bound everything it can do. No
+  workflow in THIS repo runs on the box any more, by design.
 
 ---
 
@@ -771,6 +777,40 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     the PR ready. After their merge: build failures and findings email the
     contact on their cadence; `disabled: true` over there pauses. Keep the
     draft here in step for PATHS only. Runbook: `.oss-scanner/README.md`.
+
+19. **`sparky-ops` moved to the private sparky repo — runner swap PENDING
+    (2026-10-25).** Why: this repo is public, so the 137 `sparky-ops` and
+    11 `download-model` run logs (2026-08-24 → 2026-10-12, all inside the
+    90-day log retention) were world-readable box forensics, and a cold
+    email on 2026-10-25 quoted the `diagnose` op and thread #14's 00:04Z
+    write-up back at the operator. Done in this PR: both workflow files
+    deleted here; byte-identical copies plus `scripts/setup-actions-runner.sh`
+    (handles the re-registration) landed in `Scubber/sparky` (PR #7 there);
+    CLAUDE.md + this file repointed. **Remaining, in order — the ordering
+    is load-bearing because the runner binds to ONE repo:** (1) merge
+    sparky PR #7; (2) on the box, as the runner user:
+    `cd ~/sparky && git pull`, then
+    `RUNNER_REMOVE_TOKEN=$(gh api -X POST repos/Scubber/insider-intel/actions/runners/remove-token -q .token)
+    RUNNER_TOKEN=$(gh api -X POST repos/Scubber/sparky/actions/runners/registration-token -q .token)
+    ~/sparky/scripts/setup-actions-runner.sh` (stops the user service,
+    removes the insider-intel registration, registers to sparky, restarts);
+    (3) dispatch `sparky-ops` → `diagnose` from sparky's Actions tab — the
+    live check; (4) merge this PR; (5) archive, then delete, the 148 old
+    runs here — deleting the workflow file does NOT delete its runs, and
+    GitHub cannot move a run between repos, so sparky carries the full
+    inventory (`docs/ops-archive/insider-intel-actions/INDEX.md` +
+    `runs.json`, captured 2026-10-25) and
+    `~/sparky/scripts/archive-insider-intel-runs.sh` pulls every run's log
+    text into that tree, then `DELETE=RUN` deletes each verified run
+    (from a laptop or the box — the sandbox cannot reach GitHub's log
+    storage); commit the archive in sparky;
+    (6) if the August 4h sweep-watch Routine still exists in the operator's
+    Claude account, retarget or delete it — it dispatched `sparky-ops` here.
+    Until (2) completes, no `sparky-ops` dispatch works from either repo.
+    Still public after this PR and left that way on purpose: the incident
+    narratives in threads #14/#16 (ops history, no secrets) — trim them
+    separately if wanted. Invariant added to CLAUDE.md: no
+    `runs-on: self-hosted` workflow in this repo, ever.
 
 ---
 
