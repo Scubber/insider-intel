@@ -43,7 +43,10 @@ in `docs/research/briefings/` on a branch, emailed to the operator by the
 2. List open pull requests (GitHub `list_pull_requests`, state open). Any
    branch named `research/<slug>` means that slug is already taken.
 3. Take the first row whose Status is `queued` and whose slug has no open
-   `research/<slug>` branch and no file `docs/research/briefings/<slug>*.md`.
+   `research/<slug>` pull request, no `research/<slug>` branch on origin
+   (`git ls-remote --heads origin 'research/*'` — a closed, unmerged PR
+   leaves its branch behind and that briefing was still sent), and no file
+   `docs/research/briefings/<slug>*.md`.
 4. If every row is taken, write three new topic rows in the same table
    format (a question the corpus can answer, a pack spec), open a PR that
    adds them, and stop. Say so in the session; send no email.
