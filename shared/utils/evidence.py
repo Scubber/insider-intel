@@ -75,6 +75,13 @@ POSTURE_WEIGHT: dict[str, int] = {
     "fir_allegation": 1,
     "bail": 1,
     "quashing": 1,
+    # Appellate review (2026-11, RECAP now carries Supreme Court dockets back
+    # to 2000): a cert petition or appellate brief RECITES the record below;
+    # the reviewing court has found nothing about the conduct. Weighted like
+    # a settlement — resolved somewhere, but this document is not the finding
+    # — so "adjudicated" claims read off a petition cap at alleged unless the
+    # lower court's own judgment is the enriched document.
+    "appellate_review": 3,
 }
 POSTURE_ADJUDICATED_MIN_WEIGHT = 4
 CHANNELS = ("email", "chat", "network", "endpoint", "cloud", "identity", "physical", "human")

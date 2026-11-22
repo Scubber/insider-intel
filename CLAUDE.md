@@ -61,6 +61,22 @@ Voya India`) adds per-company coverage — `company_watchlist_queries` expands
 each name into a scoped insider query **and** a bare catch-all, appended to
 both lanes. CourtListener indexes US courts only, so a non-US entity is matched
 by US filings that name it, not by foreign court records.
+**Supreme Court (2026-11-22):** the RECAP Archive now carries SCOTUS dockets
+and filings back to 2000 (Free Law Project, 2026-11-18; court id `scotus`),
+fed from the Court's own e-filing system — NOT PACER. The forward lane sees
+them by construction (`type=r` spans every RECAP court), so three things
+changed, not the queries: every CourtListener hit now stamps typed
+`legal_metadata` (court id in `jurisdiction`, `court_level`
+supreme|appellate|district|bankruptcy via `court_level_for`); a second,
+court-scoped history sweep (`run_scotus_history_sweep`, own cursor keys
+`courtlistener_history:cursor:scotus`, full query rotation per 365-day
+window, floor `COURTLISTENER_SCOTUS_HISTORY_FLOOR=2000-01-01`, empty
+disables) walks the years below the main sweep's 2015 floor;
+and the PACER purchaser skips non-PACER courts (`is_pacer_court`,
+`NON_PACER_COURT_IDS`) — RECAP Fetch has nothing to buy there. Bodies
+arrive through the ordinary free text backfill. The enricher gained the
+`appellate_review` posture (weight 3, below the adjudicated floor): a cert
+petition recites the record below, it finds nothing.
 
 **IndiaCourts** (`indiacourts.py` + `indiacourts_pipeline.py`,
 docs/india-courts-ingest.md) is the $0 Indian filings lane: a local
@@ -324,6 +340,7 @@ python -m apps.aggregator ingest_social_url <url>     # flag one post (handles /
 python -m apps.aggregator backfill_courtlistener_text # pull full RECAP/opinion bodies for stored cases
 python -m apps.aggregator purchase_pacer --dry-run    # preview PACER buys (RECAP Fetch, budget-capped)
 python -m apps.aggregator sweep_courtlistener_history --windows 4  # pull historical case windows manually
+python -m apps.aggregator sweep_courtlistener_history --courts scotus --windows 4  # the Supreme Court sweep (own cursor)
 python -m apps.aggregator ingest_indiacourts          # scan new Indian HC judgments (INDIACOURTS_ENABLED)
 python -m apps.aggregator sweep_indiacourts_history   # walk Indian judgment years back to the 2000 floor
 python -m apps.aggregator sweep_indiacourts_bulk      # FULL-history tar-stream sweep (days; see HANDOFF #8)

@@ -31,6 +31,7 @@ from apps.aggregator.courtlistener import (
     SOURCE_ID,
     CourtListenerError,
     fetch_docket_entries,
+    is_pacer_court,
     parse_docket_id,
     request_pacer_fetch,
 )
@@ -159,15 +160,25 @@ def run_pacer_purchases(
         if article_qualifies(row, filing_requires_body=False)
     }
 
-    candidates = [
-        a
-        for a in article_store.load_all()
-        if a.source_id == SOURCE_ID
-        and needs_full_text(a)
-        and a.link in qualifying_links
+    candidates = []
+    non_pacer_skipped = 0
+    for a in article_store.load_all():
+        if a.source_id != SOURCE_ID or not needs_full_text(a) or a.link not in qualifying_links:
+            continue
         # Buy only after the free archive was checked and came up empty.
-        and ingest_state.get(_TEXT_ATTEMPT_KEY.format(link=a.link)) is not None
-    ]
+        if ingest_state.get(_TEXT_ATTEMPT_KEY.format(link=a.link)) is None:
+            continue
+        # Supreme Court dockets live in RECAP but not on PACER (the Court's own
+        # e-filing system feeds them) — RECAP Fetch has nothing to buy there.
+        if not is_pacer_court(a):
+            non_pacer_skipped += 1
+            continue
+        candidates.append(a)
+    if non_pacer_skipped:
+        logger.info(
+            "PACER purchases: skipped %d qualifying docket(s) from non-PACER courts",
+            non_pacer_skipped,
+        )
     candidates.sort(
         key=lambda a: (a.published or a.ingested_at).timestamp()
         if (a.published or a.ingested_at)

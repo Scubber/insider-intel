@@ -11,6 +11,7 @@ from apps.aggregator.courtlistener_pipeline import (
     run_courtlistener_history_sweep,
     run_courtlistener_ingestion,
     run_courtlistener_text_backfill,
+    run_scotus_history_sweep,
 )
 from apps.aggregator.datatheftnews_pipeline import run_datatheftnews_ingestion
 from apps.aggregator.feedly_pipeline import run_feedly_ingestion
@@ -107,6 +108,10 @@ def run_full_pipeline(
         # backfill below over subsequent runs).
         history_result = run_courtlistener_history_sweep(store_path=raw_path)
         court_result = _merge_ingestion(court_result, history_result)
+        # Second cursor for the RECAP Supreme Court collection (filings since
+        # 2000 — older than the main sweep's floor). No-op once at its floor.
+        scotus_result = run_scotus_history_sweep(store_path=raw_path)
+        court_result = _merge_ingestion(court_result, scotus_result)
         # Pull full RECAP/opinion document text for stored cases before
         # processing, so re-scoring + LLM extraction see whole filings.
         text_result = run_courtlistener_text_backfill(

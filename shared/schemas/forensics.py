@@ -105,6 +105,12 @@ LEGAL_POSTURES = (
     "civil_decree",
     "trial_judgment",
     "acquittal",
+    # Appellate review (2026-11, the RECAP Supreme Court collection): a cert
+    # petition, appellate brief, or order granting/denying review. The
+    # reviewing court decided nothing about the conduct, so it sits below the
+    # adjudicated floor; the lower court's merits decision keeps its own
+    # posture when THAT document is the one enriched.
+    "appellate_review",
     "none",
     "unknown",
 )

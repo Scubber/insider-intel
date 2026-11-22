@@ -192,6 +192,22 @@ class Settings(BaseSettings):
             "COURTLISTENER_API_TOKEN lifts the limit (0 = all queries per window)."
         ),
     )
+    # Court-scoped sweep for the RECAP Supreme Court collection (FLP, 2026-11):
+    # SCOTUS dockets + filings reach back to 2000, past the main sweep's floor,
+    # so a second cursor (own state keys) walks `court=scotus` down to this
+    # floor. Low volume ⇒ the full query rotation runs per window. Empty
+    # disables; the main sweep is untouched either way.
+    courtlistener_scotus_history_floor: str = Field(
+        default="2000-01-01",
+        alias="COURTLISTENER_SCOTUS_HISTORY_FLOOR",
+        description="Supreme Court (court=scotus) sweep floor (empty disables)",
+    )
+    courtlistener_scotus_history_window_days: int = Field(
+        default=365,
+        alias="COURTLISTENER_SCOTUS_HISTORY_WINDOW_DAYS",
+        ge=7,
+        le=365,
+    )
     courtlistener_lookback_days: int = Field(
         default=3,
         alias="COURTLISTENER_LOOKBACK_DAYS",

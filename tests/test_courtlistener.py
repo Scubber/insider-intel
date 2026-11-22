@@ -939,3 +939,172 @@ def test_history_sweep_throttle_does_not_advance_cursor(tmp_path, monkeypatch) -
     state = clp.JsonIngestState(tmp_path / "state.json")
     clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
     assert state.get("courtlistener_history:cursor") is None  # window retries next run
+
+
+# --- RECAP Supreme Court collection (FLP, 2026-11) ---------------------------
+
+
+def test_recap_hit_stamps_us_court_provenance() -> None:
+    from apps.aggregator.courtlistener import is_pacer_court
+
+    hit = {
+        "caseName": "United States v. Example",
+        "docket_absolute_url": "/docket/123/united-states-v-example/",
+        "court": "District Court, S.D. New York",
+        "court_id": "nysd",
+        "docketNumber": "1:24-cr-00001",
+        "dateFiled": "2024-06-01",
+    }
+    article = hit_to_raw_article(hit, query='"trade secret"')
+    assert article is not None and article.legal_metadata is not None
+    legal = article.legal_metadata
+    assert legal.country_code == "US"
+    assert legal.jurisdiction == "nysd"
+    assert legal.court_name == "District Court, S.D. New York"
+    assert legal.court_level == "district"
+    assert legal.document_kind == "docket"
+    assert legal.case_number == "1:24-cr-00001"
+    assert legal.cnr is None  # never fabricated
+    assert is_pacer_court(article)
+
+
+def test_scotus_hit_is_supreme_tier_and_not_a_pacer_court() -> None:
+    from apps.aggregator.courtlistener import (
+        SCOTUS_COURT_NAME,
+        court_level_for,
+        is_pacer_court,
+    )
+
+    hit = {
+        "caseName": "Petitioner v. United States",
+        "docket_absolute_url": "/docket/777/petitioner-v-united-states/",
+        "court": SCOTUS_COURT_NAME,
+        "court_id": "scotus",
+        "docketNumber": "24-123",
+        "dateFiled": "2025-01-15",
+    }
+    article = hit_to_raw_article(hit, query='"insider trading"')
+    assert article is not None and article.legal_metadata is not None
+    assert article.legal_metadata.jurisdiction == "scotus"
+    assert article.legal_metadata.court_level == "supreme"
+    assert article.summary is not None and SCOTUS_COURT_NAME in article.summary
+    assert not is_pacer_court(article)
+    # Legacy rows (pre-stamp) carry only the summary line — same answer.
+    legacy = article.model_copy(update={"legal_metadata": None})
+    assert not is_pacer_court(legacy)
+    # Tier table: appellate / bankruptcy / unknown.
+    assert court_level_for("ca2") == "appellate"
+    assert court_level_for("cafc") == "appellate"
+    assert court_level_for("nysb") == "bankruptcy"
+    assert court_level_for("") is None
+    assert court_level_for("something-odd") is None
+
+
+def test_opinion_hit_stamps_opinion_provenance() -> None:
+    hit = {
+        "caseName": "Example v. State",
+        "absolute_url": "/opinion/456/example-v-state/",
+        "court": "Supreme Court of the United States",
+        "court_id": "scotus",
+        "docketNumber": "23-999",
+        "dateFiled": "2024-05-15",
+    }
+    article = opinion_hit_to_raw_article(hit, query="q")
+    assert article is not None and article.legal_metadata is not None
+    assert article.legal_metadata.document_kind == "opinion"
+    assert article.legal_metadata.court_level == "supreme"
+
+
+def test_search_passes_court_filter_only_when_scoped() -> None:
+    from apps.aggregator.courtlistener import _search
+
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, text=json.dumps({"results": [], "next": None}))
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        _search(search_type="dockets", query="q", client=client)
+        _search(search_type="dockets", query="q", courts="scotus", client=client)
+        _search(search_type="dockets", query="q", courts="  scotus   ca2 ", client=client)
+    assert "court" not in seen[0]
+    assert seen[1]["court"] == "scotus"
+    assert seen[2]["court"] == "scotus ca2"
+
+
+def test_scoped_history_sweep_owns_its_cursor_and_scopes_the_search(tmp_path, monkeypatch) -> None:
+    """The SCOTUS sweep walks to 2000 on its own keys; the main cursor never moves."""
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    seen_courts: list = []
+
+    stub = _history_search_stub(calls)
+
+    def fake_search(*, courts=None, **kw):
+        seen_courts.append(courts)
+        return stub(**kw)
+
+    monkeypatch.setattr(clp, "_search", fake_search)
+    monkeypatch.setenv("COURTLISTENER_HISTORY_FLOOR", "2015-01-01")
+    monkeypatch.setenv("COURTLISTENER_HISTORY_QUERIES_PER_WINDOW", "4")
+    monkeypatch.setenv("COURTLISTENER_SCOTUS_HISTORY_FLOOR", "2000-01-01")
+    monkeypatch.setenv("COURTLISTENER_SCOTUS_HISTORY_WINDOW_DAYS", "365")
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    nq = len(clp.history_rotation_queries())
+
+    cursor_key, qoffset_key = clp.history_state_keys("scotus")
+    assert cursor_key == "courtlistener_history:cursor:scotus"
+    assert clp.history_state_keys(None) == (clp._HISTORY_CURSOR_KEY, clp._HISTORY_QOFFSET_KEY)
+
+    r1 = clp.run_scotus_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    # Full rotation per window (queries_per_window forced to 0), both types.
+    assert len(calls) == nq * 2
+    assert set(seen_courts) == {"scotus"}
+    assert r1.sources and r1.sources[0].source_id == "courtlistener-history-scotus"
+    assert r1.sources[0].success
+    _, _, since1, before1 = calls[0]
+    assert since1 < before1
+    # Own cursor advanced by one 365-day window; main cursor untouched.
+    assert state.get(cursor_key) == since1
+    assert state.get(qoffset_key) == "0"
+    assert state.get(clp._HISTORY_CURSOR_KEY) is None
+    assert state.get(clp._HISTORY_QOFFSET_KEY) is None
+
+    # The unscoped sweep still starts from today — the scoped cursor is invisible to it.
+    calls.clear()
+    seen_courts.clear()
+    clp.run_courtlistener_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert set(seen_courts) == {None}
+    assert len(calls) == 4 * 2  # the configured 4-query slice, not the full rotation
+    assert state.get(clp._HISTORY_CURSOR_KEY) is None  # window held (slice 1 of N)
+    assert state.get(cursor_key) == since1
+
+
+def test_scoped_history_sweep_disabled_by_empty_floor(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
+    monkeypatch.setenv("COURTLISTENER_SCOTUS_HISTORY_FLOOR", "")
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    result = clp.run_scotus_history_sweep(store_path=str(tmp_path / "raw.jsonl"), state=state)
+    assert result.sources == [] and calls == []
+
+
+def test_scoped_history_sweep_stops_at_its_floor(tmp_path, monkeypatch) -> None:
+    import apps.aggregator.courtlistener_pipeline as clp
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(clp, "_search", _history_search_stub(calls))
+    state = clp.JsonIngestState(tmp_path / "state.json")
+    cursor_key, _ = clp.history_state_keys("scotus")
+    state.set(cursor_key, "1999-12-31")
+    result = clp.run_courtlistener_history_sweep(
+        store_path=str(tmp_path / "raw.jsonl"),
+        state=state,
+        courts="scotus",
+        floor="2000-01-01",
+    )
+    assert result.sources == [] and calls == []

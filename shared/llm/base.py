@@ -304,8 +304,13 @@ Enum values (use exactly these strings):
   civil_suit | settlement | fir_allegation | charge_sheet |
   disciplinary_proceeding | interim_injunction | bail | quashing |
   writ_review | arbitral_proceeding | civil_decree | trial_judgment |
-  acquittal | none | unknown — the document's stage, not a guess. For court
-  judgments, the stage is what the COURT was deciding: a bail order is
+  acquittal | appellate_review | none | unknown — the document's stage, not a
+  guess. A petition for certiorari, an appellate brief, or an order granting or
+  denying review (Supreme Court or court of appeals dockets) is
+  "appellate_review": the reviewing court decided nothing about the conduct,
+  and a conviction or judgment the brief recites belongs to the lower court's
+  own document, not this one. For court judgments, the stage is what the
+  COURT was deciding: a bail order is
   "bail" (never a conviction), quashing an FIR is "quashing", an interim
   injunction is "interim_injunction", review of an employer's enquiry is
   "writ_review" or "disciplinary_proceeding". A judgment that RECITES

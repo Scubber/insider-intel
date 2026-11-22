@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from shared.schemas import RawArticle
+from shared.schemas import LegalMetadata, RawArticle
 from shared.utils.text import normalize_whitespace, strip_html
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,21 @@ COURTLISTENER_FETCH_URL = "https://www.courtlistener.com/api/rest/v4/recap-fetch
 FETCH_TYPE_DOCKET = 1  # buy/refresh a docket report (populates entries)
 FETCH_TYPE_PDF = 2  # buy one document PDF by recap_document id
 COURTLISTENER_BASE = "https://www.courtlistener.com"
+
+# Supreme Court of the United States in the RECAP Archive (Free Law Project,
+# 2026-11-18): dockets and filings since 2000, fed from the Court's own
+# electronic filing system — NOT PACER. Search already covers it (type=r is
+# every RECAP court), but two things differ: (a) the RECAP Fetch API cannot buy
+# anything there (PACER has no Supreme Court), and (b) the collection reaches
+# back to 2000 while the main history sweep stopped at its 2015 floor — a
+# court-scoped sweep walks the older years (``COURTLISTENER_SCOTUS_HISTORY_*``).
+SCOTUS_COURT_ID = "scotus"
+SCOTUS_COURT_NAME = "Supreme Court of the United States"
+SCOTUS_FILINGS_FLOOR = "2000-01-01"
+# CourtListener court ids whose records never pass through PACER — the RECAP
+# Fetch purchaser must skip them (a request would fail, or worse, bill for
+# nothing). Grows if FLP adds state courts to RECAP (their stated next step).
+NON_PACER_COURT_IDS: frozenset[str] = frozenset({SCOTUS_COURT_ID})
 
 DEFAULT_QUERIES: list[str] = [
     '"insider trading"',
@@ -134,6 +149,77 @@ def _absolute_url(path_or_url: str | None) -> str | None:
     return urljoin(COURTLISTENER_BASE, path_or_url)
 
 
+_APPELLATE_COURT_RE = re.compile(r"^(ca\d{1,2}|cadc|cafc)$")
+# PACER trial-court ids are short letter codes ending in d (district) or b
+# (bankruptcy): nysd, cand, txsb. Anything shaped differently is unknown.
+_DISTRICT_COURT_RE = re.compile(r"^[a-z]{2,6}d$")
+_BANKRUPTCY_COURT_RE = re.compile(r"^[a-z]{2,6}b$")
+
+
+def court_level_for(court_id: str | None) -> str | None:
+    """Coarse tier of a CourtListener court id (None when unknown).
+
+    ``supreme`` (scotus) | ``appellate`` (ca1–ca11, cadc, cafc) | ``bankruptcy``
+    (ids ending in ``b``) | ``district`` (ids ending in ``d``). Anything else
+    stays None rather than guessing — the tier feeds display and the PACER
+    gate, never the ledger's posture law.
+    """
+    cid = (court_id or "").strip().lower()
+    if not cid:
+        return None
+    if cid == SCOTUS_COURT_ID:
+        return "supreme"
+    if _APPELLATE_COURT_RE.match(cid):
+        return "appellate"
+    if _BANKRUPTCY_COURT_RE.match(cid):
+        return "bankruptcy"
+    if _DISTRICT_COURT_RE.match(cid):
+        return "district"
+    return None
+
+
+def _hit_legal_metadata(hit: dict[str, Any], *, document_kind: str) -> LegalMetadata:
+    """Typed US court provenance for a search hit (court id in ``jurisdiction``).
+
+    Jurisdiction = the court system the record came from, never the actor's
+    nationality. Unknown fields stay None — never fabricated.
+    """
+    court_id = str(hit.get("court_id") or "").strip().lower() or None
+    court = hit.get("court") or hit.get("court_citation_string")
+    docket = hit.get("docketNumber")
+    return LegalMetadata(
+        country_code="US",
+        jurisdiction=court_id,
+        court_name=str(court).strip() if court else None,
+        court_level=court_level_for(court_id),
+        document_kind=document_kind,
+        case_number=str(docket).strip() if docket else None,
+    )
+
+
+_COURT_LINE_RE = re.compile(r"^Court:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def is_pacer_court(article: RawArticle) -> bool:
+    """False when a stored CourtListener row comes from a court PACER does not serve.
+
+    Reads the typed ``legal_metadata`` first; legacy rows (ingested before the
+    stamp existed) fall back to the ``Court:`` line in the summary. Unknown
+    courts are assumed PACER — the purchaser's other gates still apply.
+    """
+    legal = article.legal_metadata
+    if legal is not None:
+        cid = (legal.jurisdiction or "").strip().lower()
+        if cid in NON_PACER_COURT_IDS or (legal.court_level or "") == "supreme":
+            return False
+        if (legal.court_name or "").strip().lower() == SCOTUS_COURT_NAME.lower():
+            return False
+    match = _COURT_LINE_RE.search(article.summary or "")
+    if match and match.group(1).strip().lower() == SCOTUS_COURT_NAME.lower():
+        return False
+    return True
+
+
 def hit_to_raw_article(
     hit: dict[str, Any],
     *,
@@ -172,6 +258,7 @@ def hit_to_raw_article(
         source_id=SOURCE_ID,
         source_name=SOURCE_NAME,
         channel="filings",
+        legal_metadata=_hit_legal_metadata(hit, document_kind="docket"),
         raw=hit if include_raw else None,
     )
 
@@ -233,6 +320,7 @@ def opinion_hit_to_raw_article(
         source_id=OPINIONS_SOURCE_ID,
         source_name=OPINIONS_SOURCE_NAME,
         channel="filings",
+        legal_metadata=_hit_legal_metadata(hit, document_kind="opinion"),
         raw=hit if include_raw else None,
     )
 
@@ -700,12 +788,17 @@ def _search(
     order_by: str | None = None,
     filed_after: str | None = None,
     filed_before: str | None = None,
+    courts: str | None = None,
     include_raw: bool = False,
     fetch_content: bool = False,
     content_max_chars: int = DEFAULT_OPINION_TEXT_MAX_CHARS,
     client: httpx.Client | None = None,
 ) -> list[RawArticle]:
-    """Run one Search API query for a SEARCH_TYPES entry."""
+    """Run one Search API query for a SEARCH_TYPES entry.
+
+    ``courts`` narrows the search to CourtListener court ids (space-separated,
+    e.g. ``"scotus"``); None/empty searches every court the type covers.
+    """
     spec = SEARCH_TYPES.get(search_type)
     if spec is None:
         raise CourtListenerError(f"unknown search type: {search_type!r}")
@@ -729,6 +822,8 @@ def _search(
         params["filed_after"] = filed_after
     if filed_before:
         params["filed_before"] = filed_before
+    if courts and courts.strip():
+        params["court"] = " ".join(courts.split())
 
     try:
         for _ in range(max(1, max_pages)):

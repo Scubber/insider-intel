@@ -5,7 +5,7 @@ operational state; [`../CLAUDE.md`](../CLAUDE.md) is the architecture/operating
 manual, [`hosting.md`](hosting.md) the production detail, and the merged PRs
 (linked below) are the diff-level changelog.
 
-**Last updated:** 2026-10-09 · **Repo:** `Scubber/insider-intel` · **Prod:**
+**Last updated:** 2026-11-22 · **Repo:** `Scubber/insider-intel` · **Prod:**
 API on Cloud Run (`insider-intel-api`, 4Gi), UI on GitHub Pages
 (`intel.thederpweb.com`), corpus in GCS, corpus refresh on the **DGX Spark**
 (once daily 08:00Z since 2026-08-20; Cloud Scheduler paused as rollback).
@@ -38,7 +38,7 @@ redesign — restore `web/**` from here if the redesign goes sideways) ·
 | **Research briefings (emailed)** | **LIVE 2026-10-01**: a monthly Claude Routine ("insider-intel research briefing", 3rd of the month 14:46Z, fresh session) follows `docs/research/routine-prompt.md`: takes the first `queued` topic in `docs/research/topics.md` (14 authored topics; #1 is the court-funnel question seeded by the operator's trade-secret-litigation post), dispatches the new `research-pack.yml` workflow for the corpus material (printed to the job log between markers — public product only), adds outside sources, writes an 800–1,400-word briefing in house voice, pushes it to `research/<slug>` as `docs/research/briefings/<slug>.md` (topic row flipped to `drafted`), dispatches `research-mail.yml` against that branch (SMTP via the `TRAFFIC_DIGEST_*` secrets — the Routine holds no connector grant, by platform limitation), and opens a PR. Routine never merges. Site parking of RESEARCH is unchanged. Change cadence on the Routine; change behaviour in the playbook file; add topics as table rows. |
 | **Hunt synthesis** | NEW 2026-08-08: refresh job distills each observed technique’s case material into tool-agnostic detect/prevent hunt patterns (telemetry + process + people) (`data/state/technique_hunts.json`, signature-cached, `HUNT_SYNTH_MAX_PER_RUN=10`, chain = summarizer chain/Haiku). Dossier leads with patterns; entity terms (names/companies/domains) are filtered from all hunt surfaces. Initial sweep fills over ~4 days of refreshes. MODUS OPERANDI slimmed to a forensic case study (2026-08-09): SIEM query/seed surfaces removed from report + export + LLM prompt; hunting guidance cross-links to the dossier patterns. |
 | **PACER purchasing** | ARMED (`PACER_PURCHASE_MAX_PER_RUN=5`, $27/quarter cap under the fee waiver). Creds moved into `.env.spark` on sparky at the 2026-08-16 cutover. |
-| **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). |
+| **CourtListener** | Paid Tier-2 token; delay 5s; history sweep at floor (2015-01-01 reached — sweeps complete each run). **Supreme Court sweep (thread #19, code on the branch, not yet merged/deployed):** a second cursor (`courtlistener_history:cursor:scotus`) walks `court=scotus` back to 2000-01-01 in 365-day windows, full rotation per window (~46 search calls ≈ 4 min/run at the 5s delay); ~27 runs to the floor, then a no-op. Disable with `COURTLISTENER_SCOTUS_HISTORY_FLOOR=` (empty) in `.env.spark`. |
 | **UI (2026-08-20 → 22 wave)** | Filter **chip bar** (SOURCE + FOCUS, "Attack footprints" = matrix stages) replaced the Refine drawer; Scope/SIG became SETTINGS defaults; the stream's left rail is deleted (EVIDENCE is a page); Refresh button became SETTINGS "Force corpus refresh"; sources-broken panel moved to SETTINGS; TOOLING is one grouped table with an IN COURT FILINGS toggle; plain-language GUIDE panel (#241); posture badges in plain language; vacuous hunt-term chips filtered (#243); a finding's wording restated (#244). EVIDENCE findings are now derived from the ledger at read time and grouped into collapsible sections (2026-08-25); `web/findings.json` is deleted. Same day, a second pass rewrote the section as a **findings memo** (operator: it read like AI slop): a derived `bottom_line` precis, findings numbered F1..Fn, `lead` vs `supporting` card weights, the three shared caveats collapsed into one `findings_caveat` rendered once instead of per card, and a technique now renders spelled out with its ITM code linking to its dossier (server writes a `{technique}` slot, `attach_catalog_titles` fills it). Anti-slop guards in `tests/test_evidence_ledger.py` make each tell mechanically unrepeatable. **2026-08-26:** the EVIDENCE **LIMITATIONS — READ BEFORE CITING** wall was DELETED (operator decision) — a wall of bolded caveats nobody reads is the same defect as a finding that states a caveat. Selection bias and sweep depth survive in the findings caveat; the ITM™ attribution it carried moved to the EVIDENCE basis line, and TOOLING's methodology tooltip no longer cross-references the deleted section. Note for citation: *jurisdiction = the court, never the actor's nationality* is now stated only on ABOUT. A technique the ITM catalog cannot name is stamped `title_missing` and rendered marked, so a bare ITM id can never again read as a technique's name. **2026-08-26 (perf):** EVIDENCE is now **snapshot-first**. Two causes were measured, not guessed: EVIDENCE was missing from `boot()`'s pre-probe dispatch, so it sat behind the ~75s cold-start ladder — and when that ladder threw, the post-probe dispatch never ran, so with the API asleep the page painted **nothing at all** (verified: no finding in 90s). Meanwhile `data/ledger.json` had shipped in the Pages artifact all along and `paintFromSnapshot()` already downloaded it; `fetchLedger()` just never read it. Now: EVIDENCE dispatches before the probe, the GLOBAL view paints from the snapshot with a CACHED stamp, and a single-flight background read swaps to live. Measured cold-start paint **never → 0.3s**. Country tabs stay live-only (a sliced number served from a global snapshot would be a lie), and a `/reload` retires the snapshot for the session. `export_boot_snapshot.py` now calls the `evidence_ledger` **service function** instead of re-deriving, which closed two silent gaps: the corroboration join never ran, and the five `technique_*` maps the API strips were being shipped to every visitor. **Cloud Run still scales to zero** (no `--min-instances`, operator call: $0, stays inside the $10/mo budget) — the cold start is hidden, not removed. **2026-08-28 (research):** first corpus research briefing produced and adversarially verified (danger profiles — artifact https://claude.ai/code/artifact/25f3e5bf-18bc-4cd4-b7cd-ad302908d425); a site RESEARCH section (masthead tab + `web/research/` + publish-by-merge) is PARKED as the follow-on, with that briefing as entry #1. New read-only diagnostics lane **`corpus-emailscan`** (`scripts/email_domain_scan.py`): domain-level tally of email addresses quoted in case documents, context-classified (exfil-destination / counsel-service / mention) with proximity tiebreak; local parts NEVER printed anywhere — single `redact()` choke point, test-pinned (`tests/test_email_domain_scan.py`), per roles-never-individuals. Writes `export/email-domain-scan.{md,json}`; stdlib-only per the bare-runner contract. **2026-08-29 precision pass** after a 4-agent hand review of all 428 keyword-exfil pairs measured 38% counsel leakage: dense address lists (e-service SENT blocks, creditor matrices — ≥3 distinct addresses in one window) now class counsel_service; `_COUNSEL_RE` learned matrix/service-list vocabulary; repeated boilerplate snippets collapse to one evidence entry (×N, tallies untouched); legacy pre-v3 `forensics.hunt_queries` is no longer scanned (machine-generated query text was auto-classed exfil). Provenance meta lines + proof-standard badges (CONFIRMED IN COURT / ALLEGED / REPORTED) carry over from the 2026-08-10 redesign. |
 | **UI honesty** | Settings is reader-safe (no TODO / stub ADD / Notifications chrome). Empty board offers **TRY EXAMPLE HUNT**. Default theme **Wire Light** (cnn-lite; was Dossier Sage until 2026-08-11); desktop rail JS breakpoint matches CSS at **1024px**. |
 
@@ -773,6 +773,34 @@ RESEARCH renders at 390/768/1024/1280, sparky cycle healthy.
     draft here in step for PATHS only. Runbook: `.oss-scanner/README.md`.
 
 ---
+
+19. **RECAP Supreme Court collection — CODE ON BRANCH 2026-11-22
+    (`claude/supreme-court-filings-archive-64arkp`, unmerged).** Free Law
+    Project added SCOTUS dockets + filings since 2000 to the RECAP Archive
+    (announced 2026-11-18: ~1M docket entries, briefs/motions/orders,
+    full-text searchable, new filings within minutes of the Court's
+    e-filing system — not PACER). What changed here: (a) every
+    CourtListener hit stamps typed `legal_metadata` (court id, name, tier,
+    docket number — the UI's jurisdiction chip tooltip now names the
+    court; legacy rows keep the `Court:` summary line only, the store's
+    fingerprint doesn't rewrite them for metadata alone); (b)
+    `run_scotus_history_sweep` in the refresh cycle, scoped `court=scotus`,
+    own cursor, 2000-01-01 floor, ON by default (`.env.spark` override
+    above); (c) `pacer_purchase` skips non-PACER courts — typed id or the
+    legacy summary line; (d) `appellate_review` posture (weight 3, capped
+    below adjudicated) so a cert petition can't mint a court-proven case —
+    the district docket for the same matter carries the conviction.
+    **Unverified from the sandbox (courtlistener.com is not reachable from
+    Claude Code on the web):** the `court=scotus` filter value and the
+    `court_id` hit field are from the v4 Search API docs as remembered;
+    first run on sparky should confirm with `sweep_courtlistener_history
+    --courts scotus --windows 1 -v` and check the `[scotus]` log line
+    reports fetched>0 — a 400 means the param name drifted. Expect the
+    enricher to adjudicate most SCOTUS matches non-insider (securities
+    cert petitions, amicus briefs naming "insider trading"); the filings
+    spend gate's alias∧framing rule applies unchanged. Next: if FLP ships
+    state courts (their stated next step), `NON_PACER_COURT_IDS` is the
+    one list to grow.
 
 ## Conventions
 
