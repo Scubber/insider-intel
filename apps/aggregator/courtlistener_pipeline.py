@@ -11,6 +11,7 @@ import httpx
 
 from apps.aggregator.courtlistener import (
     DEFAULT_QUERIES,
+    SCOTUS_COURT_ID,
     SEARCH_TYPES,
     SOURCE_ID,
     CourtListenerError,
@@ -514,6 +515,18 @@ def history_rotation_queries() -> list[str]:
     return skipped + core
 
 
+def history_state_keys(courts: str | None) -> tuple[str, str]:
+    """(cursor key, rotation-offset key) for a sweep scope.
+
+    The unscoped sweep keeps its legacy keys; a court-scoped sweep gets its own
+    pair so it can never move the main cursor (or be moved by it).
+    """
+    scope = " ".join((courts or "").split()).lower()
+    if not scope:
+        return _HISTORY_CURSOR_KEY, _HISTORY_QOFFSET_KEY
+    return f"{_HISTORY_CURSOR_KEY}:{scope}", f"{_HISTORY_QOFFSET_KEY}:{scope}"
+
+
 def run_courtlistener_history_sweep(
     *,
     token: str | None = None,
@@ -522,6 +535,10 @@ def run_courtlistener_history_sweep(
     store: ArticleStore | None = None,
     store_path: str = DEFAULT_STORE_PATH,
     request_delay: float | None = None,
+    courts: str | None = None,
+    floor: str | None = None,
+    window_days: int | None = None,
+    queries_per_window: int | None = None,
     client: httpx.Client | None = None,
 ) -> IngestionRunResult:
     """Ingest one historical window of insider-crime cases (metadata only).
@@ -533,11 +550,18 @@ def run_courtlistener_history_sweep(
     backfill (and, where the archive is empty, the PACER purchaser) harvests
     them over subsequent runs at the usual pace. A throttled window does not
     advance the cursor, so nothing is skipped.
+
+    ``courts`` (CourtListener court ids, space-separated) scopes the search
+    and gives the sweep its own cursor/offset keys; ``floor`` /
+    ``window_days`` / ``queries_per_window`` override the settings for that
+    scope (``run_scotus_history_sweep`` is the configured caller).
     """
     settings = get_settings()
     started_at = datetime.now(UTC)
     result = IngestionRunResult(started_at=started_at)
-    floor_raw = (settings.courtlistener_history_floor or "").strip()
+    scope = " ".join((courts or "").split()).lower() or None
+    cursor_key, qoffset_key = history_state_keys(scope)
+    floor_raw = (floor if floor is not None else settings.courtlistener_history_floor or "").strip()
     if not floor_raw:
         result.finished_at = datetime.now(UTC)
         return result  # disabled
@@ -549,17 +573,20 @@ def run_courtlistener_history_sweep(
         return result
 
     ingest_state = state or JsonIngestState(state_path)
-    cursor_raw = ingest_state.get(_HISTORY_CURSOR_KEY) or started_at.date().isoformat()
+    cursor_raw = ingest_state.get(cursor_key) or started_at.date().isoformat()
     try:
         cursor = date.fromisoformat(cursor_raw)
     except ValueError:
         cursor = started_at.date()
+    label = f"CourtListener history[{scope}]" if scope else "CourtListener history"
     if cursor <= floor:
-        logger.info("CourtListener history sweep complete (cursor at floor %s)", floor)
+        logger.info("%s sweep complete (cursor at floor %s)", label, floor)
         result.finished_at = datetime.now(UTC)
         return result
 
-    window = timedelta(days=settings.courtlistener_history_window_days)
+    window = timedelta(
+        days=window_days if window_days is not None else settings.courtlistener_history_window_days
+    )
     since = max(floor, cursor - window)
     api_token = token if token is not None else settings.courtlistener_api_token
     delay = (
@@ -571,12 +598,16 @@ def run_courtlistener_history_sweep(
     # window has run, so the window is fully covered before we step back in time.
     rotation = history_rotation_queries()
     try:
-        qoffset = int(ingest_state.get(_HISTORY_QOFFSET_KEY) or 0)
+        qoffset = int(ingest_state.get(qoffset_key) or 0)
     except ValueError:
         qoffset = 0
     if qoffset < 0 or qoffset >= len(rotation):
         qoffset = 0
-    per = settings.courtlistener_history_queries_per_window
+    per = (
+        queries_per_window
+        if queries_per_window is not None
+        else settings.courtlistener_history_queries_per_window
+    )
     slice_size = len(rotation) if per <= 0 else per
     query_slice = rotation[qoffset : qoffset + slice_size]
 
@@ -603,6 +634,7 @@ def run_courtlistener_history_sweep(
                         max_pages=settings.courtlistener_history_max_pages,
                         filed_after=since.isoformat(),
                         filed_before=cursor.isoformat(),
+                        courts=scope,
                         fetch_content=False,  # bodies come via the text backfill
                         client=http,
                     )
@@ -635,11 +667,11 @@ def run_courtlistener_history_sweep(
         if next_offset >= len(rotation):
             # Every rotation slice for this window has run → step the date cursor
             # back and restart the rotation for the next (older) window.
-            ingest_state.set(_HISTORY_CURSOR_KEY, since.isoformat())
-            ingest_state.set(_HISTORY_QOFFSET_KEY, "0")
+            ingest_state.set(cursor_key, since.isoformat())
+            ingest_state.set(qoffset_key, "0")
             logger.info(
-                "CourtListener history window %s..%s complete "
-                "(%d queries): fetched=%d saved=%d (next: back to %s)",
+                "%s window %s..%s complete (%d queries): fetched=%d saved=%d (next: back to %s)",
+                label,
                 since,
                 cursor,
                 len(rotation),
@@ -649,9 +681,10 @@ def run_courtlistener_history_sweep(
             )
         else:
             # More rotation slices remain for THIS window → hold the cursor.
-            ingest_state.set(_HISTORY_QOFFSET_KEY, str(next_offset))
+            ingest_state.set(qoffset_key, str(next_offset))
             logger.info(
-                "CourtListener history window %s..%s slice %d-%d/%d: fetched=%d saved=%d",
+                "%s window %s..%s slice %d-%d/%d: fetched=%d saved=%d",
+                label,
                 since,
                 cursor,
                 qoffset,
@@ -663,8 +696,8 @@ def run_courtlistener_history_sweep(
 
     result.sources.append(
         SourceIngestionResult(
-            source_id="courtlistener-history",
-            source_name=f"CourtListener history {since}..{cursor}",
+            source_id=f"courtlistener-history-{scope}" if scope else "courtlistener-history",
+            source_name=f"{label} {since}..{cursor}",
             success=not (errors and len(batch) == 0),
             articles_fetched=len(batch),
             articles_saved=saved,
@@ -674,3 +707,47 @@ def run_courtlistener_history_sweep(
     result.total_articles_saved = saved
     result.finished_at = datetime.now(UTC)
     return result
+
+
+def run_scotus_history_sweep(
+    *,
+    token: str | None = None,
+    state: JsonIngestState | None = None,
+    state_path: str = DEFAULT_STATE_PATH,
+    store: ArticleStore | None = None,
+    store_path: str = DEFAULT_STORE_PATH,
+    request_delay: float | None = None,
+    client: httpx.Client | None = None,
+) -> IngestionRunResult:
+    """One window of the Supreme Court (``court=scotus``) history sweep.
+
+    The RECAP Archive gained SCOTUS dockets + filings back to 2000 (Free Law
+    Project, 2026-11-18). The forward lane already sees new SCOTUS matches
+    (type=r spans every RECAP court), but the main sweep's cursor sits at its
+    2015 floor, so the 2000–2015 years would never be walked. This scoped sweep
+    owns its own cursor (``history_state_keys("scotus")``), runs the FULL query
+    rotation per window (the collection is small: ~1M entries across all
+    cases, so a 365-day window is cheap), and stops at
+    ``COURTLISTENER_SCOTUS_HISTORY_FLOOR`` (empty disables). Bodies arrive
+    through the normal text backfill — never through PACER, which does not
+    serve this court.
+    """
+    settings = get_settings()
+    floor = (settings.courtlistener_scotus_history_floor or "").strip()
+    if not floor:
+        result = IngestionRunResult(started_at=datetime.now(UTC))
+        result.finished_at = datetime.now(UTC)
+        return result  # disabled
+    return run_courtlistener_history_sweep(
+        token=token,
+        state=state,
+        state_path=state_path,
+        store=store,
+        store_path=store_path,
+        request_delay=request_delay,
+        courts=SCOTUS_COURT_ID,
+        floor=floor,
+        window_days=settings.courtlistener_scotus_history_window_days,
+        queries_per_window=0,
+        client=client,
+    )

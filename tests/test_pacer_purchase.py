@@ -254,3 +254,48 @@ def test_dry_run_spends_nothing(tmp_path, monkeypatch) -> None:
     assert len(plan.purchases) == 1 and plan.purchases[0].stage == "doc"
     assert result.total_articles_saved == 0
     assert state.get(f"pacer_purchase:{link}") is None
+
+
+def test_supreme_court_dockets_are_never_bought(tmp_path, monkeypatch) -> None:
+    """RECAP carries SCOTUS dockets (FLP 2026-11) but PACER does not — no Fetch."""
+    from apps.aggregator.courtlistener import SCOTUS_COURT_NAME
+    from shared.schemas import LegalMetadata
+
+    _enable(monkeypatch)
+    pacer_link = "https://www.courtlistener.com/docket/11/a/"
+    scotus_typed = "https://www.courtlistener.com/docket/12/b/"
+    scotus_legacy = "https://www.courtlistener.com/docket/13/c/"
+    raw_path = tmp_path / "raw.jsonl"
+    processed_path = tmp_path / "processed.jsonl"
+    typed = _docket(scotus_typed).model_copy(
+        update={
+            "legal_metadata": LegalMetadata(
+                country_code="US", jurisdiction="scotus", court_level="supreme"
+            )
+        }
+    )
+    legacy = _docket(scotus_legacy).model_copy(
+        update={
+            "summary": (
+                f"Court: {SCOTUS_COURT_NAME}\nDocket: 24-123\ninsider threat data exfiltration"
+            )
+        }
+    )
+    JsonlArticleStore(raw_path).save([_docket(pacer_link), typed, legacy])
+    run_processing(raw_path=raw_path, processed_path=processed_path)
+    state = JsonIngestState(tmp_path / "state.json")
+    now = datetime.now(UTC).isoformat()
+    for link in (pacer_link, scotus_typed, scotus_legacy):
+        state.set(_TEXT_ATTEMPT_KEY.format(link=link), now)
+
+    posts: list[httpx.Request] = []
+    with httpx.Client(transport=_transport(posts, entries_payload=ENTRIES_WITH_DOC)) as client:
+        _result, plan = run_pacer_purchases(
+            store_path=str(raw_path),
+            processed_path=str(processed_path),
+            state=state,
+            limit=5,
+            client=client,
+        )
+    assert [p.link for p in plan.purchases] == [pacer_link]
+    assert len(posts) == 1

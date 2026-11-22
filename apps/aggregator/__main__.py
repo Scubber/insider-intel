@@ -218,6 +218,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Number of consecutive windows to sweep in this invocation.",
     )
+    history_p.add_argument(
+        "--courts",
+        type=str,
+        default=None,
+        help=(
+            "Scope to CourtListener court ids (space-separated, e.g. 'scotus'). "
+            "A scoped sweep keeps its own cursor and runs the full query rotation "
+            "per window; default = the unscoped main sweep."
+        ),
+    )
+    history_p.add_argument(
+        "--floor",
+        type=str,
+        default=None,
+        help="Override the sweep floor (YYYY-MM-DD) for this invocation.",
+    )
     _add_verbose(history_p)
 
     india_p = sub.add_parser(
@@ -729,8 +745,14 @@ def _cmd_sweep_courtlistener_history(args: argparse.Namespace) -> int:
     from apps.aggregator.courtlistener_pipeline import run_courtlistener_history_sweep
 
     exit_code = 0
+    courts = (args.courts or "").strip() or None
     for _ in range(max(1, args.windows)):
-        result = run_courtlistener_history_sweep(store_path=args.store_path)
+        result = run_courtlistener_history_sweep(
+            store_path=args.store_path,
+            courts=courts,
+            floor=(args.floor or "").strip() or None,
+            queries_per_window=0 if courts else None,
+        )
         if not result.sources:
             print("History sweep disabled or already at the floor.")
             break

@@ -31,9 +31,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # poppler + tesseract are the binaries apps/aggregator/ocr_pdf.py shells out
 # to on the IndiaCourts scanned-PDF path (same packages as the root
 # Dockerfile's `spark` stage), so that code path is exercisable offline.
+# libatomic1: the Node driver bundled with Playwright >= 1.65 links it, and
+# on slim bookworm it is absent — the driver then dies before
+# `playwright install --with-deps` can install any Chromium deps at all
+# (CI run 45016636783, 2026-11-22).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl git bash procps \
+        ca-certificates curl git bash procps libatomic1 \
         poppler-utils tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 

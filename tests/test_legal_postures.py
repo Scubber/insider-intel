@@ -36,6 +36,12 @@ INDIAN_PRE_ADJUDICATIVE = (
     "acquittal",  # adjudicated AGAINST proof of the conduct — capped on purpose
 )
 
+# Appellate review (2026-11, RECAP Supreme Court collection): a cert petition
+# or appellate brief recites the record below; the reviewing court found
+# nothing. Below the floor on purpose — the lower court's own judgment is the
+# document that earns "adjudicated".
+APPELLATE_PRE_MERITS = ("appellate_review",)
+
 
 def test_every_enum_posture_is_weighted_or_exempt() -> None:
     for posture in LEGAL_POSTURES:
@@ -73,6 +79,20 @@ def test_indian_pre_adjudicative_stages_sit_below_the_floor() -> None:
     # Genuine merits decisions rank adjudicated.
     assert POSTURE_WEIGHT["trial_judgment"] >= POSTURE_ADJUDICATED_MIN_WEIGHT
     assert POSTURE_WEIGHT["civil_decree"] >= POSTURE_ADJUDICATED_MIN_WEIGHT
+
+
+def test_appellate_review_sits_below_the_floor_and_caps() -> None:
+    for posture in APPELLATE_PRE_MERITS:
+        assert posture in LEGAL_POSTURES
+        assert POSTURE_WEIGHT[posture] < POSTURE_ADJUDICATED_MIN_WEIGHT, posture
+    # A cert petition that recites a conviction below still reads as alleged
+    # HERE — the conviction belongs to the district court's own record.
+    methods = [{"claim_status": "adjudicated"}]
+    assert case_strength(methods, "appellate_review") == "alleged"
+    ok = parse_forensics_json(
+        {"is_insider_case": True, "legal_posture": "appellate_review"}, link="l", title="t"
+    )
+    assert ok.legal_posture == "appellate_review"
 
 
 def test_bail_order_with_rich_detail_stays_alleged() -> None:
